@@ -1,0 +1,45 @@
+{
+  "clarityAgent": {
+    "path": "/var/folders/tx/7hhwjnfd76xcs6dz08rln4th0000gn/T/_MEIFQ0RTL",
+    "version": "1.0.0"
+  },
+  "thinkers": {
+    "disabled": [],
+    "custom": []
+  },
+  "processes": {
+    "custom": []
+  },
+  "documentState": {
+    "goal/problem.md": {
+      "contentHash": "9f4f713116fe50fc34c384cb2ef89e3fe8f73dbff40e0cff14eb18c91da62c3a",
+      "dependencyHashes": {}
+    },
+    "goal/stakeholders.md": {
+      "contentHash": "8ce69985d94783ecfad3f2e2e407dc5d14083bb5a3fd153a631ebfb35d599e8e",
+      "dependencyHashes": {
+        "goal/problem.md": "9f4f713116fe50fc34c384cb2ef89e3fe8f73dbff40e0cff14eb18c91da62c3a"
+      }
+    },
+    "goal/requirements.md": {
+      "contentHash": "cc471c0deefbbfbb77bf4750a7bbb054c4f7136a7b8af062fdaaf76541c9e91f",
+      "dependencyHashes": {
+        "goal/problem.md": "9f4f713116fe50fc34c384cb2ef89e3fe8f73dbff40e0cff14eb18c91da62c3a",
+        "goal/stakeholders.md": "8ce69985d94783ecfad3f2e2e407dc5d14083bb5a3fd153a631ebfb35d599e8e"
+      }
+    },
+    "goal/open-questions.md": {
+      "contentHash": "7f5f4712e0e0d55423db44a0e5f24c7fd4368e51d45f0281cdc73b33ee536714",
+      "dependencyHashes": {
+        "goal/problem.md": "9f4f713116fe50fc34c384cb2ef89e3fe8f73dbff40e0cff14eb18c91da62c3a"
+      }
+    },
+    "summary.md": {
+      "contentHash": "55919648c80333827c8feaf406c18ec80f5ac64b1c1658a4cbbdd44f4f91c93b",
+      "dependencyHashes": {
+        "goal/problem.md": "9f4f713116fe50fc34c384cb2ef89e3fe8f73dbff40e0cff14eb18c91da62c3a",
+        "goal/stakeholders.md": "8ce69985d94783ecfad3f2e2e407dc5d14083bb5a3fd153a631ebfb35d599e8e"
+      }
+    }
+  }
+}
