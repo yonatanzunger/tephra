@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "clarity-agent": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--extra",
+        "mcp",
+        "--directory",
+        "/Users/zunger/src/clarity-agent",
+        "python",
+        "-m",
+        "clarity_agent.mcp",
+        "--project-dir",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}
