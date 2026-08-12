@@ -34,7 +34,7 @@ Derived from `problem.md` and `precedent.md`. The ordering is deliberate: the ex
 16a. **Nothing may foreclose a periodic forced review.** Era 2's filling page compelled live items to be transcribed forward and let the rest die by omission — a confirmed feature, and a different job from due dates: a deadline says *"this has a date,"* a review asks *"is this still alive."* The digital form is to be found by experiment, which is why the last-touched timestamp in R15 is recorded now: no staleness mechanism can be added later without it, and backfilling makes every item look equally fresh.
 17. **TODO groupings are dynamic sets and are *not* the same as subjects.** Stated explicitly; they should not be unified without evidence that they are the same thing for the same reason.
 18. **Pinned lists** — recurring editable artifacts, reachable in one gesture from the top-level view.
-19. **An events calendar** of major commitments: a date or date range, location, short summary, contact person, optional link to notes. Complements Google Calendar; does not replace it.
+19. **An events calendar** of major commitments: a date or date range, location, short summary, contact person, optional link to notes. Complements Google Calendar; does not replace it. **In v1 this is not a feature — it is one pinned list file (R18).** Its precedent is era 3's Excel sheet, which worked precisely because it was a plain table kept separate with no ceremony; the requirement asks for no date arithmetic, no reminders, no calendar view. **If R18 exists, R19 is already satisfied.** Anything beyond that must be earned by use.
 
 ## R5 — Document collections (filesets)
 
@@ -46,7 +46,7 @@ Derived from `problem.md` and `precedent.md`. The ordering is deliberate: the ex
 ## R6 — Platforms and storage
 
 24. **Mac and Android both first-class** for reading, searching and writing. "Hard to think of functionalities I wouldn't want" on the phone — but see the note below.
-25. **Full function offline**, with **explicit resync** on return to network. Pausing to sync before continuing is acceptable.
+25. **Full function offline.** The steady state is continuous and invisible: edits autosave and propagate to the remote as soon as possible, asynchronously, never interrupting typing. During a disconnect they accumulate locally and go up at the first opportunity. **Explicit resync is acceptable as the degraded mode on reconnection, not as the everyday experience** (D5).
 26. **Plain, generic, durable formats.** The files must remain comprehensible and usable if this tool is abandoned.
 
 > **Desktop and mobile need not share a UI stack.** The contract between them is the file format, which R26 already requires be plain and durable. Two purpose-built apps sharing no code is a legitimate architecture, and it lets each optimise for genuinely different problems — vim and screen area on one side, touch and a small screen on the other (Q4, Q5).

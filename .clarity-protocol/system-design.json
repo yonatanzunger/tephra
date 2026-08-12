@@ -1,0 +1,305 @@
+{
+  "project": "Tephra",
+  "status": "preliminary",
+  "note": "Layering and core objects only. Failure analysis has not been run; threats listed are those visible from decisions already taken.",
+  "layers": [
+    {
+      "id": "Z",
+      "name": "Features and UI",
+      "description": "Editor surface, section nav, search and filtered views, range operations. Consumes X."
+    },
+    {
+      "id": "X",
+      "name": "Logical objects",
+      "description": "Natural domain objects exposing conceptual operations; translate them into the language of W."
+    },
+    {
+      "id": "W",
+      "name": "Infrastructure",
+      "description": "Files on disk, directory watching, atomic replacement, OS services, and from v2 the network hub."
+    }
+  ],
+  "components": [
+    {
+      "id": "editor",
+      "layer": "Z",
+      "name": "Editor surface",
+      "description": "Vim mode, raw and rendered markdown, inline widgets.",
+      "stage": "v1"
+    },
+    {
+      "id": "nav",
+      "layer": "Z",
+      "name": "Section nav",
+      "description": "Sections as expandos; the default section holds pins.",
+      "stage": "v1"
+    },
+    {
+      "id": "retrieval",
+      "layer": "Z",
+      "name": "Search and filtered views",
+      "description": "One filtered-view mechanism over tag, date and text queries.",
+      "stage": "v1"
+    },
+    {
+      "id": "rangeops",
+      "layer": "Z",
+      "name": "Range operations",
+      "description": "Select a range, then tag, bookmark, print or branch it.",
+      "stage": "v1"
+    },
+    {
+      "id": "document",
+      "layer": "X",
+      "name": "Document",
+      "description": "One logical markdown document: text, anchors, tags, headings, edit and save.",
+      "storage": "Segmented into day files for the stream; a single file for branched documents and pinned lists.",
+      "stage": "v1"
+    },
+    {
+      "id": "corpus",
+      "layer": "X",
+      "name": "Corpus",
+      "description": "The set of documents; enumeration; anchor resolution by name.",
+      "storage": "Opens documents by name. Does not scan the directory directly.",
+      "stage": "v1"
+    },
+    {
+      "id": "fileset",
+      "layer": "X",
+      "name": "Fileset",
+      "description": "Ordered typed entries: bookmark, file, URL, external document.",
+      "storage": "One index file.",
+      "stage": "v1"
+    },
+    {
+      "id": "filesetcollection",
+      "layer": "X",
+      "name": "FilesetCollection",
+      "description": "Iteration over all filesets; updating a reference globally across them.",
+      "storage": "Writes the individual fileset files.",
+      "stage": "v1"
+    },
+    {
+      "id": "search",
+      "layer": "X",
+      "name": "Search",
+      "description": "One query mechanism over tags, dates and text, returning ranges.",
+      "storage": "v1 scans through the Document API; later maintains an index fed by Document change events.",
+      "stage": "v1"
+    },
+    {
+      "id": "range",
+      "layer": "X",
+      "name": "Range",
+      "description": "A transient selection and the operations on it. A persisted range is inline markup, never offsets.",
+      "stage": "v1"
+    },
+    {
+      "id": "directory",
+      "layer": "W",
+      "name": "Local directory",
+      "description": "Plain files at a stable, user-visible path. A replica for text, a cache for attachments.",
+      "stage": "v1"
+    },
+    {
+      "id": "watcher",
+      "layer": "W",
+      "name": "Directory watcher",
+      "description": "Watches directories, never file descriptors.",
+      "stage": "v1"
+    },
+    {
+      "id": "osservices",
+      "layer": "W",
+      "name": "OS services",
+      "description": "Printing, clipboard and image paste, open-with by OS intent.",
+      "stage": "v1"
+    },
+    {
+      "id": "index",
+      "layer": "W",
+      "name": "Derived index",
+      "description": "Machine-local, never synced, disposable, never authoritative. Owned by Search; needs a startup consistency check with full rebuild on disagreement.",
+      "stage": "v3+"
+    },
+    {
+      "id": "sync",
+      "layer": "W",
+      "name": "Sync client",
+      "description": "Continuous asynchronous push; offline accumulation; divergence surfaced with a picker.",
+      "stage": "v2a"
+    },
+    {
+      "id": "hub",
+      "layer": "external",
+      "name": "Network hub",
+      "description": "Single source of truth. The only component outside the user's physical control.",
+      "stage": "v2a"
+    }
+  ],
+  "flows": [
+    {
+      "from": "editor",
+      "to": "document",
+      "label": "read and edit live buffer"
+    },
+    {
+      "from": "nav",
+      "to": "filesetcollection",
+      "label": "enumerate sections"
+    },
+    {
+      "from": "retrieval",
+      "to": "search",
+      "label": "run query"
+    },
+    {
+      "from": "rangeops",
+      "to": "document",
+      "label": "tag, bookmark, branch"
+    },
+    {
+      "from": "rangeops",
+      "to": "filesetcollection",
+      "label": "update references on branch"
+    },
+    {
+      "from": "rangeops",
+      "to": "osservices",
+      "label": "print a range"
+    },
+    {
+      "from": "editor",
+      "to": "osservices",
+      "label": "paste an image"
+    },
+    {
+      "from": "search",
+      "to": "corpus",
+      "label": "resolve"
+    },
+    {
+      "from": "corpus",
+      "to": "document",
+      "label": "enumerate"
+    },
+    {
+      "from": "filesetcollection",
+      "to": "fileset",
+      "label": "contains"
+    },
+    {
+      "from": "document",
+      "to": "directory",
+      "label": "segmented read and atomic write"
+    },
+    {
+      "from": "fileset",
+      "to": "directory",
+      "label": "index file read and write"
+    },
+    {
+      "from": "directory",
+      "to": "watcher",
+      "label": "change notification"
+    },
+    {
+      "from": "watcher",
+      "to": "document",
+      "label": "external mutation; quiesce then reload"
+    },
+    {
+      "from": "directory",
+      "to": "sync",
+      "label": "local changes"
+    },
+    {
+      "from": "sync",
+      "to": "hub",
+      "label": "TLS; continuous push, offline accumulation",
+      "boundary": true
+    },
+    {
+      "from": "search",
+      "to": "document",
+      "label": "read text through the X API (never a W-level scan)"
+    },
+    {
+      "from": "document",
+      "to": "search",
+      "label": "change events; Document stays ignorant of consumers"
+    }
+  ],
+  "trust_boundaries": [
+    {
+      "id": "device-hub",
+      "description": "Everything except the hub runs on a trusted device. The hub is outside the user's physical control and holds third-party information found in the notes."
+    }
+  ],
+  "threats": [
+    {
+      "id": "T1",
+      "component": "sync",
+      "name": "Silent loss when divergent copies reconcile",
+      "severity": "critical",
+      "rationale": "'Losing anything, ever' is an explicit unacceptability criterion.",
+      "mitigation": "Divergence surfaced with a picker, never resolved silently (D12).",
+      "status": "mitigated-by-design"
+    },
+    {
+      "id": "T2",
+      "component": "directory",
+      "name": "Interrupted write corrupts a day file",
+      "severity": "critical",
+      "rationale": "Autosave makes partial writes the ordinary risk rather than the exotic one.",
+      "mitigation": "Atomic write-temp-then-rename.",
+      "status": "mitigated-by-design"
+    },
+    {
+      "id": "T7",
+      "component": "directory",
+      "name": "Cache eviction discards text not yet pushed",
+      "severity": "critical",
+      "rationale": "Between an offline write and its push, the local copy is the only copy.",
+      "mitigation": "Text is a replica and never evictable; only attachments are cached (D5).",
+      "status": "mitigated-by-design"
+    },
+    {
+      "id": "T5",
+      "component": "watcher",
+      "name": "Watcher dies silently on atomic replace",
+      "severity": "high",
+      "rationale": "It stops firing without erroring, so the editor and disk drift apart unreported.",
+      "mitigation": "Watch directories, never file descriptors.",
+      "status": "mitigated-by-design"
+    },
+    {
+      "id": "T3",
+      "component": "hub",
+      "name": "Hub compromise exposes third-party information",
+      "severity": "high",
+      "rationale": "Notes discuss people who did not consent to the hub.",
+      "mitigation": "Open \u2014 bears on where the hub lives (Q2).",
+      "status": "open"
+    },
+    {
+      "id": "T4",
+      "component": "sync",
+      "name": "Credential leakage; Android TLS trust unresolved",
+      "severity": "high",
+      "rationale": "Portal's one unclosed spike hole, inherited: a vendored OpenSSL has no trust anchors and Android's store uses legacy hashed filenames.",
+      "mitigation": "Open.",
+      "status": "open"
+    },
+    {
+      "id": "T6",
+      "component": "index",
+      "name": "A stale derived index is trusted",
+      "severity": "medium",
+      "rationale": "Hand-editing is a feature, so index staleness is routine rather than exceptional.",
+      "mitigation": "Index is machine-local, disposable and never authoritative (D7); startup consistency check with full rebuild on disagreement.",
+      "status": "mitigated-by-design"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ The traditional thing: a continuous scroll of thinking, undifferentiated, chrono
 The same continuous scroll, plus two structures:
 
 - **A TODO list occupying the front**, worked one two-page spread at a time. Items marked `·` unstarted, `/` started, `✗` complete, ~~struck through~~ cancelled. **When a spread filled, the remaining live items were transcribed onto the next spread.**
-- **A separate calendar section.**
+- **A separate calendar section.** (Note: this is *not* the origin of the events-calendar requirement — that comes from era 3's Excel sheet, below.)
 
 **Failure mode: access, not capability.** It stopped working when the user was regularly in situations with a laptop or phone but not the notebook. The system was fine; it was in the wrong place.
 
@@ -36,6 +36,12 @@ Adopted to solve era 2's access problem, and it did solve that.
 1. **Reduced structure** relative to what could be written on paper. A document editor could not express what a notebook page could.
 2. **Barely functional mobile** (M365 especially) — which reintroduced era 2's access problem in a new form, after access was the whole reason for the move.
 3. **Flaky desktop.**
+
+### Era 3's one success: the events calendar
+
+Era 3 was not a uniform failure, and the exception is informative. The **events calendar** — major commitments only, each with a date or date range, location, summary, contact — lived in an **Excel spreadsheet**, and despite the general awfulness of Excel it was good enough. It is the only piece of era 3 that worked.
+
+Two things follow. First, **this is where the events calendar requirement comes from — not era 2**; any argument resting on it having been part of the excellent paper system is unfounded. Second, what worked was *a plain tabular artifact, kept separate, with almost no ceremony*, which is a far weaker requirement than "build a calendar" and points directly at R19's conclusion: the v1 events calendar is **a pinned list file, not a feature**.
 
 ## The synthesis: what actually predicts success
 

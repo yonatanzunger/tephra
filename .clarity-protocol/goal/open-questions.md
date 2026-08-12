@@ -11,20 +11,23 @@ Five genuine unknowns, ordered by how much they constrain everything else. Q1 an
 
 **The cost is concentrated in one place: editing in the rendered view.** Rendered *reading* is nearly free. Rendered *editing* means the markup must be managed on the user's behalf — cursor enters a node, markup reveals; cursor leaves, it re-renders. That works well for inline constructs (emphasis, links, headings) and poorly for tables and equations, which usually want a dedicated editing affordance instead. So this decomposes: ship raw+vim and rendered-read first, then add rendered-edit per node type in order of value. **Tables and equations are the expensive ones and can wait.**
 
-**Strategy:** prototyping — smallest thing with a real vim mode, an inline equation, an inline image and a table, typed into at full speed and measured.
+**Strategy:** prototyping. The experiment is defined in `goal/discovery/spike-01-experiment.md` — **Spike A**, a plain browser page, which answers this at zero platform cost. Its sharp edge is not rendering but **vim operating over widgets**: what `dd` does to a line holding a rendered equation, whether motion, visual selection and undo behave across one.
 
 ## Q2: What is the storage and sync substrate?
 
-**Status:** open
+**Status:** open, but strongly indicated
 **Why it matters:** Load-bearing for offline operation, multi-device use, conflict behaviour, and the departer's exit.
 **What is already known**, which narrows it considerably:
 
 - The real requirement is **local-first with deterministic reconciliation**, not strong consistency — "strongly consistent" and "works on a plane" cannot both hold during a partition.
-- **Explicit resync is acceptable** (R25). This is a significant relaxation: sync need not be invisible, so conflicts may be *surfaced* rather than silently resolved, and a great deal of merge machinery becomes optional.
+- **The steady state is continuous invisible sync; explicit resync is the reconnection ceremony** (D5, R25). Conflicts may be *surfaced* rather than silently resolved, and a great deal of merge machinery becomes optional.
+- **Concurrent multi-device editing is not an expected workflow** (D12), which removes the convergence requirement that most merge machinery exists to satisfy.
 - Git meets all four underlying needs — sync, offline, non-lossy reconciliation, rewindable history — and Portal validated it end to end including cross-compilation and mobile bindings. Its one unresolved hole was **TLS trust on Android**.
-- The genuine fork: **plain files as source of truth** (keeps the exit, makes merge your problem) versus **a CRDT document as source of truth** (merges without conflict by construction, but plain files become an export and R26 weakens).
+- The genuine fork was: **plain files as source of truth** (keeps the exit, makes merge your problem) versus **a CRDT document as source of truth** (merges without conflict by construction, but plain files become an export and R26 weakens).
 
-**Strategy:** thinking, then a narrow prototype of whichever candidate survives.
+**The fork is no longer balanced.** A CRDT's entire value proposition is conflict-free concurrent editing. With that case rare (D12) and reconnection ceremony acceptable, the benefit is small while the cost — files demoted to an export — is large. **Plain files as source of truth is the expected answer**; what remains is confirming it rather than deciding it.
+
+**Strategy:** confirm, then prototype narrowly — aimed at the divergence picker and atomic writes, which are the parts that still have to work.
 
 ## Q3: What replaces the filling page?
 
@@ -46,18 +49,17 @@ Five genuine unknowns, ordered by how much they constrain everything else. Q1 an
 
 That matters more here than it would for most apps, because **OS integration is not incidental to these requirements**: printing a range (R11), opening fileset documents individually or en masse (R21), pasting images in situ (R7), and drag-and-drop into filesets are all OS conversations. A stack that makes them expensive taxes four requirements, not one.
 
-**But the counter-evidence is sitting on the desk.** This document was written in **VSCode with vim plugins**, at 130 WPM, and found acceptable. VSCode is Electron — web tech in a native shell — which is an existence proof that R1.1 (typing latency), R1.4 (vim) and R1.3 (rendering) are all satisfiable in a web-based stack. The Tauri finding is therefore evidence about *Tauri's OS bridge*, not about web rendering.
+**But the counter-evidence is sitting on the desk.** The user has been running **VSCode with vim plugins** as a stopgap, at 130 WPM, and finds it *pleasant* — markedly so after writing custom themes for it. VSCode is Electron — web tech in a native shell — which is an existence proof that R1.1 (typing latency), R1.4 (vim) and R1.3 (rendering) are all jointly satisfiable in a web-based stack. The Tauri finding is therefore evidence about *Tauri's OS bridge*, not about web rendering. **The rendering-quality worry is retired; the OS-integration worry is the whole of what remains.**
 
-**Four candidate shapes:**
+**Three candidate shapes** (a fourth — building this as an editor extension — was eliminated in **D1**, on measured mobile grounds):
 
 1. **Fully native (SwiftUI/AppKit).** Best OS integration; requires building or porting vim behaviour and markdown rendering. Very expensive, and squarely on the maintainer's weakest ground.
 2. **Native shell, web view for the editor surface only.** Native menus, printing, file handling and paste; web tech confined to where it is strongest (text rendering plus CodeMirror). Middle cost, and it directly targets the Tauri failure.
 3. **Full web shell (Electron or Tauri).** Most code shared; OS integration is work, and with Tauri specifically that work is now measured rather than guessed.
-4. **An extension to an existing editor (VSCode).** Editor, vim mode, typing performance, file handling and printing all free. Costs the deepest requirement — R1.5, "the UX is the user's own" — and covers no mobile at all. Worth pricing honestly rather than dismissing, since it is close to the current working setup and Foam and Dendron are precedents.
 
 **A structural point that widens the space: desktop and mobile need not share a UI stack.** The contract between them is the *file format*, which R26 requires be plain and durable anyway. Two purpose-built apps sharing no code is a legitimate architecture here, and it lets the desktop optimise for vim and screen area while the phone optimises for touch and small screens — which Q5 suggests are different problems regardless.
 
-**Strategy:** prototyping, jointly with Q1. The spike should include **printing a range and pasting an image**, not just typing, since those are where the measured pain is.
+**Strategy:** prototyping, as **Spike B** in `goal/discovery/spike-01-experiment.md` — printing a range and pasting an image, implemented in a native Swift shell and in Electron. Tauri needs no third implementation; its result is already measured. Rendering quality no longer needs proving.
 
 ## Q5: How much does mobile actually need to do?
 

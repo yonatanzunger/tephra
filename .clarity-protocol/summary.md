@@ -1,4 +1,4 @@
-# Notebook *(working name)*
+# Tephra
 
 Some people think by talking. This one thinks by writing — which means that where the writing happens, and how it feels to do, isn't a matter of preference but a direct input to the quality of the thinking. The evidence is twenty years long and unusually clear: a physical lab notebook worked until the work started happening away from it; a structured version of that notebook, with a TODO list in the front and a calendar in the back, worked *excellently* until the same access problem caught up with it; and Google Docs and then M365 solved access and failed anyway, because they had less structure than paper and a mobile app that barely functioned. **None of them failed for lack of features.** The one that worked best had four status symbols and a calendar section.
 
