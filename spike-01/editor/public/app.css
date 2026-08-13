@@ -1,0 +1,122 @@
+/* Tephra spike A — visual reference is the Clarity "sage" theme. */
+:root {
+  --font-body: 'Lora', Georgia, serif;
+  --font-sidebar: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --body-tracking: -0.01em;
+
+  --surface: 250 250 249;
+  --surface-ground: 245 245 244;
+  --surface-muted: 231 229 228;
+  --text: 41 37 36;
+  --text-heading: 68 64 60;
+  --text-muted: 120 113 108;
+  --border: 231 229 228;
+  --border-strong: 214 211 209;
+  --accent: 5 150 105;
+  --accent-surface: 209 240 227;
+  --code-bg: 237 235 232;
+  --sidebar: 2 44 34;
+  --sidebar-text: 245 245 244;
+}
+[data-mode="dark"] {
+  --surface: 28 25 23;
+  --surface-ground: 23 20 19;
+  --surface-muted: 41 37 36;
+  --text: 231 229 228;
+  --text-heading: 245 245 244;
+  --text-muted: 168 162 158;
+  --border: 68 64 60;
+  --border-strong: 87 83 78;
+  --accent: 52 211 153;
+  --accent-surface: 6 78 59;
+  --code-bg: 41 37 36;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: rgb(var(--surface-ground));
+  color: rgb(var(--text));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+#editor { position: absolute; inset: 0; }
+.cm-editor { height: 100%; }
+.cm-editor.cm-focused { outline: none; }
+
+/* ── widgets ──────────────────────────────────────────────────────────── */
+.tx-math { color: rgb(var(--text)); }
+.tx-math-block { display: block; text-align: center; padding: 0.7em 0; }
+.tx-math .katex { font-size: 1.03em; }
+.tx-bad { color: #b91c1c; font-family: var(--font-mono); font-size: 0.85em; }
+
+.tx-img img { max-width: 100%; border-radius: 4px; border: 1px solid rgb(var(--border)); }
+.tx-img:not(.tx-img-block) img {
+  max-height: 1.6em; width: auto; vertical-align: text-bottom;
+  border-radius: 2px; margin: 0 0.15em;
+}
+.tx-img-block { display: block; padding: 0.6em 0; text-align: center; }
+.tx-img-block img { max-height: 380px; }
+
+.tx-table { display: block; padding: 0.5em 0; overflow-x: auto; }
+.tx-table table { border-collapse: collapse; font-size: 0.9em; font-family: var(--font-sidebar); width: 100%; }
+.tx-table th, .tx-table td {
+  border-bottom: 1px solid rgb(var(--border));
+  padding: 0.35em 0.7em; text-align: left;
+}
+.tx-table th { color: rgb(var(--text-heading)); font-weight: 600; border-bottom: 1.5px solid rgb(var(--border-strong)); }
+.tx-table tr:hover td { background: rgb(var(--surface-muted) / 0.5); }
+
+/* headings: the line carries the size so the whole line reflows with it */
+.cm-line.tx-h1 { font-size: 1.85em; font-weight: 600; letter-spacing: -0.02em; color: rgb(var(--text-heading)); padding-top: 1.1em; padding-bottom: 0.3em; }
+.cm-line.tx-h2 { font-size: 1.4em;  font-weight: 600; letter-spacing: -0.02em; color: rgb(var(--text-heading)); padding-top: 1.5em; padding-bottom: 0.25em; }
+.cm-line.tx-h3 { font-size: 1.2em;  font-weight: 600; color: rgb(var(--text-heading)); padding-top: 0.9em; padding-bottom: 0.2em; }
+.cm-line.tx-h4, .cm-line.tx-h5, .cm-line.tx-h6 { font-weight: 600; color: rgb(var(--text-heading)); padding-top: 0.7em; }
+
+/* ── HUD ──────────────────────────────────────────────────────────────── */
+#hud {
+  position: fixed; top: 10px; right: 10px; width: 320px; z-index: 20;
+  font-family: var(--font-sidebar); font-size: 12px;
+  background: rgb(var(--sidebar)); color: rgb(var(--sidebar-text));
+  border-radius: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.22);
+  opacity: 0.94;
+}
+#hud:hover { opacity: 1; }
+#hud header { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; }
+#hud header b { letter-spacing: 0.04em; text-transform: uppercase; font-size: 11px; opacity: 0.85; }
+#hud .body { padding: 0 10px 10px; max-height: 82vh; overflow-y: auto; }
+#hud.mini .body { display: none; }
+#hud table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#hud th { font-weight: 500; opacity: 0.6; text-align: right; font-size: 10px; }
+#hud td { text-align: right; padding: 1px 0; }
+#hud td:first-child, #hud th:first-child { text-align: left; opacity: 0.85; }
+#hud .ok { color: #6ee7b7; font-weight: 600; }
+#hud .bad { color: #fca5a5; font-weight: 600; }
+#hud .sub { opacity: 0.65; margin-top: 5px; line-height: 1.45; }
+#hud fieldset { border: 1px solid rgb(255 255 255 / 0.14); border-radius: 6px; margin: 8px 0 0; padding: 6px 8px 8px; }
+#hud legend { opacity: 0.55; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 0 4px; }
+#hud label { display: inline-flex; align-items: center; gap: 4px; margin-right: 9px; line-height: 1.9; }
+#hud label.wide { display: flex; justify-content: space-between; gap: 6px; margin-right: 0; }
+#hud label.wide input[type=range] { flex: 1; }
+#hud label.wide span { width: 30px; text-align: right; opacity: 0.7; }
+#hud select, #hud button {
+  font-family: inherit; font-size: 11px; border-radius: 5px;
+  border: 1px solid rgb(255 255 255 / 0.2); background: rgb(255 255 255 / 0.08);
+  color: inherit; padding: 3px 7px;
+}
+#hud button { cursor: pointer; }
+#hud button:hover { background: rgb(255 255 255 / 0.16); }
+#hud .row { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+#hud details { margin-top: 8px; }
+#hud summary { cursor: pointer; opacity: 0.7; }
+#hud .try { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; opacity: 0.85; }
+#hud .try b { font-family: var(--font-mono); background: rgb(255 255 255 / 0.12); padding: 0 3px; border-radius: 3px; }
+
+/* vim status bar */
+.cm-vim-panel { font-family: var(--font-mono) !important; font-size: 12px !important; }
+
+@media (max-width: 760px) {
+  #hud { width: auto; left: 8px; right: 8px; top: 8px; font-size: 13px; }
+  #hud .body { max-height: 55vh; }
+}

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tephra · Spike A</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23059669'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&family=JetBrains+Mono:wght@400;500&family=iA+Writer+Quattro:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="editor"></div>
+
+  <aside id="hud">
+    <header>
+      <b>Spike A</b>
+      <button id="collapse" title="collapse">–</button>
+    </header>
+    <div class="body">
+      <div id="stats"></div>
+
+      <div class="row">
+        <button id="reset">Reset stats</button>
+        <button id="dump">Copy results</button>
+      </div>
+
+      <fieldset>
+        <legend>fluidity — flip one at a time, stats reset</legend>
+        <div class="row" style="margin:0 0 4px">
+          <button id="allon">all on</button><button id="alloff">strip to bare text</button>
+          <span id="config" class="sub" style="margin:0"></span>
+        </div>
+        <label title="the whole vim keymap and its cursor handling"><input type="checkbox" id="f-vim" checked> <b>vim</b></label>
+        <label title="CodeMirror draws its own cursor; off falls back to the browser's native caret"><input type="checkbox" id="f-drawnCaret" checked> drawn caret</label>
+        <label title="markdown parsing and the prose highlight style"><input type="checkbox" id="f-syntax" checked> syntax colour</label>
+        <label title="the markdown parser itself"><input type="checkbox" id="f-markdownParser" checked> md parser</label>
+        <label title="highlights other occurrences of the word under the cursor — repaints as you type"><input type="checkbox" id="f-selMatch" checked> match highlight</label>
+        <label title="highlights the matching bracket beside the cursor"><input type="checkbox" id="f-brackets" checked> bracket match</label>
+        <label title="off makes long paragraphs one very wide line instead of rewrapping"><input type="checkbox" id="f-wrap" checked> line wrap</label>
+        <label title="subpixel vs greyscale antialiasing changes apparent weight"><input type="checkbox" id="f-smoothing" checked> font smoothing</label>
+        <label class="wide">caret blink <input type="range" id="blink" min="0" max="1600" step="100" value="1200"><span id="blink-v">1200</span></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>OS boundary — spike B</legend>
+        <div class="row">
+          <button id="print">Print selection ⌘P</button>
+          <button id="paste">Paste image</button>
+        </div>
+        <div class="sub">shell: <b id="shellname">—</b> &middot; <span id="shellout">select a range, then print</span></div>
+        <div class="sub"><a href="caps.html" style="color:#6ee7b7">capability matrix →</a></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>where you type</legend>
+        <div class="row">
+          <button id="p-head">head of a long ¶</button><button id="p-tail">tail of it</button>
+        </div>
+        <div class="row">
+          <button id="p-short">short line</button><button id="p-empty">empty line</button>
+          <span id="where" class="sub" style="margin:0"></span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>widgets</legend>
+        <label><input type="checkbox" id="t-widgets" checked> widgets</label>
+        <label title="inline widgets are one unit for CodeMirror-level motion"><input type="checkbox" id="t-atomic" checked> atomic inline</label>
+        <label title="block widgets too — with this on, j/k cannot enter a table"><input type="checkbox" id="t-atomicb"> atomic block</label>
+        <label title="unrender the widget the cursor is inside (live preview)"><input type="checkbox" id="t-reveal" checked> reveal on cursor</label>
+        <label title="blocks also unrender from the neighbouring line — without this j/k can never enter one"><input type="checkbox" id="t-adj" checked> reveal adjacent</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>typography</legend>
+        <label class="wide">font
+          <select id="font">
+            <option value="'Lora', Georgia, serif">Lora (Clarity body)</option>
+            <option value="'Source Serif 4', Georgia, serif">Source Serif 4</option>
+            <option value="'iA Writer Quattro', 'Lora', serif">iA Writer Quattro</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="'DM Sans', system-ui, sans-serif">DM Sans</option>
+            <option value="ui-serif, Charter, serif">Charter / system serif</option>
+            <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+          </select>
+        </label>
+        <label class="wide">size <input type="range" id="size" min="13" max="28" step="1" value="18"><span id="size-v">18</span></label>
+        <label class="wide">measure <input type="range" id="measure" min="45" max="110" step="1" value="74"><span id="measure-v">74</span></label>
+        <label class="wide">leading <input type="range" id="leading" min="1.2" max="2.2" step="0.02" value="1.62"><span id="leading-v">1.62</span></label>
+        <label class="wide">¶ space <input type="range" id="paraSpace" min="0" max="1.4" step="0.05" value="0.55"><span id="paraSpace-v">0.55</span></label>
+        <label class="wide">tracking <input type="range" id="tracking" min="-0.04" max="0.03" step="0.005" value="-0.01"><span id="tracking-v">-0.01</span></label>
+        <label class="wide">caret px <input type="range" id="caretWidth" min="1" max="4" step="1" value="2"><span id="caretWidth-v">2</span></label>
+        <label class="wide">theme
+          <select id="theme"><option value="light">light</option><option value="dark">dark</option></select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>load</legend>
+        <div class="row">
+          <button id="type">Synthetic typing</button>
+          <select id="wpm">
+            <option value="130">130 wpm</option>
+            <option value="200">200 wpm</option>
+            <option value="300">300 wpm (burst)</option>
+            <option value="600">600 wpm (abuse)</option>
+          </select>
+        </div>
+        <div class="row">
+          <button id="scroll">Scroll storm</button>
+          <span id="scrollres" class="sub"></span>
+        </div>
+        <div class="row">
+          <button id="top">Top</button><button id="mid">Middle</button><button id="end">End</button>
+        </div>
+      </fieldset>
+
+      <details>
+        <summary>what to try</summary>
+        <ol class="try">
+          <li><b>dd</b> on the inline-equation line, then <b>u</b>.</li>
+          <li><b>x</b> / <b>h</b> / <b>l</b> across a rendered equation — does the cursor step over it as one unit?</li>
+          <li><b>v</b> then <b>$</b> over a line with a widget; then <b>d</b>, then <b>u</b>.</li>
+          <li><b>cw</b> with the cursor on the word before an equation.</li>
+          <li><b>j</b> / <b>k</b> down through the display equation and the table — every source line should be reachable.</li>
+          <li><b>dd</b> on a table row, then <b>u</b>.</li>
+          <li>Turn <b>reveal on cursor</b> off and try <b>l</b> across an equation — this is what the option buys.</li>
+          <li><b>/</b> search for text past a widget; <b>n</b> to walk hits.</li>
+          <li>Type a full paragraph at your real speed anywhere in the stream.</li>
+          <li>Feels off? <b>strip to bare text</b>, type, then switch things back on one at a time.</li>
+          <li>Compare against <a href="baseline.html" style="color:#6ee7b7">a plain textarea</a> holding the same 1 MB.</li>
+        </ol>
+      </details>
+    </div>
+  </aside>
+
+  <script src="bundle.js"></script>
+  <script>
+    const hud = document.getElementById('hud')
+    document.getElementById('collapse').onclick = () => hud.classList.toggle('mini')
+  </script>
+</body>
+</html>

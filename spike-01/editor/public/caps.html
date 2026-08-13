@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tephra · capability matrix</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23059669'/%3E%3C/svg%3E">
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 2rem;
+         background: #faf9f8; color: #292524; }
+  h1 { font-size: 1.3rem; margin: 0 0 .2rem; }
+  .origin { font-family: ui-monospace, monospace; font-size: 13px; color: #78716c; margin-bottom: 1.5rem; word-break: break-all; }
+  table { border-collapse: collapse; width: 100%; max-width: 800px; }
+  th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid #e7e5e4; }
+  th { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #78716c; }
+  td.v { font-family: ui-monospace, monospace; font-size: 13px; }
+  .yes { color: #047857; font-weight: 600; }
+  .no  { color: #b91c1c; font-weight: 600; }
+  .why { color: #78716c; font-size: 13px; }
+  pre { background: #f5f5f4; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 12px; max-width: 800px; }
+  button { font: inherit; padding: .35rem .8rem; border-radius: 6px; border: 1px solid #d6d3d1; background: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>Capability matrix</h1>
+<div class="origin" id="origin"></div>
+<table id="t"><thead><tr><th>capability</th><th>result</th><th>why it matters</th></tr></thead><tbody></tbody></table>
+<p><button id="copy">Copy as JSON</button></p>
+<pre id="json"></pre>
+
+<script>
+// What the engine grants depends on the origin the page was loaded from, not on
+// whether the app considers the page its own. This enumerates the gates that
+// would silently remove functionality if the shipping load strategy differs
+// from the one the spike was run under.
+const checks = []
+const add = (name, fn, why) => checks.push({ name, fn, why })
+
+add('isSecureContext', () => window.isSecureContext,
+    'the master gate — clipboard, crypto.subtle and more hang off it')
+add('window.origin', () => String(window.origin), 'opaque ("null") breaks storage and fetch')
+add('navigator.clipboard', () => !!navigator.clipboard, 'reading an image from the clipboard in the web layer')
+add('clipboard.read()', () => typeof navigator.clipboard?.read === 'function',
+    'the actual method the web paste path needs; absent even where clipboard exists')
+add('crypto.subtle', () => !!(window.crypto && window.crypto.subtle), 'secure-context-gated; a canary for the same gate')
+add('fetch a relative file', async () => {
+  try { const r = await fetch('corpus.md', { method: 'GET' }); return r.ok ? `ok, ${(+r.headers.get('content-length') || (await r.text()).length / 1e6).toString().slice(0, 6)}` : 'status ' + r.status }
+  catch (e) { return 'FAILED: ' + e.message }
+}, 'the editor loads its own content this way')
+add('localStorage', () => { try { localStorage.setItem('_t', '1'); localStorage.removeItem('_t'); return true } catch (e) { return 'FAILED: ' + e.name } },
+    'where a shipping build would keep scroll position and preferences')
+add('indexedDB', () => !!window.indexedDB, 'the same, for anything larger')
+add('PerformanceObserver "event"', () => { try { new PerformanceObserver(() => {}).observe({ type: 'event', durationThreshold: 0 }); return true } catch (e) { return 'FAILED' } },
+    'half of the latency instrumentation')
+add('PerformanceObserver "longtask"', () => { try { new PerformanceObserver(() => {}).observe({ type: 'longtask' }); return true } catch (e) { return 'FAILED' } },
+    'the other half; WebKit is not expected to have it')
+add('regex lookbehind', () => { try { return new RegExp('(?<=a)b').test('ab') } catch (e) { return 'FAILED' } },
+    'used by the markdown mark-hiding layer')
+add('window.print exists', () => typeof window.print === 'function',
+    'exists everywhere; whether it does anything is the shell question')
+add('window.tephra bridge', () => window.tephra ? (window.tephra.name || 'present') : false,
+    'whether a shell injected its half')
+
+const results = {}
+const tbody = document.querySelector('#t tbody')
+document.getElementById('origin').textContent = location.href
+
+;(async () => {
+  for (const c of checks) {
+    let v
+    try { v = await c.fn() } catch (e) { v = 'THREW: ' + e.message }
+    results[c.name] = v
+    const tr = document.createElement('tr')
+    const cls = v === true ? 'yes' : (v === false || String(v).startsWith('FAILED') || String(v).startsWith('THREW')) ? 'no' : ''
+    tr.innerHTML = `<td>${c.name}</td><td class="v ${cls}">${v === true ? 'yes' : v === false ? 'no' : v}</td><td class="why">${c.why}</td>`
+    tbody.appendChild(tr)
+  }
+  results._userAgent = navigator.userAgent
+  results._href = location.href
+  const json = JSON.stringify(results, null, 2)
+  document.getElementById('json').textContent = json
+  window.capsResult = results
+  // hand the result to a shell if one is listening, so runs can be collected
+  // compact for the shell (one line, easy to grep out of a log), pretty on screen
+  window.tephra?.report?.(JSON.stringify(results))
+})()
+
+document.getElementById('copy').onclick = () =>
+  navigator.clipboard?.writeText(document.getElementById('json').textContent)
+</script>
+</body>
+</html>

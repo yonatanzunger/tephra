@@ -1,8 +1,18 @@
 # Open Questions
 
-Five genuine unknowns, ordered by how much they constrain everything else. Q1 and Q2 should be resolved before any substantial building.
+Five genuine unknowns, ordered by how much they constrain everything else. **Q1 and Q4 are now resolved by Spike 01** (`discovery/spike-01-findings.md`); Q2 should be resolved before any substantial building.
 
 ## Q1: Can one editing surface be vim-compatible *and* render figures, equations and tables inline?
+
+**Status: RESOLVED — yes, CodeMirror 6.** See D16 and `discovery/spike-01-findings.md`.
+
+Spike A confirmed it against a 1.05 MB corpus, on the desktop and on Android. The editor's own cost is 0.4 ms per keystroke at p99 and does not grow with document size, widget count or typing speed. Three constraints came with the answer and are now design inputs rather than open questions: block widgets must come from a state field rather than a view plugin; rendered constructs must unrender under the cursor, because the vim plugin ignores CodeMirror's atomic ranges; and block widgets must unrender from a neighbouring line, or vertical motion can never reach them.
+
+Two things the spike changed that were not in the question. **Vim itself is now a setting** (D15) — it is unusable on a soft keyboard and subtly worse on the desktop. And the "p99 under 30 ms" bar turned out not to be scoreable: a plain `<textarea>` holding the same corpus measures 17.5 ms on the same machine, so most of that budget is the display pipeline.
+
+The staging in the original analysis survives untouched: ship raw+vim and rendered-read first, add rendered-edit per node type, tables and equations last.
+
+<details><summary>Original analysis, kept for its reasoning</summary>
 
 **Status:** open, and narrower than it first looked
 **Why it matters:** Decides the technology of the whole desktop app; R1.4 and R2.7 are both hard requirements pulling against each other.
@@ -12,6 +22,8 @@ Five genuine unknowns, ordered by how much they constrain everything else. Q1 an
 **The cost is concentrated in one place: editing in the rendered view.** Rendered *reading* is nearly free. Rendered *editing* means the markup must be managed on the user's behalf — cursor enters a node, markup reveals; cursor leaves, it re-renders. That works well for inline constructs (emphasis, links, headings) and poorly for tables and equations, which usually want a dedicated editing affordance instead. So this decomposes: ship raw+vim and rendered-read first, then add rendered-edit per node type in order of value. **Tables and equations are the expensive ones and can wait.**
 
 **Strategy:** prototyping. The experiment is defined in `goal/discovery/spike-01-experiment.md` — **Spike A**, a plain browser page, which answers this at zero platform cost. Its sharp edge is not rendering but **vim operating over widgets**: what `dd` does to a line holding a rendered equation, whether motion, visual selection and undo behave across one.
+
+</details>
 
 ## Q2: What is the storage and sync substrate?
 
@@ -43,6 +55,16 @@ Five genuine unknowns, ordered by how much they constrain everything else. Q1 an
 
 ## Q4: What stack, given that OS integration is a real cost?
 
+**Status: RESOLVED — candidate 3, an Electron shell.** See D17 and `discovery/spike-01-findings.md`.
+
+**The premise the question rested on turned out to be false.** OS integration is not intrinsically expensive for a web-shelled app: printing a selected range and pasting an image were built twice, and both are a paragraph of shell code in either shell. The Tauri finding was about Tauri.
+
+With the deciding cost gone, the choice fell to the primary requirement. **Typing felt better in Electron than in the Swift shell** — the same subtle, unnameable difference as vim against non-vim. On macOS that is not separable from the shell: a native shell gets WKWebView, Electron is Chromium, and there is no third arrangement this project can afford. The one thing the Swift shell did better — a print panel with a document preview — closes in eleven lines in Electron. The thing Electron does better cannot be closed in Swift at all.
+
+Candidate 1 (fully native) stays where D1 and the spike plan left it: reopened only if the surface had failed, and it did not.
+
+<details><summary>Original analysis, kept for its reasoning</summary>
+
 **Status:** open, and reframed by firsthand evidence
 
 **The evidence.** The Clarity app is React rendered inside a Mac app via **Tauri**. Rendering quality: *acceptable* — which retires the main worry about R1.3. **OS integration: painful** — "things as simple as printing have required a *lot* of work."
@@ -61,8 +83,12 @@ That matters more here than it would for most apps, because **OS integration is 
 
 **Strategy:** prototyping, as **Spike B** in `goal/discovery/spike-01-experiment.md` — printing a range and pasting an image, implemented in a native Swift shell and in Electron. Tauri needs no third implementation; its result is already measured. Rendering quality no longer needs proving.
 
+</details>
+
 ## Q5: How much does mobile actually need to do?
 
 **Status:** open
 **Why it matters:** Bounds the most expensive part of the build. "Hard to think of functionalities I wouldn't want" is a maximal answer, but era 3's mobile failure was that it was *barely functional* rather than incomplete — so the requirement may be **excellent at less** rather than equal. Vim is desktop-only by nature; screen real estate makes range selection, fileset browsing and long-form writing genuinely different problems on a phone.
+
+**Narrowed by Spike A′.** The editing surface itself ports — the same page runs well in Android Chrome and a system WebView, so mobile is not a separate build. What does *not* port is vim, which is unusable on a soft keyboard (D15). That makes the non-vim keymap the phone's permanent surface rather than a fallback, and it is the part of this question now worth answering first: what the phone's editing gestures are when modal editing is off the table.
 **Strategy:** thinking. Probably resolved by listing what is actually done on the phone in a typical fortnight, rather than in the abstract.

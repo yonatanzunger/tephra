@@ -203,3 +203,67 @@
 **Search is an X-level component, not a W-level scan.** An earlier draft allowed the Corpus to grep the directory directly, as a performance shortcut. That was wrong on four counts: W does not know which file holds a given part of the notebook, so its results cannot be expressed as positions in the logical document; W does not know the format, so a raw scan matches frontmatter and markup as prose; a W-level hit is a file and an offset, the address D11 forbids; and unsaved edits live in X's buffer, so a disk scan cannot find the paragraph just typed. The v1 implementation reads through the Document API; a later one maintains an index fed by **Document's change events**, with Document staying ignorant of its consumers.
 
 **The six rules that keep it honest** are in `solution/architecture.md`. The one that would otherwise be discovered painfully: **the layering is strict for operations and persistence, and deliberately loose for reading live state.** R1.1 is a hard latency requirement, and an editing surface routing every keystroke through Z→X→W cannot meet it — the live buffer is held in memory and rendered from directly, while X persists asynchronously. A naively strict version of this architecture would violate the project's primary requirement.
+
+## D15: Vim mode is a switchable feature, not the fixed editing model
+
+**Date:** 2026-08-12
+**Status:** decided
+**Detail:** `goal/discovery/spike-01-findings.md`
+
+**Decision.** The vim keymap is a setting the user can turn off, and the editing surface must remain fully usable without it. R1.4 stands — vim is the default and the reason the surface was chosen — but it is no longer load-bearing for the surface being pleasant.
+
+**Why — two independent reasons, and the second is the stronger one.**
+
+**Mobile cannot use vim at all.** Spike A′ confirmed it on the phone: a modal keymap over a soft keyboard is not merely worse, it is unusable. R1.4 already said vim is desktop-only by nature, but that was a statement about where vim is *wanted*; this is a statement about where it can *function*. Since desktop and mobile run the same editing surface wherever they can (Q4), the surface must work without vim as a first-class mode rather than a degraded one.
+
+**And on the desktop it has a cost that resists naming.** Spike A produced an unexpected result: typing is measurably fine either way, and yet **it feels less fluid with vim on**. The difference survived every attempt to name it. Keystroke-to-paint is identical (p50 4.2–12.5 ms with vim, 4.4–12.7 ms without), both modes take the browser's native `beforeinput` insertion path with nothing default-prevented, and the seven other candidate causes — line wrapping, markdown parsing, syntax colouring, match highlighting, bracket matching, font smoothing, position within a long wrapped paragraph — were each measured and cleared. The effect is real to the user and below the resolution of the instruments.
+
+**Why this is a resolution rather than a deferral.** The trigger for the whole project is that the tool must be a joy to type in, and "there is something slightly off that I cannot name" is exactly the kind of friction that decides whether writing actually happens here. A switch converts it into a preference, which is the honest answer when the cause is unnamed. It is also nearly free: the vim layer already lives in a single CodeMirror compartment, so toggling it is a reconfigure rather than a rebuild.
+
+**One lead left on the table.** CodeMirror's drawn cursor costs about 1 ms against the browser's native caret, and vim requires the drawn one for its normal-mode block cursor. If the feeling is ever worth chasing, that is where to start — and it would also mean the vim-off path can use the native caret and be *better* than vim-on rather than merely equal.
+
+**What would reopen this.** Nothing; the mobile half alone settles it, and a switch forecloses nothing. The question it leaves open is whether the non-vim mode deserves its own keymap design rather than inheriting CodeMirror's defaults — which now matters more than it looked, since that mode is what the phone always runs.
+
+## D16: The editing surface is CodeMirror 6, with widgets that unrender under the cursor
+
+**Date:** 2026-08-12
+**Status:** decided
+**Resolves:** Q1
+**Detail:** `goal/discovery/spike-01-findings.md`
+
+**Decision.** One surface — CodeMirror 6 — carries both raw markdown edited with vim and inline rendering of equations, images and tables. Mode switching is a decoration toggle, not a second editor.
+
+**Why.** Spike A confirmed it against a 1.05 MB corpus of real prose on desktop and Android. The editor's own cost is 0.4 ms per keystroke at p99, flat across document size, widget count and typing speed, with no queueing at 600 WPM. Every vim operation over every widget type behaves correctly and undo restores byte-for-byte.
+
+**Three constraints came with the answer, and none of them was a choice.**
+
+- **Block widgets cannot come from a view plugin** — CodeMirror refuses. Inline widgets are rebuilt per viewport in a `ViewPlugin`; tables, display equations and figures live in a whole-document `StateField` that maps through changes and rescans only the edited block. A state field cannot see the viewport, so anything that rescans the corpus per keystroke is wrong by construction.
+- **Rendered constructs must unrender under the cursor.** `@replit/codemirror-vim` does its own offset arithmetic and never consults `atomicRanges`, so nothing can tell it a widget is one unit. Left rendered, the cursor freezes at the widget's edge while vim walks the hidden source underneath.
+- **Block widgets must also unrender from a neighbouring line.** Replacing whole lines removes them from the visual layout, so `j` and `k` skip them entirely — unreachable means uneditable.
+
+**What it does not decide.** Rendered *editing* per node type still stages as Q1 described: inline constructs first, tables and equations last.
+
+**What would reopen this.** A vim implementation that respects atomic ranges would relax the second constraint, not the decision.
+
+## D17: The app ships as an Electron shell
+
+**Date:** 2026-08-12
+**Status:** decided
+**Resolves:** Q4
+**Detail:** `goal/discovery/spike-01-findings.md`
+
+**Decision.** Tephra is candidate 3 — a full web shell, Electron specifically. The desktop and mobile builds share the editing surface; the contract between them remains the file format.
+
+**Why the question's premise dissolved.** Q4 existed because OS integration looked expensive. Spike B built printing-a-range and pasting-an-image twice, and both are a paragraph of shell code in either shell — 71 and 21 lines in Swift, 23 and 10 in Electron. **The Tauri finding was about Tauri**, and the cost that made this question hard is not there.
+
+**Why Electron rather than the native shell, once cost stopped deciding.** Typing felt better in Electron — the same subtle, unnameable difference as vim against non-vim, and more acute. **On macOS this is not separable from the shell:** a native shell gets WKWebView, Electron is Chromium, and no third arrangement is affordable here. So the difference cannot be fixed inside the Swift arm at any price. Meanwhile the one thing the Swift shell did better — a print panel showing a preview of the document — closes in eleven lines in Electron by rendering to PDF and showing it in Chromium's own viewer, which brings thumbnails, zoom and a print button with it.
+
+**The asymmetry is the argument.** The gap that cannot be closed sits on R1.1, the requirement the project exists for. The gap that closes cheaply sits on R11, which is occasional.
+
+**Consequences to carry.**
+- **The app serves itself from a custom scheme**, not `file://` and not a localhost server. Every origin tested is a secure context, so nothing is lost; a custom scheme needs no port and, unlike a localhost server inside a desktop app, cannot be reached by any other process on the machine — which matters because these files hold other people's information. Electron requires `registerSchemesAsPrivileged({ secure: true })` before startup.
+- **A ~150 MB bundled runtime**, accepted.
+- **Paste re-encodes rather than preserving the pasteboard's original bytes** — 4 062 against 7 610 for the same image. Pixels survive, the file does not. This is the one cost that cannot be recovered after the fact, and if it matters it needs a small native path.
+- Printing renders the range to HTML in the web layer and hands it to the shell; the print document must carry an explicit `<base href>` or relative images silently vanish.
+
+**What would reopen this.** Electron becoming untenable for the Android side, which it does not touch — mobile was always free to be its own build.
