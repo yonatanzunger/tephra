@@ -16,4 +16,5 @@ Each entry records what it competes with and what evidence would promote it. Evi
 | **Editable filtered views** | Read-only views, jump to source to edit | Measured friction of the jump. This is the most demanding thing in the design (`goal/scope.md`), so the evidence bar is correspondingly high. |
 | **Real search** | v1's literal substring matching | Substring search failing on real recall tasks — the half-remembered thing not found. |
 | **A derived index** | Scanning | Scans ceasing to be instant (D7). |
+| **Journal recovery UI** | Nothing — no stand-in exists | The journal retains 30 days of change records from v1 (D28); this is the affordance that makes them readable. Promoted by the first time something is destroyed and noticed late |
 | **docx and other export** | Copy and paste into another program | An actual occasion where the markdown was not enough. |

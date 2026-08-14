@@ -39,6 +39,8 @@ The staging in the original analysis survives untouched: ship raw+vim and render
 
 **The fork is no longer balanced.** A CRDT's entire value proposition is conflict-free concurrent editing. With that case rare (D12) and reconnection ceremony acceptable, the benefit is small while the cost — files demoted to an export — is large. **Plain files as source of truth is the expected answer**; what remains is confirming it rather than deciding it.
 
+**A new constraint on the answer (D31): the hub must be a *versioned* store, not a file-sync service.** Rewindable history is a real requirement with no other home — the local journal is a durability window, not a history — so the hub is where "what did this look like in March" has to live. That rules out Dropbox/iCloud/S3-shaped answers and points hard at git or an equivalent, which is also where Portal's validated spike work already sits.
+
 **Strategy:** confirm, then prototype narrowly — aimed at the divergence picker and atomic writes, which are the parts that still have to work.
 
 ## Q3: What replaces the filling page?
@@ -92,3 +94,58 @@ That matters more here than it would for most apps, because **OS integration is 
 
 **Narrowed by Spike A′.** The editing surface itself ports — the same page runs well in Android Chrome and a system WebView, so mobile is not a separate build. What does *not* port is vim, which is unusable on a soft keyboard (D15). That makes the non-vim keymap the phone's permanent surface rather than a fallback, and it is the part of this question now worth answering first: what the phone's editing gestures are when modal editing is off the table.
 **Strategy:** thinking. Probably resolved by listing what is actually done on the phone in a typical fortnight, rather than in the abstract.
+
+## Q6: How do local undo and versioned history interact?
+
+**Status: RESOLVED — D32.** Options in `solution/history-options.md`; architecture in `solution/history-architecture.md`.
+**Why it matters:** It is a v1 question (how undo works) and a v2/v3 question (the sync architecture) that must be answered together, because answering them separately misaligns them. It also currently has **three decisions resting on an unexamined assumption** — D28's 30-day journal retention, D29's rewind semantics, and D31's split of responsibilities — all of which were written before the interaction was examined directly.
+
+**The shape of it.** Two histories want to exist: fine-grained edit history (undo) and versioned history (rewind, cross-device). The difficulty is entirely in three places where they touch — **autosave** (no discrete save event to anchor a version to), **remote merge** (what does undo mean over text someone else changed), and **hand-editing** (a change with no record of intent). A good option puts all three in one place or in none; a bad one spreads them across two mechanisms that must agree.
+
+**Resolution.** Option 4 with all three modifiers: volatile in-memory undo, a seconds-long WAL, and a git repository local from v1. The deciding argument was that it is the only option putting all three interaction points in one place or in none — and that git extends the exit to the history, which a bespoke store would not.
+
+## Q7: What is the shape of the stream view, and how far does continuity reach?
+
+**Status:** open. Partly measurable, partly judgement — and the two halves are separable.
+**Why it matters:** It decides how the editor binds to `Window`, which is structural rather than iterable. It is also the first thing that will be built and the first thing that will be felt.
+
+### The question in current terms
+
+R6 asks for "one continuous chronological stream." The corpus is 0.4–0.9 GB over twenty years and cannot be resident, so the stream is presented through a `Window` (D8, D23). **"Window extent" and "the stream UX" turn out to be one question, not two**: how much is loaded *is* how far you can scroll before something else has to happen, and what that something else is.
+
+The stream is **oldest-first, appended at the end** — the paper-notebook order, and the one the project's own metaphor describes. Opening Tephra should land at the end of today with the cursor ready, since appending to today is by far the highest-frequency gesture.
+
+### Four things are undetermined; one of them is structural
+
+**(a) Where does continuous scrolling stop and jumping take over? — STRUCTURAL.** This decides whether `Window.extend` is exercised constantly or rarely, and whether scroll-anchoring-on-prepend has to be solved at all. Prepending content above the viewport shifts every position and the scroll offset with it; correcting for that requires measuring inserted height after layout, and it is the fiddly part of every upward-infinite-scroll implementation ever written.
+
+**(b) Does a jump move the current window, or open another?** D10 already has "current window or new window" as an entry-activation choice, so the likely answer is: a jump moves this window and keeps a back stack, browser-fashion, with open-in-new-window as an explicit gesture.
+
+**(c) One editor pane, or a privileged place for the stream?** One pane is simpler, but then jotting in today's stream while reading a note costs a navigation — friction on the highest-frequency gesture. Portal's answer was a separate capture surface: *"the widget is the capture surface, not the editor; capture is gesture, type, enter."* Probably deferrable: one pane plus a one-key "go to today", and a capture affordance only if that proves frictional.
+
+**(d) What does a first launch against an empty directory do?** Small, but it is the first thing built and the first thing seen.
+
+### Options for (a)
+
+1. **Fixed window, explicit extend.** An "earlier ▲" affordance at the boundary. Simplest; honest; a visible seam where the requirement asks for continuity.
+2. **Auto-extending, no eviction.** Grows as you scroll up. Memory grows without bound and performance degrades somewhere unmeasured.
+3. **Sliding window with eviction.** Constant memory, but scroll anchoring becomes mandatory and editing near an evicted boundary is fiddly.
+4. **Continuous within a generous window, date-jump beyond it.** Continuity where continuity is actually used — the last few weeks, where you are re-reading context — and a different affordance for distance, which is what a person reaches for anyway.
+
+**2-with-a-cap and 4 converge**, since a generous auto-extending window that stops growing at a cap *is* option 4. That is the likely answer.
+
+### The idea that decouples the tension
+
+A large window is slow to open and rarely needs extending; a small one opens instantly and extends often. **Both, in sequence:** open a few days' worth immediately, then extend backwards in the background toward a larger target while the reader is still orienting. Opening stays instant and the boundary is rarely reached.
+
+### What is measurable, and what is not
+
+**Measurable, and currently unknown: where the editor actually degrades.** Spike A measured flat cost at 1.05 MB — about a fortnight. A *month* is already extrapolation, and nothing above that has been tested. **One hour's work** settles it: synthetic corpora at 2, 5, 10 and 25 MB, with realistic widget density, loaded and typed into. Widget density matters as much as byte count, so prose-only figures would mislead.
+
+**Judgement, not measurable: how far back continuous scrolling should reach** before a jump is the better gesture. That is a question about how the notebook is used, and the honest way to settle it is to live with a number and change it.
+
+**Strategy:** measure the ceiling, choose the extent well inside it, and treat the extent as a tunable rather than a constant.
+
+**Deferred (D36).** The measurement waits until after a first v1 cut — safely, and for a specific reason: **v1 ships option 1**, `autoExtendOnApproach: false`, and a window that does not grow never approaches the unmeasured ceiling. The reopening trigger is therefore precise: **before that flag is set true.**
+
+**Update (D35).** Q7's option space is now **configuration rather than architecture**: `Pane.policy` has `initial`, `target`, `cap`, `autoExtendOnApproach` and `evict`, and options 1, 2 and 4 are settings of it. Only eviction is new code. What remains genuinely open is the *measurement* — where the editor degrades above 1.05 MB — and the *judgement* about how far continuous scrolling should reach, which is answered by living with a number.

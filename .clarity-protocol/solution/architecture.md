@@ -12,6 +12,8 @@ Three layers, explicit in the code rather than implied by convention.
 | **X** | Logical objects | The natural objects of the domain — a document, a fileset, the corpus — exposing *conceptual* operations. Translates those into the language of W. |
 | **W** | Infrastructure | Files on disk, directory watching, atomic replacement, OS services, and later the network hub. |
 
+**The shell is Electron** (D17), serving the app from a **custom scheme** — not `file://`, not a localhost server. Z is a Chromium page with CodeMirror 6 at its centre (D16); W is the Electron main process plus the filesystem.
+
 **This is not a stylistic preference here, because the most alarming finding Portal produced was a layering violation.** A widget that opened its file during view construction re-read constantly and lost edit state on reparenting — which is R1.2, *no state is ever at risk*, failing at the framework level rather than in application logic. Model construction being separate from view construction is the same rule as Z never reaching into W.
 
 ## The X objects
@@ -113,7 +115,7 @@ Everything above the dashed link to the hub is on a trusted device; the hub is t
 
 ## Preliminary risks
 
-Not the output of failure analysis, which has not been run — these are the ones already visible from decisions taken.
+Not the output of failure analysis, which has not been run and is **deliberately deferred until v2a begins** (D36) — these are the ones already visible from decisions taken. **T10 is the one v1-relevant item that coding will not illuminate**; it is bounded by v1 having no remote, so the purge procedure is owed before the first *push* rather than the first commit.
 
 | | Risk | Why it ranks | Mitigation so far |
 |---|---|---|---|
@@ -123,4 +125,6 @@ Not the output of failure analysis, which has not been run — these are the one
 | **T5** | Watcher dies silently on atomic replace | It fails *without erroring*, so nothing reports it | Watch directories, never descriptors |
 | **T3** | Hub compromise exposes third-party information | Notes discuss people who did not consent to the hub | Open — bears on where the hub lives (Q2) |
 | **T4** | Credential leakage; Android TLS trust unresolved | Portal's one unclosed hole, inherited | Open — carried from Portal's T5 spike |
-| **T6** | A stale derived index is trusted | Hand-editing is a feature, so staleness is routine | Index is machine-local, disposable, never authoritative (D7) |
+| **T6** | A stale derived index is trusted | Hand-editing is a feature, so staleness is routine | Index is machine-local, disposable, never authoritative (D7); startup consistency check with full rebuild |
+| **T8** | A local HTTP server inside the app is reachable by any other process on the machine | The corpus holds other people's information, so a localhost origin is a real exposure, not a theoretical one | Avoided by design: the app serves itself from a custom scheme, which needs no port and no listener (D17). **Do not substitute a dev server for convenience.** |
+| **T9** | The vim keymap's only mature implementation ignores CodeMirror's atomic ranges | Two of D16's three constraints exist to work around it; if it is abandoned or fixed, behaviour shifts underneath | Low severity — the workaround (unrender under the cursor) is arguably correct behaviour independently |

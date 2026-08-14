@@ -15,7 +15,7 @@ Everything discussed so far, in one list, with a proposed stage. Stages are **v1
 | Automatic dating | R8 | v1 |
 | Per-file metadata in frontmatter | — | v1 |
 | Subject-tag syntax (inline markup, no offsets) | R12, D11 | v1 — format only if tagging slips |
-| Origin date in frontmatter for branched files | D13 | v1 (format) |
+| *(no origin fields — the link left in the stream carries it)* | D27 | — |
 | Bookmark anchor syntax (inline) | R9 | v1 — format only if bookmarking slips |
 | Section/fileset index format | R20 | v1 (nav needs it) |
 | Image paste writes a file and inserts a link | R7 | v1 |
@@ -27,8 +27,9 @@ Everything discussed so far, in one list, with a proposed stage. Stages are **v1
 
 | Feature | Ref | Stage |
 |---|---|---|
-| Windowed single-document editor, per-region write-back | D8 | v1 |
-| Vim mode | R1.4 | v1 |
+| Windowed editor over the document, per-region write-back | D8, D23 | v1 — **required**, not deferred: a month of writing is 2.4× the largest corpus the editor has been tested against |
+| Vim mode, as a switchable setting | R1.4, D15 | v1 |
+| Non-vim keymap, deliberately designed rather than inherited | D15 | v1 — it is what mobile always runs |
 | Raw markdown editing | R1.4 | v1 |
 | Rendered reading view | R1.4 | v1 |
 | Rendered editing — inline constructs | R1.4 | ◆ v1 or v2 |
@@ -59,7 +60,7 @@ Everything discussed so far, in one list, with a proposed stage. Stages are **v1
 | Combined tag-and-date query | D9 | v2 |
 | Editable filtered views | R13 | v3+ |
 | Real search: ranking, stemming, structure | R10 | v3+ |
-| Derived index | D7 | v3+ (v1 scans) |
+| Derived index | D7, D23 | **v2** — scanning is instant at 10 MB and is not at 50 MB, which is year two |
 
 ## Range operations
 
@@ -78,12 +79,15 @@ Everything discussed so far, in one list, with a proposed stage. Stages are **v1
 |---|---|---|
 | Real, visible local directories | D5 | v1 |
 | Atomic writes (write-temp-then-rename) | — | v1 |
+| WAL: changes since last file write | D32 | v1 |
+| Three write tiers, each with quiescence **and** max-interval triggers | D32 | v1 |
 | Network hub as source of truth | D5 | v2a |
 | Continuous asynchronous background push | D5 | v2a |
 | Offline accumulation, push on reconnect | R25 | v2a |
 | Divergence surfaced to the user with a picker | D12 | v2a |
 | Attachment cache with eviction | D5 | v2b (the phone forces it) |
-| Rewindable history | — | v3+ |
+| Local git repository — commits, restore | D32 | **v1.** M1: versioning is local from day one, so v2a adds distribution rather than history |
+| Rewindable history | D32 | **v1** — falls out of the repository, rather than being a v3 feature with no mechanism |
 
 ## Mobile
 

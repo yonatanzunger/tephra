@@ -1,7 +1,7 @@
 {
   "project": "Tephra",
   "status": "preliminary",
-  "note": "Layering and core objects only. Failure analysis has not been run; threats listed are those visible from decisions already taken.",
+  "note": "Layering and core objects. Stack resolved by Spike 01: Electron shell (D17), CodeMirror 6 surface (D16). Full failure analysis has not been run; threats listed are those visible from decisions and spike findings.",
   "layers": [
     {
       "id": "Z",
@@ -24,7 +24,7 @@
       "id": "editor",
       "layer": "Z",
       "name": "Editor surface",
-      "description": "Vim mode, raw and rendered markdown, inline widgets.",
+      "description": "CodeMirror 6. Vim is a switchable setting (D15); the non-vim keymap is first-class and is what mobile always runs. Inline widgets in a viewport ViewPlugin, block widgets in an incrementally-updated StateField; constructs unrender under the cursor and blocks unrender from a neighbouring line. Binds to a DocumentWindow, which is the complete editor-facing API (D26, renamed in D35); reaches Document only for undo, which is document-scoped.",
       "stage": "v1"
     },
     {
@@ -52,7 +52,7 @@
       "id": "document",
       "layer": "X",
       "name": "Document",
-      "description": "One logical markdown document: text, anchors, tags, headings, edit and save.",
+      "description": "One logical markdown document: text and inferred spans (dates, headings, anchors, tags). Owns history and durability. Positions are (segment, offset); the stream\u2019s segments are dates.",
       "storage": "Segmented into day files for the stream; a single file for branched documents and pinned lists.",
       "stage": "v1"
     },
@@ -113,7 +113,7 @@
       "id": "osservices",
       "layer": "W",
       "name": "OS services",
-      "description": "Printing, clipboard and image paste, open-with by OS intent.",
+      "description": "Electron main process. Printing (range rendered to HTML in the web layer, with an explicit base href), clipboard and image paste, open-with by OS intent.",
       "stage": "v1"
     },
     {
@@ -136,6 +136,41 @@
       "name": "Network hub",
       "description": "Single source of truth. The only component outside the user's physical control.",
       "stage": "v2a"
+    },
+    {
+      "id": "shell",
+      "layer": "W",
+      "name": "Electron shell",
+      "description": "Serves the app from a custom scheme registered with registerSchemesAsPrivileged({secure:true}). Not file://, not a localhost server.",
+      "stage": "v1"
+    },
+    {
+      "id": "journal",
+      "layer": "W",
+      "name": "Write-ahead log",
+      "description": ".tephra/wal \u2014 changes since the last file write. Seconds long, discarded on write. Explicitly NOT a history (D32).",
+      "stage": "v1"
+    },
+    {
+      "id": "history",
+      "layer": "X",
+      "name": "History",
+      "description": "Versions of the corpus: commit, versions, read, restore(version, doc, span?). The only durable history. Commit on ~5min quiescence or every 30min or session end; never blocks typing.",
+      "stage": "v1"
+    },
+    {
+      "id": "repo",
+      "layer": "W",
+      "name": "Git repository",
+      "description": "notebook/.git, gitignoring .tephra/. Local in v1; gains a remote at v2a. Chosen over a bespoke store because it extends the exit to the history.",
+      "stage": "v1"
+    },
+    {
+      "id": "pane",
+      "layer": "Z",
+      "name": "Pane (view-model)",
+      "description": "Navigation and extent policy: location, back stack, boundary state, ExtentPolicy. Consumes Document/Region/Corpus. The editor reports viewportChanged; the Pane decides whether to extend. ui-state.json is this, serialised.",
+      "stage": "v1"
     }
   ],
   "flows": [
@@ -229,6 +264,26 @@
       "from": "document",
       "to": "search",
       "label": "change events; Document stays ignorant of consumers"
+    },
+    {
+      "from": "history",
+      "to": "repo",
+      "label": "commit / restore"
+    },
+    {
+      "from": "document",
+      "to": "history",
+      "label": "notifies; History decides when to commit"
+    },
+    {
+      "from": "editor",
+      "to": "pane",
+      "label": "viewportChanged \u2014 reports a fact, does not decide"
+    },
+    {
+      "from": "pane",
+      "to": "document",
+      "label": "goTo / extend \u2014 opens and replaces Regions"
     }
   ],
   "trust_boundaries": [
@@ -300,6 +355,33 @@
       "rationale": "Hand-editing is a feature, so index staleness is routine rather than exceptional.",
       "mitigation": "Index is machine-local, disposable and never authoritative (D7); startup consistency check with full rebuild on disagreement.",
       "status": "mitigated-by-design"
+    },
+    {
+      "id": "T8",
+      "component": "shell",
+      "name": "A local HTTP server inside the app is reachable by any other local process",
+      "severity": "high",
+      "rationale": "The corpus holds other people\u2019s information, so a localhost origin is a real exposure rather than a theoretical one.",
+      "mitigation": "Avoided by design: custom scheme, no port, no listener (D17). Do not substitute a dev server for convenience.",
+      "status": "avoided-by-design"
+    },
+    {
+      "id": "T9",
+      "component": "editor",
+      "name": "The vim keymap implementation ignores CodeMirror atomic ranges",
+      "severity": "low",
+      "rationale": "Two of D16\u2019s three design constraints exist to work around a third-party gap; if the package is abandoned or fixed, behaviour shifts underneath.",
+      "mitigation": "The workaround \u2014 unrender under the cursor \u2014 is arguably correct behaviour independently of the bug.",
+      "status": "accepted"
+    },
+    {
+      "id": "T10",
+      "component": "journal",
+      "name": "Deleted text survives forever in version history",
+      "severity": "high",
+      "rationale": "With a git repository from v1 (D32), deleted content persists indefinitely rather than for 30 days \u2014 and from v2a it is also on the hub, which holds other people\u2019s information.",
+      "mitigation": "Inherent to having history at all. Purging is a history rewrite and, after v2a, a force-push: a documented procedure, NOT a button. The earlier \"a purge clears the journal\" mitigation is void.",
+      "status": "accepted-with-procedure"
     }
   ]
 }

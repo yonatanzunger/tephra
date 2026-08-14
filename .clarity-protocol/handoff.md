@@ -4,6 +4,8 @@ Written 2026-08-12, at the point where the Clarity session moved from `../portal
 
 Delete or rewrite this file once its contents have been absorbed into the normal documents. It is scaffolding, not a record.
 
+> **Stale as of 2026-08-12 (later), except for one section.** Alignment was confirmed, the project was named, seventeen decisions were recorded, and Spike 01 closed Q1 and Q4. "Where we are," "Live threads not yet in the documents," and the note about empty `decisions/` are all superseded — read `decisions/decisions.md`, `solution/`, and `goal/open-questions.md` instead. **"How this user works" and "Mistakes I made" have not been superseded, and are the reason this file still exists.**
+
 ## Read in this order
 
 1. `summary.md` — what this is and why, in prose.
