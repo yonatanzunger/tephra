@@ -1,0 +1,37 @@
+/* Visual reference is the Clarity app's sage theme (notes.md). Carried from
+   Spike A, where these tokens were judged against real prose. */
+:root {
+  --font-body: 'Lora', Georgia, serif;
+  --font-ui: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --surface: 250 250 249;
+  --surface-ground: 245 245 244;
+  --surface-muted: 231 229 228;
+  --text: 41 37 36;
+  --text-heading: 68 64 60;
+  --text-muted: 120 113 108;
+  --border: 231 229 228;
+  --accent: 5 150 105;
+  --status-error: 185 28 28;
+  --status-warn: 180 83 9;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: rgb(var(--surface-ground));
+  color: rgb(var(--text));
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+.scaffold { padding: 4rem clamp(1.5rem, 8vw, 6rem); max-width: 46rem; }
+.scaffold h1 { font-family: var(--font-body); font-weight: 600; font-size: 1.9rem; margin: 0 0 .2em; color: rgb(var(--text-heading)); }
+.scaffold .sub { color: rgb(var(--text-muted)); margin: 0 0 2.5rem; }
+.scaffold dl { display: grid; grid-template-columns: max-content 1fr; gap: .55rem 1.5rem; font-size: .9rem; }
+.scaffold dt { color: rgb(var(--text-muted)); }
+.scaffold dd { margin: 0; font-family: var(--font-mono); font-size: .85rem; }
+.ok { color: rgb(var(--accent)); }
+.warn { color: rgb(var(--status-warn)); }
+.bad { color: rgb(var(--status-error)); }

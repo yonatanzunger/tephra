@@ -677,3 +677,57 @@ Option 1 is `autoExtend: false`; option 2 is `autoExtend: true, cap: null`; opti
 **Reopening trigger:** *before v2a begins.* Sync, a hub holding third-party information, the divergence path and the first push all arrive together, and that is the point at which a threat list assembled from decisions rather than from the process stops being defensible.
 
 **What this preserves.** `architecture.md`'s threat list stays marked preliminary rather than being quietly treated as complete, and `implementation-notes.md` §5 already carries the tests for the failure modes that *are* v1-relevant — the split path, crash recovery, atomic-rename watcher survival, the divergence path. Those are obligations on the first cut regardless.
+
+## D37: X lives in the main process; O(corpus) work goes to a utility process
+
+**Date:** 2026-08-14
+**Status:** decided
+**Detail:** `solution/architecture.md`
+
+**Decision.** The X layer — Document, Corpus, History, Search — runs in the **Electron main process**, alongside W. The renderer holds Z and the live CodeMirror buffer. Anything O(corpus) — the startup scan, search, git — runs in a `utilityProcess` from the start rather than being retrofitted after the first stall.
+
+**Why one X at all.** X implements the concept of *a document*; if there is one document there should be one object for it. D10's "open in the current window or a new window" otherwise produces two renderers with two Documents, two undo stacks and two WALs over the same day file — which is the corruption the `lock` file exists to prevent, arriving through a door the lock does not cover, since it guards processes rather than BrowserWindows.
+
+**Why main rather than a shared hidden renderer**, which was the other candidate:
+
+- **A hidden renderer saves no hops.** It is a separate process from the visible renderer, so renderer-to-renderer traffic still routes through main; and it cannot touch the filesystem without either `nodeIntegration` — the posture Spike B was careful to avoid — or IPC to main. File I/O becomes two hops where main-hosted X has none.
+- **It does not solve the crash problem it exists for.** The reason to move X out of the visible renderer is that a renderer is the component most likely to die. A hidden renderer is still a renderer.
+- **Chromium throttles hidden renderers**, and that is the disqualifying one. Timers slow when a renderer is backgrounded or occluded, and the write tiers are timer-driven: the 5-second file-write ceiling and the 30-minute commit ceiling exist precisely because quiescence alone fails during long writing sessions (D32). Throttling them puts "a path that fires rarely is broken when it fires" directly on durability. `backgroundThrottling: false` exists, but it is a flag that must be remembered forever.
+
+Main also wins on the properties actually wanted: it is a singleton by construction, so there is no election; it is where W already lives; and it is where the watcher and `isomorphic-git` naturally run.
+
+**The cost, stated with its discipline.** Blocking main stalls window management, menus and IPC for every renderer. Hence the utility process for corpus-scale work — `utilityProcess` and `MessageChannelMain` are both available in the target Electron, and MessagePorts let a scan stream results to the renderer without transiting main at all.
+
+**One API contract needs restating, and this is the consequence to watch.** `DocumentWindow.edit()` promised that in-memory state — *both the window's and the document's* — updates synchronously before returning. With Document in main that is not literally achievable. What is achievable and sufficient: **the window's buffer updates synchronously in the renderer**, the edit is posted to main, and per-channel IPC ordering guarantees any later call observes it. So `DocumentWindow` is genuinely two-part — a renderer-side facade holding `text` and the span list, which is what keeps `toDocument`, `spansAt`, `snap`, `advance` and `distance` synchronous as declared, over a main-side authority.
+
+**What would reopen this.** Main-process contention that a utility process cannot relieve, which would mean moving X to a utility process wholesale rather than back to a renderer.
+
+## D38: Dates are assigned in a fixed reference zone, UTC−8
+
+**Date:** 2026-08-14
+**Status:** decided
+**Detail:** `solution/format-spec.md`
+
+**Decision.** The `date` a passage is filed under is computed in a **fixed UTC−8**, never in the device's local zone. Times are *displayed* locally; only the filing date is fixed. The practice is borrowed from Google, where a single reference zone removed exactly this class of problem.
+
+**Why it has to be fixed rather than local.** Dates are the stream's ordering axis, they are assigned automatically (R8), and re-dating is corruption (D9) — so the zone in which a date is computed is a **format decision v1 cannot revisit**. Local time fails twice over: fly to Zurich and today's file already exists under a different calendar date, and every device disagrees about which day a passage belongs to. A fixed offset also has no DST discontinuity, so no hour is ever doubled or skipped.
+
+**Two consequences, stated rather than discovered.**
+
+- **The day rolls at 00:00 PST, which is 01:00 local during PDT** — about eight months of the year. A note typed at 00:30 in summer files under the previous day. This is the trade a fixed offset buys and is correct, not a bug.
+- **The choice of −8 specifically is about where the writing happens.** UTC−8 is nine hours behind CET, so a European working day from 09:00 to midnight maps entirely onto the same-numbered date; only writing before about 09:00 local falls back a day. Choosing a reference zone near the usual place of work is what keeps boundary oddities rare.
+
+**What would reopen this.** Effectively nothing — the corpus accumulates under this rule and re-dating is corruption. A different reference zone would have to be applied going forward, not retroactively.
+
+## D39: TypeScript, React and electron-vite; CodeMirror stays outside React
+
+**Date:** 2026-08-14
+**Status:** decided
+
+**Decision.** TypeScript throughout. Z is **React**, built with **electron-vite**. Not Next.js — there is no SSR and no routing in a desktop app.
+
+**Why React is safe here despite owning none of the important surface.** CodeMirror owns its own DOM and its own update cycle, so it is mounted once into a ref'd container and React never renders into that subtree. React therefore does nothing for the editing surface, which is the point: it earns its keep on the chrome — nav sections, filtered views, pickers, settings — where a component model genuinely helps. The typing path never enters reconciliation, so R1.1 is unaffected.
+
+**One binding rule that prevents a specific bug.** Pane already exposes exactly the shape `useSyncExternalStore` wants — `onWindowChanged`, `onLocationChanged`, `onBoundaryChanged`. Bind to those directly. **Mirroring Pane state into React state would create a second source of truth**, which is the thing this design refuses everywhere else and would refuse here for the same reason.
+
+electron-vite gives renderer HMR, which is worth having for the phase this build is entering — iterate on Z rapidly once X is trustworthy.
