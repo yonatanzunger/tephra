@@ -475,7 +475,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 ## D28: The journal is retained for 30 days, and deletion must reach it
 
-> **Under review (Q6).** The 30-day retention assumes the journal is also the destruction record. If versioned history moves wholly to the hub — and especially if the hub exists locally from v1 — the journal shrinks to a crash-gap WAL and this retention retires. See `solution/history-options.md`.
+> **SUPERSEDED by D32.** What was under review here resolved against it: versioned history moved to a local git repository from v1, the journal shrank to a seconds-long WAL, and the 30-day retention retired along with the ambiguity of one mechanism serving as both a durability device and a history. The destruction record now lives in the repository, where it is durable and versioned — which also makes T10 worse rather than better, since deleted text now survives permanently. Kept for its reasoning; the split-threshold half of the decision (256 KB → 1 MB) still stands.
 
 **Date:** 2026-08-12
 **Status:** decided
@@ -625,16 +625,16 @@ Fine-grained cross-device undo is the only capability this forgoes, and under D1
 
 **A caveat recorded honestly.** Library maintenance status and API completeness change faster than my knowledge of them, and library health is where I am least reliable. The structural analysis above is durable; the current state of any of these packages is worth thirty minutes of verification before committing.
 
-## D35: Pane is the navigation view-model; Window is renamed Region
+## D35: Pane is the navigation view-model; Window is renamed DocumentWindow
 
 **Date:** 2026-08-12
 **Status:** decided
 **Addresses:** Q7
 **Detail:** `solution/pane-api.md`
 
-**Decision.** A new **`Pane`** class in Z owns navigation and extent policy: where the user is, how they got there, and whether an extension blocks or happens quietly. **`Window` is renamed `Region`** (`WindowPosition` → `RegionPosition`).
+**Decision.** A new **`Pane`** class in Z owns navigation and extent policy: where the user is, how they got there, and whether an extension blocks or happens quietly. **`Window` is renamed `DocumentWindow`** (`WindowPosition` → `BufferPosition`).
 
-**Why it cannot be Window, and the reason is decisive: navigation crosses documents.** Jumping from the stream to a branched note to a fileset and back is the ordinary case, and a Region is bound to one Document — so whatever holds a back stack must sit above it and replace Regions as it moves.
+**Why it cannot be Window, and the reason is decisive: navigation crosses documents.** Jumping from the stream to a branched note to a fileset and back is the ordinary case, and a DocumentWindow is bound to one Document — so whatever holds a back stack must sit above it and replace DocumentWindows as it moves.
 
 **Why the rename, and why `DocumentWindow` specifically.** The bare name `Window` collided three ways: a loaded region, an **OS window** (D10's "current window or a new window"), and a UI area. And there is a hard technical reason beyond readability — **`Window` is a DOM global in TypeScript's `lib.dom`**, so a bare `Window` type in a renderer process is a live footgun rather than merely a vague name. `DocumentWindow` is qualified and unambiguous. `Region` was considered and rejected as too vague to guess from.
 
@@ -646,7 +646,7 @@ Fine-grained cross-device undo is the only capability this forgoes, and under D1
 initial · target · cap · autoExtendOnApproach · evict
 ```
 
-Option 1 is `autoExtend: false`; option 2 is `autoExtend: true, cap: null`; option 4 is the same with a cap; option 3 sets `evict`. **Three of the four are flags; only eviction is new code**, because it is the one that makes scroll anchoring mandatory — and that code is isolated inside Region. So the intended evolution is a sequence of default changes rather than rewrites. `initial` differing from `target` is what decouples "opens instantly" from "rarely reaches the boundary."
+Option 1 is `autoExtend: false`; option 2 is `autoExtend: true, cap: null`; option 4 is the same with a cap; option 3 sets `evict`. **Three of the four are flags; only eviction is new code**, because it is the one that makes scroll anchoring mandatory — and that code is isolated inside DocumentWindow. So the intended evolution is a sequence of default changes rather than rewrites. `initial` differing from `target` is what decouples "opens instantly" from "rarely reaches the boundary."
 
 **A unification found on the way: `NavTarget` and the fileset entry type are one type.** D10's four entry kinds — bookmark, file, URL, external document — *are* navigation targets. Clicking a section entry works with no adapter because there is nothing to adapt.
 

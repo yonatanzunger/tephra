@@ -75,10 +75,10 @@ Images are written as files and referenced by ordinary relative markdown links; 
 
 ```
 attachments/2026/03/2026-03-14-plot-a1b2c3.png
-![Titration curve](../../attachments/2026/03/2026-03-14-plot-a1b2c3.png)
+![Titration curve](../../../attachments/2026/03/2026-03-14-plot-a1b2c3.png)
 ```
 
-The short content hash prevents collisions and makes duplicate detection possible later. Ordinary links mean any renderer shows the image and the exit stays real.
+Three levels up, because a day file sits at `stream/YYYY/MM/`. The short content hash prevents collisions and makes duplicate detection possible later. Ordinary links mean any renderer shows the image and the exit stays real.
 
 ## Sections
 
@@ -119,19 +119,17 @@ Never synced, and — with one deliberate exception noted below — entirely dis
 
 **`ui-state.json` has an unresolved requirement behind it.** R1.2 asks that scroll position, cursor and open view survive "app switches, crashes, device changes and sync." *Device changes* implies some of this should **sync**, which contradicts `.tephra/` being machine-local. Resuming on the phone where the Mac left off is a real and plausible reading; so is "never lose your place on this machine." **v1 keeps it machine-local**, since v1 has no sync — but if it is ever to sync, it needs a home in the synced tree, and that is a coverage decision rather than a mechanism (the backfill rule). Left open deliberately.
 
-## The journal
+## The WAL
 
-`.tephra/journal/<doc-id>/` holds serialised `DocumentChange` records (D20, D23, D29) — appended on every change, replayed after a crash, folded into the text files and compacted at quiescence. Machine-local, never synced.
+`.tephra/wal/<doc-id>.jsonl` holds serialised `DocumentChange` records — appended on every change, replayed after a crash, folded into the text files and truncated once they are written. Machine-local, never synced.
 
-**Retention is 30 days, and the reason is the backfill rule rather than undo.** Durability alone needs only the records since the last fold. Retaining longer costs about 15 MB — a day of writing is ~100 KB of content and perhaps 3–5× that in change records — and buys something that cannot be reconstructed later: **a record of what was destroyed.** "Losing anything, ever" is an explicit unacceptability criterion, and the case it does not otherwise cover is accidental destruction noticed a week afterwards.
+**It is measured in seconds, and that is the whole of its job** (D32). It covers the gap between memory and disk, nothing more. Being that short-lived is what makes it safe: it cannot become a second history, so it can never disagree with one.
 
-**The journal is a durability window, not a history** (D31). Fine-grained undo on this device is its job; *what did this look like in March* is the hub's job, and the two have different granularities because they answer different questions.
+**What was destroyed lives in the repository instead.** The git history is durable, versioned, and from v2a cross-device — strictly better than a local retention window, and it is what retired D28's 30-day journal along with the ambiguity of a mechanism that was both a durability device and a history.
 
-**Retention is also what bounds rewind.** `rewindTo` (D29) can reach any generation whose records survive; beyond 30 days the generation is known but unreachable, and the call fails loudly rather than approximating. That gives the retention figure a second justification.
+**What bounds rewind is the session, not a retention period.** `rewindTo` (D29) reaches any generation in the in-memory undo stack, which begins at process start; older states are reached through `History.restore` at commit granularity. Undo therefore does not survive a restart — accepted deliberately (D32), on the grounds that this is VSCode plus git, used daily without friction, where the post-restart recovery path is the history rather than ⌘Z.
 
-**The recovery affordance is a later feature; the data has to exist now.** This is the same pattern as the last-touched timestamp (R15) — mechanisms can be deferred, data cannot be backfilled. Retaining the journal without ever building a way to read it would be pointless, so the affordance belongs in the backlog rather than nowhere.
-
-**One consequence that must be stated, not discovered: deleting text from Tephra does not delete it from the journal for up to 30 days.** If something is deleted *because* it should not be recorded, that expectation is silently violated. A purge action that clears journal records as well as text is the mitigation, and it is a v1 obligation rather than a nicety (T10).
+**One consequence that must be stated, not discovered: deleting text from Tephra does not delete it from the repository.** It survives there permanently, and from v2a on the hub as well, so purging genuinely-unwanted content is a history rewrite rather than a deletion. **The mitigation is a documented purge procedure, not a button**, and it is honest about costing a force-push after v2a. Because v1 has no remote, the exposure is bounded to one machine and the procedure is owed **before the first push, not before the first commit** (T10, D36).
 
 ## Degradation — the hand-editing contract
 

@@ -292,8 +292,10 @@ export interface Document {
    * reachable through the undo affordance. "Losing anything, ever" then holds
    * for history as well as for text.
    *
-   * Fails if `to` predates journal retention (D28): the generation is known
-   * but the records needed to reach it are gone. Fail loudly, as ever.
+   * Bounded by the session: the undo stack is in memory only (D32), so a
+   * generation from before this process started is unreachable, and the call
+   * fails loudly rather than approximating. Older states are reached through
+   * History.restore, at commit granularity rather than keystroke granularity.
    */
   rewindTo(to: SessionGeneration): Promise<DocumentChange | null>
 
@@ -427,9 +429,9 @@ Nothing above imports CodeMirror. Five properties keep the adapter thin, and the
 
 `replace` resolves once the change is durable, which is affordable because **the keystroke path does not call `replace` per keystroke**: the editor renders from its window buffer, and `replace` serves operations.
 
-Typed text is covered by the journal — append a `DocumentChange`, replay after a crash, fold into the text files and discard at quiescence. **The realistic loss event is a renderer crash, not power failure**, since the live buffer lives in the renderer; that is why the journal must be an append crossing to the main process.
+Typed text is covered by the WAL — append a `DocumentChange`, replay after a crash, fold into the text files and truncate once written. **The realistic loss event is a renderer crash, not power failure**, since the live buffer lives in the renderer; that is why the WAL must be an append crossing to the main process.
 
-**Retaining the journal past quiescence is a small, separate choice**: it buys undo that survives an app restart, at the cost of a second representation of the same data. Worth taking deliberately rather than by default.
+**The WAL is seconds long and is deliberately not retained** (D32). Retaining it would buy undo that survives a restart at the cost of a second representation of the same data — and the durable record of what a document used to look like belongs to the repository, which has it already.
 
 The contract: **durable when `flush()` resolves, and durable within N ms otherwise.**
 
