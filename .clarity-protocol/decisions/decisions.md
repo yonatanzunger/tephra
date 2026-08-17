@@ -731,3 +731,24 @@ Main also wins on the properties actually wanted: it is a singleton by construct
 **One binding rule that prevents a specific bug.** Pane already exposes exactly the shape `useSyncExternalStore` wants — `onWindowChanged`, `onLocationChanged`, `onBoundaryChanged`. Bind to those directly. **Mirroring Pane state into React state would create a second source of truth**, which is the thing this design refuses everywhere else and would refuse here for the same reason.
 
 electron-vite gives renderer HMR, which is worth having for the phase this build is entering — iterate on Z rapidly once X is trustworthy.
+
+## D40: Extent is measured in screens, converted to characters — never in days
+
+**Date:** 2026-08-16
+**Status:** decided
+**Amends:** D35 (`ExtentPolicy`), and `DocumentWindow.extend` in the locked `solution/document-api.md`
+**Detail:** `solution/pane-api.md`
+
+**Decision.** `ExtentPolicy` is denominated in **screens**, converted to characters at the moment of use by a rate measured from the editor, and bounded by a hard character ceiling. `DocumentWindow.extend(direction, chars?)` takes characters rather than days. A loaded region need not begin or end on a day boundary.
+
+**Why days were wrong, and it is a safety problem rather than a matter of taste.** A day file holds between roughly 100 KB and the 1 MB split threshold — a tenfold range. So a fortnight is anywhere from 1.4 MB to 14 MB, and `target: days(14)` asks for an amount nobody can predict. Spike A measured flat cost at **1.05 MB and nothing above it has been tested**, which is precisely the untested region D36's deferral depends on staying out of. A day-denominated target walks into it on a heavy fortnight, silently, with no flag flipped. **The deferral and the unit were coupled and nobody noticed.**
+
+**Why not characters as the unit a policy is written in.** Nobody scrolls back two hundred thousand characters; they scroll back *a bit*. A policy written in characters cannot be tuned by feel, and tuning by feel is exactly what Q7 says settles the extent question.
+
+**Screens resolve both, and the measurement is already in the API.** `Pane.viewportChanged(visible)` carries `from` and `to` in buffer positions, so `to - from` **is** the character extent of one screenful. The rate therefore needs no layout knowledge, no font metrics and no second signal: it is measured continuously from something the editor already reports, and it adapts to window size, font size and content density for free. Sparse and dense screens are handled by clamping samples and smoothing, so one full-page figure — about forty characters — cannot convince the policy that a screen holds forty characters.
+
+**`maxChars` is the part that must not be dropped in a later simplification.** It is the hard bound the screen arithmetic may never exceed, set to Spike A's measured-flat 1.05 MB, and it is what keeps the D36 deferral honest under any policy. Raise it alongside that measurement, never by feel.
+
+**What it costs.** A window boundary may fall mid-day, so the "earlier ▲" affordance names the date of the earliest loaded position rather than a whole day loaded. This is free: positions are already `(segment, offset)` and `read` already widens markdown-aware, so partial segments were always expressible — only `ExtentPolicy` imposed whole-day granularity, and it imposed it by accident.
+
+**What would reopen this.** The D36 measurement, which should revisit `maxChars` and may make a cap in screens meaningful where today it is null.

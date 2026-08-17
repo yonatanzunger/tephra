@@ -22,13 +22,21 @@ This is the point of the class. Q7's options become settings:
 
 ```ts
 export interface ExtentPolicy {
-  initial: Duration          // load this much on open — small, so opening is instant
-  target: Duration           // extend to this in the background while the reader orients
-  cap: Duration | null       // stop growing here; beyond the cap, jumping is the affordance
+  initial: Screens           // load this much on open — small, so opening is instant
+  target: Screens            // extend to this in the background while the reader orients
+  cap: Screens | null        // stop growing here; beyond the cap, jumping is the affordance
+  extendWhenWithin: Screens  // headroom that triggers an extension
   autoExtendOnApproach: boolean
   evict: boolean             // drop the far end to hold memory constant
+  maxChars: number           // hard ceiling; the screen arithmetic may never exceed it
 }
 ```
+
+**The unit is screens, not days, and that is a safety property rather than a preference** (D40). A day holds between ~100 KB and the 1 MB split threshold, so `target: days(14)` asks for somewhere between 1.4 MB and 14 MB — and Spike A measured flat cost at 1.05 MB with nothing above it tested. A day-denominated target walks into the region D36's deferral depends on avoiding, silently. `maxChars` is the hard bound that keeps that deferral honest, and it is set to measured ground.
+
+**The rate is measured, not guessed.** `viewportChanged` already carries `from` and `to`, so `to - from` *is* the character extent of one screenful; `ScreenMetric` smooths and clamps those samples, so a full-page figure of forty characters cannot convince the policy that a screen holds forty characters. It adapts to window size, font size and content density with no extra signal.
+
+**A window boundary may therefore fall mid-day**, and the "earlier ▲" affordance names the date of the earliest loaded position. This costs nothing: positions were always `(segment, offset)` and `read` always widened markdown-aware, so partial segments were expressible all along — only `ExtentPolicy` imposed day granularity, and it did so by accident.
 
 | Q7 option | Policy |
 |---|---|
