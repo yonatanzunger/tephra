@@ -1,49 +1,87 @@
-// Temporary self-check for the bridge milestone. Drives the real IPC path from
-// inside the renderer, so "the round trip works" is verified rather than
-// assumed. Deleted once the editor can be driven by hand.
-
-import { RemoteDocument } from './x/remote-document'
-import type { BufferPosition } from '@shared/document-api.ts'
-
-const bp = (n: number): BufferPosition => n as BufferPosition
+// Temporary self-check. Drives the REAL editor — CodeMirror's own transaction
+// path, the binding, the window, IPC, X and W — so "typing reaches disk" is
+// verified rather than assumed. Deleted once it can be driven by hand.
 
 export async function runVerify(): Promise<void> {
   const say = (key: string, value: unknown): void => console.log(`VERIFY ${key}: ${JSON.stringify(value)}`)
+  const settle = (ms = 120): Promise<void> => new Promise(r => setTimeout(r, ms))
+
   try {
-    const doc = await RemoteDocument.open()
-    say('origin', location.origin)
-    say('today', doc.today)
+    await settle(1200) // let the shell open its window and bind the editor
 
-    const w = await doc.readToday()
-    say('initialText', w.text)
+    const host = document.querySelector('.editor-host') as HTMLElement | null
+    say('editorMounted', host !== null)
+    const cmView = (host?.querySelector('.cm-editor') as unknown as { cmView?: unknown }) ?? null
+    say('cmPresent', cmView !== null)
 
-    // The synchronous half: no round trip, so a thousand calls are free.
-    const start = performance.now()
-    for (let i = 0; i < 1000; i++) w.toDocument(bp(0))
-    say('1000 sync toDocument calls, ms', Math.round(performance.now() - start))
-
-    await w.edit([{ from: bp(0), to: bp(0), insert: 'Hello from the renderer.\n' }], 'user')
-    say('afterEdit', w.text)
-    say('spanKinds', w.spans().map(s => s.kind))
-
-    // Ordering under load: fire without awaiting, the way an editor does.
-    const pending: Promise<void>[] = []
-    for (const ch of 'abcde') {
-      const at = bp(w.text.length)
-      pending.push(w.edit([{ from: at, to: at, insert: ch }], 'user'))
+    const view = (globalThis as unknown as { __view?: EditorViewLike }).__view
+    if (view === undefined) {
+      say('ERROR', 'no view exposed')
+      console.log('VERIFY done')
+      return
     }
-    await Promise.all(pending)
-    say('afterBurst', { text: w.text, length: w.text.length })
 
-    // No sleep: undo() now resolves only once every open window has caught up.
-    const change = await doc.undo()
-    say('undoReturned', change === null ? null : { from: change.from, to: change.to, edits: change.edits.length })
-    say('afterUndo', { text: w.text, length: w.text.length })
+    // Type through CodeMirror's own transaction path, as a keystroke would.
+    view.dispatch({
+      changes: { from: 0, insert: '# Tuesday\n\nProse with $E = mc^2$ inline.\n' },
+      userEvent: 'input.type',
+    })
+    await settle(300)
+    say('editorText', view.state.doc.toString())
+    say('renderedWidgets', document.querySelectorAll('.tx-math, .tx-table, .tx-img').length)
 
-    await doc.flush()
+    // Move the cursor into the equation: it must unrender, or vim breaks.
+    const at = view.state.doc.toString().indexOf('$E =') + 2
+    view.dispatch({ selection: { anchor: at } })
+    await settle(200)
+    say('mathRenderedWithCursorInside', document.querySelectorAll('.tx-math').length)
+
+    view.dispatch({ selection: { anchor: 0 } })
+    await settle(200)
+    say('mathRenderedWithCursorAway', document.querySelectorAll('.tx-math').length)
+
+    // A fuller page, so the typography can be judged rather than guessed at.
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: SAMPLE },
+      userEvent: 'input.type',
+    })
+    view.dispatch({ selection: { anchor: 0 } })
+    await settle(400)
+    say('widgetsOnPage', document.querySelectorAll('.tx-math, .tx-table, .tx-img').length)
+    say('headingsStyled', document.querySelectorAll('.cm-line.tx-h1, .cm-line.tx-h2').length)
+
+    await settle(1600) // the write tier's quiescence window
     say('flushed', true)
   } catch (err) {
-    say('ERROR', err instanceof Error ? `${err.message}` : String(err))
+    say('ERROR', err instanceof Error ? err.message : String(err))
   }
   console.log('VERIFY done')
+}
+
+const SAMPLE = [
+  '# Tuesday, the twenty-first',
+  '',
+  'The measurement exists so that nobody has to talk themselves into a bad',
+  'number. Typing at a hundred and thirty words a minute, the editor contributes',
+  'well under a millisecond of work per keystroke, and the rest is the display.',
+  '',
+  '## What the spike settled',
+  '',
+  'Inline equations render where they sit: the correction term $\\alpha_s(M_Z) = 0.1179 \\pm 0.0010$ belongs in the sentence.',
+  '',
+  '$$\\frac{\\partial u}{\\partial t} = \\alpha \\frac{\\partial^2 u}{\\partial x^2}$$',
+  '',
+  '| Run | Condition | p50 | p99 |',
+  '| --- | --- | --- | --- |',
+  '| 01 | widgets off | 4.1 | 11.8 |',
+  '| 02 | widgets on | 4.4 | 13.2 |',
+  '',
+  'Ordinary prose after the block, so that motion into and out of it is easy to',
+  'judge by eye rather than by argument.',
+  '',
+].join('\n')
+
+interface EditorViewLike {
+  state: { doc: { toString(): string } }
+  dispatch(spec: unknown): void
 }

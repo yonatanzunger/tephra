@@ -4,6 +4,7 @@
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
 import { Notebook } from './w/notebook.ts'
 import { DocumentService, registerDocumentIpc, attachWindow } from './ipc.ts'
@@ -44,7 +45,14 @@ function createWindow(): BrowserWindow {
     win.webContents.on('console-message', (_e, _level, message) => {
       if (!message.startsWith('VERIFY')) return
       console.log(message)
-      if (message === 'VERIFY done') setTimeout(() => app.exit(0), 200)
+      if (message === 'VERIFY done') {
+        setTimeout(() => {
+          void win.webContents
+            .capturePage()
+            .then(img => writeFileSync(process.env['TEPHRA_SHOT'] ?? '/tmp/tephra-shot.png', img.toPNG()))
+            .finally(() => app.exit(0))
+        }, 400)
+      }
     })
   }
 
@@ -95,7 +103,7 @@ app.on('before-quit', async event => {
   const closing = notebook
   notebook = null
   try {
-    await service?.flush()
+    await service?.stop()
   } finally {
     await closing.close()
     app.quit()

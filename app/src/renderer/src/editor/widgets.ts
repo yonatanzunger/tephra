@@ -1,0 +1,369 @@
+// Inline rendering, ported from Spike 01 where the behaviour was measured.
+//
+// THREE CONSTRAINTS, ALL FORCED (D16, implementation-notes §2):
+//
+// 1. Block widgets cannot come from a view plugin — CodeMirror refuses outright.
+//    Inline widgets rebuild per viewport in a ViewPlugin; block widgets live in
+//    a whole-document StateField that maps through each change and rescans only
+//    the block the edit touched. Never rescan the document per keystroke.
+//
+// 2. Rendered constructs must unrender under the cursor. @replit/codemirror-vim
+//    does its own offset arithmetic and never consults atomicRanges, so nothing
+//    can tell it a widget is one unit. Left rendered, six `l` presses leave the
+//    cursor frozen while vim walks the hidden source underneath.
+//
+// 3. Block widgets must also unrender from a NEIGHBOURING line. Replacing whole
+//    lines removes them from the visual layout, so j/k skip them entirely — and
+//    unreachable means uneditable.
+//
+// Measured in the spike: 2 ms initial scan, 0.2 ms incremental.
+
+import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
+import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
+import katex from 'katex'
+
+export const rebuildWidgets = StateEffect.define<null>()
+
+export interface WidgetOptions {
+  enabled: boolean
+  /** Unrender the construct the cursor is inside. Mandatory for vim (see above). */
+  reveal: boolean
+  /** Blocks also unrender from a neighbouring line, or j/k cannot enter them. */
+  revealAdjacent: boolean
+}
+
+export const defaultWidgetOptions: WidgetOptions = {
+  enabled: true,
+  reveal: true,
+  revealAdjacent: true,
+}
+
+// Mutable module state, deliberately: these are toggled live from the settings
+// UI and every decoration builder reads them. A facet would be tidier and would
+// also mean rebuilding the extension set on every toggle.
+export const widgetOptions: WidgetOptions = { ...defaultWidgetOptions }
+
+const INLINE_MATH = /(?<!\$)\$([^$\n]+?)\$(?!\$)/g
+const IMAGE = /!\[([^\]]*)\]\(([^)\s]+)\)/g
+const DISPLAY_MATH_LINE = /^\s*\$\$(.+)\$\$\s*$/
+const TABLE_DELIM = /^\s*\|?[\s:|-]{3,}\|?\s*$/
+const IMAGE_ALONE = /^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/
+const HEADING = /^(#{1,6})\s+/
+
+const katexCache = new Map<string, string>()
+
+function renderMath(src: string, display: boolean): string {
+  const key = (display ? 'D' : 'I') + src
+  let html = katexCache.get(key)
+  if (html === undefined) {
+    try {
+      html = katex.renderToString(src, { displayMode: display, throwOnError: false, output: 'html' })
+    } catch {
+      html = `<span class="tx-bad">${escapeHtml(src)}</span>`
+    }
+    katexCache.set(key, html)
+  }
+  return html
+}
+
+const escapeHtml = (s: string): string =>
+  s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] ?? c)
+
+class MathWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly display: boolean,
+  ) {
+    super()
+  }
+  override eq(other: MathWidget): boolean {
+    return other.src === this.src && other.display === this.display
+  }
+  toDOM(): HTMLElement {
+    const el = document.createElement(this.display ? 'div' : 'span')
+    el.className = 'tx-math' + (this.display ? ' tx-math-block' : '')
+    el.innerHTML = renderMath(this.src, this.display)
+    return el
+  }
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
+class ImageWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+    readonly block: boolean,
+  ) {
+    super()
+  }
+  override eq(other: ImageWidget): boolean {
+    return other.src === this.src && other.alt === this.alt && other.block === this.block
+  }
+  toDOM(): HTMLElement {
+    const wrap = document.createElement(this.block ? 'div' : 'span')
+    wrap.className = 'tx-img' + (this.block ? ' tx-img-block' : '')
+    const img = document.createElement('img')
+    img.src = this.src
+    img.alt = this.alt
+    img.loading = 'lazy'
+    wrap.appendChild(img)
+    return wrap
+  }
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
+class TableWidget extends WidgetType {
+  readonly key: string
+  constructor(readonly rows: readonly string[]) {
+    super()
+    this.key = rows.join('\n')
+  }
+  override eq(other: TableWidget): boolean {
+    return other.key === this.key
+  }
+  toDOM(): HTMLElement {
+    const wrap = document.createElement('div')
+    wrap.className = 'tx-table'
+    const table = document.createElement('table')
+    const cells = (row: string): string[] =>
+      row.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+    this.rows.forEach((row, i) => {
+      if (i === 1 && TABLE_DELIM.test(row)) return
+      const tr = document.createElement('tr')
+      for (const cell of cells(row)) {
+        const td = document.createElement(i === 0 ? 'th' : 'td')
+        td.textContent = cell
+        tr.appendChild(td)
+      }
+      table.appendChild(tr)
+    })
+    wrap.appendChild(table)
+    return wrap
+  }
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
+function overlapsCursor(state: EditorState, from: number, to: number): boolean {
+  return state.selection.ranges.some(r => r.from <= to && r.to >= from)
+}
+
+/** One line either side, so vertical motion has somewhere to land. */
+function nearCursor(state: EditorState, from: number, to: number): boolean {
+  const doc = state.doc
+  const a = doc.line(Math.max(1, doc.lineAt(from).number - 1)).from
+  const b = doc.line(Math.min(doc.lines, doc.lineAt(to).number + 1)).to
+  return overlapsCursor(state, a, b)
+}
+
+const blockRevealed = (state: EditorState, from: number, to: number): boolean =>
+  widgetOptions.revealAdjacent ? nearCursor(state, from, to) : overlapsCursor(state, from, to)
+
+function isBlockLine(state: EditorState, lineNumber: number): boolean {
+  const text = state.doc.line(lineNumber).text
+  return DISPLAY_MATH_LINE.test(text) || IMAGE_ALONE.test(text) || text.trimStart().startsWith('|')
+}
+
+// ── inline: viewport only ────────────────────────────────────
+
+interface PendingDeco {
+  from: number
+  to: number
+  deco?: Decoration
+  line?: Decoration
+}
+
+function buildInline(view: EditorView): DecorationSet {
+  if (!widgetOptions.enabled) return Decoration.none
+  const decos: PendingDeco[] = []
+  const state = view.state
+
+  for (const { from, to } of view.visibleRanges) {
+    const first = state.doc.lineAt(from).number
+    const last = state.doc.lineAt(to).number
+    for (let n = first; n <= last; n++) {
+      const line = state.doc.line(n)
+      const text = line.text
+      if (isBlockLine(state, n)) continue
+      const cursorHere = overlapsCursor(state, line.from, line.to)
+
+      // Paragraph spacing belongs to the END of a paragraph, not to every line.
+      // Padding each line double-spaces hard-wrapped prose — which the spike
+      // never showed, because its corpus stored every paragraph as one long
+      // soft-wrapped line. Real notebooks contain both.
+      if (text.trim() !== '' && (n === state.doc.lines || state.doc.line(n + 1).text.trim() === '')) {
+        decos.push({ from: line.from, to: line.from, line: Decoration.line({ class: 'tx-para-end' }) })
+      }
+
+      const heading = HEADING.exec(text)
+      if (heading !== null) {
+        decos.push({ from: line.from, to: line.from, line: Decoration.line({ class: `tx-h${(heading[1] as string).length}` }) })
+        if (widgetOptions.reveal && !cursorHere) {
+          decos.push({ from: line.from, to: line.from + (heading[0] as string).length, deco: Decoration.replace({}) })
+        }
+      }
+
+      let m: RegExpExecArray | null
+      IMAGE.lastIndex = 0
+      while ((m = IMAGE.exec(text)) !== null) {
+        const from2 = line.from + m.index
+        const to2 = from2 + m[0].length
+        if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
+        decos.push({ from: from2, to: to2, deco: Decoration.replace({ widget: new ImageWidget(m[2] as string, m[1] as string, false) }) })
+      }
+
+      INLINE_MATH.lastIndex = 0
+      while ((m = INLINE_MATH.exec(text)) !== null) {
+        const from2 = line.from + m.index
+        const to2 = from2 + m[0].length
+        if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
+        decos.push({ from: from2, to: to2, deco: Decoration.replace({ widget: new MathWidget(m[1] as string, false) }) })
+      }
+    }
+  }
+
+  decos.sort((a, b) => a.from - b.from || (a.line ? -1 : b.line ? 1 : 0) || a.to - b.to)
+  const builder = new RangeSetBuilder<Decoration>()
+  let lastTo = -1
+  for (const d of decos) {
+    if (d.line !== undefined) {
+      builder.add(d.from, d.from, d.line)
+      continue
+    }
+    if (d.from < lastTo || d.from === d.to || d.deco === undefined) continue
+    builder.add(d.from, d.to, d.deco)
+    lastTo = d.to
+  }
+  return builder.finish()
+}
+
+export const inlineWidgets = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    constructor(view: EditorView) {
+      this.decorations = buildInline(view)
+    }
+    update(update: ViewUpdate): void {
+      if (
+        update.docChanged ||
+        update.viewportChanged ||
+        update.selectionSet ||
+        update.transactions.some(t => t.effects.some(e => e.is(rebuildWidgets)))
+      ) {
+        this.decorations = buildInline(update.view)
+      }
+    }
+  },
+  {
+    decorations: v => v.decorations,
+    // Inline widgets ARE atomic; block widgets are NOT. Marking blocks atomic
+    // makes vertical motion worse and buys nothing.
+    provide: plugin =>
+      EditorView.atomicRanges.of(view => view.plugin(plugin)?.decorations ?? Decoration.none),
+  },
+)
+
+// ── block: whole document, incrementally ─────────────────────
+
+function buildBlocks(state: EditorState, fromLine: number, toLine: number): ReturnType<typeof Decoration.replace>[] {
+  const out: ReturnType<typeof Decoration.replace>[] = []
+  if (!widgetOptions.enabled) return out
+  const doc = state.doc
+  let n = fromLine
+  while (n <= toLine) {
+    const line = doc.line(n)
+    const text = line.text
+
+    if (text.trimStart().startsWith('|') && n < doc.lines && TABLE_DELIM.test(doc.line(n + 1).text)) {
+      let end = n
+      const rows: string[] = []
+      while (end <= doc.lines && doc.line(end).text.trimStart().startsWith('|')) {
+        rows.push(doc.line(end).text)
+        end++
+      }
+      const to = doc.line(end - 1).to
+      if (!(widgetOptions.reveal && blockRevealed(state, line.from, to))) {
+        out.push(Decoration.replace({ widget: new TableWidget(rows), block: true }).range(line.from, to))
+      }
+      n = end
+      continue
+    }
+
+    const display = DISPLAY_MATH_LINE.exec(text)
+    if (display !== null) {
+      if (!(widgetOptions.reveal && blockRevealed(state, line.from, line.to))) {
+        out.push(
+          Decoration.replace({ widget: new MathWidget((display[1] as string).trim(), true), block: true }).range(line.from, line.to),
+        )
+      }
+      n++
+      continue
+    }
+
+    const image = IMAGE_ALONE.exec(text)
+    if (image !== null && !(widgetOptions.reveal && blockRevealed(state, line.from, line.to))) {
+      out.push(
+        Decoration.replace({ widget: new ImageWidget(image[2] as string, image[1] as string, true), block: true }).range(line.from, line.to),
+      )
+    }
+    n++
+  }
+  return out
+}
+
+/** Widen a dirty region to whole blocks, plus a line each way for adjacency. */
+function dirtyBlock(state: EditorState, from: number, to: number): [number, number] {
+  const doc = state.doc
+  let a = doc.lineAt(Math.max(0, Math.min(from, doc.length))).number
+  let b = doc.lineAt(Math.max(0, Math.min(to, doc.length))).number
+  while (a > 1 && doc.line(a - 1).text.trim() !== '') a--
+  while (b < doc.lines && doc.line(b + 1).text.trim() !== '') b++
+  return [Math.max(1, a - 2), Math.min(doc.lines, b + 2)]
+}
+
+export const blockWidgets = StateField.define<DecorationSet>({
+  create(state) {
+    return Decoration.set(buildBlocks(state, 1, state.doc.lines), true)
+  },
+  update(deco, tr) {
+    const forced = tr.effects.some(e => e.is(rebuildWidgets))
+    if (!tr.docChanged && tr.selection === undefined && !forced) return deco
+    if (forced) return Decoration.set(buildBlocks(tr.state, 1, tr.state.doc.lines), true)
+
+    const mapped = deco.map(tr.changes)
+    let lo = Number.POSITIVE_INFINITY
+    let hi = -1
+    tr.changes.iterChangedRanges((_fa, _ta, fb, tb) => {
+      lo = Math.min(lo, fb)
+      hi = Math.max(hi, tb)
+    })
+    if (tr.selection !== undefined) {
+      const before = tr.startState.selection.main
+      const after = tr.state.selection.main
+      lo = Math.min(lo, tr.changes.mapPos(before.from), after.from)
+      hi = Math.max(hi, tr.changes.mapPos(before.to), after.to)
+    }
+    if (hi < 0) return mapped
+
+    const [a, b] = dirtyBlock(tr.state, lo, hi)
+    const from = tr.state.doc.line(a).from
+    const to = tr.state.doc.line(b).to
+    return mapped.update({
+      filterFrom: from,
+      filterTo: to,
+      filter: () => false,
+      add: buildBlocks(tr.state, a, b),
+      sort: true,
+    })
+  },
+  provide: f => EditorView.decorations.from(f),
+})
+
+export function widgetExtensions(): Extension {
+  return [blockWidgets, inlineWidgets]
+}

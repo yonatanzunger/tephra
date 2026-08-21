@@ -127,3 +127,40 @@ test('flush writes through the service, and the file is on disk', async t => {
   assert.match(onDisk, /persisted/)
   assert.match(onDisk, /^---\ntephra: 1\n/)
 })
+
+test('a change is written without anyone asking, on quiescence', async t => {
+  // Durability is main's job. The renderer is the process most likely to die,
+  // so asking it to remember to save is asking the least reliable component to
+  // own the most important guarantee.
+  const { service, snapshot, root, today } = await fixture(t)
+  await service.edit({
+    id: snapshot.id,
+    edits: [{ from: bp(0), to: bp(0), insert: 'unprompted\n' }],
+    origin: 'user',
+    generation: 1 as never,
+  })
+  await new Promise(r => setTimeout(r, 1400)) // past the quiescence window
+  const onDisk = await readFile(join(root, dayFile(today as DateKey)), 'utf8')
+  assert.match(onDisk, /unprompted/)
+})
+
+test('continuous typing still reaches disk, because quiescence is not the only trigger', async t => {
+  // Quiescence alone fails under exactly the condition this notebook exists
+  // for: an hour of continuous writing never goes quiet, so nothing is ever
+  // written. The ceiling is what closes that.
+  const { service, snapshot, root, today } = await fixture(t)
+  const deadline = Date.now() + 5_600
+  let at = 0
+  while (Date.now() < deadline) {
+    await service.edit({
+      id: snapshot.id,
+      edits: [{ from: bp(at), to: bp(at), insert: 'x' }],
+      origin: 'user',
+      generation: 1 as never,
+    })
+    at++
+    await new Promise(r => setTimeout(r, 300)) // never quiet for a full second
+  }
+  const onDisk = await readFile(join(root, dayFile(today as DateKey)), 'utf8')
+  assert.match(onDisk, /x{5,}/, 'the ceiling fired even though quiescence never did')
+})

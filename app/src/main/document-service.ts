@@ -22,6 +22,21 @@ export interface MessageSink {
   send(channel: string, message: unknown): void
 }
 
+/**
+ * The file-write tier (D32 M2): quiescence OR a ceiling, never quiescence alone.
+ *
+ * Quiescence alone fails under exactly the condition this notebook exists for —
+ * writing continuously for an hour never reaches quiescence, so the file is
+ * never written and everything lives in memory until something goes wrong. The
+ * ceiling closes that, and it is why both numbers are here rather than one.
+ *
+ * Durability belongs in main, not in the renderer: the renderer is the process
+ * most likely to die, and asking it to remember to save is asking the least
+ * reliable component to own the most important guarantee.
+ */
+const QUIESCE_MS = 1_000
+const MAX_INTERVAL_MS = 5_000
+
 export class DocumentService {
   readonly #doc: StreamDocument
   readonly #windows = new Map<WindowId, StreamWindow>()
@@ -29,6 +44,9 @@ export class DocumentService {
 
   /** The serial queue. Every mutation chains onto it; reads do not need to. */
   #queue: Promise<unknown> = Promise.resolve()
+
+  #flushTimer: ReturnType<typeof setTimeout> | null = null
+  #dirtySince: number | null = null
 
   constructor(notebook: Notebook) {
     this.#doc = new StreamDocument(notebook)
@@ -98,6 +116,7 @@ export class DocumentService {
       const window = this.#windows.get(request.id)
       if (window === undefined) throw new Error(`no such window ${request.id}`)
       await window.edit(request.edits, request.origin)
+      this.#scheduleFlush()
       return {
         generation: window.generation,
         length: window.text.length,
@@ -108,21 +127,47 @@ export class DocumentService {
   }
 
   async undo(): Promise<ChangeAck> {
-    return this.#serial(async () => ({
-      change: await this.#doc.undo(),
-      generation: this.#doc.generation,
-    }))
+    return this.#serial(async () => {
+      const change = await this.#doc.undo()
+      this.#scheduleFlush()
+      return { change, generation: this.#doc.generation }
+    })
   }
 
   async redo(): Promise<ChangeAck> {
-    return this.#serial(async () => ({
-      change: await this.#doc.redo(),
-      generation: this.#doc.generation,
-    }))
+    return this.#serial(async () => {
+      const change = await this.#doc.redo()
+      this.#scheduleFlush()
+      return { change, generation: this.#doc.generation }
+    })
   }
 
   async flush(): Promise<void> {
+    this.#cancelFlush()
     await this.#serial(() => this.#doc.flush())
+  }
+
+  /**
+   * Write after a second of quiet, but never later than five seconds after the
+   * first unsaved change — whichever comes first.
+   */
+  #scheduleFlush(): void {
+    const now = Date.now()
+    this.#dirtySince ??= now
+    if (this.#flushTimer !== null) clearTimeout(this.#flushTimer)
+    const remaining = MAX_INTERVAL_MS - (now - this.#dirtySince)
+    this.#flushTimer = setTimeout(() => void this.flush(), Math.max(0, Math.min(QUIESCE_MS, remaining)))
+  }
+
+  #cancelFlush(): void {
+    if (this.#flushTimer !== null) clearTimeout(this.#flushTimer)
+    this.#flushTimer = null
+    this.#dirtySince = null
+  }
+
+  /** Quiesce: write anything outstanding and stop the timer. */
+  async stop(): Promise<void> {
+    await this.flush()
   }
 
   releaseWindow(id: WindowId): void {
