@@ -95,6 +95,32 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(400)
     }
 
+    if (scene === 'spacing') {
+      const at = view.state.selection.main.head
+      view.dispatch({
+        changes: {
+          from: at,
+          insert: [
+            'A paragraph that has been hard-wrapped by hand, the way a person',
+            'types when they are not thinking about it, so that several lines',
+            'belong to one thought and should read as one block.',
+            '',
+            'A second paragraph, separated by a blank line, which should feel',
+            'distinctly further away than the line above it did.',
+            '',
+          ].join('\n'),
+        },
+        userEvent: 'input.type',
+      })
+      await settle(500)
+      const lines = [...document.querySelectorAll('.cm-line')].map(el => ({
+        blank: el.classList.contains('tx-blank'),
+        end: el.classList.contains('tx-para-end'),
+        height: Math.round(el.getBoundingClientRect().height),
+      }))
+      say('lineBoxes', lines.slice(0, 8))
+    }
+
     if (scene === 'reopen') {
       const head = view.state.selection.main.head
       say('buffer', view.state.doc.toString())

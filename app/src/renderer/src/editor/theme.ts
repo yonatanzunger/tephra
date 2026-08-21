@@ -13,16 +13,21 @@ export interface Typography {
   font: string
   size: number
   measure: number
+  /** Line height within a paragraph. */
   leading: number
+  /** Extra space at a paragraph's end, in ems. */
   paragraphSpace: number
+  /** Height of a blank line, as a fraction of a text line. */
+  blankLine: number
 }
 
 export const defaultTypography: Typography = {
   font: "'Lora', Georgia, serif",
   size: 18,
   measure: 74,
-  leading: 1.62,
-  paragraphSpace: 0.55,
+  leading: 1.55,
+  paragraphSpace: 0.5,
+  blankLine: 0.55,
 }
 
 export const typographyCompartment = new Compartment()
@@ -52,6 +57,7 @@ export function tephraTheme(t: Typography): Extension {
     // Per-paragraph, not per-line: see the note in widgets.ts.
     '.cm-line': { padding: '0' },
     '.cm-line.tx-para-end': { paddingBottom: `${t.paragraphSpace}em` },
+    '.cm-line.tx-blank': { height: `${(t.blankLine * t.leading).toFixed(3)}em`, lineHeight: `${(t.blankLine * t.leading).toFixed(3)}em` },
     '.cm-cursor, .cm-dropCursor': { borderLeftWidth: '2px', borderLeftColor: 'rgb(var(--accent))' },
     '.cm-fat-cursor': { background: 'rgb(var(--accent)) !important', color: 'rgb(var(--surface)) !important' },
     // Styled twice because there are two mechanisms: the drawn layer, which

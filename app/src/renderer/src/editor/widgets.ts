@@ -192,11 +192,17 @@ function buildInline(view: EditorView): DecorationSet {
       if (isBlockLine(state, n)) continue
       const cursorHere = overlapsCursor(state, line.from, line.to)
 
-      // Paragraph spacing belongs to the END of a paragraph, not to every line.
-      // Padding each line double-spaces hard-wrapped prose — which the spike
-      // never showed, because its corpus stored every paragraph as one long
-      // soft-wrapped line. Real notebooks contain both.
-      if (text.trim() !== '' && (n === state.doc.lines || state.doc.line(n + 1).text.trim() === '')) {
+      // Spacing within a paragraph and between paragraphs are separate knobs.
+      //
+      // Within: line-height alone. Between: the end of a paragraph carries a
+      // deliberate gap, and the blank line separating them is set SHORT — it is
+      // structural whitespace, not a line of text, and letting it occupy a full
+      // line makes the gap the accidental sum of two things rather than one
+      // chosen amount. It stays clickable, which is why it is shortened rather
+      // than hidden.
+      if (text.trim() === '') {
+        decos.push({ from: line.from, to: line.from, line: Decoration.line({ class: 'tx-blank' }) })
+      } else if (n === state.doc.lines || state.doc.line(n + 1).text.trim() === '') {
         decos.push({ from: line.from, to: line.from, line: Decoration.line({ class: 'tx-para-end' }) })
       }
 
