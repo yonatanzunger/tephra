@@ -54,8 +54,15 @@ export function tephraTheme(t: Typography): Extension {
     '.cm-line.tx-para-end': { paddingBottom: `${t.paragraphSpace}em` },
     '.cm-cursor, .cm-dropCursor': { borderLeftWidth: '2px', borderLeftColor: 'rgb(var(--accent))' },
     '.cm-fat-cursor': { background: 'rgb(var(--accent)) !important', color: 'rgb(var(--surface)) !important' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-      backgroundColor: 'rgb(var(--accent-surface))',
+    // Styled twice because there are two mechanisms: the drawn layer, which
+    // vim requires, and the browser's native selection, used when vim is off.
+    // The colour was previously --accent-surface, a pale mint on near-white,
+    // which was so faint that selecting text looked like nothing had happened.
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
+      backgroundColor: 'rgb(var(--accent) / 0.22)',
+    },
+    '.cm-content ::selection, .cm-line::selection, .cm-line ::selection': {
+      backgroundColor: 'rgb(var(--accent) / 0.22)',
     },
     '.cm-activeLine': { backgroundColor: 'transparent' },
     '.cm-gutters': { display: 'none' },

@@ -51,6 +51,50 @@ export async function runVerify(scene: string): Promise<void> {
       say('afterExternal', view.state.doc.toString())
     }
 
+    if (scene === 'selection') {
+      const at = view.state.selection.main.head
+      view.dispatch({
+        changes: { from: at, insert: 'One two three four five six seven.\n' },
+        userEvent: 'input.type',
+      })
+      await settle(400)
+
+      // Set a selection and see whether it is there a moment later. This tells
+      // "cannot select" apart from "selection collapses" apart from "selection
+      // is invisible", which look identical from the outside.
+      view.dispatch({ selection: { anchor: 4, head: 15 } })
+      const immediately = view.state.selection.main
+      say('rightAfterSetting', { from: immediately.from, to: immediately.to, empty: immediately.empty })
+
+      await settle(1500)
+      const later = view.state.selection.main
+      say('oneAndAHalfSecondsLater', { from: later.from, to: later.to, empty: later.empty })
+
+      const visible = (): unknown => {
+        const drawn = document.querySelectorAll('.cm-selectionBackground')
+        if (drawn.length > 0) {
+          return { how: 'drawn layer', count: drawn.length, colour: getComputedStyle(drawn[0]!).backgroundColor }
+        }
+        const line = document.querySelector('.cm-line')
+        return {
+          how: 'native',
+          text: globalThis.getSelection?.()?.toString() ?? '',
+          colour: line === null ? null : getComputedStyle(line, '::selection').backgroundColor,
+        }
+      }
+      say('vimOff', visible())
+
+      // And again with vim on, which switches to the drawn layer.
+      const toggle = document.querySelector('.titlebar input') as HTMLInputElement | null
+      toggle?.click()
+      await settle(500)
+      view.dispatch({ selection: { anchor: 4, head: 15 } })
+      await settle(300)
+      say('vimOn', visible())
+      view.dispatch({ selection: { anchor: 4, head: 32 } })
+      await settle(400)
+    }
+
     if (scene === 'reopen') {
       const head = view.state.selection.main.head
       say('buffer', view.state.doc.toString())

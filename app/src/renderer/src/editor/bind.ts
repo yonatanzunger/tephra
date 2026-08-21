@@ -13,7 +13,7 @@
 // may land outside the loaded region; two histories over one text diverge.
 
 import { ChangeSet, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView, crosshairCursor, drawSelection, keymap, rectangularSelection } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
@@ -59,7 +59,7 @@ export function bindEditor(options: BindOptions): Binding {
     state: EditorState.create({
       doc: docWindow.text,
       extensions: [
-        vimCompartment.of(options.vim ? vim({ status: true }) : []),
+        vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         markdown(),
         syntaxHighlighting(proseHighlight, { fallback: true }),
@@ -104,7 +104,7 @@ export function bindEditor(options: BindOptions): Binding {
   return {
     view,
     setVim(on: boolean): void {
-      view.dispatch({ effects: vimCompartment.reconfigure(on ? vim({ status: true }) : []) })
+      view.dispatch({ effects: vimCompartment.reconfigure(vimExtensions(on)) })
       view.focus()
     },
     setTypography(t: Typography): void {
@@ -116,6 +116,23 @@ export function bindEditor(options: BindOptions): Binding {
       view.destroy()
     },
   }
+}
+
+/**
+ * Vim, and the drawn selection layer it needs.
+ *
+ * These travel together on purpose. CodeMirror can render selection two ways:
+ * the browser's native selection, or its own drawn layer. Vim needs the drawn
+ * one, because a block cursor is not something a native caret can be. But Spike
+ * A measured the drawn caret at about a millisecond more than the native one —
+ * small, consistent, and on the typing path — so with vim off there is no
+ * reason to pay it.
+ *
+ * The cost of the split is that selection has to be styled twice, once for each
+ * mechanism. That is in the theme, and it is the whole of the cost.
+ */
+function vimExtensions(on: boolean): Extension {
+  return on ? [vim({ status: true }), drawSelection(), rectangularSelection(), crosshairCursor()] : []
 }
 
 /** Every user transaction becomes a window edit. Fired, never awaited. */
