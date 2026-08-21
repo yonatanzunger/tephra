@@ -6,8 +6,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
-  ChangeAck, DocumentInfo, EditAck, EditRequest, ReadRequest, SpansRequest,
-  WindowChangedMessage, WindowId, WindowSnapshot,
+  ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
+  SpansRequest, WindowChangedMessage, WindowId, WindowSnapshot,
 } from '../shared/ipc.ts'
 import type { DateKey, DocumentPosition, TypedSpan } from '../shared/document-api.ts'
 
@@ -31,6 +31,7 @@ const tephra = {
     read: (request: ReadRequest): Promise<WindowSnapshot> => ipcRenderer.invoke(CHANNEL.read, request),
     edit: (request: EditRequest): Promise<EditAck> => ipcRenderer.invoke(CHANNEL.edit, request),
     release: (id: WindowId): Promise<void> => ipcRenderer.invoke(CHANNEL.release, id),
+    extend: (request: ExtendRequest): Promise<void> => ipcRenderer.invoke(CHANNEL.extend, request),
     undo: (): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.undo),
     redo: (): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.redo),
     flush: (): Promise<void> => ipcRenderer.invoke(CHANNEL.flush),

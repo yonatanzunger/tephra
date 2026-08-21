@@ -26,6 +26,7 @@ export const CHANNEL = {
   resolveAnchor: 'tephra:doc:resolveAnchor',
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',
+  extend: 'tephra:win:extend',
   /** main → renderer */
   windowChanged: 'tephra:win:changed',
   windowReset: 'tephra:win:reset',
@@ -47,6 +48,7 @@ export interface WindowSnapshot {
   readonly spans: readonly TypedSpan[]
   /** Where each segment's body starts in the buffer — the coordinate mapping. */
   readonly placement: readonly { readonly date: DateKey; readonly start: number; readonly length: number }[]
+  readonly boundaries: Boundaries
 }
 
 /**
@@ -77,6 +79,7 @@ export interface WindowChangedMessage {
   readonly text: string
   readonly spans: readonly TypedSpan[]
   readonly placement: WindowSnapshot['placement']
+  readonly boundaries: Boundaries
 }
 
 export interface ReadRequest {
@@ -94,6 +97,19 @@ export interface EditRequest {
 
 export interface SpansRequest {
   readonly kind?: SpanKind
+}
+
+export interface ExtendRequest {
+  readonly id: WindowId
+  readonly direction: 'earlier' | 'later'
+  /** Characters, not days (D40). The Pane converts from its screen policy. */
+  readonly chars: number
+}
+
+/** What lies beyond each edge, so the UI can offer the right affordance. */
+export interface Boundaries {
+  readonly earlier: boolean
+  readonly later: boolean
 }
 
 export type { DocumentPosition }

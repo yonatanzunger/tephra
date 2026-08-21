@@ -1,42 +1,50 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
 import { useCallback, useEffect, useState } from 'react'
-import type { BufferPosition, DocumentWindow } from '@shared/document-api.ts'
+import type { BufferPosition } from '@shared/document-api.ts'
 import { RemoteDocument } from './x/remote-document'
+import { Pane } from './pane/pane'
+import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { Editor } from './editor/Editor'
 import { defaultTypography, type Typography } from './editor/theme'
 import { widgetOptions } from './editor/widgets'
 
 export function App(): React.JSX.Element {
   const [doc, setDoc] = useState<RemoteDocument | null>(null)
-  const [docWindow, setWindow] = useState<DocumentWindow | null>(null)
+  const [pane, setPane] = useState<Pane | null>(null)
   const [vim, setVim] = useState(false)
   const [typography] = useState<Typography>(defaultTypography)
   const [error, setError] = useState<string | null>(null)
-  const [saved] = useState<'clean' | 'saving'>('clean')
 
-  // Model construction, deliberately before and outside view construction.
+  const docWindow = usePaneWindow(pane)
+  const location = usePaneLocation(pane)
+  const boundary = usePaneBoundary(pane)
+
+  // Model construction, deliberately before and outside view construction —
+  // Portal's most alarming finding was a widget that built its model during
+  // view construction and lost edit state on reparenting.
   useEffect(() => {
-    let released: DocumentWindow | null = null
+    let created: Pane | null = null
     void (async () => {
       try {
         const opened = await RemoteDocument.open()
-        const w = await opened.readToday()
-        released = w
+        const p = new Pane(opened)
+        created = p
         setDoc(opened)
-        setWindow(w)
+        setPane(p)
+        // Temporary: the self-check drives this. Goes away with verify.ts.
+        ;(globalThis as unknown as { __pane: Pane }).__pane = p
+        await p.goToToday()
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
     })()
-    return () => released?.release()
+    return () => created?.release()
   }, [])
 
-  // NO autosave here. Durability is main's job (D32): the write tiers live
-  // beside the files, and the renderer is the process most likely to die.
-  // This only reflects what main reports.
-
-  // Undo is document-scoped and reached past the facade on purpose (D26).
+  // Undo is document-scoped and reached past the facade on purpose (D26). When
+  // it lands outside the loaded region the Pane is told to go there — which is
+  // an ordinary goTo, a shape that already exists.
   useEffect(() => {
     if (doc === null) return
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -48,16 +56,35 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [doc])
 
-  const onViewport = useCallback((_visible: { from: BufferPosition; to: BufferPosition }) => {
-    // Reported upward already; the Pane starts consuming it in the next bullet.
-  }, [])
+  const onViewport = useCallback(
+    (visible: { from: BufferPosition; to: BufferPosition }) => pane?.viewportChanged(visible),
+    [pane],
+  )
 
-  if (error !== null) return <main className="scaffold"><h1>Tephra</h1><p className="bad">{error}</p></main>
+  if (error !== null) {
+    return (
+      <main className="scaffold">
+        <h1>Tephra</h1>
+        <p className="bad">{error}</p>
+      </main>
+    )
+  }
+
+  const title = location?.kind === 'date' ? location.date : (doc?.today ?? '…')
 
   return (
     <div className="app">
       <header className="titlebar">
-        <span className="title">{doc?.today ?? '…'}</span>
+        <button className="nav" disabled={pane?.canGoBack !== true} onClick={() => void pane?.back()}>
+          ‹
+        </button>
+        <button className="nav" disabled={pane?.canGoForward !== true} onClick={() => void pane?.forward()}>
+          ›
+        </button>
+        <span className="title">{title}</span>
+        <button className="nav" onClick={() => void pane?.goToToday()}>
+          today
+        </button>
         <span className="spacer" />
         <label className="toggle">
           <input type="checkbox" checked={vim} onChange={e => setVim(e.target.checked)} /> vim
@@ -72,10 +99,19 @@ export function App(): React.JSX.Element {
           />{' '}
           render
         </label>
-        <span className={`saved ${saved}`}>{saved === 'saving' ? 'saving…' : 'saved'}</span>
       </header>
+
+      {boundary?.earlier.kind === 'extendable' && (
+        <button className="edge" onClick={() => void pane?.extend('earlier')}>
+          ▲ earlier
+        </button>
+      )}
+      {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
+
       {docWindow === null ? (
-        <main className="scaffold"><p className="sub">Opening…</p></main>
+        <main className="scaffold">
+          <p className="sub">Opening…</p>
+        </main>
       ) : (
         <Editor
           window={docWindow}

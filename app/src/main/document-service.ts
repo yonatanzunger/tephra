@@ -11,7 +11,7 @@
 // start before it finishes. Two keystrokes would then interleave and the
 // document would be reordered relative to what the typist saw.
 
-import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
+import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, TypedSpan, DocumentPosition } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
 import { StreamDocument } from './x/stream-document.ts'
@@ -94,6 +94,7 @@ export class DocumentService {
         text: window.text,
         spans: window.spans(),
         placement: window.placement(),
+        boundaries: window.boundaries,
       })
     })
     window.onReset(() => this.#broadcastReset(id))
@@ -108,7 +109,17 @@ export class DocumentService {
       generation: window.generation,
       spans: window.spans(),
       placement: window.placement(),
+      boundaries: window.boundaries,
     }
+  }
+
+  /** Growing the region is a mutation, so it queues with the edits. */
+  async extend(request: ExtendRequest): Promise<void> {
+    await this.#serial(async () => {
+      const window = this.#windows.get(request.id)
+      if (window === undefined) throw new Error(`no such window ${request.id}`)
+      await window.extend(request.direction, request.chars)
+    })
   }
 
   async edit(request: EditRequest): Promise<EditAck> {

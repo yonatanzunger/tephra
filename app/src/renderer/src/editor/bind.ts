@@ -12,7 +12,7 @@
 // THE EDITOR'S OWN HISTORY IS DISABLED. Undo is document-scoped (D23, D32) and
 // may land outside the loaded region; two histories over one text diverge.
 
-import { EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
+import { ChangeSet, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
@@ -68,6 +68,18 @@ export function bindEditor(options: BindOptions): Binding {
         viewportReporter(options.onViewport),
       ] as Extension[],
     }),
+  })
+
+  // Land at the END of the loaded region, not the start.
+  //
+  // The stream is oldest-first and appended to (Q7), so opening Tephra should
+  // put the cursor where the next sentence goes. It also matters more than it
+  // looks: the window grows backwards in the background, so offset zero stops
+  // meaning "today" a moment after opening — a cursor left there would put the
+  // first thing typed into whatever old day had just been loaded above.
+  view.dispatch({
+    selection: { anchor: view.state.doc.length },
+    effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }),
   })
 
   const unsubscribeChanged = docWindow.onChanged((edits, origin) => {
@@ -131,11 +143,29 @@ function editorToWindow(
   })
 }
 
-/** Apply a change the document made, without sending it back. */
+/**
+ * Apply a change the document made, without sending it back.
+ *
+ * The selection is mapped with association AFTER, which matters for exactly one
+ * case and matters a lot there: extending the window earlier is an insertion at
+ * offset zero, and a cursor sitting at offset zero is the ordinary state right
+ * after opening. CodeMirror's default keeps such a cursor at zero, so the
+ * prepended day slides in underneath it and the caret ends up at the TOP of the
+ * oldest loaded day — where the next thing typed lands in the wrong file. With
+ * 'after' the caret travels with the text it was attached to, which is where
+ * the person left it.
+ */
 function applyFromDocument(view: EditorView, edits: readonly BufferEdit[], _origin: EditOrigin): void {
   if (edits.length === 0) return
+  const changes = ChangeSet.of(
+    edits.map(e => ({ from: e.from as number, to: e.to as number, insert: e.insert })),
+    view.state.doc.length,
+  )
+  const head = view.state.selection.main.head
+  const anchor = view.state.selection.main.anchor
   view.dispatch({
-    changes: edits.map(e => ({ from: e.from as number, to: e.to as number, insert: e.insert })),
+    changes,
+    selection: { anchor: changes.mapPos(anchor, 1), head: changes.mapPos(head, 1) },
     effects: fromDocument.of(null),
     annotations: Transaction.addToHistory.of(false),
   })

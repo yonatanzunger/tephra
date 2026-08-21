@@ -245,3 +245,71 @@ test('flush writes only the days that were touched', async t => {
   await doc.flush()
   assert.equal(await readFile(join(root, dayFile(NEXT)), 'utf8'), untouchedBefore)
 })
+
+test('extend earlier prepends, as an ordinary change rather than a reset', async t => {
+  // A prepend arriving as an insertion at offset zero is what lets the editor
+  // map the cursor and scroll through it. Replacing the whole document would
+  // throw both away — the fiddly part of every upward-infinite-scroll.
+  const { doc } = await fixture(t, {
+    [dayFile(d('2026-03-12'))]: dayText('2026-03-12', 'oldest\n'),
+    [dayFile(d('2026-03-13'))]: dayText('2026-03-13', 'middle\n'),
+    [dayFile(DAY)]: dayText('2026-03-14', 'newest\n'),
+  })
+  const w = (await windowOver(doc, DAY)) as never as {
+    text: string
+    onChanged(h: (edits: readonly { from: number; to: number; insert: string }[], o: string) => void): () => void
+    extend(direction: 'earlier' | 'later', chars?: number): Promise<void>
+    readonly boundaries: { earlier: boolean; later: boolean }
+  }
+  assert.equal(w.text, 'newest\n')
+  assert.deepEqual(w.boundaries, { earlier: true, later: false })
+
+  const seen: { from: number; insert: string }[] = []
+  w.onChanged(edits => seen.push(...edits.map(e => ({ from: e.from, insert: e.insert }))))
+
+  await w.extend('earlier', 1)
+  assert.equal(w.text, 'middle\nnewest\n')
+  assert.deepEqual(seen, [{ from: 0, insert: 'middle\n' }], 'an insertion at zero, not a wholesale replace')
+
+  await w.extend('earlier', 1)
+  assert.equal(w.text, 'oldest\nmiddle\nnewest\n')
+  assert.deepEqual(w.boundaries, { earlier: false, later: false })
+})
+
+test('extend gathers whole days until the character budget is met', async t => {
+  const { doc } = await fixture(t, {
+    [dayFile(d('2026-03-11'))]: dayText('2026-03-11', 'a'.repeat(50) + '\n'),
+    [dayFile(d('2026-03-12'))]: dayText('2026-03-12', 'b'.repeat(50) + '\n'),
+    [dayFile(d('2026-03-13'))]: dayText('2026-03-13', 'c'.repeat(50) + '\n'),
+    [dayFile(DAY)]: dayText('2026-03-14', 'today\n'),
+  })
+  const w = (await windowOver(doc, DAY)) as never as { text: string; extend(d: 'earlier', c?: number): Promise<void> }
+  await w.extend('earlier', 80) // two days' worth, so two days load
+  assert.equal(w.text.length, 'today\n'.length + 102)
+})
+
+test('extend at the end of the corpus is a no-op, not an error', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'only\n') })
+  const w = (await windowOver(doc, DAY)) as never as { text: string; extend(d: 'earlier'): Promise<void> }
+  await w.extend('earlier')
+  assert.equal(w.text, 'only\n')
+})
+
+test('typing at the end of the window goes to the last day, not the one before', async t => {
+  // The failure this caught: at a boundary both segments matched, the payload
+  // went to the earlier one, and text typed with the caret visibly at the start
+  // of today was written into yesterday's file.
+  const { doc, root } = await fixture(t, {
+    [dayFile(d('2026-03-13'))]: dayText('2026-03-13', 'yesterday\n'),
+    [dayFile(DAY)]: dayText('2026-03-14', ''),
+  })
+  const w = await windowOver(doc, d('2026-03-13'), DAY)
+  assert.equal(w.text, 'yesterday\n')
+
+  // The very end of the buffer is also the boundary, since today is empty.
+  await w.edit([{ from: bp(w.text.length), to: bp(w.text.length), insert: 'today!\n' }], 'user')
+  await doc.flush()
+
+  assert.equal(await readFile(join(root, dayFile(d('2026-03-13'))), 'utf8'), dayText('2026-03-13', 'yesterday\n'))
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), dayText('2026-03-14', 'today!\n'))
+})

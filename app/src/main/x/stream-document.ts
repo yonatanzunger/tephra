@@ -117,6 +117,7 @@ export class StreamDocument implements Document {
     for (const date of dates) segments.push(await this.segment(date))
 
     const window = new StreamWindow(this, segments)
+    await window.refreshBoundaries()
     this.#windows.add(window)
     return window
   }

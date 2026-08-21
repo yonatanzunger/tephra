@@ -1,7 +1,7 @@
 // Wiring the document service to Electron IPC. Nothing here does work.
 
 import { ipcMain, type BrowserWindow } from 'electron'
-import { CHANNEL, type EditRequest, type ReadRequest, type SpansRequest, type WindowId } from '../shared/ipc.ts'
+import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { StreamDocument } from './x/stream-document.ts'
 
@@ -13,6 +13,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.read, (_e, request: ReadRequest) => service.openWindow(request))
   ipcMain.handle(CHANNEL.edit, (_e, request: EditRequest) => service.edit(request))
   ipcMain.handle(CHANNEL.release, (_e, id: WindowId) => service.releaseWindow(id))
+  ipcMain.handle(CHANNEL.extend, (_e, request: ExtendRequest) => service.extend(request))
   ipcMain.handle(CHANNEL.undo, () => service.undo())
   ipcMain.handle(CHANNEL.redo, () => service.redo())
   ipcMain.handle(CHANNEL.flush, () => service.flush())

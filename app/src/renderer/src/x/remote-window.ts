@@ -33,6 +33,7 @@ export class RemoteWindow implements DocumentWindow {
   #generation: SessionGeneration
   #spans: readonly TypedSpan[]
   #placement: Placement
+  #boundaries: { earlier: boolean; later: boolean }
 
   readonly #changeHandlers = new Set<(edits: readonly BufferEdit[], origin: EditOrigin) => void>()
   readonly #resetHandlers = new Set<() => void>()
@@ -53,6 +54,7 @@ export class RemoteWindow implements DocumentWindow {
     this.#generation = snapshot.generation
     this.#spans = snapshot.spans
     this.#placement = snapshot.placement
+    this.#boundaries = snapshot.boundaries
   }
 
   get document(): Document {
@@ -185,11 +187,13 @@ export class RemoteWindow implements DocumentWindow {
     generation: SessionGeneration,
     spans: readonly TypedSpan[],
     placement: Placement,
+    boundaries: { earlier: boolean; later: boolean },
   ): void {
     this.#text = text
     this.#generation = generation
     this.#spans = spans
     this.#placement = placement
+    this.#boundaries = boundaries
     for (const handler of this.#changeHandlers) handler(edits, origin)
   }
 
@@ -201,8 +205,16 @@ export class RemoteWindow implements DocumentWindow {
     for (const handler of this.#resetHandlers) handler()
   }
 
-  async extend(_direction: 'earlier' | 'later', _chars?: number): Promise<void> {
-    throw new Error('extend arrives with Pane, in the next milestone')
+  /**
+   * Grow the region. The resulting prepend or append arrives as an ordinary
+   * pushed change, which is what lets the editor map the cursor through it.
+   */
+  async extend(direction: 'earlier' | 'later', chars = 20_000): Promise<void> {
+    await window.tephra.doc.extend({ id: this.id, direction, chars })
+  }
+
+  get boundaries(): { earlier: boolean; later: boolean } {
+    return this.#boundaries
   }
 
   release(): void {

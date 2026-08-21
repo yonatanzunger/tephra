@@ -84,3 +84,19 @@ body {
 .cm-line.tx-h4, .cm-line.tx-h5, .cm-line.tx-h6 { font-weight: 600; color: rgb(var(--text-heading)); padding-top: .7em; }
 
 .cm-vim-panel { font-family: var(--font-mono) !important; font-size: 12px !important; }
+
+.titlebar .nav {
+  -webkit-app-region: no-drag;
+  font: inherit; border: 0; background: transparent; cursor: pointer;
+  color: rgb(var(--text-muted)); padding: .1rem .4rem; border-radius: 4px;
+}
+.titlebar .nav:hover:not(:disabled) { background: rgb(var(--surface-muted)); color: rgb(var(--text)); }
+.titlebar .nav:disabled { opacity: .3; cursor: default; }
+
+.edge {
+  align-self: center; margin: .4rem auto 0; font: inherit; font-size: 12px;
+  border: 1px solid rgb(var(--border)); background: rgb(var(--surface));
+  color: rgb(var(--text-muted)); border-radius: 999px; padding: .15rem .9rem; cursor: pointer;
+}
+.edge:hover { color: rgb(var(--text)); }
+.edge.quiet { border-style: dashed; cursor: default; }

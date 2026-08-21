@@ -12,6 +12,7 @@ import type {
   DocumentWindow, Edit, EditOrigin, Offset, SessionGeneration, Span, SpanKind,
   TypedSpan, Unsubscribe,
 } from '../../shared/document-api.ts'
+import { compareDateKeys } from '../../shared/dates.ts'
 import type { Segment } from './segment.ts'
 import type { StreamDocument } from './stream-document.ts'
 
@@ -33,6 +34,8 @@ export class StreamWindow implements DocumentWindow {
 
   /** Set while this window is the origin of a change, to suppress its own echo. */
   #originating = false
+
+  #edges = { earlier: false, later: false }
 
   constructor(doc: StreamDocument, segments: readonly Segment[]) {
     this.#doc = doc
@@ -86,14 +89,9 @@ export class StreamWindow implements DocumentWindow {
    */
   toDocument(at: BufferPosition): DocumentPosition {
     const offset = Math.min(Math.max(0, at as number), this.#text.length)
-    for (let i = this.#placed.length - 1; i >= 0; i--) {
-      const placed = this.#placed[i] as Placed
-      if (offset >= placed.start) {
-        return this.#doc.positionAt(placed.segment.date, offset - placed.start)
-      }
-    }
-    const first = this.#placed[0]
-    return this.#doc.positionAt(first?.segment.date ?? ('' as DateKey), 0)
+    const placed = this.#placed[0] === undefined ? null : this.#segmentAt(offset)
+    if (placed === null) return this.#doc.positionAt('' as DateKey, 0)
+    return this.#doc.positionAt(placed.segment.date, offset - placed.start)
   }
 
   toBuffer(at: DocumentPosition): BufferPosition | null {
@@ -133,11 +131,26 @@ export class StreamWindow implements DocumentWindow {
       const from = Math.min(edit.from as number, edit.to as number)
       const to = Math.max(edit.from as number, edit.to as number)
 
-      const touched = this.#placed.filter(p => {
-        const end = p.start + p.segment.length
-        return from < end && to > p.start ? true : from === to && from >= p.start && from <= end
-      })
-      const spans = touched.length > 0 ? touched : [this.#placed[this.#placed.length - 1] as Placed]
+      // A PURE INSERTION resolves to exactly one segment, by the same rule
+      // toDocument uses. Letting the range logic below handle it matched BOTH
+      // segments at a boundary and put the text in the earlier one — so the
+      // caret sat at the start of today while what was typed went into
+      // yesterday's file. Two implementations of one convention is one too many.
+      if (from === to) {
+        const placed = this.#segmentAt(from)
+        const local = from - placed.start
+        out.push({
+          span: {
+            begin: this.#doc.positionAt(placed.segment.date, local),
+            end: this.#doc.positionAt(placed.segment.date, local),
+          },
+          payload: edit.insert,
+        })
+        continue
+      }
+
+      const touched = this.#placed.filter(p => from < p.start + p.segment.length && to > p.start)
+      const spans = touched.length > 0 ? touched : [this.#segmentAt(from)]
 
       let payloadPlaced = false
       for (const placed of spans) {
@@ -159,6 +172,20 @@ export class StreamWindow implements DocumentWindow {
       }
     }
     return out
+  }
+
+  /**
+   * The one implementation of the boundary convention: a buffer offset on a
+   * segment boundary belongs to the LATER segment, and the end of the whole
+   * window belongs to the last one. toDocument reads from here too.
+   */
+  #segmentAt(offset: number): Placed {
+    const at = Math.min(Math.max(0, offset), this.#text.length)
+    for (let i = this.#placed.length - 1; i >= 0; i--) {
+      const placed = this.#placed[i] as Placed
+      if (at >= placed.start) return placed
+    }
+    return this.#placed[0] as Placed
   }
 
   // ── queries ────────────────────────────────────────────────
@@ -255,8 +282,80 @@ export class StreamWindow implements DocumentWindow {
     for (const handler of this.#resetHandlers) handler()
   }
 
-  async extend(_direction: 'earlier' | 'later', _chars?: number): Promise<void> {
-    throw new Error('extend arrives with Pane, in the next milestone')
+  /**
+   * Grow the loaded region by roughly `chars` characters.
+   *
+   * Emitted as an ORDINARY CHANGE, not a reset. A prepend is an insertion at
+   * offset zero, and letting the editor apply it as such is what makes the
+   * cursor and the scroll position survive — CodeMirror maps the selection
+   * through an insertion for free, where replacing the whole document throws
+   * both away. Scroll anchoring on prepend is the fiddly part of every
+   * upward-infinite-scroll ever written; this sidesteps it rather than solving
+   * it, and only because option 1 makes extension explicit and rare.
+   *
+   * Days are found through the corpus's date list rather than by walking the
+   * calendar: an empty year between two entries would otherwise be 365 reads.
+   */
+  async extend(direction: 'earlier' | 'later', chars = 20_000): Promise<void> {
+    const loaded = this.#placed.map(p => p.segment.date)
+    const first = loaded[0]
+    const last = loaded[loaded.length - 1]
+    if (first === undefined || last === undefined) return
+
+    const all = await this.#doc.dates()
+    const candidates =
+      direction === 'earlier'
+        ? all.filter(d => compareDateKeys(d, first) < 0).reverse()
+        : all.filter(d => compareDateKeys(d, last) > 0)
+
+    const added: Segment[] = []
+    let gathered = 0
+    for (const date of candidates) {
+      if (gathered >= chars) break
+      const segment = await this.#doc.segment(date)
+      added.push(segment)
+      gathered += segment.length
+    }
+    if (added.length === 0) return
+
+    const ordered = direction === 'earlier' ? [...added].reverse() : added
+    const insert = ordered.map(s => s.body).join('')
+    const at = direction === 'earlier' ? 0 : this.#text.length
+
+    this.#segments = direction === 'earlier' ? [...ordered, ...this.#segments] : [...this.#segments, ...ordered]
+    this.#rebuild()
+    await this.refreshBoundaries()
+
+    const edit: BufferEdit = { from: at as BufferPosition, to: at as BufferPosition, insert }
+    for (const handler of this.#changeHandlers) handler([edit], 'external')
+  }
+
+  /**
+   * What lies beyond each edge, so the UI can offer the right affordance.
+   *
+   * SYNCHRONOUS, reading a value refreshed when the region changes. Making it
+   * async pushed every change notification onto a later tick, which turned the
+   * whole change feed asynchronous for the sake of one boolean pair — a large
+   * behavioural change bought with nothing. Worst case here is a stale edge
+   * affordance for a moment, which costs a click.
+   */
+  get boundaries(): { earlier: boolean; later: boolean } {
+    return this.#edges
+  }
+
+  async refreshBoundaries(): Promise<void> {
+    const loaded = this.#placed.map(p => p.segment.date)
+    const first = loaded[0]
+    const last = loaded[loaded.length - 1]
+    if (first === undefined || last === undefined) {
+      this.#edges = { earlier: false, later: false }
+      return
+    }
+    const all = await this.#doc.dates()
+    this.#edges = {
+      earlier: all.some(d => compareDateKeys(d, first) < 0),
+      later: all.some(d => compareDateKeys(d, last) > 0),
+    }
   }
 
   release(): void {

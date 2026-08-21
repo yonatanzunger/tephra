@@ -51,6 +51,7 @@ export class RemoteDocument implements Document {
           message.generation,
           message.spans,
           message.placement,
+          message.boundaries,
         )
       doc.#settle(message.generation)
     })
