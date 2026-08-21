@@ -62,7 +62,8 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  const query = process.env['TEPHRA_VERIFY'] ? '?verify=1' : ''
+  const scene = process.env['TEPHRA_VERIFY']
+  const query = scene === undefined || scene === '' ? '' : `?verify=${encodeURIComponent(scene)}`
   if (DEV_SERVER) void win.loadURL(DEV_SERVER + query)
   else void win.loadURL(`${APP_ORIGIN}/index.html${query}`)
 

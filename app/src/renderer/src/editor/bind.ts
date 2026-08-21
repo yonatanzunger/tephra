@@ -19,7 +19,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
-import type { BufferEdit, BufferPosition, DocumentWindow, EditOrigin } from '@shared/document-api.ts'
+import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, EditOrigin } from '@shared/document-api.ts'
 import { widgetExtensions } from './widgets.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
@@ -36,6 +36,10 @@ export interface BindOptions {
   readonly typography?: Typography
   /** Reported upward so the Pane can own extent policy (D35). */
   readonly onViewport?: (visible: { from: BufferPosition; to: BufferPosition }) => void
+  /** Where the caret is, in document space, so it can outlive the session. */
+  readonly onCursor?: (at: DocumentPosition) => void
+  /** Restored position from a previous session. Absent means "end of today". */
+  readonly initialCursor?: DocumentPosition | null
   readonly onError?: (err: Error) => void
 }
 
@@ -66,20 +70,25 @@ export function bindEditor(options: BindOptions): Binding {
         typographyCompartment.of(tephraTheme(typography)),
         editorToWindow(docWindow, options.onError),
         viewportReporter(options.onViewport),
+        cursorReporter(docWindow, options.onCursor),
       ] as Extension[],
     }),
   })
 
-  // Land at the END of the loaded region, not the start.
+  // Where to land.
   //
-  // The stream is oldest-first and appended to (Q7), so opening Tephra should
-  // put the cursor where the next sentence goes. It also matters more than it
-  // looks: the window grows backwards in the background, so offset zero stops
-  // meaning "today" a moment after opening — a cursor left there would put the
-  // first thing typed into whatever old day had just been loaded above.
+  // Restored position first, if the previous session left one. Otherwise the
+  // END of the loaded region: the stream is oldest-first and appended to (Q7),
+  // so opening Tephra should put the cursor where the next sentence goes. That
+  // matters more than it looks — the window grows backwards in the background,
+  // so offset zero stops meaning "today" a moment after opening, and a cursor
+  // left there would put the first thing typed into whatever old day had just
+  // been loaded above it.
+  const restored = options.initialCursor == null ? null : docWindow.toBuffer(options.initialCursor)
+  const landing = restored ?? (docWindow.text.length as BufferPosition)
   view.dispatch({
-    selection: { anchor: view.state.doc.length },
-    effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'end' }),
+    selection: { anchor: landing as number },
+    effects: EditorView.scrollIntoView(landing as number, { y: restored === null ? 'end' : 'center' }),
   })
 
   const unsubscribeChanged = docWindow.onChanged((edits, origin) => {
@@ -168,6 +177,21 @@ function applyFromDocument(view: EditorView, edits: readonly BufferEdit[], _orig
     selection: { anchor: changes.mapPos(anchor, 1), head: changes.mapPos(head, 1) },
     effects: fromDocument.of(null),
     annotations: Transaction.addToHistory.of(false),
+  })
+}
+
+/**
+ * Report the caret in DOCUMENT space, which is the only form that outlives the
+ * session — a buffer offset names different text in the next window.
+ */
+function cursorReporter(
+  docWindow: DocumentWindow,
+  onCursor: ((at: DocumentPosition) => void) | undefined,
+): Extension {
+  if (onCursor === undefined) return []
+  return EditorView.updateListener.of(update => {
+    if (!update.selectionSet && !update.docChanged) return
+    onCursor(docWindow.toDocument(update.state.selection.main.head as BufferPosition))
   })
 }
 

@@ -11,7 +11,7 @@
 // created by the caller and handed in; this component only binds a view to it.
 
 import { useEffect, useRef } from 'react'
-import type { BufferPosition, DocumentWindow } from '@shared/document-api.ts'
+import type { BufferPosition, DocumentPosition, DocumentWindow } from '@shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
 import type { Typography } from './theme'
 
@@ -20,10 +20,20 @@ export interface EditorProps {
   readonly vim: boolean
   readonly typography: Typography
   readonly onViewport?: (visible: { from: BufferPosition; to: BufferPosition }) => void
+  readonly onCursor?: (at: DocumentPosition) => void
+  readonly initialCursor?: DocumentPosition | null
   readonly onError?: (err: Error) => void
 }
 
-export function Editor({ window: docWindow, vim, typography, onViewport, onError }: EditorProps): React.JSX.Element {
+export function Editor({
+  window: docWindow,
+  vim,
+  typography,
+  onViewport,
+  onCursor,
+  initialCursor,
+  onError,
+}: EditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const binding = useRef<Binding | null>(null)
 
@@ -37,6 +47,8 @@ export function Editor({ window: docWindow, vim, typography, onViewport, onError
       vim,
       typography,
       ...(onViewport !== undefined ? { onViewport } : {}),
+      ...(onCursor !== undefined ? { onCursor } : {}),
+      ...(initialCursor !== undefined ? { initialCursor } : {}),
       ...(onError !== undefined ? { onError } : {}),
     })
     binding.current = bound

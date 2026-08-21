@@ -5,8 +5,9 @@ import 'katex/dist/katex.min.css'
 import './index.css'
 
 // Temporary: the bridge self-check, driven by a flag on the URL.
-if (new URLSearchParams(location.search).has('verify')) {
-  void import('./verify').then(m => m.runVerify())
+const scene = new URLSearchParams(location.search).get('verify')
+if (scene !== null) {
+  void import('./verify').then(m => m.runVerify(scene))
 }
 
 createRoot(document.getElementById('root')!).render(

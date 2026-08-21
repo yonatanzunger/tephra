@@ -27,6 +27,8 @@ export const CHANNEL = {
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',
   extend: 'tephra:win:extend',
+  loadUiState: 'tephra:ui:load',
+  saveUiState: 'tephra:ui:save',
   /** main → renderer */
   windowChanged: 'tephra:win:changed',
   windowReset: 'tephra:win:reset',

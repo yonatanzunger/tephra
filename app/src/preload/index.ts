@@ -10,6 +10,7 @@ import type {
   SpansRequest, WindowChangedMessage, WindowId, WindowSnapshot,
 } from '../shared/ipc.ts'
 import type { DateKey, DocumentPosition, TypedSpan } from '../shared/document-api.ts'
+import type { UiState } from '../shared/ui-state.ts'
 
 type Handler<T> = (message: T) => void
 
@@ -32,6 +33,8 @@ const tephra = {
     edit: (request: EditRequest): Promise<EditAck> => ipcRenderer.invoke(CHANNEL.edit, request),
     release: (id: WindowId): Promise<void> => ipcRenderer.invoke(CHANNEL.release, id),
     extend: (request: ExtendRequest): Promise<void> => ipcRenderer.invoke(CHANNEL.extend, request),
+    loadUiState: (): Promise<UiState> => ipcRenderer.invoke(CHANNEL.loadUiState),
+    saveUiState: (state: UiState): Promise<void> => ipcRenderer.invoke(CHANNEL.saveUiState, state),
     undo: (): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.undo),
     redo: (): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.redo),
     flush: (): Promise<void> => ipcRenderer.invoke(CHANNEL.flush),

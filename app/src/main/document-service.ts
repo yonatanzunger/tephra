@@ -14,6 +14,8 @@
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, TypedSpan, DocumentPosition } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
+import { LOCAL } from './w/layout.ts'
+import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
 import type { StreamWindow } from './x/window.ts'
 
@@ -48,8 +50,26 @@ export class DocumentService {
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #dirtySince: number | null = null
 
+  readonly #notebook: Notebook
+
   constructor(notebook: Notebook) {
+    this.#notebook = notebook
     this.#doc = new StreamDocument(notebook)
+  }
+
+  // ── UI state: where the reader was ─────────────────────────
+
+  async loadUiState(): Promise<UiState> {
+    return parseUiState(await this.#notebook.read(LOCAL.uiState))
+  }
+
+  /**
+   * Written straight through rather than queued behind edits: losing a cursor
+   * position is cheap and self-correcting, and making it wait behind the write
+   * tiers would spend a real guarantee on a soft one.
+   */
+  async saveUiState(state: UiState): Promise<void> {
+    await this.#notebook.write(LOCAL.uiState, JSON.stringify(state, null, 2) + '\n')
   }
 
   get document(): StreamDocument {

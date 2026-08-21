@@ -1,13 +1,16 @@
-// Temporary self-check. Drives the real editor through the real Pane, so
-// navigation, extension and the landing position are verified rather than
-// assumed. Deleted once M0 can be driven by hand.
+// Scene-driven self-check, used by scripts/m0-acceptance.mjs.
+//
+// Each scene drives the REAL app — the real editor, Pane, bridge, X and W — and
+// prints what it found. Two launches against one notebook is the only way to
+// test what M0 actually claims: that nothing is lost across a quit.
 
-export async function runVerify(): Promise<void> {
+export async function runVerify(scene: string): Promise<void> {
   const say = (key: string, value: unknown): void => console.log(`VERIFY ${key}: ${JSON.stringify(value)}`)
   const settle = (ms = 200): Promise<void> => new Promise(r => setTimeout(r, ms))
 
   try {
-    await settle(1600) // open, bind, and let the background growth finish
+    await settle(1800) // open, bind, restore, and let background growth finish
+
     const view = (globalThis as unknown as { __view?: EditorViewLike }).__view
     const pane = (globalThis as unknown as { __pane?: PaneLike }).__pane
     if (view === undefined || pane === undefined) {
@@ -16,30 +19,32 @@ export async function runVerify(): Promise<void> {
       return
     }
 
-    say('location', pane.location)
+    if (scene === 'write') {
+      const at = view.state.selection.main.head
+      say('landedAt', { cursor: at, docLength: view.state.doc.length })
+      view.dispatch({
+        changes: { from: at, insert: 'A first sentence, typed by hand.\nAnd a second one.\n' },
+        userEvent: 'input.type',
+      })
+      await settle(300)
 
-    // Where the cursor lands matters more than it looks: the window grows
-    // backwards in the background, so offset zero stops meaning "today" a
-    // moment after opening.
-    const cursor = view.state.selection.main.head
-    say('cursorLandsAtEnd', { cursor, docLength: view.state.doc.length })
+      // Leave the caret somewhere specific and non-trivial, so restoring it is
+      // a real claim rather than "it happened to be at the end again".
+      const target = view.state.doc.toString().indexOf('second')
+      view.dispatch({ selection: { anchor: target } })
+      say('buffer', view.state.doc.toString())
+      say('cursorLeftAt', target)
 
-    view.dispatch({ changes: { from: cursor, insert: 'Typed today.\n' }, userEvent: 'input.type' })
-    await settle(300)
-    say('buffer', view.state.doc.toString())
+      await settle(2400) // the write tier's quiescence window, plus the state save
+    }
 
-    say('boundaryEarlier', pane.boundary.earlier.kind)
-
-    await pane.goTo({ kind: 'date', date: '2026-01-02' })
-    await settle(500)
-    say('afterJump', { location: pane.location, canGoBack: pane.canGoBack })
-
-    await pane.back()
-    await settle(500)
-    say('afterBack', { location: pane.location, canGoForward: pane.canGoForward })
-
-    await settle(1600)
-    say('flushed', true)
+    if (scene === 'reopen') {
+      const head = view.state.selection.main.head
+      say('buffer', view.state.doc.toString())
+      say('cursorRestoredTo', head)
+      say('textAtCursor', view.state.doc.toString().slice(head, head + 6))
+      say('location', pane.location)
+    }
   } catch (err) {
     say('ERROR', err instanceof Error ? err.message : String(err))
   }
@@ -52,9 +57,4 @@ interface EditorViewLike {
 }
 interface PaneLike {
   readonly location: unknown
-  readonly canGoBack: boolean
-  readonly canGoForward: boolean
-  readonly boundary: { earlier: { kind: string }; later: { kind: string } }
-  goTo(target: unknown): Promise<void>
-  back(): Promise<void>
 }
