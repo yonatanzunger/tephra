@@ -125,6 +125,17 @@ test('deletion is reported as deletion', async t => {
   assert.ok(seen.some(c => c.rel === rel && c.kind === 'deleted'), JSON.stringify(seen))
 })
 
+test('the notebook\'s own bootstrap writes are not reported as external', async t => {
+  // Notebook.open creates .gitignore and the version file. A watcher started
+  // after those writes has no record of them, so their queued events arrive
+  // looking like hand-edits and X reloads at startup for no reason. This only
+  // showed up as a flake under parallel test load.
+  const nb = await openScratch(t)
+  const { seen } = collector(nb)
+  await settle(600)
+  assert.deepEqual(seen, [], `bootstrap leaked: ${JSON.stringify(seen)}`)
+})
+
 test('.tephra is never reported — it would be a permanent event storm', async t => {
   const nb = await openScratch(t)
   await settle(200)

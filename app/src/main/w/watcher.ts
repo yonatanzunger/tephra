@@ -52,6 +52,18 @@ export class NotebookWatcher {
   /** What we last wrote, per path. The basis of self-write suppression. */
   readonly #ourWrites = new Map<RelPath, string>()
 
+  /**
+   * Paths the app has actually touched — read or written.
+   *
+   * A DELETION is only reported for one of these. macOS reports events whose
+   * filename is the watched root's own basename, which resolves to a path that
+   * does not exist and would otherwise be announced as a deleted file at every
+   * startup. More generally, the disappearance of something we never knew about
+   * changes nothing for anyone above us, while the disappearance of a file we
+   * have open is exactly what X must hear about.
+   */
+  readonly #known = new Set<RelPath>()
+
   #watcher: FSWatcher | null = null
   #pending = new Set<RelPath>()
   #timer: NodeJS.Timeout | null = null
@@ -73,6 +85,12 @@ export class NotebookWatcher {
    */
   noteOwnWrite(rel: RelPath, hash: string): void {
     this.#ourWrites.set(rel, hash)
+    this.#known.add(rel)
+  }
+
+  /** Reading counts as touching: a file we have open may later be deleted. */
+  noteRead(rel: RelPath): void {
+    this.#known.add(rel)
   }
 
   start(): void {
@@ -134,7 +152,7 @@ export class NotebookWatcher {
       if (info === null) {
         // Gone. If we had a record of writing it, it is no longer true.
         this.#ourWrites.delete(rel)
-        changes.push({ rel, kind: 'deleted' })
+        if (this.#known.delete(rel)) changes.push({ rel, kind: 'deleted' })
         continue
       }
 
@@ -145,6 +163,7 @@ export class NotebookWatcher {
       const content = await readText(abs)
       if (content === null) continue // vanished between stat and read; its own event will follow
 
+      this.#known.add(rel)
       const hash = hashContent(content)
       if (this.#ourWrites.get(rel) === hash) continue // our own write, echoed back
 

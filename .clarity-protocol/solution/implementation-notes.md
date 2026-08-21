@@ -100,6 +100,28 @@ Each of these is a path that fires rarely enough to rot, or a failure that canno
 
 ---
 
+## 5a. Watch in use — correct so far, but the failure would be quiet
+
+Both of these are implemented and tested; they are here because the tests
+encode *a* reading of the right answer, and only real writing will say whether
+it was the right one.
+
+- **Offsets near a segment boundary.** A buffer position on a day boundary is
+  both the end of one day and the start of the next. It resolves to the LATER
+  day, because a day body ends with a newline and that offset therefore renders
+  at the first column of the next day — text typed there must land in the file
+  the reader can see it under. The end of the window still belongs to the last
+  segment, which is what makes appending work. Watch for text arriving in the
+  wrong day around midnight, and for cursor jumps when a window is extended.
+
+- **Tags and code spans interacting.** Marker scanning is fence-aware: markers
+  inside fenced blocks, indented blocks and inline code spans are text, not
+  markup. The uncomfortable case is a tag that *opens* outside a fence and would
+  close inside one — the close is invisible, so the tag runs to the end of its
+  segment and is reported unterminated. That is the specified degradation, but
+  it will look like a bug the first time it happens while writing about Tephra
+  in Tephra.
+
 ## 6. Claims not yet verified
 
 Separated deliberately from everything above, which is measured or reasoned. **Do not build on these without checking.**

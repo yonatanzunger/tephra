@@ -4,10 +4,13 @@
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.js'
+import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
+import { Notebook } from './w/notebook.ts'
+import { DocumentService, registerDocumentIpc, attachWindow } from './ipc.ts'
 
-const dirname = join(fileURLToPath(import.meta.url), '..')
+// app.getAppPath() rather than import.meta.url: the built main process is CJS,
+// where import.meta does not exist, and this works in both.
+const outDir = (...parts: string[]): string => join(app.getAppPath(), 'out', ...parts)
 
 // Before app.whenReady, without exception.
 declareScheme()
@@ -27,7 +30,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#faf9f8',
     webPreferences: {
-      preload: join(dirname, '../preload/index.mjs'),
+      preload: outDir('preload', 'index.cjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -36,31 +39,12 @@ function createWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => win.show())
 
-  // Temporary self-check for the scaffold milestone: report what the renderer
-  // actually got, so "served from the custom scheme" is verified rather than
-  // assumed. Removed once the editor lands.
+  // Temporary: surface the renderer's self-check, and exit when it finishes.
   if (process.env['TEPHRA_VERIFY']) {
-    win.webContents.once('did-finish-load', async () => {
-      const report = await win.webContents.executeJavaScript(
-        `JSON.stringify({ origin: location.origin, protocol: location.protocol,
-          secure: window.isSecureContext, bridge: typeof window.tephra,
-          react: !!document.querySelector('.scaffold h1'),
-          heading: document.querySelector('.scaffold h1')?.textContent })`,
-      )
-      console.log('VERIFY ' + report)
-      // Plain ../ is normalised away by the URL parser before the handler sees
-      // it, so it tests nothing. Percent-encoded traversal survives parsing and
-      // is what the containment check actually exists for.
-      for (const probe of ['../../../package.json', '%2e%2e/%2e%2e/%2e%2e/package.json']) {
-        const r = await win.webContents.executeJavaScript(
-          `fetch('tephra://app/${probe}').then(async r => 'status ' + r.status + ' len ' + (await r.text()).length, e => 'blocked: ' + e.message)`,
-        )
-        console.log(`VERIFY traversal [${probe}] -> ${r}`)
-      }
-      const ok = await win.webContents.executeJavaScript(
-        `fetch('tephra://app/index.html').then(async r => 'status ' + r.status + ' len ' + (await r.text()).length, e => 'FAILED ' + e.message)`,
-      )
-      console.log('VERIFY normal fetch -> ' + ok)
+    win.webContents.on('console-message', (_e, _level, message) => {
+      if (!message.startsWith('VERIFY')) return
+      console.log(message)
+      if (message === 'VERIFY done') setTimeout(() => app.exit(0), 200)
     })
   }
 
@@ -70,8 +54,9 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  if (DEV_SERVER) void win.loadURL(DEV_SERVER)
-  else void win.loadURL(`${APP_ORIGIN}/index.html`)
+  const query = process.env['TEPHRA_VERIFY'] ? '?verify=1' : ''
+  if (DEV_SERVER) void win.loadURL(DEV_SERVER + query)
+  else void win.loadURL(`${APP_ORIGIN}/index.html${query}`)
 
   return win
 }
@@ -81,14 +66,40 @@ ipcMain.handle('tephra:hello', () => ({
   origin: DEV_SERVER ?? APP_ORIGIN,
 }))
 
-app.whenReady().then(() => {
-  if (!DEV_SERVER) serveRenderer(join(dirname, '../renderer'))
+let notebook: Notebook | null = null
+let service: DocumentService | null = null
 
-  createWindow()
+app.whenReady().then(async () => {
+  if (!DEV_SERVER) serveRenderer(outDir('renderer'))
+
+  // X and W both live here (D37). The renderer holds Z and the live buffer,
+  // and reaches everything else through the bridge.
+  notebook = await Notebook.open({ root: process.env['TEPHRA_ROOT'] })
+  service = new DocumentService(notebook)
+  registerDocumentIpc(service)
+
+  attachWindow(service, createWindow())
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0 && service !== null) {
+      attachWindow(service, createWindow())
+    }
   })
+})
+
+// Quiesce before exit: flush, then release. Skipping the flush silently
+// discards whatever has not reached a file yet.
+app.on('before-quit', async event => {
+  if (notebook === null) return
+  event.preventDefault()
+  const closing = notebook
+  notebook = null
+  try {
+    await service?.flush()
+  } finally {
+    await closing.close()
+    app.quit()
+  }
 })
 
 app.on('window-all-closed', () => {

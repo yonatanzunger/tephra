@@ -7,7 +7,7 @@
 
 import { protocol, net } from 'electron'
 import { resolve } from 'node:path'
-import { resolveWithinRoot } from './paths.js'
+import { resolveWithinRoot } from './paths.ts'
 import { pathToFileURL } from 'node:url'
 
 export const SCHEME = 'tephra'

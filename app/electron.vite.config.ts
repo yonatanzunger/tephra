@@ -6,12 +6,25 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    build: { rollupOptions: { input: { index: resolve('src/main/index.ts') } } },
+    build: {
+      // CJS, not ESM. Electron's own module does not expose named ESM exports,
+      // so `import { BrowserWindow } from 'electron'` fails at load in an ESM
+      // main process. The package stays type: module for the sources and tests.
+      rollupOptions: {
+        input: { index: resolve('src/main/index.ts') },
+        output: { format: 'cjs', entryFileNames: '[name].cjs' },
+      },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    build: { rollupOptions: { input: { index: resolve('src/preload/index.ts') } } },
+    build: {
+      rollupOptions: {
+        input: { index: resolve('src/preload/index.ts') },
+        output: { format: 'cjs', entryFileNames: '[name].cjs' },
+      },
+    },
   },
   renderer: {
     plugins: [react()],

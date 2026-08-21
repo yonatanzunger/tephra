@@ -1,0 +1,230 @@
+// The renderer's handle on the Document that lives in main (D37).
+//
+// Everything here is a forward. The one piece of real behaviour is routing a
+// pushed change to the window it belongs to — main addresses windows by handle,
+// because a live object cannot cross a process boundary.
+
+import type {
+  DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
+  DocumentWindow, Edit, EditOrigin, SegmentKey, SessionGeneration, Span, SpanKind,
+  TypedSpan, Unsubscribe, Divergence,
+} from '@shared/document-api.ts'
+import type { DocumentInfo } from '@shared/ipc.ts'
+import { RemoteWindow } from './remote-window.ts'
+
+export class RemoteDocument implements Document {
+  readonly id = 'stream' as DocumentId
+  readonly meta: DocumentMeta
+  #generation: SessionGeneration
+  #today: DateKey
+
+  readonly #windows = new Map<number, RemoteWindow>()
+  readonly #changeHandlers = new Set<(c: DocumentChange) => void>()
+
+  /**
+   * Callers waiting for a pushed change to land.
+   *
+   * undo() is answered by an IPC reply, but the WINDOW is updated by a separate
+   * pushed message — so without this, `await doc.undo()` resolves while the
+   * buffer still shows the old text, and anything that reads it immediately
+   * afterwards gets a stale answer. That is a race a caller cannot see and
+   * cannot reasonably be asked to work around.
+   */
+  #waiters: { generation: SessionGeneration; resolve: () => void }[] = []
+
+  private constructor(info: DocumentInfo) {
+    this.meta = info.meta
+    this.#generation = info.generation
+    this.#today = info.today
+  }
+
+  static async open(): Promise<RemoteDocument> {
+    const doc = new RemoteDocument(await window.tephra.doc.open())
+    window.tephra.doc.onWindowChanged(message => {
+      doc.#generation = message.generation
+      doc.#windows
+        .get(message.id)
+        ?.applyRemote(
+          message.edits,
+          message.origin,
+          message.text,
+          message.generation,
+          message.spans,
+          message.placement,
+        )
+      doc.#settle(message.generation)
+    })
+    window.tephra.doc.onWindowReset(message => doc.#windows.get(message.id)?.remoteReset())
+    return doc
+  }
+
+  get generation(): SessionGeneration {
+    return this.#generation
+  }
+
+  get isDirty(): boolean {
+    return false // main owns this; nothing in Z reads it yet
+  }
+
+  get today(): DateKey {
+    return this.#today
+  }
+
+  currentGeneration(): SessionGeneration {
+    return this.#generation
+  }
+
+  async read(span: Span): Promise<DocumentWindow> {
+    const snapshot = await window.tephra.doc.read({
+      first: span.begin.segment as DateKey,
+      last: span.end.segment as DateKey,
+    })
+    const remote = new RemoteWindow(this, snapshot)
+    this.#windows.set(snapshot.id, remote)
+    this.#generation = snapshot.generation
+    return remote
+  }
+
+  /** Sugar for the highest-frequency action: open at the end of today. */
+  async readToday(): Promise<DocumentWindow> {
+    this.#today = await window.tephra.doc.today()
+    const at: DocumentPosition = {
+      segment: this.#today as SegmentKey,
+      offset: 0 as never,
+      generation: this.#generation,
+    }
+    return this.read({ begin: at, end: at })
+  }
+
+  async undo(): Promise<DocumentChange | null> {
+    const ack = await window.tephra.doc.undo()
+    await this.#windowsCaughtUp(ack.generation)
+    this.#generation = ack.generation
+    if (ack.change !== null) for (const handler of this.#changeHandlers) handler(ack.change)
+    return ack.change
+  }
+
+  async redo(): Promise<DocumentChange | null> {
+    const ack = await window.tephra.doc.redo()
+    await this.#windowsCaughtUp(ack.generation)
+    this.#generation = ack.generation
+    if (ack.change !== null) for (const handler of this.#changeHandlers) handler(ack.change)
+    return ack.change
+  }
+
+  #settle(generation: SessionGeneration): void {
+    this.#waiters = this.#waiters.filter(waiter => {
+      if (generation >= waiter.generation) {
+        waiter.resolve()
+        return false
+      }
+      return true
+    })
+  }
+
+  /**
+   * Resolve once every open window has seen `target`, so that a caller awaiting
+   * undo() can read the buffer immediately afterwards and get the new text.
+   *
+   * Bounded by a timeout rather than waiting forever: a change that lands
+   * entirely outside every open window produces no push, and blocking on a
+   * message that is never coming would be worse than answering slightly early.
+   */
+  async #windowsCaughtUp(target: SessionGeneration, timeoutMs = 500): Promise<void> {
+    const behind = [...this.#windows.values()].some(w => w.generation < target)
+    if (!behind) return
+    await new Promise<void>(resolve => {
+      const timer = setTimeout(resolve, timeoutMs)
+      this.#waiters.push({
+        generation: target,
+        resolve: () => {
+          clearTimeout(timer)
+          resolve()
+        },
+      })
+    })
+  }
+
+  async flush(): Promise<void> {
+    await window.tephra.doc.flush()
+  }
+
+  async spans(kind?: SpanKind): Promise<readonly TypedSpan[]> {
+    return window.tephra.doc.spans(kind === undefined ? {} : { kind })
+  }
+
+  async resolveAnchor(name: string): Promise<DocumentPosition | null> {
+    return window.tephra.doc.resolveAnchor(name)
+  }
+
+  async extent(): Promise<{ readonly first: DateKey; readonly last: DateKey } | null> {
+    return window.tephra.doc.extent()
+  }
+
+  dateAt(at: DocumentPosition): DateKey | null {
+    return at.segment as DateKey
+  }
+
+  onChanged(handler: (change: DocumentChange) => void): Unsubscribe {
+    this.#changeHandlers.add(handler)
+    return () => this.#changeHandlers.delete(handler)
+  }
+
+  releaseWindow(id: number): void {
+    this.#windows.delete(id)
+  }
+
+  // ── not in M0; explicit rather than silently absent ────────
+
+  #notYet(name: string): never {
+    throw new Error(`Document.${name} is not implemented in M0`)
+  }
+  snap(_span: Span): Promise<Span> {
+    return this.#notYet('snap')
+  }
+  advance(_from: DocumentPosition, _chars: number): Promise<DocumentPosition | null> {
+    return this.#notYet('advance')
+  }
+  distance(_a: DocumentPosition, _b: DocumentPosition): Promise<number | null> {
+    return this.#notYet('distance')
+  }
+  spansAt(_at: DocumentPosition): Promise<readonly TypedSpan[]> {
+    return this.#notYet('spansAt')
+  }
+  replace(_edits: readonly Edit[], _origin?: EditOrigin): Promise<void> {
+    return this.#notYet('replace')
+  }
+  rewindTo(_to: SessionGeneration): Promise<DocumentChange | null> {
+    return this.#notYet('rewindTo')
+  }
+  history(_since?: SessionGeneration): Promise<readonly DocumentChange[]> {
+    return this.#notYet('history')
+  }
+  tag(_span: Span, _subject: string): Promise<void> {
+    return this.#notYet('tag')
+  }
+  untag(_span: Span, _subject: string): Promise<void> {
+    return this.#notYet('untag')
+  }
+  setAnchor(_at: DocumentPosition, _name: string): Promise<void> {
+    return this.#notYet('setAnchor')
+  }
+  removeAnchor(_name: string): Promise<void> {
+    return this.#notYet('removeAnchor')
+  }
+  branch(_span: Span, _name: string): Promise<DocumentId> {
+    return this.#notYet('branch')
+  }
+  onDiverged(_handler: (d: Divergence) => void): Unsubscribe {
+    return () => undefined
+  }
+  mapPosition(_at: DocumentPosition, _through: DocumentChange): DocumentPosition | null {
+    return this.#notYet('mapPosition')
+  }
+  reload(): Promise<void> {
+    return this.#notYet('reload')
+  }
+  release(): Promise<void> {
+    return this.#notYet('release')
+  }
+}

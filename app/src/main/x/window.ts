@@ -265,6 +265,18 @@ export class StreamWindow implements DocumentWindow {
     this.#resetHandlers.clear()
   }
 
+  /**
+   * Where each segment's body sits in the buffer.
+   *
+   * The renderer's half of this window needs it to answer toDocument/toBuffer
+   * synchronously across the process boundary — that mapping is the whole of
+   * what makes those methods cheap, and it is small enough to send on every
+   * change.
+   */
+  placement(): readonly { date: DateKey; start: number; length: number }[] {
+    return this.#placed.map(p => ({ date: p.segment.date, start: p.start, length: p.segment.length }))
+  }
+
   // ── internals ──────────────────────────────────────────────
 
   #rebuild(): void {

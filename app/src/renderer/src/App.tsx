@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react'
 
+
 export function App(): React.JSX.Element {
   const [hello, setHello] = useState<{ version: string; origin: string } | null>(null)
   const [error, setError] = useState<string | null>(null)

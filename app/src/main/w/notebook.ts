@@ -59,6 +59,12 @@ export class Notebook {
     const notebook = new Notebook(root, options.lock === false ? null : new NotebookLock(join(root, LOCAL.lock)))
     await notebook.#lock?.acquire()
 
+    // Watch BEFORE bootstrapping, not after. The writes below are ours, and a
+    // watcher started afterwards has no record of them — so the events they
+    // already queued arrive looking like someone else's hand-edits, and X
+    // reloads at startup for no reason. Ordering, not filtering, is the fix.
+    if (options.watch !== false) notebook.#startWatching()
+
     if (!(await notebook.has(LOCAL.version))) {
       await notebook.write(LOCAL.version, `${STATE_VERSION}\n`)
     }
@@ -66,7 +72,6 @@ export class Notebook {
       await notebook.write('.gitignore', GITIGNORE)
     }
 
-    if (options.watch !== false) notebook.#startWatching()
     return notebook
   }
 
@@ -76,7 +81,11 @@ export class Notebook {
   }
 
   async read(rel: RelPath): Promise<string | null> {
-    return readText(this.#abs(rel))
+    const text = await readText(this.#abs(rel))
+    // Reading counts as touching: a file the app has open is one whose deletion
+    // it must hear about.
+    if (text !== null) this.#watcher?.noteRead(rel)
+    return text
   }
 
   /**
