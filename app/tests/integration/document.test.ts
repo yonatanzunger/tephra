@@ -313,3 +313,55 @@ test('typing at the end of the window goes to the last day, not the one before',
   assert.equal(await readFile(join(root, dayFile(d('2026-03-13'))), 'utf8'), dayText('2026-03-13', 'yesterday\n'))
   assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), dayText('2026-03-14', 'today!\n'))
 })
+
+test('a hand-edit to a clean day is adopted, as an ordinary external change', async t => {
+  // Hand-editing is a feature, so this needs no ceremony: reload, emit, and let
+  // the editor map its cursor through it like any other edit.
+  const { doc, root, nb } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'original\n') })
+  const w = await windowOver(doc, DAY)
+  const seen: string[] = []
+  w.onChanged((_edits, origin) => seen.push(origin))
+
+  await writeFile(join(root, dayFile(DAY)), dayText('2026-03-14', 'edited by hand\n'))
+  await doc.externalChanged(dayFile(DAY))
+
+  assert.equal(w.text, 'edited by hand\n')
+  assert.deepEqual(seen, ['external'])
+  void nb
+})
+
+test('a hand-edit onto unsaved edits diverges, and NOTHING is overwritten', async t => {
+  // The one case where both automatic answers lose something: our write
+  // destroys their hand-edit, their reload destroys our typing. D12 asks for
+  // correct, visible and recoverable rather than seamless.
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'original\n') })
+  const w = await windowOver(doc, DAY)
+
+  const divergences: string[] = []
+  doc.onDiverged(d => divergences.push(d.date))
+
+  await w.edit([{ from: bp(0), to: bp(0), insert: 'MINE ' }], 'user') // now dirty
+  await writeFile(join(root, dayFile(DAY)), dayText('2026-03-14', 'THEIRS\n'))
+  await doc.externalChanged(dayFile(DAY))
+
+  assert.deepEqual(divergences, [DAY], 'the divergence was surfaced')
+
+  // Their file is untouched by us...
+  await doc.flush()
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), dayText('2026-03-14', 'THEIRS\n'))
+  // ...and our text is still in the buffer, not silently discarded.
+  assert.equal(w.text, 'MINE original\n')
+})
+
+test('a diverged day refuses further writes rather than failing quietly', async t => {
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'original\n') })
+  const w = await windowOver(doc, DAY)
+  await w.edit([{ from: bp(0), to: bp(0), insert: 'MINE ' }], 'user')
+  await writeFile(join(root, dayFile(DAY)), dayText('2026-03-14', 'THEIRS\n'))
+  await doc.externalChanged(dayFile(DAY))
+
+  await assert.rejects(
+    () => w.edit([{ from: bp(0), to: bp(0), insert: 'more' }], 'user'),
+    /changed on disk/,
+  )
+})

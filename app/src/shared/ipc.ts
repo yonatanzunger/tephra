@@ -32,6 +32,7 @@ export const CHANNEL = {
   /** main → renderer */
   windowChanged: 'tephra:win:changed',
   windowReset: 'tephra:win:reset',
+  diverged: 'tephra:doc:diverged',
 } as const
 
 export interface DocumentInfo {

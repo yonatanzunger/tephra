@@ -55,6 +55,19 @@ export class DocumentService {
   constructor(notebook: Notebook) {
     this.#notebook = notebook
     this.#doc = new StreamDocument(notebook)
+
+    // Hand-editing is a feature, so the app has to notice. Queued with the
+    // edits, because a reload racing a write is the corruption this whole
+    // layer exists to avoid.
+    notebook.onExternalChange(changes => {
+      void this.#serial(async () => {
+        for (const change of changes) await this.#doc.externalChanged(change.rel)
+      })
+    })
+
+    this.#doc.onDiverged(divergence => {
+      for (const sink of this.#sinks) sink.send(CHANNEL.diverged, divergence)
+    })
   }
 
   // ── UI state: where the reader was ─────────────────────────

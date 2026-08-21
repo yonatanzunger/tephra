@@ -19,6 +19,7 @@ export class Segment {
   #parsed: ParsedFile
   #body: string
   #dirty = false
+  #diverged = false
 
   /** Lazily computed and dropped on every edit; scanning is cheap, staleness is not. */
   #markers: readonly RawMarker[] | null = null
@@ -53,6 +54,24 @@ export class Segment {
   }
 
   /**
+   * Someone changed this file on disk while we held unsaved edits to it.
+   *
+   * The segment is then FROZEN for writing. Not because the situation is
+   * unrecoverable, but because every automatic resolution loses something: our
+   * write clobbers their hand-edit, their reload clobbers our typing. D12 asks
+   * for correct, visible and recoverable rather than seamless — so nothing is
+   * written until a person decides, and the picker that lets them decide is
+   * v2a's work, not a silent guess made now.
+   */
+  get diverged(): boolean {
+    return this.#diverged
+  }
+
+  markDiverged(): void {
+    this.#diverged = true
+  }
+
+  /**
    * A file whose frontmatter could not be parsed is READ-ONLY, permanently, for
    * as long as that holds. Never overwrite what you could not read.
    */
@@ -81,6 +100,15 @@ export class Segment {
     this.#original = written
     this.#parsed = parseFile(written)
     this.#dirty = false
+  }
+
+  /** Take the file's current contents as truth. Only ever called when clean. */
+  adopt(fileText: string): void {
+    this.#original = fileText
+    this.#parsed = parseFile(fileText)
+    this.#body = this.#parsed.body
+    this.#dirty = false
+    this.#markers = null
   }
 
   #scan(): readonly RawMarker[] {

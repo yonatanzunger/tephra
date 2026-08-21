@@ -4,12 +4,13 @@
   "description": "A notebook that is one continuous stream of writing",
   "main": "out/main/index.cjs",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "./run.sh --dev",
     "build": "electron-vite build",
-    "start": "electron-vite preview",
+    "start": "./run.sh",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --experimental-strip-types --test \"tests/**/*.test.ts\"",
-    "m0": "npm run build && node scripts/m0-acceptance.mjs"
+    "m0": "npm run build && node scripts/m0-acceptance.mjs",
+    "scratch": "./run.sh --scratch"
   },
   "type": "module",
   "dependencies": {

@@ -17,6 +17,7 @@ export function App(): React.JSX.Element {
   const [restored, setRestored] = useState<DocumentPosition | null>(null)
   const [typography] = useState<Typography>(defaultTypography)
   const [error, setError] = useState<string | null>(null)
+  const [diverged, setDiverged] = useState<{ date: string } | null>(null)
 
   const docWindow = usePaneWindow(pane)
   const location = usePaneLocation(pane)
@@ -55,6 +56,13 @@ export function App(): React.JSX.Element {
       }
     })()
     return () => created?.release()
+  }, [])
+
+  // A day changed on disk while we held unsaved edits to it. Surfaced, never
+  // resolved (D12): both automatic answers destroy something. Writing to that
+  // day has stopped, and it says so rather than failing quietly.
+  useEffect(() => {
+    return window.tephra.doc.onDiverged(d => setDiverged({ date: d.date }))
   }, [])
 
   // Undo is document-scoped and reached past the facade on purpose (D26). When
@@ -153,6 +161,14 @@ export function App(): React.JSX.Element {
           render
         </label>
       </header>
+
+      {diverged !== null && (
+        <div className="banner">
+          <b>{diverged.date}</b> changed on disk while you were editing it. Your unsaved
+          changes to that day are <b>not being written</b>, and nothing has been
+          overwritten. Copy what you need, then reopen.
+        </div>
+      )}
 
       {boundary?.earlier.kind === 'extendable' && (
         <button className="edge" onClick={() => void pane?.extend('earlier')}>

@@ -14,7 +14,7 @@ import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
 import { dayFile, parseDayFile } from '../w/layout.ts'
-import { frontmatterFor, renderFrontmatter } from './frontmatter.ts'
+import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
 import { Segment } from './segment.ts'
 import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
@@ -203,6 +203,69 @@ export class StreamDocument implements Document {
     return at.segment as DateKey
   }
 
+  // ── changes made outside the app ───────────────────────────
+
+  /**
+   * A file changed on disk. Hand-editing is a feature, so this needs no
+   * ceremony (D32): reload, emit an ordinary change with origin 'external',
+   * and let the editor map its cursor through it like any other edit.
+   *
+   * The one hard case is a hand-edit landing on a buffer we have unsaved edits
+   * to. That is divergence, and it is surfaced rather than resolved (D12) —
+   * both automatic answers lose something.
+   */
+  async externalChanged(rel: string): Promise<void> {
+    const ref = parseDayFile(rel)
+    if (ref === null || ref.part !== 1) return
+
+    const segment = this.#segments.get(ref.date)
+    if (segment === undefined) return // not loaded; the next read gets it fresh
+
+    const text = await this.#notebook.read(rel)
+    const theirs = text === null ? '' : parseFile(text).body
+    if (theirs === segment.body) return // same content, nothing to say
+
+    if (segment.dirty) {
+      segment.markDiverged()
+      for (const handler of this.#divergeHandlers) {
+        handler({ ours: segment.body, theirs, date: ref.date })
+      }
+      return
+    }
+
+    // A minimal replacement rather than a wholesale reset: it keeps the change
+    // small, and it is what lets a cursor elsewhere in the day survive.
+    const replacement = minimalReplacement(segment.body, theirs)
+    if (text !== null) segment.adopt(text)
+    else segment.setBody('')
+    if (replacement === null) return
+
+    const from = this.#generation
+    this.#generation = (from + 1) as SessionGeneration
+    const change: DocumentChange = {
+      from,
+      to: this.#generation,
+      edits: [
+        {
+          span: {
+            begin: this.#positionAt(ref.date, replacement.from),
+            end: this.#positionAt(ref.date, replacement.to),
+          },
+          payload: replacement.insert,
+        },
+      ],
+      origin: 'external',
+      at: Date.now(),
+    }
+    for (const handler of this.#changeHandlers) handler(change)
+    for (const window of this.#windows) window.documentChanged(change)
+  }
+
+  /** Days whose disk copy and buffer disagree, and which are not being written. */
+  divergedDates(): readonly DateKey[] {
+    return [...this.#segments.entries()].filter(([, s]) => s.diverged).map(([date]) => date)
+  }
+
   // ── writing ────────────────────────────────────────────────
 
   async replace(edits: readonly Edit[], origin: EditOrigin = 'operation'): Promise<void> {
@@ -240,6 +303,9 @@ export class StreamDocument implements Document {
       const segment = await this.segment(date)
       if (segment.readOnly) {
         throw new Error(`${segment.rel} has frontmatter that could not be parsed; it is not rewritten`)
+      }
+      if (segment.diverged) {
+        throw new Error(`${segment.rel} changed on disk while you were editing it; it is not being written`)
       }
       const sorted = [...list].sort((a, b) => a.from - b.from)
       inverse.set(date, invertEdits(segment.body, sorted))
@@ -425,7 +491,9 @@ export class StreamDocument implements Document {
 
   async flush(): Promise<void> {
     for (const segment of this.#segments.values()) {
-      if (!segment.dirty || segment.readOnly) continue
+      // A diverged segment is frozen: writing it would destroy the hand-edit
+      // that caused the divergence, which is the one outcome nothing recovers.
+      if (!segment.dirty || segment.readOnly || segment.diverged) continue
       const text = segment.serialise()
       await this.#notebook.write(segment.rel, text)
       segment.markClean(text)

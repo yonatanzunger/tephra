@@ -9,19 +9,23 @@ import type {
   ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
   SpansRequest, WindowChangedMessage, WindowId, WindowSnapshot,
 } from '../shared/ipc.ts'
-import type { DateKey, DocumentPosition, TypedSpan } from '../shared/document-api.ts'
+import type { DateKey, Divergence, DocumentPosition, TypedSpan } from '../shared/document-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
 
 type Handler<T> = (message: T) => void
 
 const changedHandlers = new Set<Handler<WindowChangedMessage>>()
 const resetHandlers = new Set<Handler<{ id: WindowId }>>()
+const divergedHandlers = new Set<Handler<Divergence>>()
 
 ipcRenderer.on(CHANNEL.windowChanged, (_e, message: WindowChangedMessage) => {
   for (const handler of changedHandlers) handler(message)
 })
 ipcRenderer.on(CHANNEL.windowReset, (_e, message: { id: WindowId }) => {
   for (const handler of resetHandlers) handler(message)
+})
+ipcRenderer.on(CHANNEL.diverged, (_e, message: Divergence) => {
+  for (const handler of divergedHandlers) handler(message)
 })
 
 const tephra = {
@@ -51,6 +55,11 @@ const tephra = {
     onWindowReset(handler: Handler<{ id: WindowId }>): () => void {
       resetHandlers.add(handler)
       return () => resetHandlers.delete(handler)
+    },
+    /** A day changed on disk while it had unsaved edits. Surfaced, never resolved (D12). */
+    onDiverged(handler: Handler<Divergence>): () => void {
+      divergedHandlers.add(handler)
+      return () => divergedHandlers.delete(handler)
     },
   },
 } as const

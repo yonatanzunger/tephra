@@ -38,6 +38,19 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(2400) // the write tier's quiescence window, plus the state save
     }
 
+    if (scene === 'handedit') {
+      // Type, save, then wait while the harness edits the same file from
+      // outside. Nothing here reaches into the watcher; it exercises the whole
+      // path from the filesystem up.
+      const at = view.state.selection.main.head
+      view.dispatch({ changes: { from: at, insert: 'From the app.\n' }, userEvent: 'input.type' })
+      await settle(2000) // let it save, so the buffer is clean
+      say('beforeExternal', view.state.doc.toString())
+      say('ready', true)
+      await settle(3000) // the harness edits the file during this window
+      say('afterExternal', view.state.doc.toString())
+    }
+
     if (scene === 'reopen') {
       const head = view.state.selection.main.head
       say('buffer', view.state.doc.toString())
