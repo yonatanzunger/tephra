@@ -67,16 +67,69 @@ while testing against `./run.sh --scratch`, and not fine for real writing.
 ## M1 — the corpus becomes safe
 
 Everything that stands between "it writes files" and "it will not lose twenty
-years of them." Nothing above this is worth building first.
+years of them." Nothing above this is worth building first. Safety in three time
+bands: **seconds** (the WAL), **minutes** (file writes, done in M0), **forever**
+(git).
 
-- Day-file split at 1 MB, with a forced test — a path that fires once every few
-  years is broken when it fires (`implementation-notes.md` §5)
-- The WAL, and the three write tiers each with quiescence **and** a ceiling
-  (D32). M0 has the file tier only
-- Local git repository, commits, restore (D32, D34) — versioning is local from
-  v1, so v2a adds distribution rather than history
-- The purge procedure, owed before the first *push* rather than the first
-  commit (T10, D36)
+### The order, and why it is not the obvious one
+
+The obvious order starts with the split. This one starts with git, for two
+reasons.
+
+**The split is the only surgery in M1.** It changes how a day maps to files, and
+a prefix-stability mistake manufactures divergence out of nothing. Doing the
+dangerous thing before the safety net exists is backwards.
+
+**And D34 says the library choice needs verifying before it is committed to** —
+it flags library health as where its own analysis is least reliable. If
+`isomorphic-git` is unmaintained or broken under Electron, that changes M1's
+shape, and the time to find out is the first hour rather than after the split
+and the WAL have been built on the assumption.
+
+### The checklist
+
+1. **Verify `isomorphic-git`.** init, add, commit, log, read a blob, checkout —
+   in the real Electron main process, against a scratch repository. **The
+   acceptance test is D34's: standard `git` must be able to read it.** A
+   repository only Tephra can read defeats the entire reason git was chosen.
+2. **The commit tier.** Repository at the notebook root. Commits on ~5 min
+   quiescence **or** every 30 min **or** session end (D32). `.tephra/` stays
+   ignored — the bootstrap `.gitignore` already does this; `config/` is
+   committed, because a theme somebody crafted is authored work (D41).
+3. **History as its own X object.** Document stops owning durable history;
+   `Document.undo` and `rewindTo` stay volatile and session-scoped (D32).
+   **v1 scope: browse and copy out** — list commits, view a file at a version,
+   lift text by hand. It is the smallest thing that makes the history real, and
+   it never writes, so it cannot itself lose anything.
+   `History.restore(version, doc, span?)` lands in **M2**, where spans already
+   exist as a first-class idea.
+4. **Day-file split at 1 MB.** Prefix-stable, at the last paragraph boundary at
+   or before the threshold; parts coalesce into one date span above the storage
+   layer (D20), so the split stays invisible to the API. **With a forced test
+   using a synthetic oversized day** — at ~100 KB a day this will essentially
+   never fire on its own, and a path that fires once every few years is broken
+   when it fires.
+5. **The WAL.** Changes since the last file write, batched at ~50 ms, at the
+   `.tephra/wal` path already reserved in `layout.ts`. Closes the seconds-wide
+   window that the file tier leaves open.
+6. **The purge procedure.** Documented, not a button (T10, D36).
+7. **`npm run m1`.** The acceptance run, mirroring M0's: kill the app mid-write
+   and lose nothing; recover a deleted paragraph from a commit; force a split and
+   read the parts back as a single day.
+
+### Two choices made up front
+
+**Commit messages quote the first line of what changed.** Chosen for recall —
+finding a lost paragraph a year later is the job, and a timestamp does not help
+with it.
+
+> **This makes the purge procedure larger, and item 6 must say so.** Deleted text
+> now lives in the repository forever (D32 already established that). With
+> content in commit messages it lives in **two** places per commit, so a purge
+> is a rewrite of messages as well as blobs. Better known while writing the
+> procedure than discovered while running it.
+
+**Restore is read-only in v1.** See item 3.
 
 ## M2 — range operations
 
