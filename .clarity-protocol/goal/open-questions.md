@@ -121,7 +121,9 @@ The stream is **oldest-first, appended at the end** — the paper-notebook order
 
 **(b) Does a jump move the current window, or open another?** D10 already has "current window or new window" as an entry-activation choice, so the likely answer is: a jump moves this window and keeps a back stack, browser-fashion, with open-in-new-window as an explicit gesture.
 
-**(c) One editor pane, or a privileged place for the stream?** One pane is simpler, but then jotting in today's stream while reading a note costs a navigation — friction on the highest-frequency gesture. Portal's answer was a separate capture surface: *"the widget is the capture surface, not the editor; capture is gesture, type, enter."* Probably deferrable: one pane plus a one-key "go to today", and a capture affordance only if that proves frictional.
+**(c) One editor pane, or a privileged place for the stream? — PARTLY ANSWERED (D42).** The *frame* now has a place for it: a reserved third column, opened on demand, elastic between 210px and 300px, refused below the width at which it would push the annotation gutter off the edge (about 1512px of window for the full 300px). What remains open is the original question — whether it earns its width in use, or whether a one-key jump to today suffices. That is answered by living with it, not by measuring.
+
+The original framing: One pane is simpler, but then jotting in today's stream while reading a note costs a navigation — friction on the highest-frequency gesture. Portal's answer was a separate capture surface: *"the widget is the capture surface, not the editor; capture is gesture, type, enter."* Probably deferrable: one pane plus a one-key "go to today", and a capture affordance only if that proves frictional.
 
 **(d) What does a first launch against an empty directory do?** Small, but it is the first thing built and the first thing seen.
 
@@ -149,3 +151,68 @@ A large window is slow to open and rarely needs extending; a small one opens ins
 **Deferred (D36).** The measurement waits until after a first v1 cut — safely, and for a specific reason: **v1 ships option 1**, `autoExtendOnApproach: false`, and a window that does not grow never approaches the unmeasured ceiling. The reopening trigger is therefore precise: **before that flag is set true.**
 
 **Update (D35).** Q7's option space is now **configuration rather than architecture**: `Pane.policy` has `initial`, `target`, `cap`, `autoExtendOnApproach` and `evict`, and options 1, 2 and 4 are settings of it. Only eviction is new code. What remains genuinely open is the *measurement* — where the editor degrades above 1.05 MB — and the *judgement* about how far continuous scrolling should reach, which is answered by living with a number.
+
+
+---
+
+## Q8: Where does a comment's body live?
+
+**Raised by R27.** D11 already settles the *anchoring*: references are by identity,
+never by stored offsets, because offsets rot the moment the text is edited by
+hand. What it does not settle is where the comment's **text** goes.
+
+**(a) Fully inline** — anchor and body both in the day file, in a marker the
+renderer hides. Consistent with everything else in the format; one file is one
+complete artifact; survives the tool's abandonment intact (R26). Costs: the base
+text is now interleaved with commentary that a plain-text reader sees inline, and
+a long comment sits in the middle of the passage it discusses.
+
+**(b) Anchor inline, body in a sidecar** keyed by the anchor's name. The base text
+gains only a short invisible marker; commentary accumulates in its own file, which
+matches the Talmudic arrangement literally — one text, commentary alongside. Costs:
+two files to keep together, and a sidecar whose anchors can go stale is a second
+source of truth, which is exactly what D11 exists to prevent. Mitigated but not
+eliminated by anchoring by identity.
+
+**What decides it:** whether a comment ever wants to be long. Marginal notes of a
+line or two argue for (a); a genuine commentary tradition — where the margin
+outgrows the text — argues for (b). **Not urgent:** MV only needs the gutter
+*reserved*, which neither option affects.
+
+## Q9: Does an imported base text stay pristine?
+
+**Raised by R28.** Annotating an imported document is different in kind from
+annotating one's own writing: the base text is *someone else's*, it will not be
+revised here, and its integrity may be the point.
+
+If comments are inline (Q8a), commenting necessarily modifies the imported text.
+If they are a sidecar (Q8b), the import can be left byte-identical to what came in
+— and for a `.docx` or `.pdf` that has been *converted*, the pristine thing worth
+keeping may be the original file rather than the markdown anyway.
+
+**Note the coupling:** Q9 is not independent of Q8. If pristine-base turns out to
+matter, it decides Q8 in favour of the sidecar. **Sequence:** answer Q9 first, by
+importing one real document and trying to live with it.
+
+
+## Q10: What is the mobile frame?
+
+**Status:** open, deliberately unexamined, and **scheduled after MV** so the study has a real desktop implementation to be judged against.
+
+**Why it is not a variant of D42.** D42 is an argument about horizontal budget from end to end — nav, measure, annotation gutter, capture stream, and which of them yields when the window narrows. A phone has no horizontal budget to allocate. Deriving the mobile frame from the desktop one would answer a question nobody asked.
+
+### The three questions that actually matter
+
+**(a) What becomes of marginal commentary when there is no margin?** R27 made commentary durable content, so the phone must at least be able to read it. The desktop's own narrow band already implements one answer — each note folded beneath the paragraph it belongs to, ruled rather than floated, giving up position and keeping legibility. That is a **starting hypothesis, not a finding**: it was designed for a 1000px window, not a 390px one, and it has never been read with a thumb.
+
+**(b) Does the phone land on capture, or on reading?** On the desktop this tension resolved into a third column (D42). A phone cannot spend a column on it, so the same tension becomes a question about what the app *is* when opened — and R25's note that mobile must be *excellent at what it does* rather than complete argues for choosing one and doing it properly.
+
+**(c) What does the keyboard do to all of this?** It covers something like half the screen whenever writing is happening, which is the majority of the time under (b)'s capture answer. Nothing in the desktop work has an analogue to this.
+
+### How it must be judged, which is the part worth writing down
+
+**On the phone, not in a narrow window on the Mac.** Proof sheets are URLs, so this costs nothing but remembering to do it. A phone layout evaluated in a resized desktop browser reproduces none of what makes a phone hard — thumb reach, one-handed use, no hover, the keyboard, and the fact that the screen is held at a different distance from the eye, which interacts directly with R1's legibility requirement.
+
+This is the same failure the frame studies already produced once in another form: a readout that measured only the text column's left edge certified an arrangement as steady while its measure narrowed by 200px (D42). **An instrument that cannot see the failure it is pointed at converts an open question into a false answer**, and a desktop browser is exactly that instrument for a phone.
+
+**One constraint is already settled** and does not need re-testing: vim is never used on mobile (Spike A′, D15).

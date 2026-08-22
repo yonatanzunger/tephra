@@ -55,6 +55,39 @@ Derived from `problem.md` and `precedent.md`. The ordering is deliberate: the ex
 
 > **On mobile parity.** Era 3's mobile failure was that it was *barely functional*, not that it lacked features. The requirement is therefore that mobile be **excellent at what it does**, not that it match the desktop feature for feature — and R1.4 (vim) is desktop-only by nature. Screen size and input device make the desktop preferable for serious work; the phone must be genuinely good, not a viewer.
 
+## R7 — Commentary and imported text
+
+*Added after the visual studies. The margin was drawn as an aesthetic
+inheritance from the Aldine page; seeing it rendered made clear it is a
+requirement, and one that arrives with a second use case attached.*
+
+27. **Attach a comment to a range of text, shown in the margin beside it.**
+    Several comments may bear on the same passage, and a comment is itself
+    editable text, not a fixed annotation. **The margin is a second column of
+    text, not an ornament** — sized and toned to be read, and reserved at all
+    times so that the arrival of a comment never reflows the passage it is
+    about.
+28. **Import an external document — clipboard, `.docx`, `.pdf` — into the
+    format, in order to comment on it.** The imported text is the base column;
+    the reader's commentary accumulates in the margin. This is a distinct
+    inbound path: the text being annotated was not written here and never will
+    be.
+
+> **Why this is a requirement and not a decoration.** The stated lineage is
+> medieval marginalia and, behind it, the Talmudic page — base text surrounded
+> by generations of commentary, where the argument in the margin is as much the
+> document as the text it surrounds. The modern working tools largely lost this:
+> comments became transient review artifacts, attached to a draft and discarded
+> on acceptance. The requirement is the opposite — **commentary is durable
+> content**, and R26 (plain, durable formats) applies to it exactly as it does
+> to the base text.
+
+> **What is not yet decided.** Whether a comment's body lives inline in the
+> document or in a sidecar keyed by an anchor; and whether an imported base text
+> stays pristine while being annotated. Both are recorded in `open-questions.md`
+> (Q8, Q9). Note that D11 already forces part of the answer: anchoring is by
+> identity, never by stored offsets.
+
 ## Constraints
 
 - **Single builder**, alongside a full slate of other projects. macOS experience is decades old; Android experience is slight. **Platform scaffolding is the project's real risk**, and it concentrates precisely in the rich-editor surface.

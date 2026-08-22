@@ -72,6 +72,11 @@ Everything discussed so far, in one list, with a proposed stage. Stages are **v1
 | Print a range | R11 | v1 (Q4 evidence) |
 | Branch a range into its own file, linked from its origin | R14 | v1 (D13) |
 | Find a branched file independently of its origin | R14 | v2 (needs tags and search) |
+| Comment on a range, shown in the reserved margin | R27 | v1 |
+| The margin reserved in every theme, comments or not | R27 | MV — cannot wait |
+| Import clipboard text to annotate | R28 | v1 |
+| Import `.docx` to annotate | R28 | ◆ v1 |
+| Import `.pdf` to annotate | R28 | v2 — extraction is its own problem |
 
 ## Storage and sync
 

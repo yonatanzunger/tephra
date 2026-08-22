@@ -35,6 +35,32 @@ restart; external edits adopted, and divergence surfaced rather than resolved.
 defaults rather than a designed one (D15 asks for designed, since it is what
 mobile always runs), and typography is fixed rather than tunable (R1.3).
 
+## MV — the visual system (in progress)
+
+Brought forward ahead of M1, and the design's own words argue for it:
+`components.md` names exactly two things expensive to change later, and one of
+them is "the editing surface plus visual system, because they decide whether the
+thing gets used at all." The earlier ordering had it near-last.
+
+- A **theme system** — named parameter sets in `config/themes/`, active theme
+  per device (D41). Four arrangements exist as proof sheets in
+  `design/type-specimen.html`; the choice is deliberately late-bound
+- The **annotation gutter reserved in every theme**, so marginal notes can
+  arrive later without reflowing a line. This is the part that cannot wait —
+  and R27/R28 raised its stakes: the margin is a second column of *text*, sized
+  and toned to be read, not a faint aside. The proof sheets were corrected once
+  already for exactly this
+- **Per-script size adjustment**, Hebrew first (D41)
+- The **left nav**: sections as expandos, pins first (D10). Filesets arrive in
+  M3, so it opens with dates, which are v1 anyway (R9)
+- A **fixed frame**: the text column centres in the frame, not in the space left
+  over beside the nav, so showing or hiding the nav moves nothing
+- Somewhere non-modal for **format anomalies** to surface, which `format-spec.md`
+  leaves explicitly open
+
+**Accepted risk:** the corpus is not yet safe — no split, no WAL, no git. Fine
+while testing against `./run.sh --scratch`, and not fine for real writing.
+
 ## M1 — the corpus becomes safe
 
 Everything that stands between "it writes files" and "it will not lose twenty
@@ -59,6 +85,12 @@ wearing four hats, and selection is the core interaction primitive.
 - Print a range — the web layer renders, the shell supplies the panel
   (Spike B; ~90 lines of shared JS already proven)
 - Branch a range into its own file, create → update references → delete (D13)
+- **Comment on a range, rendered in the reserved margin (R27)** — the same
+  gesture again, and per Q8 the storage question is open. MV reserves the space;
+  M2 fills it
+- **Import clipboard text to annotate (R28)**, the cheapest of the three inbound
+  paths and enough to answer Q9 by living with it. `.docx` follows; `.pdf` is v2,
+  because extraction is its own problem and not this one
 
 ## M3 — navigation and filesets
 
@@ -84,6 +116,11 @@ v1**: in scope, after the core works.
 - Rendered editing of inline constructs (◆ in `features.md`)
 
 ---
+
+**Immediately after MV:** the mobile proof sheet (Q10), opened on the phone. The
+frame decision D42 is desktop-only by construction, and the mobile questions —
+what replaces the margin, capture or reading, and what the keyboard does to both
+— are recorded now so they keep their edge while MV is built.
 
 ## After v1
 

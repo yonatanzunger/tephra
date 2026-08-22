@@ -1,0 +1,701 @@
+<title>Tephra Frame Studies</title>
+<style>
+  /* ────────────────────────────────────────────────────────────────────
+     Six ways to divide the window, of which 6 is the one being proposed. The type is held constant — Aldine,
+     because its 54ch measure plus a 19ch annotation gutter is the most
+     demanding case for horizontal budget, and the nav has to fit beside
+     it. Whichever type arrangement wins later drops straight in.
+
+     The constraint being tested: NOTHING MOVES. Each arrangement claims
+     something about what happens when the nav appears or goes away, and
+     the readout at the top measures the body's left edge AND its width so the
+     claim can be checked rather than believed. Width was added after the
+     left-edge-only version certified arrangement 4 as steady while its measure
+     narrowed from 54ch to 36ch — an instrument blind to the failure it was
+     pointed at.
+     ──────────────────────────────────────────────────────────────────── */
+
+  :root {
+    --stage: #141619;
+    --bar: #1c1f23;
+    --bar-line: #2b3036;
+    --bar-ink: #b9bfc7;
+    --bar-dim: #79818b;
+    --bar-bright: #e9ecf0;
+    --steel: #8fa3b8;
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+
+    /* the app's own palette, held constant across the frames */
+    --paper: #faf7f0;
+    --ink: #23201b;
+    --head: #14120f;
+    --faint: #8a8175;
+    --rule: #c9c0b1;
+    --rule-faint: #e4ded2;
+    --nav-ground: #f2ede2;
+    --nav-line: #ded5c4;
+    --accent: #7a6a4f;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--stage);
+    color: var(--bar-ink);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── control bar ─────────────────────────────────────────────────── */
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 12px 20px;
+    background: var(--bar);
+    border-bottom: 1px solid var(--bar-line);
+    font-size: 12.5px;
+  }
+  .bar .name {
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--bar-dim);
+  }
+  .picks { display: flex; gap: 4px; }
+  .pick {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--bar-ink);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 5px 11px;
+    cursor: pointer;
+  }
+  .pick:hover { background: #262b31; }
+  .pick[aria-pressed='true'] {
+    background: #2f353c;
+    border-color: #3d444c;
+    color: var(--bar-bright);
+  }
+  .pick:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; }
+  .pick kbd { font: inherit; color: var(--bar-dim); margin-right: 6px; }
+  .pick[aria-pressed='true'] kbd { color: var(--steel); }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .toggle input { accent-color: var(--steel); margin: 0; }
+  .toggle:has(input:disabled) { color: #4d545c; cursor: not-allowed; }
+
+  /* The proof, not the promise: the body's left edge, live. */
+  .readout {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--bar-dim);
+  }
+  .readout b { color: var(--bar-bright); font-weight: 600; }
+  .readout .verdict { padding: 3px 9px; border-radius: 999px; font-size: 11.5px; }
+  .verdict.steady { background: #17311f; color: #7fd0a0; }
+  .verdict.shifted { background: #3a1e1e; color: #f0a3a3; }
+
+  .hint { color: var(--bar-dim); font-size: 11.5px; width: 100%; margin: 0; }
+  .hint b { color: var(--bar-ink); font-weight: 600; }
+
+  /* ── the window ──────────────────────────────────────────────────── */
+
+  .stage { flex: 1; min-height: 0; padding: 22px; }
+
+  .window {
+    height: 100%;
+    background: var(--paper);
+    border-radius: 9px;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.4), 0 22px 54px rgb(0 0 0 / 0.4);
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    position: relative;
+  }
+
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 16px;
+    height: 42px;
+    border-bottom: 1px solid var(--rule-faint);
+    background: var(--nav-ground);
+    color: var(--faint);
+    font-size: 12px;
+  }
+  .lights { display: flex; gap: 7px; }
+  .lights i { width: 11px; height: 11px; border-radius: 50%; background: #d6cfc0; }
+  .titlebar .where {
+    font-variant-numeric: tabular-nums;
+    color: var(--head);
+    font-weight: 500;
+  }
+  .titlebar .grow { flex: 1; }
+  .navbutton {
+    font: inherit;
+    font-size: 12px;
+    color: var(--faint);
+    background: none;
+    border: 1px solid var(--nav-line);
+    border-radius: 5px;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  .navbutton:hover { color: var(--head); }
+
+  /* The frame proper. Every arrangement lays this out differently, and the
+     difference between them is entirely in these two rules. */
+  .frame {
+    display: grid;
+    min-height: 0;
+    position: relative;
+  }
+
+  .nav {
+    background: var(--nav-ground);
+    border-right: 1px solid var(--nav-line);
+    overflow-y: auto;
+    padding: 16px 0 26px;
+    font-size: 13px;
+  }
+  /* Breathing room between the nav's edge and the first character. Without
+     it the border and the text literally touch, and the eye reads the rule as
+     part of the line. 0.3in is a minimum, not a target — the column is centred,
+     so a wide window gives more; this only binds when the window is tight.
+     Symmetric, so centring is untouched and the left edge still cannot move. */
+  .reading {
+    overflow-y: auto;
+    min-width: 0;
+    position: relative;
+    padding-inline: 0.3in;
+  }
+
+  /* The text column and its reserved annotation gutter. Present in every
+     arrangement, because a gutter that appears later reflows the corpus. */
+  .column {
+    display: grid;
+    grid-template-columns: minmax(0, 54ch) 19ch;
+    column-gap: 3ch;
+    padding: 44px 0 60px;
+    font-family: 'Hoefler Text', Baskerville, Georgia, serif;
+    font-size: 19px;
+    line-height: 1.72;
+    color: var(--ink);
+    font-variant-ligatures: common-ligatures discretionary-ligatures contextual;
+    font-variant-numeric: oldstyle-num;
+  }
+  .column > * { grid-column: 1; }
+  /* Sized to be read. See the note in type-specimen.html: the margin holds
+     commentary, and commentary that has to be squinted at is decoration. */
+  .column aside {
+    grid-column: 2;
+    font-size: 0.84em;
+    line-height: 1.5;
+    font-style: italic;
+    color: #4a4136;
+  }
+  .column h2 {
+    grid-column: 1;
+    font-size: 1.3em;
+    font-weight: 400;
+    line-height: 1.25;
+    margin: 0 0 0.6em;
+    color: var(--head);
+    text-wrap: balance;
+  }
+  .column p { margin: 0 0 0.75em; }
+  .column .day {
+    grid-column: 1 / -1;
+    font-size: 0.7em;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-bottom: 1px solid var(--rule-faint);
+    padding-bottom: 0.5em;
+    margin: 2.4em 0 1.4em;
+  }
+  .column .day:first-child { margin-top: 0; }
+
+  .edge {
+    grid-column: 1 / -1;
+    justify-self: center;
+    font: inherit;
+    font-size: 0.62em;
+    font-family: var(--ui);
+    color: var(--faint);
+    background: none;
+    border: 1px solid var(--nav-line);
+    border-radius: 999px;
+    padding: 3px 14px;
+    margin-bottom: 1.6em;
+    cursor: pointer;
+  }
+
+  /* ── nav contents ────────────────────────────────────────────────── */
+
+  .navgroup { margin-bottom: 4px; }
+  .navhead {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    font: inherit;
+    font-size: 10.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--faint);
+    background: none;
+    border: 0;
+    padding: 8px 18px 6px;
+    cursor: pointer;
+  }
+  .navhead .caret { font-size: 9px; opacity: 0.7; }
+  .navlist { list-style: none; margin: 0; padding: 0 10px 6px; }
+  .navlist a {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    color: var(--ink);
+    text-decoration: none;
+    line-height: 1.35;
+  }
+  .navlist a:hover { background: #e7e0d0; }
+  .navlist a.here { background: #e2d9c6; color: var(--head); }
+  .navlist .kind {
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+    flex: none;
+    width: 34px;
+  }
+  .dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 2px 18px 8px;
+  }
+  .dates button {
+    font: inherit;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 2px 7px;
+    cursor: pointer;
+  }
+  .dates button:hover { background: #e7e0d0; }
+  .dates button.here { background: var(--accent); color: var(--paper); }
+
+  /* ── the four arrangements ───────────────────────────────────────── */
+
+  /* 1 — Fixed rail. The nav is always there. Nothing can move because
+     nothing is ever removed. The honest baseline. */
+  [data-frame='fixed'] .frame { grid-template-columns: 248px minmax(0, 1fr); }
+  [data-frame='fixed'] .column { margin: 0 auto; }
+  [data-frame='fixed'] .navbutton { display: none; }
+
+  /* 2 — Reserved. The nav can be hidden, but its column stays. You get the
+     visual quiet without the reflow — the space is spent either way. */
+  [data-frame='reserved'] .frame { grid-template-columns: 248px minmax(0, 1fr); }
+  [data-frame='reserved'] .column { margin: 0 auto; }
+  [data-frame='reserved'].nav-hidden .nav { visibility: hidden; }
+
+  /* 3 — Overlay. The body owns the whole window and is centred in it; the
+     nav floats above when summoned. Maximum reading width, and still
+     nothing moves — a different way to honour the same rule. */
+  [data-frame='overlay'] .frame { grid-template-columns: minmax(0, 1fr); }
+  [data-frame='overlay'] .column { margin: 0 auto; }
+  [data-frame='overlay'] .nav {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 248px;
+    box-shadow: 0 0 34px rgb(0 0 0 / 0.18);
+    z-index: 2;
+  }
+  [data-frame='overlay'].nav-hidden .nav { display: none; }
+
+  /* 4 — Stream beside. Q7(c): a permanent narrow column for today, so
+     jotting while reading a note costs no navigation. It also costs the
+     width the annotation gutter wanted. */
+  [data-frame='beside'] .frame { grid-template-columns: 218px minmax(0, 1fr) 300px; }
+  [data-frame='beside'] .column { margin: 0 auto; }
+  [data-frame='beside'] .capture { display: flex; }
+  [data-frame='beside'] .navbutton { display: none; }
+
+  .capture {
+    display: none;
+    flex-direction: column;
+    border-left: 1px solid var(--nav-line);
+    background: #fdfbf6;
+    min-width: 0;
+  }
+  .capture .capthead {
+    font-size: 10.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 14px 18px 8px;
+    border-bottom: 1px solid var(--rule-faint);
+  }
+  .capture .capbody {
+    flex: 1;
+    padding: 16px 18px;
+    font-family: 'Hoefler Text', Baskerville, Georgia, serif;
+    font-size: 16px;
+    line-height: 1.62;
+    color: var(--ink);
+    overflow-y: auto;
+  }
+  .capture .capbody p { margin: 0 0 0.7em; }
+  .capture .caret-line { border-left: 2px solid var(--accent); padding-left: 8px; }
+
+  /* 6 — Reserved + stream on demand. The arrangement that came out of looking
+     at 2 and 4 together and noticing they are not rivals: 4 IS 2 plus a third
+     column. The nav behaves exactly as in Reserved; the stream is a capture
+     surface summoned when the main pane is showing something *other* than the
+     head of today, which is precisely when jotting would otherwise cost a
+     navigation.
+
+     The thing that makes it work, and it is not obvious: the text column is a
+     FIXED 54ch track here, not minmax(0, 54ch). Under minmax the stream's
+     arrival silently steals width from the text — which is what arrangement 4
+     does, and what the left-edge readout could not see, because the left edge
+     never moved while the measure narrowed from 54ch to 36ch. A slow jump is
+     still a jump. Fixed track, and the stream instead consumes the slack that
+     already sits to the right of the annotation gutter.
+
+     The cost is honest and now measurable: below roughly 1680px there is no
+     slack to consume, and the stream has nowhere to come from. */
+  [data-frame='desk'] .frame { grid-template-columns: 248px minmax(0, 1fr); }
+  /* The stream yields, never the gutter. A capture surface is a few lines
+     wide by nature — it does not need 300px, it merely prefers it — whereas
+     the gutter holds durable commentary (R27) and has a typographic width.
+     So the stream is the elastic member, and below the point where even its
+     minimum fits, the toggle is refused rather than honoured destructively. */
+  [data-frame='desk'].stream-shown .frame {
+    grid-template-columns: 248px minmax(0, 1fr) var(--stream-w, 300px);
+  }
+  /* Guarded by width, or it outranks the collapse rule below on specificity —
+     an attribute selector plus a class beats a bare class, so `desk` kept its
+     two fixed tracks in the band where every other arrangement had folded, and
+     overflowed by 61px while the sweep was otherwise green. */
+  @media (min-width: 1211px) {
+    [data-frame='desk'] .column { grid-template-columns: 54ch 19ch; }
+  }
+  [data-frame='desk'].nav-hidden .nav { visibility: hidden; }
+  [data-frame='desk'].stream-shown .capture { display: flex; }
+
+  /* 5 — Naive. The obvious implementation: the nav takes what it needs and
+     the body centres in what is left. Included precisely because it is the
+     one to avoid — and because a readout that never reports a shift is an
+     instrument nobody has reason to trust. */
+  [data-frame='naive'] .frame { grid-template-columns: auto minmax(0, 1fr); }
+  [data-frame='naive'] .column { margin: 0 auto; }
+  [data-frame='naive'].nav-hidden .nav { display: none; }
+
+  .gutter-shown .column {
+    background: linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(54ch + 1.5ch),
+      #efe8d9 calc(54ch + 1.5ch)
+    );
+  }
+
+  /* A band nobody had handled. The nav (248) plus the reading padding (58)
+     plus the measure and its gutter (861) need 1167px inside the window, i.e.
+     about 1211px of viewport — but the collapse below only fired at 860px. In
+     between, the gutter simply hung off the right edge, at every arrangement,
+     with or without the stream. Found by measuring at 1200px while checking
+     something else.
+
+     The intermediate treatment keeps the nav and moves each note beneath the
+     paragraph it belongs to, ruled rather than floated. The commentary stays
+     legible and attached; only its position is given up, which is the right
+     thing to give up first. */
+  @media (min-width: 861px) and (max-width: 1210px) {
+    .column { grid-template-columns: minmax(0, 1fr); }
+    .column aside {
+      grid-column: 1;
+      margin: 0.2em 0 1.2em;
+      padding-left: 1.1em;
+      border-left: 2px solid var(--rule-faint);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .bar { gap: 12px; }
+    [data-frame] .frame { grid-template-columns: minmax(0, 1fr) !important; }
+    .nav { display: none; }
+    .capture { display: none !important; }
+    .reading { padding-inline: 0; }
+    .column { grid-template-columns: minmax(0, 1fr); padding: 24px 18px 40px; }
+    .column aside { grid-column: 1; margin: 0.3em 0 1.1em; }
+  }
+</style>
+
+<div class="bar">
+  <span class="name">Frame studies</span>
+  <div class="picks" id="picks">
+    <button class="pick" data-pick="fixed" aria-pressed="true"><kbd>1</kbd>Fixed rail</button>
+    <button class="pick" data-pick="reserved" aria-pressed="false"><kbd>2</kbd>Reserved</button>
+    <button class="pick" data-pick="overlay" aria-pressed="false"><kbd>3</kbd>Overlay</button>
+    <button class="pick" data-pick="beside" aria-pressed="false"><kbd>4</kbd>Stream beside</button>
+    <button class="pick" data-pick="naive" aria-pressed="false"><kbd>5</kbd>Naive</button>
+    <button class="pick" data-pick="desk" aria-pressed="false"><kbd>6</kbd>Reserved + stream</button>
+  </div>
+  <label class="toggle"><input type="checkbox" id="navtoggle" checked /> Nav visible</label>
+  <label class="toggle"><input type="checkbox" id="streamtoggle" /> Stream <kbd>S</kbd></label>
+  <label class="toggle"><input type="checkbox" id="guttertoggle" /> Show gutter</label>
+
+  <div class="readout">
+    <span>text starts at <b id="edge">—</b></span>
+    <span>width <b id="wide">—</b></span>
+    <span class="verdict steady" id="verdict">steady</span>
+  </div>
+
+  <p class="hint">
+    Press 1–6, N for the nav, S for the stream. The readout measures the text column's left
+    edge: toggle the nav and watch whether it moves. That is the whole question —
+    and <b>5 is the arrangement to avoid</b>, and <b>6 is the proposal</b>, included so the readout has
+    something to catch. Fixed and Stream beside keep the nav permanently, so
+    there is nothing to toggle.
+  </p>
+</div>
+
+<div class="stage">
+  <section class="window" id="window" data-frame="fixed">
+    <header class="titlebar">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <button class="navbutton" id="navbutton">☰ Sections</button>
+      <span class="where">Friday 21 August 2026</span>
+      <span class="grow"></span>
+      <span>saved</span>
+    </header>
+
+    <div class="frame">
+      <nav class="nav" id="nav">
+        <div class="navgroup">
+          <button class="navhead"><span class="caret">▾</span> Pinned</button>
+          <ul class="navlist">
+            <li><a href="#" class="here"><span class="kind">note</span> Reading list</a></li>
+            <li><a href="#"><span class="kind">note</span> Travel 2026</a></li>
+            <li><a href="#"><span class="kind">note</span> Wiring the house</a></li>
+          </ul>
+        </div>
+
+        <div class="navgroup">
+          <button class="navhead"><span class="caret">▾</span> House deal</button>
+          <ul class="navlist">
+            <li><a href="#"><span class="kind">mark</span> Mortgage contact</a></li>
+            <li><a href="#"><span class="kind">pdf</span> Offer letter</a></li>
+            <li><a href="#"><span class="kind">url</span> The listing</a></li>
+          </ul>
+        </div>
+
+        <div class="navgroup">
+          <button class="navhead"><span class="caret">▾</span> Physics</button>
+          <ul class="navlist">
+            <li><a href="#"><span class="kind">mark</span> Titration curves</a></li>
+            <li><a href="#"><span class="kind">note</span> Seminar notes</a></li>
+            <li><a href="#"><span class="kind">pdf</span> Landau ch. 5</a></li>
+          </ul>
+        </div>
+
+        <div class="navgroup">
+          <button class="navhead"><span class="caret">▾</span> Recent days</button>
+          <div class="dates">
+            <button class="here">21 Aug</button><button>20 Aug</button>
+            <button>18 Aug</button><button>17 Aug</button>
+            <button>14 Aug</button><button>13 Aug</button>
+            <button>11 Aug</button><button>8 Aug</button>
+          </div>
+        </div>
+      </nav>
+
+      <div class="reading" id="reading">
+        <article class="column" id="column">
+          <button class="edge">▲ earlier</button>
+
+          <p class="day">Thursday 20 August</p>
+          <p>
+            Left the measurement running overnight against the larger corpus. The
+            result is the same shape as the small one, which is either reassuring
+            or a sign the harness is not doing what I think.
+          </p>
+          <aside>Check the harness before trusting this.</aside>
+
+          <p class="day">Friday 21 August</p>
+          <h2>Where the frame is decided</h2>
+          <p>
+            The question is not whether there is a sidebar. It is whether the
+            text moves when the sidebar does. A column centred in the space left
+            over beside a nav will shift every line the moment that nav appears,
+            and no amount of care elsewhere makes that acceptable to read.
+          </p>
+          <p>
+            Centring in a fixed frame costs some width and buys the guarantee
+            outright. Overlaying costs nothing and buys the same guarantee by a
+            different route, at the price of the nav covering the text while it
+            is open. Both are defensible; they are not the same choice.
+          </p>
+          <aside>The gutter and the nav want the same pixels.</aside>
+          <p>
+            The annotation gutter is reserved in all of these, which is the
+            constraint that cannot be added later — marginal notes arriving one
+            day must not reflow twenty years of writing.
+          </p>
+        </article>
+      </div>
+
+      <aside class="capture">
+        <div class="capthead">Today</div>
+        <div class="capbody">
+          <p>Ordered the part for the bathroom tap.</p>
+          <p>Ask Dana about the seminar slot.</p>
+          <p class="caret-line">&nbsp;</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+</div>
+
+<script>
+  const win = document.getElementById('window')
+  const picks = [...document.querySelectorAll('.pick')]
+  const navToggle = document.getElementById('navtoggle')
+  const gutterToggle = document.getElementById('guttertoggle')
+  const streamToggle = document.getElementById('streamtoggle')
+  const wideOut = document.getElementById('wide')
+  const navButton = document.getElementById('navbutton')
+  const column = document.getElementById('column')
+  const edgeOut = document.getElementById('edge')
+  const verdict = document.getElementById('verdict')
+
+  // Where the text column starts, per arrangement. An arrangement that claims
+  // nothing moves has to produce the same number with the nav on and off; the
+  // verdict below is measured, not declared.
+  const baseline = new Map()
+
+  // Position AND width. The first version watched the left edge alone and
+  // therefore certified Stream beside as steady while its measure narrowed by
+  // 200px — an instrument that cannot see the failure it is pointed at.
+  function measure() {
+    const box = column.getBoundingClientRect()
+    const left = Math.round(box.left)
+    const text = Math.round(parseFloat(getComputedStyle(column).gridTemplateColumns.split(' ')[0]))
+    edgeOut.textContent = `${left}px`
+    wideOut.textContent = `${text}px`
+
+    const frame = win.dataset.frame
+    if (!baseline.has(frame)) baseline.set(frame, { left, text })
+    const first = baseline.get(frame)
+    const moved = left !== first.left
+    const shrank = text !== first.text
+    verdict.textContent = moved
+      ? `shifted ${Math.abs(left - first.left)}px`
+      : shrank
+        ? `narrowed ${Math.abs(text - first.text)}px`
+        : 'steady'
+    verdict.className = `verdict ${moved || shrank ? 'shifted' : 'steady'}`
+  }
+
+  function pick(name) {
+    win.dataset.frame = name
+    for (const button of picks) {
+      button.setAttribute('aria-pressed', String(button.dataset.pick === name))
+    }
+    baseline.delete(name) // re-baseline on entry, then watch the toggle
+    refreshStreamAvailability()
+    requestAnimationFrame(measure)
+  }
+
+  function setNav(visible) {
+    navToggle.checked = visible
+    win.classList.toggle('nav-hidden', !visible)
+    requestAnimationFrame(measure)
+  }
+
+  for (const button of picks) button.addEventListener('click', () => pick(button.dataset.pick))
+  navToggle.addEventListener('change', () => setNav(navToggle.checked))
+  navButton.addEventListener('click', () => setNav(!navToggle.checked))
+  // Whether the stream can open without pushing the gutter off the edge. The
+  // arithmetic is done against the layout rather than against a remembered
+  // breakpoint, so it stays true if the measure or the gutter changes.
+  // ONE calculation, not two. The first version asked "does the minimum fit?"
+  // in one place and let a CSS clamp choose the actual width in another, and at
+  // 1440px they disagreed — the check waved it through at 210px and the clamp
+  // then took 288px, pushing the gutter 58px off the edge. Whatever decides the
+  // width must also be what decides availability.
+  const STREAM_MIN = 210
+  const STREAM_MAX = 300
+
+  function streamWidth() {
+    const readingStyle = getComputedStyle(document.querySelector('.reading'))
+    const pad = 2 * parseFloat(readingStyle.paddingLeft)
+    const tracks = getComputedStyle(column).gridTemplateColumns.split(' ').map(parseFloat)
+    const gap = parseFloat(getComputedStyle(column).columnGap)
+    const need = tracks[0] + gap + tracks[1] + pad
+    const frameWidth = document.querySelector('.frame').getBoundingClientRect().width
+    const navWidth = document.querySelector('.nav').getBoundingClientRect().width
+    const spare = frameWidth - navWidth - need
+    return spare >= STREAM_MIN ? Math.min(STREAM_MAX, Math.floor(spare)) : 0
+  }
+
+  function refreshStreamAvailability() {
+    const width = streamWidth()
+    const fits = width > 0
+    if (fits) win.style.setProperty('--stream-w', `${width}px`)
+    streamToggle.disabled = !fits
+    streamToggle.closest('.toggle').title = fits
+      ? 'Open the capture stream beside the document'
+      : 'Not enough width: the annotation gutter would be pushed off the edge'
+    if (!fits && streamToggle.checked) setStream(false)
+  }
+
+  function setStream(shown) {
+    streamToggle.checked = shown
+    win.classList.toggle('stream-shown', shown)
+    requestAnimationFrame(measure)
+  }
+  streamToggle.addEventListener('change', () => setStream(streamToggle.checked))
+  gutterToggle.addEventListener('change', () =>
+    win.classList.toggle('gutter-shown', gutterToggle.checked),
+  )
+  addEventListener('resize', () => {
+    baseline.delete(win.dataset.frame)
+    refreshStreamAvailability()
+    measure()
+  })
+  addEventListener('keydown', event => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+    const byKey = { 1: 'fixed', 2: 'reserved', 3: 'overlay', 4: 'beside', 5: 'naive', 6: 'desk' }
+    if (byKey[event.key]) pick(byKey[event.key])
+    else if (event.key.toLowerCase() === 'n') setNav(!navToggle.checked)
+    else if (event.key.toLowerCase() === 's') setStream(!streamToggle.checked)
+  })
+
+  refreshStreamAvailability()
+  requestAnimationFrame(measure)
+</script>

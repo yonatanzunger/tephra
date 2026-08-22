@@ -752,3 +752,55 @@ electron-vite gives renderer HMR, which is worth having for the phase this build
 **What it costs.** A window boundary may fall mid-day, so the "earlier ▲" affordance names the date of the earliest loaded position rather than a whole day loaded. This is free: positions are already `(segment, offset)` and `read` already widens markdown-aware, so partial segments were always expressible — only `ExtentPolicy` imposed whole-day granularity, and it imposed it by accident.
 
 **What would reopen this.** The D36 measurement, which should revisit `maxChars` and may make a cap in screens meaningful where today it is null.
+
+## D41: Themes are named parameter sets, stored in `config/` and chosen per device
+
+**Date:** 2026-08-21
+**Status:** decided
+**Extends:** R1.3, R1.5
+**Touches:** D3 (three native types), D7 and D30 (`.tephra/` is disposable)
+
+**Decision.** The visual system is a **theme**: a named set of parameters covering the font stack, size, measure, leading, paragraph and blank-line spacing, per-script size adjustments, the annotation gutter, antialiasing and the full colour set. Themes are plain files in **`config/themes/`** inside the notebook — synced, durable, hand-editable. Which theme is **active** lives in `.tephra/ui-state.json` and is therefore per device.
+
+**Why a system rather than a choice.** Four complete arrangements were built and all four were pleasant. That is not indecision, it is the same finding the project keeps reaching: *the instrument of record is the person using it*, and the honest way to settle a number is to live with it and change it. A single fixed rendering would force the choice at the moment we know least, which is now. R1.3 already asks for tunable; this makes it tunable **and saveable**, which is the difference between an experiment and a setting.
+
+**Why `config/` and not `.tephra/`.** `.tephra/` is machine-local and disposable — deleting it must cost nothing but a rebuild (D7, D30). **A theme somebody crafted is authored work, and losing it on a new machine would be a real loss.** It therefore belongs in the synced tree, in plain files, for the same reason the corpus does (R26): the exit has to cover it.
+
+**Why this does not break D3.** D3 says the directory holds three native *content* types and that everything else is external or embedded. A theme is neither content nor an attachment — it is application configuration, and `config/` names it as such rather than smuggling a fourth content type into the corpus. The test D3 actually protects is that nothing is *inferred from context*; a directory called `config` infers nothing.
+
+**Why the active theme is machine-local.** Which rendering suits depends on the screen and the light in the room, and a phone in daylight wants something a desk at night does not. Definitions are authored and durable; selection is soft state. That is the same split already drawn for cursor position, and drawing it the same way twice is worth more than the small convenience of syncing a preference.
+
+**One thing this pulls forward.** The annotation gutter is a theme parameter, and it must be **reserved in every theme from the start**. Marginal notes arrive in a later milestone, but a gutter that appears on that day reflows every line in the corpus — the failure the user named first and most emphatically. Reserving space costs nothing now and cannot be retrofitted quietly.
+
+**Per-script sizing is part of the parameter set.** Hebrew reads uncomfortably small beside Latin at the same nominal size: its letters all sit at x-height, so the eye gets no size cue, and several differ only in fine detail. The mechanism needs no markup and no language tagging — a `@font-face` whose `unicode-range` covers one script, with `size-adjust` scaling it, so the rest of the stack falls through untouched. Measured at 122%: Hebrew glyphs grow by exactly that, Latin is unchanged.
+
+**What would reopen this.** Sync arriving (v2a) may make an active-theme-per-device feel wrong rather than right; that is the moment to revisit, alongside the same open question D30 already carries about `ui-state.json`.
+
+
+---
+
+## D42: The frame is Reserved, with the capture stream summoned on demand
+
+**Scope: desktop only, and deliberately.** `requirements.md` already grants that desktop and mobile need not share a UI stack, the contract between them being the file format. This decision spends that grant. Every argument below is about **horizontal budget** — nav, measure, gutter, stream, and which yields to which — and horizontal budget is a quantity a phone does not have. Nothing here should be read as constraining the mobile design, and the mobile design should not be derived from it. See the note at the end for what the mobile question actually is.
+
+**Decision.** The window is **Reserved**: the nav can be dismissed, but its column stays, so nothing moves when it goes. A **capture stream** — the end of today, always ready to type into — can be opened beside the document, in a column whose width is reserved the same way. Its natural moment is when the main pane is showing something *other* than the head of today, which is exactly when jotting would otherwise cost a navigation.
+
+**Why not Fixed rail.** Reserved is Fixed plus the ability to dismiss, at no cost to the guarantee. Dismissal is wanted; there is nothing to trade for it.
+
+**Why not Overlay.** Overlay also keeps the guarantee, and by a defensible route — but the nav covers the text while open, and being able to see the nav and the document at once won on use.
+
+**Why not Stream beside as its own arrangement.** It is not a rival to Reserved; it *is* Reserved plus a third column. Treating them as alternatives was a mistake in how the studies were framed, and it hid that the real question — does today get a privileged permanent column — is independent of how the nav behaves.
+
+**The measured constraint, which is what makes this a decision rather than a preference.** The measure (54ch) plus the annotation gutter (19ch) plus the nav needs about 1211px of window before the gutter overflows. Opening a 300px stream needs about 1512px — a 14″ MacBook at full screen, by one pixel. So the stream cannot simply be granted:
+
+- **The stream is the elastic member, never the gutter.** A capture surface is a few lines wide by nature; the gutter holds durable commentary (R27) and has a typographic width. The stream clamps between 210px and 300px and yields first.
+- **Below the point where even 210px fits, the toggle is refused** rather than honoured destructively. A control that declines is better than one that silently narrows the measure.
+- **Availability and width are one calculation.** The first attempt asked "does the minimum fit?" in one place and let a CSS clamp choose the actual width in another; at 1440px they disagreed, the check waved it through at 210px, the clamp took 288px, and the gutter went 58px off the edge. Two computations of the same quantity is the bug, not the arithmetic.
+
+**A band that had no treatment at all.** Between 861px and 1210px the layout did not fit and nothing handled it — the collapse rule fired only at 860px, so the gutter simply hung off the right edge in *every* arrangement, with or without the stream. It now folds each note beneath its paragraph, ruled rather than floated: commentary stays legible and attached, and only its position is given up, which is the right thing to give up first.
+
+**What this cost to learn, and the standing lesson.** The readout originally measured the text column's left edge alone, and on that evidence certified Stream beside as "steady" while its measure narrowed from 54ch to 36ch. A slow jump is still a jump. **An instrument that cannot see the failure it is pointed at is worse than no instrument**, because it converts an open question into a false answer — the third time in this project that the deciding evidence turned out to be something the instrumentation could not observe. The readout now watches position *and* width, and 75 width/arrangement combinations pass with the stream opened wherever it is offered.
+
+**What the mobile question is instead, so it is not confused with this one.** At a phone's width the gutter cannot exist, so the question is not *which arrangement* but **what becomes of marginal commentary when there is no margin** — and, separately, whether the phone lands on capture or on reading. Those are different questions with different evidence, and the evidence has to be gathered on the device: the desktop studies worked because the arrangements could be reacted to at full size with a real pointer, and a phone layout judged in a narrow desktop window reproduces none of what makes a phone hard. **A mobile study is therefore a thing to open on the phone**, not a column in this sheet. R27 makes it more pressing than it was, since commentary is now durable content that a phone must at minimum be able to read.
+
+**What would reopen this.** Living with it. Q7(c) asks whether the capture surface earns its width at all, and the honest test is whether the one-key jump to today proves frictional in practice. The frame decision does not depend on that answer — the stream is additive to a frame that already reserves its columns.

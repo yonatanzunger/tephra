@@ -1,0 +1,766 @@
+<title>Tephra Proof Sheets</title>
+<style>
+  /* ────────────────────────────────────────────────────────────────────
+     A proofing table. The chrome is deliberately one fixed visual world —
+     a dark ground — rather than following the viewer's theme, because the
+     specimens are what is being judged and a frame that changed with the
+     time of day would make the same sheet look different on different
+     days. Each sheet carries its own complete palette.
+     ──────────────────────────────────────────────────────────────────── */
+
+  /* ── per-script sizing ───────────────────────────────────────────────
+     Hebrew reads uncomfortably small beside Latin at the same nominal
+     size, for two reasons that compound: almost every letter sits at
+     x-height, with no ascenders or descenders to give the eye a size cue;
+     and several letters differ only in small details, so the reader needs
+     more actual pixels to tell ב from כ, ד from ר, ה from ח.
+
+     The rule is generated at runtime (see the script at the foot) because a
+     @font-face descriptor cannot read a custom property — which is also how
+     the app will do it, with the face and the adjustment as theme
+     parameters (D41).
+
+     ONE TRAP, LEARNED THE HARD WAY: naming a face here REPLACES the natural
+     fallback. The first version listed Arial Hebrew first and silently
+     swapped a serif for a sans. Whatever is named must be chosen for how it
+     looks, not for having Hebrew in its name. */
+
+  :root {
+    --table: #16181b;
+    --table-2: #1d2024;
+    --rail-line: #2a2e34;
+    --rail-ink: #b9bfc7;
+    --rail-dim: #7c848e;
+    --rail-bright: #e8ebef;
+    --steel: #8fa3b8;
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--table);
+    color: var(--rail-ink);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The frame never moves. Rail and stage are fixed columns; switching an
+     arrangement restyles the sheet in place. This page obeys the rule it
+     exists to test. */
+  .table {
+    display: grid;
+    grid-template-columns: 268px minmax(0, 1fr);
+    height: 100%;
+  }
+
+  /* ── rail ────────────────────────────────────────────────────────── */
+
+  .rail {
+    border-right: 1px solid var(--rail-line);
+    background: var(--table-2);
+    padding: 26px 22px 22px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .brand {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--rail-dim);
+  }
+  .brand b {
+    display: block;
+    margin-top: 5px;
+    font-size: 16px;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: var(--rail-bright);
+    font-weight: 600;
+  }
+
+  .group-label {
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--rail-dim);
+    margin-bottom: 9px;
+  }
+
+  .choices { display: flex; flex-direction: column; gap: 2px; }
+
+  .choice {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    font-size: 13px;
+    color: var(--rail-ink);
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    padding: 9px 10px;
+    cursor: pointer;
+  }
+  .choice:hover { background: #23272c; }
+  .choice[aria-pressed='true'] { background: #2b3138; color: var(--rail-bright); }
+  .choice:focus-visible { outline: 2px solid var(--steel); outline-offset: 1px; }
+  .choice kbd {
+    font: inherit;
+    font-size: 11px;
+    color: var(--rail-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .choice[aria-pressed='true'] kbd { color: var(--steel); }
+  .choice span { display: block; }
+  .choice small {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--rail-dim);
+  }
+
+  .switches { display: flex; flex-direction: column; gap: 10px; }
+  .switch {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    color: var(--rail-ink);
+    cursor: pointer;
+  }
+  .switch input { accent-color: var(--steel); margin: 0; }
+
+  .sizer { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .sizer input[type='range'] { flex: 1; accent-color: var(--steel); }
+  .sizer select {
+    flex: 1;
+    font: inherit;
+    font-size: 12px;
+    color: var(--rail-bright);
+    background: #23272c;
+    border: 1px solid var(--rail-line);
+    border-radius: 5px;
+    padding: 3px 5px;
+  }
+  .sizer output {
+    font-variant-numeric: tabular-nums;
+    color: var(--rail-bright);
+    min-width: 34px;
+    text-align: right;
+  }
+
+  .note {
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--rail-dim);
+    border-top: 1px solid var(--rail-line);
+    padding-top: 16px;
+    margin-top: auto;
+  }
+  .note p { margin: 0 0 9px; }
+  .note b { color: var(--rail-ink); font-weight: 600; }
+
+  /* ── stage ───────────────────────────────────────────────────────── */
+
+  .stage {
+    overflow-y: auto;
+    padding: 34px 34px 60px;
+    display: flex;
+    justify-content: center;
+    /* Content-height, not stretched. Without this the sheet inherits the
+       stage's height from align-items: stretch, and everything past the fold
+       renders outside the painted paper — invisible on the dark sheet, glaring
+       on the light ones. */
+    align-items: flex-start;
+  }
+
+  /* The sheet: a page lying on the table. Its width is fixed by the
+     arrangement, so the reserved annotation column never has to be
+     conjured out of the layout later. */
+  .sheet {
+    --measure: 62ch;
+    --margin-col: 15ch;
+    --size: 19px;
+    --leading: 1.62;
+    --para-space: 0.62em;
+    --blank: 0.55;
+
+    background: var(--paper);
+    color: var(--ink);
+    width: min(100%, calc(var(--measure) + var(--margin-col) + 14ch));
+    padding: clamp(40px, 6vw, 86px) clamp(28px, 4vw, 64px);
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 18px 46px rgb(0 0 0 / 0.34);
+    font-family: var(--face);
+    font-size: var(--size);
+    line-height: var(--leading);
+    transition: background 240ms ease, color 240ms ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sheet { transition: none; }
+  }
+
+  /* Text column and annotation column, side by side and always present.
+     Reserving the gutter now is what stops marginal notes reflowing every
+     line on the day they arrive. */
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, var(--measure)) var(--margin-col);
+    column-gap: 3ch;
+  }
+  .body > * { grid-column: 1; }
+  /* A marginal note is something to READ, not a whisper. At 0.72em in the
+     faint tone it was pretty and hard to work with — and the margin is meant
+     to hold commentary that carries its own weight, in the tradition this
+     layout comes from. Larger, and in a tone of the ink rather than of the
+     furniture. */
+  .marginal {
+    grid-column: 2;
+    font-size: var(--note-size, 0.84em);
+    line-height: 1.5;
+    color: var(--note-ink, var(--ink));
+    font-style: italic;
+    align-self: start;
+  }
+
+  .gutter-shown .marginal { color: var(--ink); }
+  .gutter-shown .body {
+    background: linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--measure) + 1.5ch),
+      var(--gutter-tint) calc(var(--measure) + 1.5ch)
+    );
+  }
+
+  .date {
+    font-size: 0.78em;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums lining-nums;
+    margin: 0 0 2.4em;
+  }
+
+  h1 {
+    font-size: 1.72em;
+    line-height: 1.18;
+    font-weight: 600;
+    margin: 0 0 0.7em;
+    text-wrap: balance;
+    color: var(--head);
+  }
+  h2 {
+    font-size: 1.2em;
+    line-height: 1.28;
+    font-weight: 600;
+    margin: 2.1em 0 0.55em;
+    text-wrap: balance;
+    color: var(--head);
+  }
+
+  p { margin: 0 0 var(--para-space); }
+  p + p { margin-top: calc(var(--blank) * var(--leading) * 1em); }
+
+  .tag {
+    background: var(--tag);
+    padding: 0.05em 0.16em;
+    border-radius: 2px;
+  }
+  .anchor {
+    border-bottom: 1.5px dotted var(--rule);
+  }
+
+  .eq {
+    margin: 1.5em 0;
+    text-align: center;
+    font-size: 1.06em;
+  }
+  /* MathML must use a MATH font, not the body face. Forcing Hoefler Text onto
+     it is what made the partial-differential sign render at x-height: a text
+     face has no math metrics and no large-operator variants, so the browser
+     has nothing to scale. The `math` generic picks the platform's math font.
+     NOTE: the app renders equations with KaTeX, which is better than this —
+     these are indicative of placement and colour, not of final quality. */
+  math {
+    font-family: 'STIX Two Math', 'Latin Modern Math', 'Cambria Math', math;
+    font-size: 1.06em;
+  }
+  math[display='block'] { font-size: 1.18em; }
+
+  figure { margin: 1.7em 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 0.7em;
+    font-size: 0.76em;
+    color: var(--faint);
+    font-style: italic;
+  }
+
+  .tablewrap { overflow-x: auto; margin: 1.5em 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.86em;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  th, td { padding: 0.42em 0.7em 0.42em 0; text-align: left; }
+  th {
+    font-weight: 600;
+    color: var(--head);
+    border-bottom: 1.5px solid var(--rule);
+  }
+  td { border-bottom: 1px solid var(--rule-faint); }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--rule-faint);
+    margin: 2.4em 0;
+  }
+
+  .scripts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 2.2ch;
+    row-gap: 0.5em;
+    margin: 1.2em 0 1.6em;
+  }
+  .scripts dt {
+    font-size: 0.72em;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding-top: 0.35em;
+  }
+  .scripts dd { margin: 0; }
+  .scripts dd[dir='rtl'] { text-align: right; }
+
+  .colophon {
+    margin-top: 2.6em;
+    font-size: 0.72em;
+    line-height: 1.6;
+    color: var(--faint);
+    font-style: italic;
+  }
+
+  /* ── the arrangements ────────────────────────────────────────────── */
+
+  /* 1 — Aldine. Narrow measure, wide reserved gutter, old-style figures
+     and discretionary ligatures on. Hoefler Text is the one face shipping
+     with macOS with real Renaissance credentials. */
+  [data-sheet='aldine'] {
+    --face: var(--hebrew), 'Hoefler Text', Baskerville, Georgia, serif;
+    --paper: #faf7f0;
+    --ink: #23201b;
+    --head: #14120f;
+    --faint: #8a8175;
+    --rule: #c9c0b1;
+    --rule-faint: #e4ded2;
+    --tag: #efe6cf;
+    --gutter-tint: #f3eee2;
+    --note-ink: #4a4136;
+    --measure: 54ch;
+    --margin-col: 19ch;
+    --size: 20px;
+    --leading: 1.72;
+    --para-space: 0.75em;
+    font-variant-ligatures: common-ligatures discretionary-ligatures contextual;
+    font-variant-numeric: oldstyle-num;
+    font-kerning: normal;
+  }
+  [data-sheet='aldine'] h1,
+  [data-sheet='aldine'] h2 { font-weight: 400; letter-spacing: 0.005em; }
+  [data-sheet='aldine'] .date { font-variant-numeric: oldstyle-num; letter-spacing: 0.14em; }
+
+  /* 2 — Sage. The Clarity lineage: warm stone, emerald accent, a moderate
+     measure and a sturdy text face. The known quantity to judge against. */
+  [data-sheet='sage'] {
+    --face: var(--hebrew), 'Iowan Old Style', Palatino, Georgia, serif;
+    --paper: #faf9f8;
+    --ink: #292524;
+    --head: #44403c;
+    --faint: #8a8380;
+    --rule: #d6d3d1;
+    --rule-faint: #e7e5e4;
+    --tag: #d6f0e3;
+    --gutter-tint: #f4f3f1;
+    --note-ink: #57534e;
+    --measure: 66ch;
+    --margin-col: 13ch;
+    --size: 18px;
+    --leading: 1.58;
+    --para-space: 0.5em;
+  }
+
+  /* 3 — Night. Not an inversion: the ground is a cool near-black, the ink
+     is warmed slightly to stop it ringing, and the face is a sturdier one
+     because a light stroke on a dark ground gains apparent weight. */
+  [data-sheet='night'] {
+    --face: var(--hebrew), Charter, 'Bitstream Charter', 'Iowan Old Style', Georgia, serif;
+    --paper: #14161a;
+    --ink: #d5d2cc;
+    --head: #f0ede7;
+    --faint: #7e8790;
+    --rule: #333a42;
+    --rule-faint: #262c33;
+    --tag: #1e3a34;
+    --gutter-tint: #191c21;
+    --note-ink: #a8b0b8;
+    --measure: 62ch;
+    --margin-col: 14ch;
+    --size: 19px;
+    --leading: 1.66;
+    --para-space: 0.6em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 4 — Broad. The legibility question pushed hard: larger still, more
+     air, minimal ornament. Tests whether comfort costs anything. */
+  [data-sheet='broad'] {
+    --face: var(--hebrew), ui-serif, 'New York', 'Iowan Old Style', Georgia, serif;
+    --paper: #fbfbfa;
+    --ink: #1f2124;
+    --head: #101214;
+    --faint: #7f858c;
+    --rule: #cfd3d8;
+    --rule-faint: #e6e9ec;
+    --tag: #dbe7f2;
+    --gutter-tint: #f2f4f6;
+    --note-ink: #4c5259;
+    --measure: 58ch;
+    --margin-col: 16ch;
+    --size: 22px;
+    --leading: 1.76;
+    --para-space: 0.8em;
+  }
+
+  .subpixel { -webkit-font-smoothing: auto; }
+
+  @media (max-width: 900px) {
+    .table { grid-template-columns: 1fr; height: auto; }
+    .rail { border-right: 0; border-bottom: 1px solid var(--rail-line); }
+    .body { grid-template-columns: minmax(0, 1fr); }
+    .marginal { grid-column: 1; margin: 0.4em 0 1.2em; font-style: italic; }
+    .gutter-shown .body { background: none; }
+  }
+</style>
+
+<div class="table">
+  <aside class="rail">
+    <div class="brand">Tephra · proof sheets<b>Four arrangements</b></div>
+
+    <div>
+      <div class="group-label">Arrangement</div>
+      <div class="choices" id="choices">
+        <button class="choice" data-pick="aldine" aria-pressed="true">
+          <kbd>1</kbd>
+          <span>Aldine<small>54ch measure, 19ch gutter, old-style figures, Hoefler Text at 20px</small></span>
+        </button>
+        <button class="choice" data-pick="sage" aria-pressed="false">
+          <kbd>2</kbd>
+          <span>Sage<small>The Clarity lineage. Warm stone, emerald, 66ch at 18px</small></span>
+        </button>
+        <button class="choice" data-pick="night" aria-pressed="false">
+          <kbd>3</kbd>
+          <span>Night<small>Cool near-black, warmed ink, a sturdier face for dark ground</small></span>
+        </button>
+        <button class="choice" data-pick="broad" aria-pressed="false">
+          <kbd>4</kbd>
+          <span>Broad<small>Legibility pushed hard: 22px, 1.76 leading, minimal ornament</small></span>
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <div class="group-label">Try</div>
+      <div class="switches">
+        <label class="switch">
+          <input type="checkbox" id="gutter" />
+          Show the reserved margin
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="subpixel" />
+          Subpixel antialiasing
+        </label>
+        <div class="sizer">
+          <label for="notesize">Margin note</label>
+          <input type="range" id="notesize" min="0.68" max="1" step="0.02" value="0.84" />
+          <output id="noteout">0.84</output>
+        </div>
+        <div class="sizer">
+          <label for="hebrewface">Hebrew</label>
+          <select id="hebrewface">
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="New Peninim MT">New Peninim MT</option>
+            <option value="Corsiva Hebrew">Corsiva Hebrew</option>
+            <option value="Arial Hebrew">Arial Hebrew</option>
+          </select>
+        </div>
+        <div class="sizer">
+          <label for="hebrewsize">Hebrew size</label>
+          <input type="range" id="hebrewsize" min="100" max="140" step="2" value="122" />
+          <output id="hebrewout">122%</output>
+        </div>
+        <div class="sizer">
+          <label for="size">Size</label>
+          <input type="range" id="size" min="-3" max="5" step="1" value="0" />
+          <output id="sizeout">0</output>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      <p>
+        <b>Nothing moves.</b> The rail and the sheet are fixed columns, and the
+        annotation gutter is reserved in every arrangement — so marginal notes
+        can arrive later without reflowing a single line.
+      </p>
+      <p>
+        <b>Faces ship with macOS.</b> Hoefler Text, Iowan Old Style, Charter and
+        New York. Nothing is downloaded, so what you see is what the app can use
+        without bundling a font.
+      </p>
+      <p>
+        <b>The margin is for commentary.</b> Its notes are sized and toned to be
+        read, not glanced at — the tradition this layout borrows from treats the
+        margin as a place where the argument continues.
+      </p>
+      <p>
+        <b>Hebrew is sized up.</b> Its letters all sit at x-height and several
+        differ only in fine detail, so it needs more pixels than Latin at the
+        same nominal size. Done with a unicode-range and size-adjust, so no
+        markup or language tagging is involved — and the face is chosen, not
+        inherited, since naming one replaces the natural fallback.
+      </p>
+      <p>Press 1–4, or G for the margin.</p>
+    </div>
+  </aside>
+
+  <main class="stage">
+    <article class="sheet" id="sheet" data-sheet="aldine">
+      <div class="body">
+        <p class="date">Friday 21 August 2026</p>
+
+        <h1>What the editing spike actually settled</h1>
+
+        <p>
+          The measurement exists so that nobody has to talk themselves into a bad
+          number. Typing at a hundred and thirty words a minute, the editor
+          contributes well under a millisecond of work per keystroke, and
+          everything else in the figure is the browser's input pipeline and the
+          display refresh. That is a more useful result than the one we set out
+          to get.
+        </p>
+
+        <p class="marginal">
+          Worth re-running against a 25 MB corpus before the extent cap is ever
+          raised.
+        </p>
+
+        <p>
+          The bar we wrote down — <span class="anchor">p99 under thirty
+          milliseconds</span> — turned out not to be answerable as stated. The
+          same measurement over a plain text area holding the identical
+          megabyte comes back at 17.5 ms, so most of that budget belongs to the
+          compositor rather than to us. What is unambiguous is the part the bar
+          was standing in for.
+        </p>
+
+        <h2>Where the cost actually sits</h2>
+
+        <p>
+          Widget rebuilds are flat across position in the document, which is
+          <span class="tag">the property that matters</span>: a notebook that
+          slows down as it grows is a notebook that stops being used. The
+          correction term <math><mrow><msub><mi>α</mi><mi>s</mi></msub><mo>(</mo><msub><mi>M</mi><mi>Z</mi></msub><mo>)</mo><mo>=</mo><mn>0.1179</mn><mo>±</mo><mn>0.0010</mn></mrow></math>
+          belongs in the sentence rather than in a box beside it, and the same is
+          true of a table.
+        </p>
+
+        <div class="eq">
+          <math display="block">
+            <mrow>
+              <mfrac><mrow><mi>∂</mi><mi>u</mi></mrow><mrow><mi>∂</mi><mi>t</mi></mrow></mfrac>
+              <mo>=</mo>
+              <mi>α</mi>
+              <mfrac><mrow><msup><mi>∂</mi><mn>2</mn></msup><mi>u</mi></mrow><mrow><mi>∂</mi><msup><mi>x</mi><mn>2</mn></msup></mrow></mfrac>
+            </mrow>
+          </math>
+        </div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Run</th><th>Condition</th><th>p50</th><th>p99</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>01</td><td>widgets off</td><td>4.1</td><td>11.8</td><td>nothing in the viewport</td></tr>
+              <tr><td>02</td><td>widgets on</td><td>4.4</td><td>13.2</td><td>three equations visible</td></tr>
+              <tr><td>03</td><td>burst</td><td>5.0</td><td>18.6</td><td>300 wpm, synthetic</td></tr>
+              <tr><td>04</td><td>mid-document</td><td>4.3</td><td>12.9</td><td>half a megabyte in</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="marginal">Run 03 is the only one that ever queued, and only by one frame.</p>
+
+        <figure>
+          <svg viewBox="0 0 640 210" role="img" aria-label="Latency against document size, flat across the tested range">
+            <rect width="640" height="210" fill="none" />
+            <g stroke="currentColor" opacity="0.16" stroke-width="1">
+              <line x1="46" y1="176" x2="620" y2="176" />
+              <line x1="46" y1="128" x2="620" y2="128" />
+              <line x1="46" y1="80" x2="620" y2="80" />
+              <line x1="46" y1="32" x2="620" y2="32" />
+            </g>
+            <polyline
+              points="60,140 160,136 260,141 360,138 460,134 560,139 612,137"
+              fill="none" stroke="currentColor" stroke-width="2.25" opacity="0.82"
+              stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="612" cy="137" r="3.4" fill="currentColor" />
+            <g font-size="11" fill="currentColor" opacity="0.55">
+              <text x="46" y="196">0.2 MB</text>
+              <text x="560" y="196">1.05 MB</text>
+              <text x="8" y="36">20 ms</text>
+              <text x="8" y="180">0</text>
+            </g>
+          </svg>
+          <figcaption>Keystroke to paint against document size. Flat is the result.</figcaption>
+        </figure>
+
+        <hr />
+
+        <h2>Other alphabets</h2>
+
+        <p>
+          Notation drifts between scripts without ceremony, so the fallbacks are
+          part of the choice rather than an afterthought.
+        </p>
+
+        <dl class="scripts">
+          <dt>Greek</dt>
+          <dd lang="el">Ἀρχιμήδης· ἡ πυκνότης ρ καὶ ἡ τάσις σ μεταβάλλονται.</dd>
+          <dt>Cyrillic</dt>
+          <dd lang="ru">Ландау и Лифшиц, «Теоретическая физика», том 5 — сверить вывод.</dd>
+          <dt>Hebrew</dt>
+          <dd lang="he" dir="rtl">שיחה עם דנה על המדידה; צריך לבדוק את הסימון שוב.</dd>
+          <dt>Symbols</dt>
+          <dd>∀ε&gt;0 ∃δ · ħω ≈ 2.3 × 10⁻¹⁹ J · α→β⇒γ · ⟨ψ|Ĥ|ψ⟩ · ‰ † ‡ … — ⁂</dd>
+        </dl>
+
+        <p class="marginal">
+          Whichever face wins, this block is the test: the fallbacks have to sit
+          on the same baseline and read at the same weight.
+        </p>
+
+        <p>
+          The thing worth carrying forward is smaller than the numbers and more
+          useful: three separate times, what decided a choice was how typing
+          felt, and each time it was invisible to instrumentation. The measurement
+          is there to catch a disaster, not to choose between good options.
+        </p>
+
+        <p class="colophon">
+          Specimen set in the type that ships with the machine. Hoefler Text for
+          the Aldine sheet, Iowan Old Style for Sage, Charter for Night, New York
+          for Broad.
+        </p>
+      </div>
+    </article>
+  </main>
+</div>
+
+<script>
+  const sheet = document.getElementById('sheet')
+  const choices = [...document.querySelectorAll('.choice')]
+  const gutter = document.getElementById('gutter')
+  const subpixel = document.getElementById('subpixel')
+  const noteSize = document.getElementById('notesize')
+  const noteOut = document.getElementById('noteout')
+  const hebrewFace = document.getElementById('hebrewface')
+  const hebrewSize = document.getElementById('hebrewsize')
+  const hebrewOut = document.getElementById('hebrewout')
+
+  /* The @font-face is written at runtime, because a descriptor cannot read a
+     custom property. A fresh family name each time sidesteps the font cache,
+     which otherwise keeps serving the previous metrics under the old name. */
+  const hebrewStyle = document.createElement('style')
+  document.head.appendChild(hebrewStyle)
+  let hebrewGeneration = 0
+
+  function applyHebrew() {
+    const family = `Tephra Hebrew ${++hebrewGeneration}`
+    hebrewStyle.textContent = `@font-face {
+      font-family: '${family}';
+      src: local('${hebrewFace.value}');
+      unicode-range: U+0590-05FF, U+FB1D-FB4F, U+200F, U+200E;
+      size-adjust: ${hebrewSize.value}%;
+    }`
+    sheet.style.setProperty('--hebrew', `'${family}'`)
+    hebrewOut.textContent = `${hebrewSize.value}%`
+  }
+  const size = document.getElementById('size')
+  const sizeout = document.getElementById('sizeout')
+
+  // Each arrangement's own base size, so the nudge is relative to it rather
+  // than flattening four deliberate choices into one number.
+  const baseSize = { aldine: 20, sage: 18, night: 19, broad: 22 }
+
+  function pick(name) {
+    sheet.dataset.sheet = name
+    for (const button of choices) {
+      button.setAttribute('aria-pressed', String(button.dataset.pick === name))
+    }
+    applySize()
+  }
+
+  function applySize() {
+    const base = baseSize[sheet.dataset.sheet] ?? 19
+    const delta = Number(size.value)
+    sheet.style.setProperty('--size', `${base + delta}px`)
+    sizeout.textContent = delta > 0 ? `+${delta}` : String(delta)
+  }
+
+  for (const button of choices) {
+    button.addEventListener('click', () => pick(button.dataset.pick))
+  }
+  gutter.addEventListener('change', () => sheet.classList.toggle('gutter-shown', gutter.checked))
+  subpixel.addEventListener('change', () => sheet.classList.toggle('subpixel', subpixel.checked))
+  noteSize.addEventListener('input', () => {
+    sheet.style.setProperty('--note-size', `${noteSize.value}em`)
+    noteOut.textContent = noteSize.value
+  })
+  hebrewFace.addEventListener('change', applyHebrew)
+  hebrewSize.addEventListener('input', applyHebrew)
+  size.addEventListener('input', applySize)
+
+  addEventListener('keydown', event => {
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+    const byKey = { 1: 'aldine', 2: 'sage', 3: 'night', 4: 'broad' }
+    if (byKey[event.key]) {
+      pick(byKey[event.key])
+      return
+    }
+    if (event.key.toLowerCase() === 'g') {
+      gutter.checked = !gutter.checked
+      gutter.dispatchEvent(new Event('change'))
+    }
+  })
+
+  applySize()
+  applyHebrew()
+</script>
