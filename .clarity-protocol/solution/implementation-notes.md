@@ -208,3 +208,72 @@ range rather than applying to the page.
 Face and scale are theme parameters with live controls and a Hebrew sample set
 in the body face, so the slider is judged against the type it affects rather
 than against the panel's UI font.
+
+## The falsification review
+
+Four M0 assumptions, checked against the code rather than against the comments.
+Two held, two did not.
+
+### Undo could change a file with nothing on screen — FIXED
+
+`App.tsx` claimed that when undo lands outside the loaded region "the Pane is
+told to go there". **Nothing did.** Measured: type a marker into today, navigate
+to a day that does not contain it, undo — the buffer did not change, the
+location did not change, and **the marker was gone from the file on disk.**
+
+The danger is not the keystroke, it is the second one. Press undo, see nothing,
+and the natural response is to press it again, silently unwinding more work in a
+file you are not looking at.
+
+Fixed by inspecting the change undo returns and navigating to its segment when
+the current window does not cover it. `toBuffer` already returns null for a
+segment outside the window, so the containment test needed no new API. Verified
+through the real menu path, which is the only path a person has — calling
+`doc.undo()` directly would have bypassed the code under test.
+
+### The boundary-crossing edit split — HELD, and now proved
+
+`#toDocumentEdits` carries the comment "a single deletion sweeping across
+midnight is two edits, one per file, and getting that wrong writes half of it to
+the wrong day." The suite tested a handful of hand-chosen ranges.
+
+It now tests a **property over every range in a three-day window**: after any
+edit, the window's text must equal applying that edit to the text before it.
+That is ~1 080 cases including both day boundaries and every zero-length
+position. **All pass**, plus four named cases that check which *file* each half
+landed in, not merely what the buffer says. The sweep costs about 9 seconds and
+is worth it: this is the function whose failure mode is silent misfiling.
+
+### A branch that could not fix what it detected — FIXED
+
+`DocumentWindow.documentChanged` had:
+
+```
+if (edits.length === 0 && before === this.#text) return
+for (const handler of this.#changeHandlers) handler(edits, change.origin)
+```
+
+When the window's text changed but no edit could be expressed in its
+coordinates, it called the handlers with an **empty** list — and the renderer
+skips empty lists. The editor's buffer would have stayed at the old text while
+`RemoteWindow`'s copy moved to the new one, and the next keystroke would have
+been computed against a buffer nobody else believed in, surfacing as a
+`DesyncError` several steps from its cause. It now resets: expensive, rare, and
+correct.
+
+### Echo suppression — HELD
+
+`#originating` is set across `replace` in a `try/finally`, and every path that
+reaches it — edit, undo, redo, extend — is serialised by `DocumentService`, so
+the flag cannot be cleared by one call while another is still relying on it. The
+renderer's half is symmetric: transactions carrying the `fromDocument` effect
+are not sent back. Reviewed, found sound, no change.
+
+### `viewportChanged` — SOUND, and untested by construction
+
+The arithmetic is right and `extendWhenWithin` exists (the first hypothesis, that
+it did not, was wrong). But the auto-extend branch is **unreachable in v1**,
+because `autoExtendOnApproach` is false (D36) — so it is a rule that has only
+ever been exercised on its refusing branch. **The trigger to test it is already
+written down**: D36 names the moment that flag is set true as the moment the
+deferred measurement comes due. This belongs on the same list.

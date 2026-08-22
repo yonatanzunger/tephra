@@ -274,6 +274,20 @@ export class StreamWindow implements DocumentWindow {
       edits.push({ from, to, insert: edit.payload })
     }
     if (edits.length === 0 && before === this.#text) return
+
+    // My text changed, but none of the change's edits could be expressed in my
+    // coordinates. That should not happen — and if it does, sending an empty
+    // edit list is the one response that cannot fix it: the renderer skips
+    // empty lists, so the editor's buffer would stay at the old text while
+    // RemoteWindow's copy moved to the new one. The next keystroke would then
+    // be computed against a buffer nobody else believes in, and the length
+    // check would turn it into a DesyncError several steps from the cause.
+    //
+    // A reset is the honest answer: expensive, rare, and correct.
+    if (edits.length === 0) {
+      for (const handler of this.#resetHandlers) handler()
+      return
+    }
     for (const handler of this.#changeHandlers) handler(edits, change.origin)
   }
 

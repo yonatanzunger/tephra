@@ -1,7 +1,7 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BufferPosition, DateKey, DocumentPosition, SegmentKey } from '@shared/document-api.ts'
+import type { BufferPosition, DateKey, DocumentChange, DocumentPosition, SegmentKey } from '@shared/document-api.ts'
 import { defaultUiState, type UiState } from '@shared/ui-state.ts'
 import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
@@ -119,12 +119,40 @@ export function App(): React.JSX.Element {
   // The menu owns ⌘Z, and Edit ▸ Undo and the keystroke are then the same path.
   useEffect(() => {
     if (doc === null) return
+
+    /**
+     * Undo, and then GO AND LOOK AT IT.
+     *
+     * Without this, undoing a change that has since scrolled out of the loaded
+     * window does its work in complete silence: the document changes, the file
+     * on disk changes, and the screen does not move. Measured — a marker typed
+     * into today, navigated away from, then undone, vanished from the file
+     * while the buffer and the location both stayed exactly as they were.
+     *
+     * The danger is not the single keystroke, it is the second one. Press undo,
+     * see nothing, and the natural response is to press it again — silently
+     * unwinding more work in a file you are not looking at.
+     *
+     * `toBuffer` returns null for a segment the window does not cover, which is
+     * the containment test; no new API is needed for it.
+     */
+    const revealing = async (work: Promise<DocumentChange | null>): Promise<void> => {
+      const change = await work
+      const segment = change?.edits[0]?.span.begin.segment
+      if (segment === undefined) return
+      const w = pane?.window
+      if (w != null && w.toBuffer({ segment, offset: 0 as never, generation: w.generation }) !== null) {
+        return // already on screen; nothing to go to
+      }
+      await pane?.goTo({ kind: 'date', date: segment as DateKey })
+    }
+
     return window.tephra.doc.onMenuCommand(command => {
-      if (command === 'undo') void doc.undo()
-      else if (command === 'redo') void doc.redo()
+      if (command === 'undo') void revealing(doc.undo())
+      else if (command === 'redo') void revealing(doc.redo())
       else if (command === 'typography') setPanelOpen(open => !open)
     })
-  }, [doc])
+  }, [doc, pane])
 
   useEffect(() => {
     if (doc === null) return

@@ -380,6 +380,43 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'undo-away') {
+      // FALSIFICATION: App.tsx claims that when undo lands outside the loaded
+      // region "the Pane is told to go there". Nothing in the renderer does
+      // that. Type on today, navigate somewhere that does not contain today,
+      // undo, and see whether anything at all happens on screen.
+      const at = view.state.doc.length
+      view.dispatch({ changes: { from: at, insert: 'MARKER-TEXT ' }, userEvent: 'input.type' })
+      await settle(600)
+      await window.tephra.doc.flush()
+      say('typedOnToday', view.state.doc.toString().includes('MARKER-TEXT'))
+
+      const older = document.querySelectorAll('.nav-dates button')
+      ;(older[older.length - 1] as HTMLButtonElement | undefined)?.click()
+      await settle(1200)
+      const away = (globalThis as unknown as { __view: EditorViewLike }).__view
+      say('navigatedAway', {
+        location: pane.location,
+        windowHasMarker: away.state.doc.toString().includes('MARKER-TEXT'),
+      })
+
+      const before = away.state.doc.toString()
+      // Through the MENU, which is the only path a person has — calling
+      // doc.undo() directly would bypass the very code being tested.
+      const change = await window.tephra.clickMenu('Undo')
+      await settle(1200)
+      const after = (globalThis as unknown as { __view: EditorViewLike }).__view.state.doc.toString()
+      say('undoReturnedAChange', change !== null)
+      say('afterUndo', {
+        bufferChanged: before !== after,
+        locationChanged: JSON.stringify(pane.location),
+      })
+
+      // And the thing that actually matters: did the undo reach the file?
+      await window.tephra.doc.flush()
+      say('flushed', true)
+    }
+
     if (scene === 'anomalies') {
       const found = await window.tephra.doc.anomalies()
       say('reported', found.map(a => `${a.kind}@${a.date ?? '-'}:${a.line ?? '-'}${a.subject === null ? '' : ' ' + a.subject}`))
