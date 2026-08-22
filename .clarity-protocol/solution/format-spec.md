@@ -175,4 +175,28 @@ D24 left `(date, line, column)` to be revisited **if the format turned out to wa
 ## Open
 
 - **Marker verbosity.** `<!--tephra:tag-start house deal-->` is self-describing and long. It is rendered as a widget away from the cursor (D16), so it is rarely seen — but raw mode is a first-class surface, and this is a judgement about how it feels to look at.
-- **Where format problems surface.** The degradation table promises every anomaly is reported. Somewhere non-modal has to hold that list, and it should not be a dialog.
+- ~~**Where format problems surface.**~~ **Settled.** A count in the titlebar —
+  *"4 notes"* — absent entirely when there is nothing to say, opening a panel
+  headed *"How these files were read"*. Three choices came out of the one-line
+  requirement:
+
+  **It is not a warning.** Every anomaly in the table has already been handled
+  safely by the time it is reported: the tag was bounded to its day, the first
+  anchor won, the unreadable frontmatter was left untouched. So the surface uses
+  the vocabulary of a note — no red, no triangle, no badge demanding to be
+  cleared — and says so out loud: *"Nothing here is broken. Each of these is a
+  decision the format made on your behalf, recorded so you can change it if you
+  would rather."*
+
+  **It is absent when empty.** A notebook that greets its owner with a warning
+  strip every morning teaches them to stop reading warnings.
+
+  **It is derived, never stored.** Anomalies are recomputed from the current
+  text, so repairing a file by hand makes the entry disappear on the next read
+  with nothing to invalidate. `.tephra/issues.json` remains reserved for a
+  cached corpus-wide sweep; nothing needs one yet, and computing one would mean
+  opening twenty years of files to populate a list nobody asked to see.
+
+  Each entry names the date (clickable, which navigates), the line, and the path
+  — because repairing one of these is something you do in another editor, and
+  R26's exit depends on that being true.

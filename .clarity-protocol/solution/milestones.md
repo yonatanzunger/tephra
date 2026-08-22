@@ -35,7 +35,7 @@ restart; external edits adopted, and divergence surfaced rather than resolved.
 defaults rather than a designed one (D15 asks for designed, since it is what
 mobile always runs), and typography is fixed rather than tunable (R1.3).
 
-## MV — the visual system (in progress)
+## MV — the visual system ✅
 
 Brought forward ahead of M1, and the design's own words argue for it:
 `components.md` names exactly two things expensive to change later, and one of
@@ -58,8 +58,8 @@ thing gets used at all." The earlier ordering had it near-last.
 - ✅ A **fixed frame** (D42): Reserved nav, a fixed measure with the slack to its
   right, and the capture stream as an overlay pinned to the right edge. Measured
   in the app at five widths, toggling both — nothing moves, nothing narrows
-- Somewhere non-modal for **format anomalies** to surface, which `format-spec.md`
-  leaves explicitly open
+- ✅ Somewhere non-modal for **format anomalies** to surface — a quiet count in
+  the titlebar opening a panel of what the degradation table did and why
 
 **Accepted risk:** the corpus is not yet safe — no split, no WAL, no git. Fine
 while testing against `./run.sh --scratch`, and not fine for real writing.

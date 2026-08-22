@@ -10,6 +10,8 @@ import { Editor } from './editor/Editor'
 import { defaultTypography, type Typography } from './editor/theme'
 import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
+import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
+import type { Anomaly } from '@shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
 import { ThemePanel } from './theme/ThemePanel'
@@ -21,6 +23,8 @@ export function App(): React.JSX.Element {
   const [restored, setRestored] = useState<DocumentPosition | null>(null)
   const [themeName, setThemeName] = useState<string>(defaultUiState.theme)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
+  const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
@@ -122,6 +126,17 @@ export function App(): React.JSX.Element {
     })
   }, [doc])
 
+  useEffect(() => {
+    if (doc === null) return
+    let cancelled = false
+    void window.tephra.doc.anomalies().then(found => {
+      if (!cancelled) setAnomalies(found)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [doc, docWindow])
+
   const onViewport = useCallback(
     (visible: { from: BufferPosition; to: BufferPosition }) => pane?.viewportChanged(visible),
     [pane],
@@ -200,6 +215,11 @@ export function App(): React.JSX.Element {
           today
         </button>
         <span className="spacer" />
+        <AnomalyBadge
+          anomalies={anomalies}
+          open={anomaliesOpen}
+          onToggle={() => setAnomaliesOpen(open => !open)}
+        />
         {/* Refused, not hidden. A control that vanishes when the window narrows
             is a puzzle; one that declines and says why is an explanation. */}
         <button
@@ -273,6 +293,16 @@ export function App(): React.JSX.Element {
             onCursor={onCursor}
             initialCursor={restored}
             onError={err => setError(err.message)}
+          />
+        )}
+        {anomaliesOpen && (
+          <AnomalyList
+            anomalies={anomalies}
+            onClose={() => setAnomaliesOpen(false)}
+            onGoTo={date => {
+              void pane?.goTo({ kind: 'date', date: date as never })
+              setAnomaliesOpen(false)
+            }}
           />
         )}
         {panelOpen && (

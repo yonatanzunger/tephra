@@ -167,6 +167,47 @@ body {
   font-size: 11px; line-height: 1.5; color: rgb(var(--text-muted));
 }
 
+/* ── format notes ─────────────────────────────────────────────────────────
+   Not a warning. Every anomaly listed has already been handled safely, so the
+   surface uses the tone of a note: no red, no triangle, no badge demanding to
+   be cleared. It is absent entirely when there is nothing to say — a notebook
+   that greets its owner with a warning strip teaches them to stop reading
+   warnings. */
+.anomaly-badge { font-variant-numeric: tabular-nums; }
+
+.anomaly-panel {
+  position: absolute;
+  top: .75rem; right: .75rem; z-index: 4;
+  width: 21rem; max-height: calc(100% - 1.5rem);
+  overflow-y: auto; overflow-x: hidden;
+  padding: .8rem .9rem 1rem;
+  font-family: var(--font-ui); font-size: 12px; color: rgb(var(--text));
+  background: rgb(var(--surface-ground));
+  border: 1px solid rgb(var(--border)); border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / .16);
+}
+.anomaly-panel header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+  color: rgb(var(--text-muted));
+  padding-bottom: .5rem; border-bottom: 1px solid rgb(var(--border));
+}
+.anomaly-preamble { margin: .6rem 0 .2rem; font-size: 11px; line-height: 1.5;
+  color: rgb(var(--text-muted)); }
+.anomaly-panel ul { list-style: none; margin: 0; padding: 0; }
+.anomaly-panel li { padding: .6rem 0; border-bottom: 1px solid rgb(var(--border)); }
+.anomaly-panel li:last-child { border-bottom: 0; }
+.anomaly-panel li p { margin: .25rem 0 .3rem; line-height: 1.5; }
+.anomaly-panel code { font-family: var(--font-mono); font-size: 10px;
+  color: rgb(var(--text-muted)); word-break: break-all; }
+.anomaly-head { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.anomaly-kind { font-weight: 600; color: rgb(var(--text-heading)); }
+.anomaly-line { font-size: 10.5px; color: rgb(var(--text-muted));
+  font-variant-numeric: tabular-nums; }
+.anomaly-panel .link { color: rgb(var(--accent)); background: none; border: 0;
+  font: inherit; font-size: 11.5px; cursor: pointer; padding: 0; }
+.anomaly-panel .link:hover { text-decoration: underline; }
+
 /* ── typography panel ─────────────────────────────────────────────────────
    A panel, never a modal: you are choosing a measure by reading, so the
    reading has to stay visible while you choose. It sits over the annotation

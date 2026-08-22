@@ -17,6 +17,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.extend, (_e, request: ExtendRequest) => service.extend(request))
   ipcMain.handle(CHANNEL.loadUiState, () => service.loadUiState())
   ipcMain.handle(CHANNEL.saveUiState, (_e, state: UiState) => service.saveUiState(state))
+  ipcMain.handle(CHANNEL.anomalies, () => service.anomalies())
   ipcMain.handle(CHANNEL.undo, () => service.undo())
   ipcMain.handle(CHANNEL.redo, () => service.redo())
   ipcMain.handle(CHANNEL.flush, () => service.flush())

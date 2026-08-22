@@ -27,6 +27,7 @@ export const CHANNEL = {
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',
   extend: 'tephra:win:extend',
+  anomalies: 'tephra:doc:anomalies',
   listThemes: 'tephra:theme:list',
   saveTheme: 'tephra:theme:save',
   loadUiState: 'tephra:ui:load',

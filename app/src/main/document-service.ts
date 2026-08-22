@@ -11,6 +11,7 @@
 // start before it finishes. Two keystrokes would then interleave and the
 // document would be reordered relative to what the typist saw.
 
+import type { Anomaly } from '../shared/anomalies.ts'
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, TypedSpan, DocumentPosition } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
@@ -168,6 +169,10 @@ export class DocumentService {
         placement: window.placement(),
       }
     })
+  }
+
+  anomalies(): readonly Anomaly[] {
+    return this.#doc.anomalies()
   }
 
   async undo(): Promise<ChangeAck> {

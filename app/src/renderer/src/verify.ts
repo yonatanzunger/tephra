@@ -380,6 +380,20 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'anomalies') {
+      const found = await window.tephra.doc.anomalies()
+      say('reported', found.map(a => `${a.kind}@${a.date ?? '-'}:${a.line ?? '-'}${a.subject === null ? '' : ' ' + a.subject}`))
+      const badge = [...document.querySelectorAll('.titlebar button')].find(b =>
+        (b.textContent ?? '').includes('note'),
+      ) as HTMLButtonElement | undefined
+      say('badgeText', badge?.textContent?.trim() ?? 'ABSENT')
+      badge?.click()
+      await settle(500)
+      say('panelOpen', document.querySelector('.anomaly-panel') !== null)
+      say('entries', document.querySelectorAll('.anomaly-panel li').length)
+      await settle(4000)
+    }
+
     if (scene === 'panel') {
       say('opened', await window.tephra.clickMenu('Typography…'))
       await settle(4000)

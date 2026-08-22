@@ -15,6 +15,7 @@ import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
 import { dayFile, parseDayFile } from '../w/layout.ts'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
+import type { Anomaly } from '../../shared/anomalies.ts'
 import { Segment } from './segment.ts'
 import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
@@ -65,6 +66,16 @@ export class StreamDocument implements Document {
   // ── segments ───────────────────────────────────────────────
 
   /** Load a day, creating an in-memory empty one if the file does not exist. */
+  /**
+   * Every anomaly in the loaded segments. Only the loaded ones: a corpus-wide
+   * sweep would mean opening twenty years of files to populate a list nobody
+   * asked to see. `.tephra/issues.json` exists for a cached corpus-wide version
+   * when something wants one (format-spec.md), and nothing does yet.
+   */
+  anomalies(): readonly Anomaly[] {
+    return [...this.#segments.values()].flatMap(segment => segment.anomalies())
+  }
+
   async segment(date: DateKey): Promise<Segment> {
     const held = this.#segments.get(date)
     if (held !== undefined) return held

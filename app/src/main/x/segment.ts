@@ -8,6 +8,8 @@
 import type { DateKey, TypedSpan } from '../../shared/document-api.ts'
 import { parseFile, spliceBody, type ParsedFile } from './frontmatter.ts'
 import { resolveAnchors, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
+import { findAnomalies } from './anomalies.ts'
+import type { Anomaly } from '../../shared/anomalies.ts'
 import type { RelPath } from '../w/layout.ts'
 
 export class Segment {
@@ -43,6 +45,22 @@ export class Segment {
 
   get body(): string {
     return this.#body
+  }
+
+  /**
+   * What the degradation table did to this file (format-spec.md). Derived, not
+   * stored, and recomputed from the current body — so repairing a file by hand
+   * makes the report go away on the next read, with nothing to invalidate.
+   */
+  anomalies(): readonly Anomaly[] {
+    return findAnomalies({
+      file: this.rel,
+      date: this.date,
+      parsed: this.#parsed,
+      markers: this.#scan(),
+      bodyOffset: this.#parsed.blockEnd,
+      text: this.#parsed.blockEnd === 0 ? this.#body : this.#original,
+    })
   }
 
   get length(): number {

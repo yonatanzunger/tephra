@@ -4,6 +4,7 @@
 // and are re-dispatched to handlers the renderer registered through this object.
 
 import { contextBridge, ipcRenderer } from 'electron'
+import type { Anomaly } from '../shared/anomalies.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
@@ -61,6 +62,7 @@ const tephra = {
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
 
+    anomalies: (): Promise<readonly Anomaly[]> => ipcRenderer.invoke(CHANNEL.anomalies),
     listThemes: (): Promise<readonly Theme[]> => ipcRenderer.invoke(CHANNEL.listThemes),
     saveTheme: (theme: Theme): Promise<void> => ipcRenderer.invoke(CHANNEL.saveTheme, theme),
 
