@@ -85,8 +85,8 @@ export async function runVerify(scene: string): Promise<void> {
       say('vimOff', visible())
 
       // And again with vim on, which switches to the drawn layer.
-      const toggle = document.querySelector('.titlebar input') as HTMLInputElement | null
-      toggle?.click()
+      const setVim = (globalThis as unknown as { __setVim?: (v: boolean) => void }).__setVim
+      setVim?.(true)
       await settle(500)
       view.dispatch({ selection: { anchor: 4, head: 15 } })
       await settle(300)
@@ -246,6 +246,92 @@ export async function runVerify(scene: string): Promise<void> {
       say('wideStreamClosed', geometry())
     }
 
+    if (scene === 'undo') {
+      // Undo moved from a keydown listener to Edit ▸ Undo. The path is entirely
+      // new — menu item, IPC, RemoteDocument — and nothing tested it end to end
+      // before, so this drives the real menu item and reads the buffer.
+      // Append at the end of the buffer each time. The first version took the
+      // caret for the second insert and got the SAME offset as the first,
+      // producing "SECOND. FIRST. " — two inverse deletes over overlapping
+      // ranges, a shape real typing never makes because the caret advances.
+      const live = (): EditorViewLike =>
+        (globalThis as unknown as { __view: EditorViewLike }).__view
+      view.dispatch({
+        changes: { from: view.state.doc.length, insert: 'FIRST. ' },
+        userEvent: 'input.type',
+      })
+      await settle(300)
+      view.dispatch({
+        changes: { from: live().state.doc.length, insert: 'SECOND. ' },
+        userEvent: 'input.type',
+      })
+      await settle(400)
+      say('bufferTail', live().state.doc.toString().slice(-22))
+      const typed = view.state.doc.toString()
+      say('afterTyping', { hasFirst: typed.includes('FIRST.'), hasSecond: typed.includes('SECOND.') })
+
+      await window.tephra.doc.flush()
+      say('flushedAfterTyping', true)
+      await settle(300)
+
+      say('undoItemFound', await window.tephra.clickMenu('Undo'))
+      await settle(900)
+      const once = (globalThis as unknown as { __view?: EditorViewLike }).__view?.state.doc.toString() ?? ''
+      say('afterUndo', { hasFirst: once.includes('FIRST.'), hasSecond: once.includes('SECOND.') })
+
+      // Is it the menu path, or is undo itself not reaching the buffer? Call the
+      // same method the menu's handler calls, directly.
+      await window.tephra.doc.flush()
+      say('flushedAfterUndo', true)
+
+      const docHandle = (globalThis as unknown as { __doc?: { undo(): Promise<unknown> } }).__doc
+      say('directUndoAvailable', docHandle !== undefined)
+      if (docHandle !== undefined) {
+        await docHandle.undo()
+        await settle(900)
+        const direct = (globalThis as unknown as { __view?: EditorViewLike }).__view?.state.doc.toString() ?? ''
+        say('afterDirectUndo', { hasFirst: direct.includes('FIRST.'), hasSecond: direct.includes('SECOND.') })
+      }
+
+      say('redoItemFound', await window.tephra.clickMenu('Redo'))
+      await settle(900)
+      const back = (globalThis as unknown as { __view?: EditorViewLike }).__view?.state.doc.toString() ?? ''
+      say('afterRedo', { hasFirst: back.includes('FIRST.'), hasSecond: back.includes('SECOND.') })
+    }
+
+    if (scene === 'chrome') {
+      const bar = document.querySelector('.titlebar')
+      const app = document.querySelector('.app')
+      say('titlebar', {
+        present: bar !== null,
+        rect: bar === null ? null : {
+          top: Math.round(bar.getBoundingClientRect().top),
+          height: Math.round(bar.getBoundingClientRect().height),
+        },
+        buttons: [...document.querySelectorAll('.titlebar button')].map(b => (b.textContent ?? '').trim()),
+        inputs: document.querySelectorAll('.titlebar input').length,
+      })
+      const chain: unknown[] = []
+      let node: Element | null = document.querySelector('.cm-scroller')
+      while (node !== null) {
+        chain.push({
+          el: node.className.toString().slice(0, 28) || node.tagName,
+          scrollTop: Math.round(node.scrollTop),
+          scrollH: Math.round(node.scrollHeight),
+          clientH: Math.round(node.clientHeight),
+        })
+        node = node.parentElement
+      }
+      say('scrollChain', chain)
+      say('page', {
+        appHeight: Math.round(app?.getBoundingClientRect().height ?? -1),
+        appTop: Math.round(app?.getBoundingClientRect().top ?? -1),
+        innerHeight: window.innerHeight,
+        scrollY: window.scrollY,
+      })
+      await settle(3000)
+    }
+
     if (scene === 'streamon') {
       const button = [...document.querySelectorAll('.titlebar button')].find(
         b => (b.textContent ?? '').includes('Stream'),
@@ -354,7 +440,10 @@ export async function runVerify(scene: string): Promise<void> {
 }
 
 interface EditorViewLike {
-  state: { doc: { toString(): string; length: number }; selection: { main: { head: number } } }
+  state: {
+    doc: { toString(): string; length: number }
+    selection: { main: { head: number; from: number; to: number; empty: boolean } }
+  }
   dispatch(spec: unknown): void
 }
 interface PaneLike {

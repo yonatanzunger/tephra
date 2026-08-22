@@ -18,7 +18,13 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+/* overflow: hidden matters. Without it the DOCUMENT scrolls — CodeMirror's
+   scrollIntoView walks up looking for a scrollable ancestor when it restores the
+   caret, finds the body, and scrolls the whole app, carrying the titlebar off
+   the top of the window. It looked like the editor had merely scrolled, and it
+   survived four rounds of screenshots being read as "the cursor was restored
+   low". The only thing that should ever scroll is the editor's own scroller. */
+html, body, #root { height: 100%; margin: 0; overflow: hidden; }
 body {
   background: rgb(var(--surface-ground));
   color: rgb(var(--text));
@@ -51,6 +57,13 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
+  /* The row must be BOUNDED, not auto. Without this the single implicit row is
+     sized to its tallest content — the whole document — so the reading column
+     grew to 1270px inside a 914px frame, overflowed, and made #root a scroll
+     container. The app then scrolled as a page and carried the titlebar off the
+     top of the window, which read as "the editor is scrolled a bit low". */
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
   position: relative;
   /* The same paper as the reading area, NOT the app's ground. The nav's column
      is spent whether or not the nav is drawn (D42), so when it is dismissed
@@ -72,6 +85,7 @@ body {
 
 .frame-reading {
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;

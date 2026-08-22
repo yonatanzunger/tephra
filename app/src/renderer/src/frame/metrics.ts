@@ -88,22 +88,3 @@ export function streamOcclusion(
 export function gutterFits(frameWidth: number, navWidth: number, need: ReadingNeed): boolean {
   return frameWidth - navWidth >= readingNeed(need)
 }
-
-/**
- * The width of one `ch` for a given font, measured rather than assumed. The
- * measure and the gutter are both specified in characters — they are
- * typographic quantities — but every comparison above is in pixels, so the
- * conversion has to happen somewhere real.
- *
- * Measured from a probe rather than from `.cm-content`'s own width, which is
- * the *result* of this arithmetic and would make the input depend on the output.
- */
-export function measureCh(font: string, sizePx: number, host: Document = document): number {
-  const probe = host.createElement('span')
-  probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font-family:${font};font-size:${sizePx}px`
-  probe.textContent = '0'.repeat(100)
-  host.body.appendChild(probe)
-  const width = probe.getBoundingClientRect().width / 100
-  probe.remove()
-  return width
-}

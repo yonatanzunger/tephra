@@ -6,7 +6,30 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { Typography } from '../editor/theme'
-import { gutterFits, measureCh, streamOcclusion, streamWidth, type ReadingNeed } from './metrics'
+import { gutterFits, streamOcclusion, streamWidth, type ReadingNeed } from './metrics'
+
+/**
+ * The width of one `ch` for a given font, measured rather than assumed. The
+ * measure and the gutter are both specified in characters — they are
+ * typographic quantities — but every comparison in `metrics.ts` is in pixels,
+ * so the conversion has to happen somewhere real.
+ *
+ * It lives here rather than beside the arithmetic because that module states it
+ * touches no DOM, and for a while it did anyway. Keeping it pure is what lets
+ * the rules be tested under Node at widths no screen can produce.
+ *
+ * Measured from a probe rather than from `.cm-content`'s own width, which is
+ * the *result* of this arithmetic and would make the input depend on the output.
+ */
+function measureCh(font: string, sizePx: number): number {
+  const probe = document.createElement('span')
+  probe.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font-family:${font};font-size:${sizePx}px`
+  probe.textContent = '0'.repeat(100)
+  document.body.appendChild(probe)
+  const width = probe.getBoundingClientRect().width / 100
+  probe.remove()
+  return width
+}
 
 /**
  * The nav's column width. Reserved whether or not the nav is drawn — that is

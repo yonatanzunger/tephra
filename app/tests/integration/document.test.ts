@@ -136,6 +136,27 @@ test('a typed run is one undo step, not one per keystroke', async t => {
   assert.equal(w.text, '\n', 'the whole run went back together')
 })
 
+// REGRESSION. Redo of a grouped typing run replayed the entry's original
+// forward edits, which after an undo point into a state that no longer exists —
+// and for a grouped run describe only the last keystroke, because `#push`
+// merges the `inverse` maps but keeps the newest `change`. In the app it threw
+// `span 141..141 outside text of 135`. The old redo test passed throughout,
+// because it uses a single `operation` edit and operations never group: the one
+// shape a person actually produces was the one shape untested.
+test('redo puts back a grouped typing run', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'start\n') })
+  const w = await windowOver(doc, DAY)
+  await w.edit([{ from: bp(5), to: bp(5), insert: ' one' }], 'user')
+  await w.edit([{ from: bp(9), to: bp(9), insert: ' two' }], 'user')
+  assert.equal(w.text, 'start one two\n')
+
+  await doc.undo()
+  assert.equal(w.text, 'start\n', 'undo of a grouped run is correct')
+
+  await doc.redo()
+  assert.equal(w.text, 'start one two\n', 'and redo should put the whole run back')
+})
+
 test('an operation is its own undo step even among typing', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'x\n') })
   const w = await windowOver(doc, DAY)

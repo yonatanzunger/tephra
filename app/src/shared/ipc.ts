@@ -29,7 +29,12 @@ export const CHANNEL = {
   extend: 'tephra:win:extend',
   loadUiState: 'tephra:ui:load',
   saveUiState: 'tephra:ui:save',
+  /** renderer → main: the menu's checkmark follows the app, not the other way. */
+  vimChanged: 'tephra:ui:vimChanged',
   /** main → renderer */
+  setVim: 'tephra:ui:setVim',
+  /** main → renderer: an Edit-menu command, which owns these keystrokes. */
+  menuCommand: 'tephra:ui:menuCommand',
   windowChanged: 'tephra:win:changed',
   windowReset: 'tephra:win:reset',
   diverged: 'tephra:doc:diverged',

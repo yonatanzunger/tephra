@@ -35,8 +35,9 @@ test('inverting a batch restores the original exactly', () => {
     ['a😀b', [e(1, 3, 'X')]],
     ['line\nline\n', [e(0, 0, 'top\n'), e(5, 9, 'LINE')]],
   ] as const) {
-    const after = applyEdits(text, edits as TextEdit[])
-    const back = applyEdits(after, invertEdits(text, edits as TextEdit[]))
+    const list: readonly TextEdit[] = edits
+    const after = applyEdits(text, list)
+    const back = applyEdits(after, invertEdits(text, list))
     assert.equal(back, text, `round trip failed for ${JSON.stringify(text)}`)
   }
 })

@@ -101,3 +101,115 @@ found the invisible selection, the cut-off proof sheet, the sans-serif Hebrew,
 and now the compounded heading. A visual milestone needs an instrument that
 looks at pixels, and looking at one screenshot found in a second what 140 passing
 tests could not see.
+
+
+## `npm run typecheck` was doing nothing at all
+
+Moving the vim toggle into a menu broke the app at runtime — `CHANNEL is not
+defined` in the main process, from an import I forgot to add. `npm run typecheck`
+had reported success moments earlier.
+
+The script was `tsc --noEmit -p tsconfig.json`, and that root config is
+`{ "files": [], "references": [...] }`. **`tsc -p` does not build referenced
+projects** — only `tsc --build` does. So it compiled the empty file list, found
+nothing wrong, and exited zero. Every green typecheck in this project's history
+meant nothing.
+
+Switching to `tsc --build --force` exposed why it had never been noticed: both
+referenced configs use `baseUrl`, removed in TypeScript 7, so they would have
+failed *immediately* if they had ever run. The no-op hid its own cause.
+
+Underneath were **25 real errors**, none of which broke anything at runtime:
+`allowImportingTsExtensions` never set although the codebase imports `.ts`
+extensions throughout; `@types/react` never installed; no declaration for
+side-effect `.css` imports; `buildBlocks` annotated as returning `Decoration[]`
+when it returns `Range<Decoration>[]`; a stand-in interface in `verify.ts`
+narrower than the code using it; and — mine, from an hour earlier — `measureCh`
+sitting in a module whose header says it touches no DOM.
+
+**The lesson is not "check the config".** It is that *a passing check is
+evidence of nothing until the check has been seen to fail.* Every instrument in
+this project that has misled us shares that shape: the left-edge readout that
+had no arrangement to catch until a deliberately broken one was added; the
+window-width harness that reported a refusal because macOS silently clamped the
+window; the build whose failure `--silent` swallowed while the app ran a stale
+bundle. **Before trusting an instrument, break something on purpose and confirm
+it says so.**
+
+## The app was scrolling as a page
+
+Found in the same sweep, by looking at a screenshot and asking why the titlebar
+was missing rather than assuming the editor had scrolled.
+
+`.frame` is a grid whose single implicit row was `auto`, so it sized to its
+tallest content — the whole document — and the reading column grew to 1270px
+inside a 914px frame. `#root` became a scroll container, and CodeMirror's
+`scrollIntoView`, walking up for a scrollable ancestor when restoring the caret,
+scrolled the entire application and carried the chrome off the top of the
+window. The row needs `minmax(0, 1fr)`; `overflow: hidden` on the document is a
+second line of defence, not the fix.
+
+It had been visible in *four* consecutive screenshots, read each time as "the
+cursor was restored a bit low."
+
+
+## Redo has never worked for a typed run
+
+Found by wiring Edit ▸ Redo and insisting on watching it work rather than
+watching it not throw.
+
+`#push` groups consecutive `user` edits so that a typed sentence is one undo
+step. It merges the two entries' `inverse` maps — correctly, which is why undo
+of a grouped run is right — but keeps only the **newest** entry's `change`. Redo
+replays `entry.change.edits`, so it replays the last edit alone, at offsets
+belonging to a state that no longer exists once the undo has run.
+
+The existing `redo puts it back` test passes because it uses a single
+`operation` edit, and operations never group. **The one shape a person actually
+produces — typing — was the one shape untested.**
+
+**Fixed.** In use it did not fail quietly, it threw:
+`OverlappingEditsError: span 141..141 outside text of 135` — a stored offset
+pointing past the end of a text that had shrunk back under it.
+
+`#stepBack` now derives **both** directions while it is holding the two texts:
+the undo edits as `minimalReplacement(before, after)`, and the redo edits as
+`minimalReplacement(after, before)`, each in the coordinates the other side will
+actually see. The redo entry carries those instead of the original forward
+edits; `inverse` is passed through unchanged, since after a redo the body is
+back to exactly the state that map transforms. Redo is now symmetric with undo
+by construction rather than by the hope that old offsets still apply. The test
+is promoted from `todo` to passing, and the app does it end to end.
+
+**Two process notes, both about the cost of a bad first measurement.** The scene
+that found this originally inserted both strings at the same offset, because it
+read the caret rather than the buffer end, and the caret had not advanced. That
+produced overlapping inverse deletes, a shape typing never makes, and for a
+while it looked as though *undo* were broken too. An unrepresentative test is
+worse than no test: it sends you after a bug that is not there.
+
+And `python3 - <<'PY'` patch scripts print their success message whether or not
+the target string matched, so a silently-skipped edit reads as a completed one.
+They now exit non-zero when a target is missing. This is the third variant of
+the same failure in one session — a stale build behind `--silent`, a typecheck
+that compiled nothing, and now a patch that did nothing while saying it had.
+
+
+## The application menu says "Electron", and `app.setName` cannot fix it
+
+macOS takes the bold application-menu title from the **bundle's**
+`CFBundleName`, not from anything the process sets at runtime. `app.setName`
+does work — Electron's own menu model reports `About Tephra` and `Quit Tephra`,
+which was worth measuring before concluding anything — but unpackaged we run
+inside `node_modules/electron/dist/Electron.app`, and that bundle is called
+Electron.
+
+Real packaging (electron-builder, `productName`) is the proper fix and is
+unscheduled (`milestones.md`). Until then `run.sh` renames the development
+bundle in place with PlistBuddy: idempotent, undone by any reinstall of
+electron, harmless if the plist moves. `productName` is set in `package.json`
+so packaging will do the right thing when it arrives.
+
+Worth noting as its own small lesson: the first instinct was to conclude
+`app.setName` had not run. It had. **Two different things were both called "the
+app name", and only measuring which one the OS reads told them apart.**

@@ -1,5 +1,6 @@
 {
   "name": "tephra",
+  "productName": "Tephra",
   "version": "0.1.0",
   "description": "A notebook that is one continuous stream of writing",
   "main": "out/main/index.cjs",
@@ -7,7 +8,7 @@
     "dev": "./run.sh --dev",
     "build": "electron-vite build",
     "start": "./run.sh",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --build --force tsconfig.json",
     "test": "node --experimental-strip-types --test \"tests/**/*.test.ts\"",
     "m0": "npm run build && node scripts/m0-acceptance.mjs",
     "scratch": "./run.sh --scratch"
@@ -28,6 +29,8 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^43.4.0",
     "electron-vite": "^5.0.0",

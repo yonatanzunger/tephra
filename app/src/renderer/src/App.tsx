@@ -8,7 +8,6 @@ import { Pane } from './pane/pane'
 import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { Editor } from './editor/Editor'
 import { defaultTypography, type Typography } from './editor/theme'
-import { widgetOptions } from './editor/widgets'
 import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { useFrameMetrics } from './frame/useFrame'
@@ -49,6 +48,7 @@ export function App(): React.JSX.Element {
         setPane(p)
         // Temporary: the self-check drives this. Goes away with verify.ts.
         ;(globalThis as unknown as { __pane: Pane }).__pane = p
+        ;(globalThis as unknown as { __doc: RemoteDocument }).__doc = opened
 
         // Where the last session left off (R1.2). A stored cursor is soft
         // state: if the text it named has moved, landing slightly off and
@@ -77,6 +77,16 @@ export function App(): React.JSX.Element {
     return window.tephra.doc.onDiverged(d => setDiverged({ date: d.date }))
   }, [])
 
+  // Vim moved from a titlebar checkbox to View ▸ Vim mode. The setting still
+  // lives here and is still saved per device; the menu is a control on it and a
+  // view of it, which is why the state is pushed back after every change —
+  // including the one that comes from loading ui-state.json at startup.
+  useEffect(() => window.tephra.doc.onSetVim(setVim), [])
+  // Temporary, for the self-check: the menu drives vim from the main process,
+  // which a renderer scene cannot reach. Goes away with verify.ts.
+  ;(globalThis as unknown as { __setVim: (v: boolean) => void }).__setVim = setVim
+  useEffect(() => window.tephra.doc.vimChanged(vim), [vim])
+
   // What the notebook actually covers, so the nav offers days that exist rather
   // than a fixed span reaching into a past that has none.
   useEffect(() => {
@@ -84,18 +94,20 @@ export function App(): React.JSX.Element {
     void window.tephra.doc.extent().then(setExtent)
   }, [doc])
 
-  // Undo is document-scoped and reached past the facade on purpose (D26). When
-  // it lands outside the loaded region the Pane is told to go there — which is
-  // an ordinary goTo, a shape that already exists.
+  // Undo is document-scoped and reaches past the facade on purpose (D26). When
+  // it lands outside the loaded region the Pane is told to go there — an
+  // ordinary goTo, a shape that already exists.
+  //
+  // It arrives from the Edit menu rather than from a keydown listener. A menu
+  // accelerator consumes the keystroke before the page sees it, so the two
+  // cannot coexist: with both, either nothing happens or it happens twice.
+  // The menu owns ⌘Z, and Edit ▸ Undo and the keystroke are then the same path.
   useEffect(() => {
     if (doc === null) return
-    const onKeyDown = (e: KeyboardEvent): void => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return
-      e.preventDefault()
-      void (e.shiftKey ? doc.redo() : doc.undo())
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
+    return window.tephra.doc.onMenuCommand(command => {
+      if (command === 'undo') void doc.undo()
+      else if (command === 'redo') void doc.redo()
+    })
   }, [doc])
 
   const onViewport = useCallback(
@@ -188,19 +200,6 @@ export function App(): React.JSX.Element {
         >
           <span aria-hidden="true">▤</span> Stream
         </button>
-        <label className="toggle">
-          <input type="checkbox" checked={vim} onChange={e => setVim(e.target.checked)} /> vim
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            defaultChecked={widgetOptions.enabled}
-            onChange={e => {
-              widgetOptions.enabled = e.target.checked
-            }}
-          />{' '}
-          render
-        </label>
       </header>
 
       {diverged !== null && (

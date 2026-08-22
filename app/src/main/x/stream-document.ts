@@ -390,22 +390,48 @@ export class StreamDocument implements Document {
     if (entry === undefined) return null
 
     const edits: Edit[] = []
+    // Redo replays THIS, not the entry's original forward edits. Those were
+    // recorded against a state that no longer exists once the undo has run, and
+    // for a grouped typing run they describe only the last keystroke of the
+    // group — `#push` merges the `inverse` maps but keeps only the newest
+    // `change`. Replaying them threw `span 141..141 outside text of 135`.
+    //
+    // Deriving both directions here makes redo symmetric with undo by
+    // construction: each is a minimal replacement between two texts we are
+    // holding, in the coordinates the other side will actually see.
+    const redoEdits: Edit[] = []
     for (const [date, list] of entry.inverse) {
       const segment = await this.segment(date)
       const before = segment.body
       const after = applyEdits(before, [...list].sort((a, b) => a.from - b.from))
-      const replacement = minimalReplacement(before, after)
-      if (replacement === null) continue
-      edits.push({
-        span: {
-          begin: this.#positionAt(date, replacement.from),
-          end: this.#positionAt(date, replacement.to),
-        },
-        payload: replacement.insert,
-      })
+
+      const undoing = minimalReplacement(before, after)
+      if (undoing !== null) {
+        edits.push({
+          span: {
+            begin: this.#positionAt(date, undoing.from),
+            end: this.#positionAt(date, undoing.to),
+          },
+          payload: undoing.insert,
+        })
+      }
+
+      // In `after` coordinates — the text redo will be applied to.
+      const redoing = minimalReplacement(after, before)
+      if (redoing !== null) {
+        redoEdits.push({
+          span: {
+            begin: this.#positionAt(date, redoing.from),
+            end: this.#positionAt(date, redoing.to),
+          },
+          payload: redoing.insert,
+        })
+      }
     }
 
-    this.#redo.push(entry)
+    // `inverse` is carried through unchanged: after a redo the body is back to
+    // its post-change state, which is exactly what that map transforms.
+    this.#redo.push({ change: { ...entry.change, edits: redoEdits }, inverse: entry.inverse })
     if (edits.length === 0) return null
     return this.#applyAndRecord(edits, 'operation', false)
   }

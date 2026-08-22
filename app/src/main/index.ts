@@ -4,10 +4,17 @@
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
+import { clickMenuItem, installMenu, setMenuVim } from './menu.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
 import { Notebook } from './w/notebook.ts'
+import { CHANNEL } from '../shared/ipc.ts'
+
+// Before anything reads it. Electron takes the app name from package.json's
+// `name` field, which is the npm package name — lower case, and not what
+// belongs in a menu bar.
+app.setName('Tephra')
 import { DocumentService, registerDocumentIpc, attachWindow } from './ipc.ts'
 
 // app.getAppPath() rather than import.meta.url: the built main process is CJS,
@@ -115,9 +122,22 @@ app.whenReady().then(async () => {
 
   // X and W both live here (D37). The renderer holds Z and the live buffer,
   // and reaches everything else through the bridge.
-  notebook = await Notebook.open({ root: process.env['TEPHRA_ROOT'] })
+  const configuredRoot = process.env['TEPHRA_ROOT']
+  notebook = await Notebook.open(configuredRoot === undefined ? {} : { root: configuredRoot })
   service = new DocumentService(notebook)
   registerDocumentIpc(service)
+
+  // The renderer owns the vim setting — it is loaded from ui-state.json and
+  // saved per device (D30). The menu's checkmark is a view of that, kept honest
+  // by the renderer reporting it, never a second copy that could disagree.
+  installMenu()
+  ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
+
+  // Self-check only: lets a renderer scene pull a real menu item. Gated, because
+  // nothing in the shipped app should be able to drive the menu bar.
+  if (process.env['TEPHRA_VERIFY'] !== undefined) {
+    ipcMain.handle('tephra:verify:menu', (_e, label: string) => clickMenuItem(label))
+  }
 
   attachWindow(service, createWindow())
 

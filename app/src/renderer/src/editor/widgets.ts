@@ -18,6 +18,7 @@
 //
 // Measured in the spike: 2 ms initial scan, 0.2 ms incremental.
 
+import type { Range } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import katex from 'katex'
@@ -25,7 +26,6 @@ import katex from 'katex'
 export const rebuildWidgets = StateEffect.define<null>()
 
 export interface WidgetOptions {
-  enabled: boolean
   /** Unrender the construct the cursor is inside. Mandatory for vim (see above). */
   reveal: boolean
   /** Blocks also unrender from a neighbouring line, or j/k cannot enter them. */
@@ -33,7 +33,6 @@ export interface WidgetOptions {
 }
 
 export const defaultWidgetOptions: WidgetOptions = {
-  enabled: true,
   reveal: true,
   revealAdjacent: true,
 }
@@ -179,7 +178,6 @@ interface PendingDeco {
 }
 
 function buildInline(view: EditorView): DecorationSet {
-  if (!widgetOptions.enabled) return Decoration.none
   const decos: PendingDeco[] = []
   const state = view.state
 
@@ -276,9 +274,12 @@ export const inlineWidgets = ViewPlugin.fromClass(
 
 // ── block: whole document, incrementally ─────────────────────
 
-function buildBlocks(state: EditorState, fromLine: number, toLine: number): ReturnType<typeof Decoration.replace>[] {
-  const out: ReturnType<typeof Decoration.replace>[] = []
-  if (!widgetOptions.enabled) return out
+// Range<Decoration>, not Decoration: every element here is the result of
+// `.range(from, to)`, which pairs a decoration with the span it covers.
+// `ReturnType<typeof Decoration.replace>` is the decoration alone, and it type
+// checked only because this project's typecheck was never actually running.
+function buildBlocks(state: EditorState, fromLine: number, toLine: number): Range<Decoration>[] {
+  const out: Range<Decoration>[] = []
   const doc = state.doc
   let n = fromLine
   while (n <= toLine) {

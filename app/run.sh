@@ -42,6 +42,27 @@ fi
 # The env var that makes Electron pretend to be Node. Unset for the child only.
 unset ELECTRON_RUN_AS_NODE
 
+# macOS takes the application-menu title from the BUNDLE's CFBundleName, not
+# from anything the app sets at runtime. app.setName('Tephra') fixes About, Hide
+# and Quit — Electron's own menu model reports "About Tephra" — but the bold
+# title beside the Apple menu still reads "Electron", because unpackaged we are
+# running inside node_modules/electron/dist/Electron.app.
+#
+# Real packaging (electron-builder, productName) is the proper fix and is
+# unscheduled. Until then, rename the development bundle in place. Idempotent,
+# reversed by any `npm install` of electron, and harmless if the plist moves.
+DEV_PLIST="node_modules/electron/dist/Electron.app/Contents/Info.plist"
+if [[ -f "$DEV_PLIST" ]] && command -v /usr/libexec/PlistBuddy >/dev/null; then
+  current="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$DEV_PLIST" 2>/dev/null || true)"
+  if [[ "$current" != "Tephra" ]]; then
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleName Tephra' "$DEV_PLIST" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName Tephra' "$DEV_PLIST" >/dev/null 2>&1 \
+      || /usr/libexec/PlistBuddy -c 'Add :CFBundleDisplayName string Tephra' "$DEV_PLIST" >/dev/null 2>&1 || true
+    # The bundle's name is cached by LaunchServices; touching it forces a reread.
+    touch "node_modules/electron/dist/Electron.app" 2>/dev/null || true
+  fi
+fi
+
 if [[ $DEV -eq 1 ]]; then
   echo "Tephra (dev, HMR)  notebook: $ROOT"
   TEPHRA_ROOT="$ROOT" exec ./node_modules/.bin/electron-vite dev

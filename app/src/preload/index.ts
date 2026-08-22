@@ -28,8 +28,20 @@ ipcRenderer.on(CHANNEL.diverged, (_e, message: Divergence) => {
   for (const handler of divergedHandlers) handler(message)
 })
 
+const menuHandlers = new Set<Handler<string>>()
+ipcRenderer.on(CHANNEL.menuCommand, (_e, command: string) => {
+  for (const handler of menuHandlers) handler(command)
+})
+
+const vimHandlers = new Set<Handler<boolean>>()
+ipcRenderer.on(CHANNEL.setVim, (_e, value: boolean) => {
+  for (const handler of vimHandlers) handler(value)
+})
+
 const tephra = {
   hello: (): Promise<{ version: string; origin: string }> => ipcRenderer.invoke('tephra:hello'),
+  /** Self-check only; the handler exists only when TEPHRA_VERIFY is set. */
+  clickMenu: (label: string): Promise<boolean> => ipcRenderer.invoke('tephra:verify:menu', label),
 
   doc: {
     open: (): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open),
@@ -47,6 +59,17 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.resolveAnchor, name),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
+
+    /** Tell the menu what vim is set to, so its checkmark is a view and not a copy. */
+    vimChanged: (vim: boolean): void => ipcRenderer.send(CHANNEL.vimChanged, vim),
+    onSetVim(handler: Handler<boolean>): () => void {
+      vimHandlers.add(handler)
+      return () => vimHandlers.delete(handler)
+    },
+    onMenuCommand(handler: Handler<string>): () => void {
+      menuHandlers.add(handler)
+      return () => menuHandlers.delete(handler)
+    },
 
     onWindowChanged(handler: Handler<WindowChangedMessage>): () => void {
       changedHandlers.add(handler)
