@@ -101,6 +101,36 @@ export function ThemePanel({
         onChange={gutter => control.update({ gutter })}
       />
 
+      {/* Per-script sizing (D41). A face and a percentage, because the right
+          answer depends on which Latin face it sits beside — and the face
+          matters as much as the size, since naming one here replaces the
+          natural fallback for the whole script. */}
+      <div className="theme-group">
+        <span className="theme-group-label">Hebrew</span>
+        <label className="field">
+          <span>Face</span>
+          <input
+            type="text"
+            className="theme-text"
+            value={draft.hebrewFace}
+            spellCheck={false}
+            onChange={e => control.update({ hebrewFace: e.target.value })}
+          />
+        </label>
+        <Slider
+          label="Scale"
+          unit="%"
+          min={100}
+          max={180}
+          step={1}
+          value={draft.hebrewScale}
+          onChange={hebrewScale => control.update({ hebrewScale })}
+        />
+        <p className="theme-sample" lang="he" dir="rtl">
+          בראשית ברא — Hebrew beside Latin
+        </p>
+      </div>
+
       {/* The measure is not only a matter of taste: it decides how much room is
           left, and therefore whether the capture stream lands on empty paper or
           covers the margin where commentary lives (D42, R27). Saying so here

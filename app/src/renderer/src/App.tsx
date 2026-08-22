@@ -24,7 +24,7 @@ export function App(): React.JSX.Element {
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
-  const typography = useMemo(() => typographyOf(theme.draft), [theme.draft])
+  const typography = useMemo(() => typographyOf(theme.draft, theme.face), [theme.draft, theme.face])
   const [error, setError] = useState<string | null>(null)
   const [diverged, setDiverged] = useState<{ date: string } | null>(null)
   const [navVisible, setNavVisible] = useState(true)
@@ -35,6 +35,9 @@ export function App(): React.JSX.Element {
 
   // Temporary, for the frame self-check. Goes away with verify.ts.
   ;(globalThis as unknown as { __metrics: typeof metrics }).__metrics = metrics
+  // Temporary, for the self-check. Goes away with verify.ts.
+  ;(globalThis as unknown as { __setHebrewScale: (n: number) => void }).__setHebrewScale = n =>
+    theme.update({ hebrewScale: n })
   const stream = useStream(metrics)
 
   const docWindow = usePaneWindow(pane)

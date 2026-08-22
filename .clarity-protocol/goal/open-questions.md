@@ -258,6 +258,33 @@ once per line and predictably, and the eye is already on that line.
 revealing changes glyphs rather than metrics. Works for delimiters, does not
 generalise to widgets, and produces odd-looking gaps.
 
+### Every option above has been rejected, and why
+
+Reviewed and **none of the five is satisfactory**. The reasons are worth keeping,
+because they narrow what a sixth option has to do:
+
+- **(a) and (d) do not solve the problem**, they only change its grain. The
+  visual jump is still there; (d) merely makes it happen per line instead of per
+  construct.
+- **(e) reserving the marks' width looks terrible.** Rejected on sight.
+- **(b) quieting the marks is the best-looking of the five and still fails two
+  ways.** It is a *display* trick, so it goes wrong the moment the display is
+  not the screen: **printing** a range (R11) would put the delimiters on paper.
+  And it does not generalise — there is no "quiet" rendering of a table or a
+  block of TeX, which are the constructs where the jump is largest.
+- **(c) conceal always, edit by command** works for bold and italic, where the
+  markup is two characters, and not for anything else.
+
+**The common failure:** all five were framed around *delimiters*, and the hard
+cases are the block constructs — tables, display equations, images — where
+"reveal the source" means replacing a rendered object with several lines of
+text. A solution that only handles emphasis has not addressed the question.
+
+**Held open deliberately.** There are likely approaches not in this list; the
+five here are the obvious ones and the obvious ones are not good enough. What is
+built now is (a), which is honest and reflows, and it stays until something
+better is found rather than being replaced by the least-bad of a bad set.
+
 ### What constrains the answer
 
 **Vim, which has already forced one decision here.** Spike A found that vim
@@ -270,9 +297,8 @@ its own kind of surprise.
 reflow does not merely move text — it moves text away from the note anchored
 beside it. Whatever this settles on has to still be true when the margin is full.
 
-**How to settle it:** live with (a), which is built, and notice whether the
-jumping is actually irritating in use or merely theoretically wrong. The frame
-studies are the precedent — the question was settled by building the
-arrangements and reacting to them, not by argument. **The cheap experiment is
-(b)**, which is a stylesheet change rather than a mechanism change, and can be
-put behind a theme parameter to be compared directly.
+**How to settle it:** not from this list. Live with (a) meanwhile — it is built
+and it is honest — and treat the printing case and the block constructs as the
+two tests any candidate has to pass, since those are what killed the best of the
+five. The frame studies are the precedent for *how*: build the candidates and
+react to them rather than argue.

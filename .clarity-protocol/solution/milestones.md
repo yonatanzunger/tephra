@@ -51,7 +51,8 @@ thing gets used at all." The earlier ordering had it near-last.
   and R27/R28 raised its stakes: the margin is a second column of *text*, sized
   and toned to be read, not a faint aside. The proof sheets were corrected once
   already for exactly this
-- **Per-script size adjustment**, Hebrew first (D41)
+- ✅ **Per-script size adjustment**, Hebrew first (D41) — runtime `@font-face`
+  with `unicode-range` and `size-adjust`, face and scale as theme parameters
 - The **left nav**: sections as expandos, pins first (D10). Filesets arrive in
   M3, so it opens with dates, which are v1 anyway (R9)
 - ✅ A **fixed frame** (D42): Reserved nav, a fixed measure with the slack to its

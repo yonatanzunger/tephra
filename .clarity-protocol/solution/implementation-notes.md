@@ -174,3 +174,37 @@ checked rather than argued: on a 1512px laptop it leaves the overlay landing on
 slack, covering nothing. The previous default — 74ch, inherited from Spike A
 when the text was centred and there was no gutter — made the stream cover 155px
 of margin, and a unit test now fails if the default drifts back above 58ch.
+
+## Per-script sizing (D41)
+
+Hebrew reads uncomfortably small beside Latin at the same nominal size: almost
+every letter sits at x-height, so the eye gets no size cue, and several differ
+only in fine detail — ב from כ, ד from ר, ה from ח — so the reader needs more
+actual pixels to tell them apart.
+
+Done with a runtime `@font-face` carrying `unicode-range` and `size-adjust`, so
+it needs **no markup and no language detection**: the browser applies it per
+character and everything outside the range falls through untouched.
+
+**The family name folds in the parameters** — `Tephra Hebrew 130 Times-New-Roman`
+— and that is not cosmetic. A `@font-face` rule is cached by family name, so
+rewriting the rule for the same name with a different `size-adjust` does not
+re-resolve; the old metrics stay and the slider appears dead. Distinct settings
+must be distinct families.
+
+**The trap, learned in the proof sheet and worth repeating:** naming a face for
+a range REPLACES the natural fallback for it. The first version listed
+`Arial Hebrew` first and silently swapped a serif for a sans — the size was
+right and the page looked worse. Whatever is named must be chosen for how it
+looks beside the Latin face, not for having the script's name in its own.
+
+**Measured, not assumed.** At 100% versus 130%, over the same string: Hebrew
+137px → 175px, Latin 140px → 140px. The Hebrew ratio is 1.278 rather than 1.300
+because the two `U+0020` spaces are outside the range and do not scale — 127px
+of glyphs × 1.3 = 165, plus 10px of unscaled spaces = 175, exactly. **Latin at
+1.000 is the assertion that matters**: it proves the rule is confined to the
+range rather than applying to the page.
+
+Face and scale are theme parameters with live controls and a Hebrew sample set
+in the body face, so the slider is judged against the type it affects rather
+than against the panel's UI font.

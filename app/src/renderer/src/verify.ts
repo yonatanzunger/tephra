@@ -299,6 +299,46 @@ export async function runVerify(scene: string): Promise<void> {
       say('afterRedo', { hasFirst: back.includes('FIRST.'), hasSecond: back.includes('SECOND.') })
     }
 
+    if (scene === 'hebrew') {
+      // Does size-adjust actually reach the glyphs? Measure a Hebrew string and
+      // a Latin one at two scales: Hebrew must grow by the ratio, Latin must not
+      // move at all. Anything else means the unicode-range is wrong and the rule
+      // is applying to the whole page.
+      const probe = (text: string): number => {
+        const span = document.createElement('span')
+        span.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-size:20px'
+        span.style.fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-body')
+        span.textContent = text
+        document.body.appendChild(span)
+        const width = span.getBoundingClientRect().width
+        span.remove()
+        return width
+      }
+      const HEB = 'בראשית ברא אלהים'
+      const LAT = 'In the beginning'
+
+      const setScale = (value: number): void => {
+        const set = (globalThis as unknown as { __setHebrewScale?: (n: number) => void })
+          .__setHebrewScale
+        set?.(value)
+      }
+
+      setScale(100)
+      await settle(700)
+      const base = { hebrew: probe(HEB), latin: probe(LAT) }
+      say('atHundred', { hebrew: Math.round(base.hebrew), latin: Math.round(base.latin) })
+
+      setScale(130)
+      await settle(700)
+      const grown = { hebrew: probe(HEB), latin: probe(LAT) }
+      say('atOneThirty', { hebrew: Math.round(grown.hebrew), latin: Math.round(grown.latin) })
+      say('ratios', {
+        hebrew: Number((grown.hebrew / base.hebrew).toFixed(3)),
+        latin: Number((grown.latin / base.latin).toFixed(3)),
+      })
+      say('familyInUse', getComputedStyle(document.documentElement).getPropertyValue('--font-body').slice(0, 40))
+    }
+
     if (scene === 'emphasis') {
       const sample = [
         'A **bold** claim and an *italic* aside.',
@@ -338,6 +378,11 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(300)
       say('revealedUnderCursor', rendered().includes('**bold**'))
       await settle(200)
+    }
+
+    if (scene === 'panel') {
+      say('opened', await window.tephra.clickMenu('Typography…'))
+      await settle(4000)
     }
 
     if (scene === 'theme') {
