@@ -135,6 +135,12 @@ Android, **v3** promotes what earned it. The order matters — sync must land
 first because the phone needs a corpus for any judgement about it to mean
 anything, and the two risks should not arrive together.
 
+## Finding your way around the code
+
+`architecture-as-built.md` is the map: the W/X/Z layers as modules, a diagram of
+how a keystroke reaches the disk, and a table saying which file holds each
+contract between the layers.
+
 ## Running it
 
 `app/run.sh` is the wrapper, and `app/Tephra.command` is the same thing made

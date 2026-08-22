@@ -2,6 +2,11 @@
 
 Preliminary. This records the layering and the core objects; it is not yet a full design, and failure analysis has not been run.
 
+> **For the map of what is actually built** — which module holds which
+> responsibility, and where each contract between the layers is written down —
+> see [architecture-as-built.md](architecture-as-built.md). This file is the
+> *why*; that one is the *where*.
+
 ## The layering
 
 Three layers, explicit in the code rather than implied by convention.
