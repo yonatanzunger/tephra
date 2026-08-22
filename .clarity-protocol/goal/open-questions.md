@@ -197,6 +197,55 @@ importing one real document and trying to live with it.
 
 ## Q10: What is the mobile frame?
 
+**Status: the layout half is ANSWERED**, on a Pixel 9, from
+`design/phone-specimen.html`. What remains open is behaviour — see the end.
+
+### What the device settled
+
+**The type.** 20px, which yields about **35ch** at a phone's width. The 45-75ch
+reading guidance does not transfer: it assumes a width you can choose, and a
+phone's is fixed, so honouring it would mean 14px type. Legibility wins.
+
+**The face and the palette carry over unchanged.** Aldine's Hoefler stack and its
+warm paper were judged comfortable on the phone with no adjustment — which is a
+better result than it sounds, because it means the phone needs its own *numbers*
+and not its own *design*.
+
+**The keyboard passes, which is what the sheet existed to find out.** On the real
+device the caret slides gently up and down as the keyboard arrives and leaves,
+and **nothing is concealed behind it** — the failure common enough on the web
+that it was the first thing worth checking. The frame is sound to build from.
+
+**Commentary: marker, with an open-all control.** Rejected: **apart**, because
+separating the gloss from its text makes it hard to read — a real constraint on
+Q9, since whatever keeps an imported document pristine cannot do it by putting
+the commentary somewhere else. Folded and interleaved both work. The winner is
+the shaded note box *plus* a visible anchor in the text; opened all at once it
+becomes interleaving **with** the anchor, which is what plain interleaving loses.
+So it is one arrangement with a collapse state, not two arrangements.
+
+**Thumb reach: controls at the bottom.** The desktop's titlebar is unreachable
+one-handed on a large phone; the frame is inverted rather than transplanted.
+
+### One modelling gap this exposed
+
+On a fixed-width screen **the measure is derived, not chosen** — size is the only
+lever, and characters-per-line is the consequence. `Theme.measure` is an explicit
+number, which is right for a desktop window and wrong for a phone. The mobile
+milestone needs a measure that can say "whatever the width allows" rather than a
+figure that happens to match one device. Small, and better known now than
+discovered later.
+
+### Still open, and deliberately
+
+**(b) capture or reading on open** was excluded from the study's scope on purpose:
+it is answered by unlocking a phone forty times over a week, not by looking at
+two mocked states. It waits for v2b.
+
+---
+
+*Original framing, kept for the record:*
+
 **Status:** open, deliberately unexamined, and **scheduled after MV** so the study has a real desktop implementation to be judged against.
 
 **Why it is not a variant of D42.** D42 is an argument about horizontal budget from end to end — nav, measure, annotation gutter, capture stream, and which of them yields when the window narrows. A phone has no horizontal budget to allocate. Deriving the mobile frame from the desktop one would answer a question nobody asked.
@@ -216,6 +265,81 @@ importing one real document and trying to live with it.
 This is the same failure the frame studies already produced once in another form: a readout that measured only the text column's left edge certified an arrangement as steady while its measure narrowed by 200px (D42). **An instrument that cannot see the failure it is pointed at converts an open question into a false answer**, and a desktop browser is exactly that instrument for a phone.
 
 **One constraint is already settled** and does not need re-testing: vim is never used on mobile (Spike A′, D15).
+
+### The study, as scoped
+
+**Instrument: the keyboard transition.** On the desktop the question was whether
+the text moved when the nav appeared, and the frame studies worked because a
+readout measured it rather than asserting it. **The mobile equivalent is not the
+nav — it is the keyboard.** It covers half the screen, it appears every time
+anything is written, and whatever it does to the layout it does dozens of times
+a day. D42's question, in a worse place. The sheet reports, live, on the real
+device: viewport height before and after, lines of text lost, and whether the
+caret's line moved.
+
+**Scope: layout only.** The frame, what replaces the margin, navigation without
+a rail, and what the keyboard does to each. Deliberately excluded is anything
+that can only be judged over days rather than in a session — *does landing on
+capture feel right* is answered by unlocking the phone forty times, not by
+looking at two mocked states, so it waits for the real app in v2b.
+
+**Three further questions folded in beyond (a)–(c):**
+
+1. **Thumb reach inverts the desktop.** Our chrome is a titlebar at the top; the
+   top of a large phone is unreachable one-handed. Controls belong at the bottom,
+   which is not a small change — it is a different frame.
+2. **Navigation with no rail.** 248px of nav is impossible, and "a hamburger that
+   opens the desktop nav" is the answer to avoid.
+3. **Non-Latin at small sizes.** Hebrew, Greek and Cyrillic are used heavily, and
+   per-script sizing matters *more* on a small screen. A sheet with only Latin
+   text is testing the easy case.
+
+### Judged on a Pixel 9
+
+**(a) What replaces the margin — largely answered.**
+
+- **"Apart" is rejected.** Separating commentary into its own view makes it hard
+  to read: the gloss loses the thing it is a gloss *on*. This is the strongest
+  result of the study, and it is a real constraint on Q8/Q9 — whatever keeps an
+  imported document pristine cannot do it by putting the commentary somewhere
+  else to look at.
+- **The other three all work.** Folded, marker and interleaved were all judged
+  good on the device.
+- **"Marker" is the preferred one, with an open-all control.** The combination
+  that won is the shaded note box *plus* a visible anchor in the text showing
+  which passage it belongs to. With every note opened at once it becomes
+  interleaving — but interleaving *with* the anchor, which is precisely what
+  plain interleaving loses. So the arrangement is not "marker versus
+  interleaved"; it is one arrangement with a collapse state.
+
+**(b) Type size beats the reading-length guidance.** The 45-75ch range assumes a
+width you can choose, and a phone's is fixed, so honouring it means 14px type.
+Judged on the device: **legible type at ~30ch wins.** The sheet now reports
+characters per line rather than scoring against a floor.
+
+**A finding the sheet produced before it was even opened on a phone.** On a
+fixed-width screen the measure is *determined by the size* — they are one
+control wearing two names — and at 412px the numbers are:
+
+| size | measure |
+|---|---|
+| 14px | 45ch |
+| 16px | 39ch |
+| 18px | 35ch |
+| 20px | 32ch |
+| 24px | 26ch |
+
+**Only 14px reaches the 45ch floor**, and 14px on a phone fights R1's legibility
+requirement directly — the requirement that produced "more legible large type
+sizes" in the first place. So the phone accepts a short measure; that is not a
+fault to fix but a constraint to design around, and it means the desktop's
+reading-length guidance simply does not transfer. What a short measure does to
+prose over a long read is one of the things to notice on the device.
+
+**One simplification.** The theme system already makes typography per-device —
+the active theme is machine-local by design (D41) — so the phone needs no new
+mechanism, only a `phone.json` with its own measure, size and leading. The
+sheet's job is to find those numbers, not to reopen how themes work.
 
 
 ## Q11: What should revealing markup do to the line under it?

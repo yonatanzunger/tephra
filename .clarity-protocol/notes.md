@@ -213,3 +213,38 @@ so packaging will do the right thing when it arrives.
 Worth noting as its own small lesson: the first instinct was to conclude
 `app.setName` had not run. It had. **Two different things were both called "the
 app name", and only measuring which one the OS reads told them apart.**
+
+## The harness supplied a tag the published page did not
+
+The phone sheet measured correctly on the desktop and rendered wrong on a real
+Pixel: type set at 24px displayed at roughly a third of that, and the measure
+read ~80ch instead of ~30ch. Both symptoms have one cause. **Without
+`<meta name="viewport" content="width=device-width">`, mobile Chrome lays a page
+out at a notional ~980px and scales the result down** — and the artifact wrapper
+supplies the `<head>`, so the file could not declare one.
+
+The reason it was invisible for a whole build cycle is the part worth keeping:
+**my puppeteer harness injected the viewport tag itself**, in the string it wrapped
+the file with. So the instrument was measuring a page that did not exist. Every
+number it reported — 35ch at 18px, 25 visible lines, tap targets passing — was
+true of the harness's page and false of the published one.
+
+Fixed by appending the meta from script before layout, and the harness now wraps
+with a bare `<head>` so it can only measure what the artifact actually is.
+
+**Same shape as the doctype incident earlier in this project**, where local
+screenshots rendered in quirks mode and the published page did not. Both are the
+same rule: **a test rig that constructs a slightly friendlier environment than
+production is not a test rig.**
+
+## Non-ASCII in a file whose encoding you do not control
+
+Em dashes and Hebrew arrived as mojibake on the phone. A `charset` declaration
+has to be in the first 1024 bytes and cannot be added later by script — so with
+the `<head>` outside our control, the only robust answer is **not to depend on
+the declared encoding at all**: the source is now pure ASCII, with numeric
+character references in HTML, `\NNNN` escapes in CSS and `\uNNNN` in JS. 671
+characters converted, verified by asserting zero bytes above 127 remain.
+
+Worth remembering for anything else published this way: **portable means ASCII
+when the wrapper owns the head.**

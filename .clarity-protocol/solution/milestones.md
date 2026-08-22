@@ -120,7 +120,10 @@ v1**: in scope, after the core works.
 
 ---
 
-**Immediately after MV:** the mobile proof sheet (Q10), opened on the phone. The
+**Done, immediately after MV:** the mobile proof sheet (Q10), judged on a Pixel 9.
+20px and ~35ch, the Aldine face and palette carrying over unchanged, commentary
+as a marker with an open-all control, controls at the bottom — and the keyboard
+behaving: the caret slides and nothing hides behind it. Original note: The
 frame decision D42 is desktop-only by construction, and the mobile questions —
 what replaces the margin, capture or reading, and what the keyboard does to both
 — are recorded now so they keep their edge while MV is built.

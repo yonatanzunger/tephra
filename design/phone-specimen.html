@@ -1,0 +1,515 @@
+<title>Tephra Phone Studies</title>
+<script>
+  // MUST run before anything is laid out.
+  //
+  // This file is published inside a wrapper that supplies the <head>, so it
+  // cannot carry a viewport meta of its own -- and without one, mobile Chrome
+  // lays the page out at a notional ~980px and scales the result down. Type
+  // set at 24px then renders at about a third of that, and the measure reads
+  // ~80ch instead of ~30ch. Both were reported from a real Pixel while the
+  // desktop harness said the numbers were fine, because the harness injected
+  // this tag and the published page did not: the instrument was measuring a
+  // page that did not exist.
+  ;(function () {
+    var meta = document.createElement('meta')
+    meta.name = 'viewport'
+    meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover'
+    document.head.appendChild(meta)
+  })()
+</script>
+<style>
+  /* --------------------------------------------------------------------
+     Four ways to hold commentary when there is no margin to hold it in,
+     plus a frame with its controls where a thumb can reach them.
+
+     OPEN THIS ON THE PHONE. A phone layout judged in a narrow window on a
+     desktop reproduces none of what makes a phone hard: thumb reach, one
+     hand, no hover, the screen held at a different distance -- and above
+     all the keyboard, which is what this sheet exists to measure.
+
+     THE INSTRUMENT: the keyboard. On the desktop the question was whether
+     the text moved when the nav appeared. Here the equivalent is not the
+     nav, it is the keyboard: it covers half the screen, it arrives every
+     time anything is written, and it does so dozens of times a day. The
+     readout reports what it costs and whether the caret's line held still.
+     -------------------------------------------------------------------- */
+
+  :root {
+    /* The Aldine theme, as it ships. The phone's own measure and size are
+       what this sheet is for, so type is a control rather than a constant. */
+    --paper: #faf7f0;
+    --ink: #23201b;
+    --head: #14120f;
+    --faint: #8a8175;
+    --rule: #c9c0b1;
+    --rule-faint: #e4ded2;
+    --ground: #f2ede2;
+    --accent: #7a6a4f;
+
+    --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --serif: 'Hoefler Text', 'Iowan Old Style', Charter, Georgia, serif;
+
+    --size: 15px;
+    --leading: 1.62;
+    --para: 0.7em;
+  }
+
+  * { box-sizing: border-box; -webkit-text-size-adjust: 100%; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+    /* dvh so the frame follows the browser chrome; the keyboard is handled
+       separately, through visualViewport, because on Android it does NOT
+       always resize the layout viewport. */
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* -- study chrome ------------------------------------------------
+     Deliberately cramped, and deliberately exempt from the 44px rule the
+     rest of the sheet enforces. An earlier version applied that rule here
+     too, on the principle that an instrument should not excuse itself --
+     but the principle was misapplied: this row is scaffolding, it will not
+     ship, and it is not what is being judged. Spending a sixth of a phone
+     screen on the comfort of controls nobody will ever have is spending it
+     against the thing under test. The BAR and the NOTE MARKERS are app
+     chrome and still obey the rule. */
+  .chrome {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 8px;
+    background: #16181b; color: #8a929b;
+    font-size: 9.5px; line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap; overflow-x: auto;
+  }
+  .chrome b { color: #e8ebef; font-weight: 600; }
+  .chrome .verdict { padding: 1px 6px; border-radius: 999px; font-size: 9px; }
+  .verdict.steady { background: #17311f; color: #7fd0a0; }
+  .verdict.shifted { background: #3a1e1e; color: #f0a3a3; }
+  .verdict.idle { background: #24282e; color: #8a929b; }
+  .chrome input[type='range'] {
+    width: 74px; height: 14px; accent-color: #8fa3b8; margin: 0;
+  }
+  .chrome .measure { color: #6f767e; }
+
+  .picker {
+    flex: 0 0 auto;
+    display: flex; gap: 3px; padding: 2px 6px;
+    background: var(--ground);
+    border-bottom: 1px solid var(--rule-faint);
+    overflow-x: auto; white-space: nowrap;
+  }
+  .picker button {
+    font: inherit; font-size: 10px; white-space: nowrap;
+    color: var(--faint); background: none;
+    border: 1px solid transparent; border-radius: 999px;
+    padding: 3px 8px; cursor: pointer; min-height: 0;
+  }
+  .picker button[aria-pressed='true'] {
+    background: var(--paper); border-color: var(--rule); color: var(--head);
+  }
+  .showall { display: none; }
+  [data-mode='marker'] .showall { display: inline-flex; align-items: center; }
+  .showall[aria-pressed='true'] { background: var(--accent); color: var(--paper);
+    border-color: var(--accent); }
+
+  /* -- the reading column --------------------------------------------- */
+  .reading {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 18px 22px;
+    font-family: var(--serif);
+    font-size: var(--size);
+    line-height: var(--leading);
+    font-variant-ligatures: common-ligatures contextual;
+  }
+  .reading p { margin: 0 0 var(--para); }
+  .day {
+    font-family: var(--ui);
+    font-size: 0.62em; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--faint);
+    border-bottom: 1px solid var(--rule-faint);
+    padding-bottom: 0.4em; margin: 1.6em 0 1em;
+  }
+  .day:first-child { margin-top: 0; }
+  h2 { font-size: 1.22em; font-weight: 400; line-height: 1.25; margin: 0 0 0.5em; color: var(--head); }
+
+  /* The editable paragraph. Real, so the REAL keyboard appears -- a faked
+     keyboard-sized block would measure nothing. */
+  .writing {
+    outline: none;
+    caret-color: var(--accent);
+  }
+  .writing:empty::before {
+    /* \2014 rather than a literal em dash: the wrapper owns the <head>, so the
+       declared encoding is not ours to rely on, and the ASCII pass that made
+       the rest of this file portable turned this one into a double hyphen. */
+    content: 'Tap here to write \2014\00a0the keyboard is what this sheet measures.';
+    color: var(--faint);
+    font-style: italic;
+  }
+
+  /* -- 1: folded ----------------------------------------------------
+     The desktop's own narrow-band answer, carried over unexamined so it can
+     be examined: the note drops beneath its paragraph with a rule beside it.
+     Position is given up, legibility is kept. */
+  [data-mode='folded'] .note {
+    display: block;
+    margin: 0.1em 0 1em;
+    padding-left: 0.9em;
+    border-left: 2px solid var(--rule);
+    font-size: 0.86em;
+    font-style: italic;
+    color: #4a4136;
+  }
+  [data-mode='folded'] .note-marker { display: none; }
+
+  /* -- 2: marker ----------------------------------------------------
+     The note collapses to a mark in the text; tapping opens it below. Costs
+     a tap, costs nothing in vertical space, and keeps the base text intact --
+     the closest thing to the Talmudic page's separation of text from gloss. */
+  [data-mode='marker'] .note { display: none; }
+  [data-mode='marker'] .note.open { display: block; margin: 0.4em 0 1em;
+    padding: 0.6em 0.8em; background: var(--ground); border-radius: 6px;
+    font-size: 0.86em; font-style: italic; color: #4a4136; }
+  /* The tappable one. Its GLYPH is small because a footnote mark that shouted
+     would defeat the purpose, but the thing a thumb has to hit cannot be 17px --
+     so the hit area is expanded past the mark with a transparent pseudo-element.
+     Found by pointing the sheet's own 44px check at the control the sheet
+     exists to test, which it had not been doing. */
+  [data-mode='marker'] .note-marker {
+    display: inline-block; vertical-align: super; position: relative;
+    font-family: var(--ui); font-size: 0.58em; font-style: normal;
+    color: var(--paper); background: var(--accent);
+    min-width: 1.5em; height: 1.5em; line-height: 1.5em; text-align: center;
+    border-radius: 999px; margin-left: 0.15em; cursor: pointer;
+    border: 0; padding: 0;
+  }
+  /* Every mode's marker, not just mode 2's: a control too small to hit is a
+     property of the control, and leaving one arrangement's unhittable would
+     have scored it down for an oversight rather than for its design. */
+  .note-marker::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: 44px; height: 44px; transform: translate(-50%, -50%);
+  }
+
+  /* -- 3: interleaved -----------------------------------------------
+     Always visible, always in the flow, distinguished by tone and indent
+     rather than by position. Nothing to tap and nothing hidden; the cost is
+     that commentary and text compete for the same vertical space. */
+  [data-mode='interleaved'] .note {
+    display: block;
+    margin: 0.2em 0 1em 1.4em;
+    font-size: 0.84em;
+    color: #6b6154;
+  }
+  [data-mode='interleaved'] .note::before {
+    content: "\2767\00a0"; color: var(--accent);
+  }
+  [data-mode='interleaved'] .note-marker { display: none; }
+
+  /* -- 4: apart -----------------------------------------------------
+     Commentary is its own view. The base text is untouched -- genuinely
+     pristine, which matters for an imported document (R28, Q9) -- at the cost
+     of never seeing text and gloss at once, which is the whole point of a
+     margin. Included because it is the honest opposite. */
+  [data-mode='apart'] .note { display: none; }
+  [data-mode='apart'] .note-marker {
+    display: inline; font-family: var(--ui); font-size: 0.6em;
+    vertical-align: super; color: var(--accent); background: none;
+    border: 0; padding: 0 0.1em; cursor: pointer;
+  }
+  [data-mode='apart'] .reading.commentary .para { display: none; }
+  [data-mode='apart'] .reading.commentary .note { display: block;
+    margin: 0 0 1em; padding-left: 0.9em; border-left: 2px solid var(--accent);
+    font-size: 0.9em; color: #4a4136; }
+
+  .apart-toggle { display: none; }
+  [data-mode='apart'] .apart-toggle { display: inline-flex; }
+
+  /* -- the bar, at the bottom ---------------------------------------
+     Where a thumb is. The desktop puts its chrome in a titlebar; the top of a
+     large phone is a place you need a second hand to reach, so the frame is
+     inverted rather than transplanted. Pinned to the visual viewport so the
+     keyboard pushes it up instead of burying it. */
+  .bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: 0 6px;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--ground);
+    border-top: 1px solid var(--rule-faint);
+  }
+  .bar button {
+    flex: 1;
+    font: inherit; font-size: 11px;
+    color: var(--faint); background: none; border: 0; border-radius: 8px;
+    /* 44px: the smallest thing a thumb hits reliably. The chrome row flags
+       anything smaller, so this is a claim the sheet checks on itself. */
+    min-height: 44px;
+    display: flex; flex-direction: row; align-items: center; justify-content: center;
+    gap: 5px; cursor: pointer;
+  }
+  .bar button b { font-size: 13px; font-weight: 400; color: var(--head); }
+  .bar button { font-size: 10.5px; }
+  .bar button[aria-pressed='true'] { background: var(--paper); }
+
+  .note b { font-style: normal; font-weight: 600; }
+</style>
+
+<div class="chrome" id="chrome">
+  <span><b id="vh">-</b>px</span>
+  <span><b id="lines">-</b> lines</span>
+  <span>kbd <b id="cost">-</b></span>
+  <span class="verdict idle" id="verdict">tap the text</span>
+  <input type="range" id="size" min="9" max="32" step="1" value="15" aria-label="Type size" />
+  <output id="sizeOut">15px</output>
+  <span class="measure" id="measureOut">-</span>
+</div>
+
+<div class="picker" id="picker">
+  <button data-mode="folded" aria-pressed="true">1 Folded</button>
+  <button data-mode="marker" aria-pressed="false">2 Marker</button>
+  <button data-mode="interleaved" aria-pressed="false">3 Interleaved</button>
+  <button data-mode="apart" aria-pressed="false">4 Apart</button>
+  <button id="showall" class="showall" aria-pressed="false">Show all</button>
+</div>
+
+<div class="reading" id="reading">
+  <p class="day">Thursday 20 August</p>
+
+  <p class="para">
+    Left the measurement running overnight against the larger corpus. The result
+    is the same shape as the small one, which is either reassuring or a sign the
+    harness is not doing what I think.<button class="note-marker" data-note="a">1</button>
+  </p>
+  <p class="note" data-note="a"><b>Check the harness before trusting this.</b> Two
+    runs agreeing is not evidence when they share a bug.</p>
+
+  <p class="day">Friday 21 August</p>
+
+  <h2 class="para">Where the margin goes when there is none</h2>
+
+  <p class="para">
+    The Aldine page put commentary beside the text, and the tradition it borrowed
+    from &#x2014; marginalia, and behind that the Talmudic page &#x2014; treats the gloss as
+    part of the document rather than as a note about it.<button class="note-marker" data-note="b">2</button>
+    A phone has no beside.
+  </p>
+  <p class="note" data-note="b">The margin was never decoration. Losing it on the
+    small screen means choosing which of its properties to keep.</p>
+
+  <p class="para">
+    Greek and Cyrillic and Hebrew all appear here in ordinary use: &#x1f00;&#x03c1;&#x03c7;&#x1f74; &#x1f25;&#x03bc;&#x03b9;&#x03c3;&#x03c5;
+    &#x03c0;&#x03b1;&#x03bd;&#x03c4;&#x03cc;&#x03c2;, &#x0432;&#x0441;&#x0451; &#x0433;&#x0435;&#x043d;&#x0438;&#x0430;&#x043b;&#x044c;&#x043d;&#x043e;&#x0435; &#x043f;&#x0440;&#x043e;&#x0441;&#x0442;&#x043e;, and &#x05d1;&#x05e8;&#x05d0;&#x05e9;&#x05d9;&#x05ea; &#x05d1;&#x05e8;&#x05d0; &#x05d0;&#x05dc;&#x05d4;&#x05d9;&#x05dd; &#x2014; which at this size is
+    where per-script adjustment stops being a refinement.<button class="note-marker" data-note="c">3</button>
+  </p>
+  <p class="note" data-note="c">Hebrew sits entirely at x-height, so it reads
+    smaller than the Latin beside it even when it is nominally the same size.</p>
+
+  <p class="para">
+    The question this sheet exists to answer is narrower than it looks: not which
+    of these is prettiest, but which one you can still read a week from now with
+    one hand on a train.
+  </p>
+
+  <p class="para writing" contenteditable="true" id="writing"></p>
+</div>
+
+<nav class="bar">
+  <button aria-pressed="true"><b>&#x2261;</b>Today</button>
+  <button><b>&#x25f7;</b>Days</button>
+  <button><b>&#x2315;</b>Find</button>
+  <button class="apart-toggle" id="apart"><b>&#x2767;</b>Notes</button>
+</nav>
+
+<script>
+  const root = document.documentElement
+  const reading = document.getElementById('reading')
+  const writing = document.getElementById('writing')
+  const vhOut = document.getElementById('vh')
+  const linesOut = document.getElementById('lines')
+  const costOut = document.getElementById('cost')
+  const verdict = document.getElementById('verdict')
+
+  root.dataset.mode = 'folded'
+
+  for (const button of document.querySelectorAll('.picker button')) {
+    button.addEventListener('click', () => {
+      root.dataset.mode = button.dataset.mode
+      for (const other of document.querySelectorAll('.picker button')) {
+        other.setAttribute('aria-pressed', String(other === button))
+      }
+      reading.classList.remove('commentary')
+      showAll.setAttribute('aria-pressed', 'false')
+      showAll.textContent = 'Show all notes'
+      for (const note of document.querySelectorAll('.note')) note.classList.remove('open')
+      measure()
+    })
+  }
+
+  // Mode 2: tapping a marker opens its note beneath the paragraph.
+  for (const marker of document.querySelectorAll('.note-marker')) {
+    marker.addEventListener('click', () => {
+      const note = document.querySelector(`.note[data-note="${marker.dataset.note}"]`)
+      note?.classList.toggle('open')
+      measure()
+    })
+  }
+
+  const showAll = document.getElementById('showall')
+  showAll.addEventListener('click', () => {
+    const open = showAll.getAttribute('aria-pressed') !== 'true'
+    showAll.setAttribute('aria-pressed', String(open))
+    showAll.textContent = open ? 'Hide all notes' : 'Show all notes'
+    for (const note of document.querySelectorAll('.note')) note.classList.toggle('open', open)
+    measure()
+  })
+
+  // Mode 4: the whole column becomes commentary.
+  document.getElementById('apart').addEventListener('click', event => {
+    reading.classList.toggle('commentary')
+    event.currentTarget.setAttribute('aria-pressed', String(reading.classList.contains('commentary')))
+    measure()
+  })
+
+  // -- the measurement ------------------------------------------------
+  // visualViewport, not window.innerHeight. On Android the keyboard does not
+  // reliably resize the layout viewport \u2014 it often overlays it \u2014 so innerHeight
+  // reports the same number with the keyboard up and the instrument reads
+  // "nothing happened" while half the screen is gone.
+  const vv = window.visualViewport
+  let restingHeight = vv ? vv.height : window.innerHeight
+  let anchorTop = null
+
+  function lineHeightPx() {
+    const style = getComputedStyle(reading)
+    return parseFloat(style.fontSize) * parseFloat(style.lineHeight) / parseFloat(style.fontSize) || 24
+  }
+
+  function visibleLines(height) {
+    const style = getComputedStyle(reading)
+    const line = parseFloat(style.lineHeight)
+    // Measured from the elements that exist, not from a list of names kept in
+    // step by hand. The previous version still named `#readout`, which had been
+    // renamed, so this threw on every call and the line count read "-" while
+    // everything around it looked healthy.
+    const chrome = ['.chrome', '.picker', '.bar']
+      .map(sel => document.querySelector(sel))
+      .filter(el => el !== null)
+      .reduce((total, el) => total + el.getBoundingClientRect().height, 0)
+    return Math.max(0, Math.floor((height - chrome) / line))
+  }
+
+  function measure() {
+    const height = vv ? vv.height : window.innerHeight
+    vhOut.textContent = String(Math.round(height))
+    linesOut.textContent = String(visibleLines(height))
+
+    const lost = Math.round(restingHeight - height)
+    if (lost > 40) {
+      costOut.textContent = `${lost}px \u00b7 ${visibleLines(restingHeight) - visibleLines(height)} lines`
+    } else {
+      costOut.textContent = '\u2014'
+    }
+
+    // Did the line being written on hold still across the transition? This is
+    // the whole question: on the desktop the nav appearing must not move the
+    // text, and here the keyboard arrives far more often than any nav ever did.
+    if (anchorTop !== null && lost > 40) {
+      const now = writing.getBoundingClientRect().top - (vv ? vv.offsetTop : 0)
+      const moved = Math.round(Math.abs(now - anchorTop))
+      verdict.textContent = moved <= 2 ? 'steady' : `caret line moved ${moved}px`
+      verdict.className = `verdict ${moved <= 2 ? 'steady' : 'shifted'}`
+        ? 'The line you are writing on did not move when the keyboard arrived.'
+        : 'The line you are writing on jumped when the keyboard arrived \u2014 the thing to avoid.'
+    } else if (lost <= 40) {
+      verdict.textContent = 'keyboard down'
+      verdict.className = 'verdict idle'
+    }
+  }
+
+  // Size and measure are one control. Reported in ch, because that is what the
+  // reading-length guidance is about \u2014 and on a phone it lands well under the
+  // 45ch floor at any size that is comfortable to read, which is a finding
+  // rather than a fault: the small screen simply does not hold a book measure.
+  const sizeInput = document.getElementById('size')
+  const sizeOut = document.getElementById('sizeOut')
+  const measureOut = document.getElementById('measureOut')
+
+  function measureInCh() {
+    const probe = document.createElement('span')
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:inherit'
+    probe.textContent = '0'.repeat(50)
+    reading.appendChild(probe)
+    const ch = probe.getBoundingClientRect().width / 50
+    probe.remove()
+    const style = getComputedStyle(reading)
+    const usable = reading.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    return Math.round(usable / ch)
+  }
+
+  function applySize() {
+    root.style.setProperty('--size', `${sizeInput.value}px`)
+    sizeOut.textContent = `${sizeInput.value}px`
+    requestAnimationFrame(() => {
+      const ch = measureInCh()
+      // Reported, not judged. The 45-75ch guidance comes from the printed page
+      // and from desktop reading; on a phone the width is fixed, so honouring it
+      // would mean 14px type, which loses more to legibility than the short
+      // measure costs. Settled on a real device: SIZE WINS. The number is here
+      // because it is what `phone.json` has to record, not because it is a bar
+      // to clear.
+      measureOut.textContent = `${ch}ch per line`
+      measure()
+    })
+  }
+  sizeInput.addEventListener('input', applySize)
+
+  writing.addEventListener('focus', () => {
+    // Recorded BEFORE the keyboard animates in, so the comparison is against
+    // where the line actually was rather than where it ended up.
+    anchorTop = writing.getBoundingClientRect().top - (vv ? vv.offsetTop : 0)
+    restingHeight = vv ? vv.height : window.innerHeight
+  })
+  writing.addEventListener('blur', () => {
+    anchorTop = null
+    measure()
+  })
+
+  if (vv) {
+    vv.addEventListener('resize', measure)
+    vv.addEventListener('scroll', measure)
+  }
+  window.addEventListener('resize', measure)
+  new ResizeObserver(measure).observe(reading)
+
+  // Tap targets, checked rather than asserted: a control smaller than 44px is
+  // one a thumb misses, and the bar claims to obey that rule.
+  requestAnimationFrame(() => {
+    // Include the note markers -- they are the control this study is about --
+    // and skip anything not currently displayed, since a hidden button reports
+    // a height of 0 and was being counted as a failure.
+    const targets = [...document.querySelectorAll('.bar button, .picker button, .note-marker')]
+      .filter(b => b.getBoundingClientRect().height > 0)
+    const small = targets.filter(b => {
+      const own = b.getBoundingClientRect()
+      const after = getComputedStyle(b, '::after')
+      const padded = after.content !== 'none' ? parseFloat(after.height) || 0 : 0
+      return Math.max(own.height, padded) < 44
+    })
+    if (small.length > 0) {
+    }
+    applySize()
+  })
+</script>
