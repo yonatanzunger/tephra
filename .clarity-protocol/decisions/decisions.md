@@ -625,6 +625,36 @@ Fine-grained cross-device undo is the only capability this forgoes, and under D1
 
 **A caveat recorded honestly.** Library maintenance status and API completeness change faster than my knowledge of them, and library health is where I am least reliable. The structural analysis above is durable; the current state of any of these packages is worth thirty minutes of verification before committing.
 
+### Verified — 2026-08-22
+
+**Maintenance: healthy.** `isomorphic-git` 1.41.8, published the previous day.
+474 releases in total and an accelerating cadence — 11 in 2023, 17 in 2024, 24 in
+2025, 41 so far in 2026. MIT. Eleven dependencies, all pure JavaScript, nothing
+native. The caveat above is answered in this library's favour.
+
+**Function: verified in the environment that matters**, which is not plain Node
+but the *bundled* main process — electron-vite emits CJS and Electron supplies
+its own Node, and a pure-JS library is only pure-JS until a bundler disagrees.
+init, add, commit, log, readBlob and checkout all work there.
+
+**THE ACCEPTANCE TEST PASSES, in both directions.** `git fsck --strict` is clean,
+`git log` and `git show` read our commits, and the working tree is clean
+immediately after we commit — so a standard `git` reads what we write. And the
+reverse, which matters just as much because a notebook is a visible directory
+(D5) its owner may reasonably run git in: a commit made with the `git` binary is
+read back correctly by us, blob and all. Text overwritten in a later commit is
+recoverable from an earlier one, and `.tephra/` is honoured as ignored.
+
+**Kept as `main/w/verify-git.ts`, behind `TEPHRA_VERIFY_GIT`**, rather than
+deleted — the question returns on every Electron upgrade and now costs one env
+var to re-ask.
+
+**One thing noted for packaging.** electron-vite *externalises* the library
+rather than inlining it, so the built main process requires it from
+`node_modules` at runtime. That is the ordinary arrangement for an Electron app
+and not a problem, but real packaging must include the dependency, and packaging
+is currently unscheduled (`milestones.md`).
+
 ## D35: Pane is the navigation view-model; Window is renamed DocumentWindow
 
 **Date:** 2026-08-12

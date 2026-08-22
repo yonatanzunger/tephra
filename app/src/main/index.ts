@@ -149,6 +149,17 @@ app.whenReady().then(async () => {
     ipcMain.handle('tephra:verify:menu', (_e, label: string) => clickMenuItem(label))
   }
 
+  // D34's verification, in the environment that actually matters: not plain
+  // Node but the BUNDLED main process, where electron-vite's CJS output and
+  // Electron's own Node are what the library has to survive. Gated, and it
+  // quits rather than opening a window.
+  if (process.env['TEPHRA_VERIFY_GIT'] !== undefined) {
+    const { verifyGit } = await import('./w/verify-git.ts')
+    await verifyGit()
+    app.quit()
+    return
+  }
+
   attachWindow(service, createWindow())
 
   app.on('activate', () => {

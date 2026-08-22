@@ -24,6 +24,7 @@
     "@lezer/highlight": "^1.2.3",
     "@replit/codemirror-vim": "^6.4.0",
     "codemirror": "^6.0.2",
+    "isomorphic-git": "^1.41.8",
     "katex": "^0.18.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
