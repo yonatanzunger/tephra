@@ -131,3 +131,46 @@ Separated deliberately from everything above, which is measured or reasoned. **D
 - **That the repository is readable by standard git tooling.** This is the *decisive* acceptance test for any git implementation — the entire reason for choosing git (D32) is that the exit extends to the history.
 - **Binary growth in git history** over twenty years of pasted images. Probably fine at this scale; worth measuring rather than assuming.
 - **Window extent as a working number.** Spike A bounds the *window*, not the file; the extent that feels right in use is unmeasured.
+
+## Themes in practice (D41)
+
+Four named parameter sets ship as built-ins — Aldine, Sage, Night, Broad — and
+are **seeded into `config/themes/` on first launch, never overwritten**. A file
+that exists is left exactly as it is, even when it differs from the built-in of
+the same name; someone who edits `aldine.json` and finds it silently restored
+next launch learns not to trust the directory again.
+
+**The name comes from the filename, not from inside the file.** Otherwise a copy
+made for experimenting silently shadows the theme it was copied from.
+
+**Parsing is lenient per field, not per file.** A theme is hand-editable (R26),
+so the interesting cases are all the ways a person gets one wrong. One bad
+number falls back to the default for *that field* and keeps the rest — losing an
+evening's work to a fat-fingered digit would be a poor trade for strictness.
+Numbers are also clamped: `size: 0` renders nothing at all, including the
+controls that would let you fix it, which is an unrecoverable state reachable by
+one typo.
+
+**Six authored colours, eight derived tokens.** A theme names paper, ink, head,
+faint, rule and accent; the ground and muted fills are mixed from them. Asking
+for twelve values that have to agree is how a palette drifts out of tune, and
+mixing *paper toward ink* means the derivation follows the theme rather than
+assuming paper is light — Night gets a lighter rail beside dark paper, not the
+reverse.
+
+**The app renders the draft, not the saved file.** Moving a slider changes what
+you are reading immediately; saving is separate and explicit. Apply-on-save
+would turn choosing a measure into a guessing game, and the whole reason these
+are parameters is that the four arrangements could only be judged by looking at
+them.
+
+**The panel states the consequence of the measure.** It is not only taste: the
+measure decides how much width is left, and therefore whether the capture stream
+lands on empty paper or covers the margin where commentary lives (D42, R27). The
+panel says which, live, so the trade is visible while it is being made.
+
+**The default is Aldine at 54ch.** It was chosen for a reason that can be
+checked rather than argued: on a 1512px laptop it leaves the overlay landing on
+slack, covering nothing. The previous default — 74ch, inherited from Spike A
+when the text was centred and there was no gutter — made the stream cover 155px
+of margin, and a unit test now fails if the default drifts back above 58ch.

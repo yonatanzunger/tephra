@@ -42,9 +42,10 @@ Brought forward ahead of M1, and the design's own words argue for it:
 them is "the editing surface plus visual system, because they decide whether the
 thing gets used at all." The earlier ordering had it near-last.
 
-- A **theme system** — named parameter sets in `config/themes/`, active theme
-  per device (D41). Four arrangements exist as proof sheets in
-  `design/type-specimen.html`; the choice is deliberately late-bound
+- ✅ A **theme system** — named parameter sets in `config/themes/`, active theme
+  per device (D41). The four proof-sheet arrangements ship as built-ins, with
+  live controls under View ▸ Typography (⌘⌥T) so the measure is settled by
+  reading rather than by argument. Default is Aldine at 54ch
 - The **annotation gutter reserved in every theme**, so marginal notes can
   arrive later without reflowing a line. This is the part that cannot wait —
   and R27/R28 raised its stakes: the margin is a second column of *text*, sized
@@ -53,8 +54,9 @@ thing gets used at all." The earlier ordering had it near-last.
 - **Per-script size adjustment**, Hebrew first (D41)
 - The **left nav**: sections as expandos, pins first (D10). Filesets arrive in
   M3, so it opens with dates, which are v1 anyway (R9)
-- A **fixed frame**: the text column centres in the frame, not in the space left
-  over beside the nav, so showing or hiding the nav moves nothing
+- ✅ A **fixed frame** (D42): Reserved nav, a fixed measure with the slack to its
+  right, and the capture stream as an overlay pinned to the right edge. Measured
+  in the app at five widths, toggling both — nothing moves, nothing narrows
 - Somewhere non-modal for **format anomalies** to surface, which `format-spec.md`
   leaves explicitly open
 

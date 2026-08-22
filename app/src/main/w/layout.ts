@@ -8,6 +8,17 @@ import type { DateKey } from '../../shared/document-api.ts'
 import { asDateKey } from '../../shared/dates.ts'
 
 export const STREAM_DIR = 'stream'
+
+/**
+ * Authored configuration, inside the notebook rather than in `.tephra/` (D41).
+ * `.tephra/` is machine-local and disposable; a theme somebody crafted is work,
+ * and losing it on a new machine would be a real loss.
+ *
+ * This is not a fourth content type and does not breach D3: a directory named
+ * `config` infers nothing from context, which is the test D3 actually protects.
+ */
+export const CONFIG_DIR = 'config'
+export const THEMES_DIR = `${CONFIG_DIR}/themes`
 export const NOTES_DIR = 'notes'
 export const SECTIONS_DIR = 'sections'
 export const ATTACHMENTS_DIR = 'attachments'
@@ -126,4 +137,9 @@ export function slug(name: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80)
   return s === '' ? 'untitled' : s
+}
+
+/** Where a theme lives. The filename is the theme's identity (D41). */
+export function themeFile(name: string): RelPath {
+  return `${THEMES_DIR}/${slug(name)}.json`
 }

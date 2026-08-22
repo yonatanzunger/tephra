@@ -70,6 +70,12 @@ export function installMenu(): void {
       label: 'View',
       submenu: [
         {
+          label: 'Typography…',
+          accelerator: 'CmdOrCtrl+Alt+T',
+          click: () => send(CHANNEL.menuCommand, 'typography'),
+        },
+        { type: 'separator' },
+        {
           label: 'Vim Mode',
           type: 'checkbox',
           checked: state.vim,

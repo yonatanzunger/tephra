@@ -4,6 +4,7 @@
 // and are re-dispatched to handlers the renderer registered through this object.
 
 import { contextBridge, ipcRenderer } from 'electron'
+import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
   ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
@@ -59,6 +60,9 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.resolveAnchor, name),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
+
+    listThemes: (): Promise<readonly Theme[]> => ipcRenderer.invoke(CHANNEL.listThemes),
+    saveTheme: (theme: Theme): Promise<void> => ipcRenderer.invoke(CHANNEL.saveTheme, theme),
 
     /** Tell the menu what vim is set to, so its checkmark is a view and not a copy. */
     vimChanged: (vim: boolean): void => ipcRenderer.send(CHANNEL.vimChanged, vim),

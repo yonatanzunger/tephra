@@ -1,7 +1,7 @@
 /* Visual reference is the Clarity app's sage theme (notes.md). Carried from
    Spike A, where these tokens were judged against real prose. */
 :root {
-  --font-body: 'Lora', Georgia, serif;
+  --font-body: 'Hoefler Text', Baskerville, Georgia, serif;
   --font-ui: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
@@ -166,6 +166,69 @@ body {
   border-top: 1px solid rgb(var(--border));
   font-size: 11px; line-height: 1.5; color: rgb(var(--text-muted));
 }
+
+/* ── typography panel ─────────────────────────────────────────────────────
+   A panel, never a modal: you are choosing a measure by reading, so the
+   reading has to stay visible while you choose. It sits over the annotation
+   gutter, which is the one part of the column with nothing in it yet. */
+.theme-panel {
+  position: absolute;
+  top: .75rem;
+  right: .75rem;
+  z-index: 4;
+  width: 17rem;
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: .8rem .9rem 1rem;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: rgb(var(--text));
+  background: rgb(var(--surface-ground));
+  border: 1px solid rgb(var(--border));
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / .16);
+}
+.theme-panel header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+  color: rgb(var(--text-muted));
+  padding-bottom: .5rem; margin-bottom: .2rem;
+  border-bottom: 1px solid rgb(var(--border));
+}
+.theme-panel .field { display: grid; grid-template-columns: 4.6rem 1fr auto; align-items: center; gap: .5rem; }
+.theme-panel .field > span { color: rgb(var(--text-muted)); }
+.theme-panel .field select { grid-column: 2 / -1; font: inherit; font-size: 12px;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .2rem .3rem; }
+.theme-panel input[type='range'] { width: 100%; accent-color: rgb(var(--accent)); }
+.theme-panel output { font-variant-numeric: tabular-nums; min-width: 3.1rem; text-align: right;
+  color: rgb(var(--text-heading)); }
+.theme-note { margin: 0 0 .3rem; font-size: 11px; line-height: 1.5; color: rgb(var(--text-muted)); }
+.theme-consequence {
+  margin: .4rem 0 0; padding-top: .6rem; font-size: 11px; line-height: 1.5;
+  color: rgb(var(--text-muted)); border-top: 1px solid rgb(var(--border));
+}
+.theme-consequence b { color: rgb(var(--text-heading)); font-variant-numeric: tabular-nums; }
+.theme-actions { display: flex; align-items: center; gap: .5rem; margin-top: .3rem; flex-wrap: wrap; }
+.theme-actions button {
+  font: inherit; font-size: 12px; cursor: pointer;
+  color: rgb(var(--surface)); background: rgb(var(--accent));
+  border: 1px solid transparent; border-radius: 5px; padding: .2rem .7rem;
+}
+.theme-actions button:disabled { opacity: .4; cursor: default; }
+.theme-panel .link {
+  color: rgb(var(--text-muted)); background: none; border: 0;
+  font: inherit; font-size: 12px; cursor: pointer; padding: .2rem;
+}
+.theme-panel .link:hover:not(:disabled) { color: rgb(var(--text)); }
+/* Its own line, and allowed to wrap. Sitting on the button row it overflowed
+   the panel and gave the whole thing a horizontal scrollbar. */
+.theme-where { flex-basis: 100%; font-size: 10px; color: rgb(var(--text-muted));
+  font-family: var(--font-mono); word-break: break-all; }
 
 /* ── capture stream ───────────────────────────────────────────────────── */
 .stream-head {

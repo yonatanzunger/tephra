@@ -16,6 +16,7 @@
 
 import type { DateKey } from './document-api.ts'
 import type { NavTarget } from './pane-api.ts'
+import { DEFAULT_THEME_NAME } from './theme.ts'
 
 export interface StoredCursor {
   readonly segment: DateKey
@@ -28,6 +29,12 @@ export interface UiState {
   readonly cursor: StoredCursor | null
   /** Vim on or off, which is a setting and not a position (D15). */
   readonly vim: boolean
+  /**
+   * The active theme's name. Machine-local on purpose (D41): which rendering
+   * suits depends on the screen and the light in the room, so definitions are
+   * authored and durable while selection is soft state.
+   */
+  readonly theme: string
 }
 
 export const defaultUiState: UiState = {
@@ -35,6 +42,7 @@ export const defaultUiState: UiState = {
   location: { kind: 'today' },
   cursor: null,
   vim: false,
+  theme: DEFAULT_THEME_NAME,
 }
 
 /** Lenient: a corrupt or older file means "start fresh", never a crash. */
@@ -50,6 +58,7 @@ export function parseUiState(text: string | null): UiState {
       location: candidate.location,
       cursor: candidate.cursor ?? null,
       vim: candidate.vim === true,
+      theme: typeof candidate.theme === 'string' && candidate.theme !== '' ? candidate.theme : DEFAULT_THEME_NAME,
     }
   } catch {
     return defaultUiState

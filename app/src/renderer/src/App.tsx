@@ -1,6 +1,6 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BufferPosition, DateKey, DocumentPosition, SegmentKey } from '@shared/document-api.ts'
 import { defaultUiState, type UiState } from '@shared/ui-state.ts'
 import { RemoteDocument } from './x/remote-document'
@@ -11,13 +11,20 @@ import { defaultTypography, type Typography } from './editor/theme'
 import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { useFrameMetrics } from './frame/useFrame'
+import { useTheme, typographyOf } from './theme/useTheme'
+import { ThemePanel } from './theme/ThemePanel'
 
 export function App(): React.JSX.Element {
   const [doc, setDoc] = useState<RemoteDocument | null>(null)
   const [pane, setPane] = useState<Pane | null>(null)
   const [vim, setVim] = useState(false)
   const [restored, setRestored] = useState<DocumentPosition | null>(null)
-  const [typography] = useState<Typography>(defaultTypography)
+  const [themeName, setThemeName] = useState<string>(defaultUiState.theme)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const theme = useTheme(themeName, setThemeName)
+  // The editor and the frame both lay out from the DRAFT, so a slider moves the
+  // text while it is being dragged. That is the entire point of the panel.
+  const typography = useMemo(() => typographyOf(theme.draft), [theme.draft])
   const [error, setError] = useState<string | null>(null)
   const [diverged, setDiverged] = useState<{ date: string } | null>(null)
   const [navVisible, setNavVisible] = useState(true)
@@ -55,6 +62,7 @@ export function App(): React.JSX.Element {
         // scrolling is the whole cost (D11).
         const state = await window.tephra.doc.loadUiState()
         setVim(state.vim)
+        setThemeName(state.theme)
         if (state.cursor !== null) {
           setRestored({
             segment: state.cursor.segment as SegmentKey,
@@ -107,6 +115,7 @@ export function App(): React.JSX.Element {
     return window.tephra.doc.onMenuCommand(command => {
       if (command === 'undo') void doc.undo()
       else if (command === 'redo') void doc.redo()
+      else if (command === 'typography') setPanelOpen(open => !open)
     })
   }, [doc])
 
@@ -130,10 +139,11 @@ export function App(): React.JSX.Element {
           location: pane?.location ?? defaultUiState.location,
           cursor: cursorRef.current,
           vim,
+          theme: themeName,
         })
       }, 600)
     },
-    [pane, vim],
+    [pane, vim, themeName],
   )
 
   // The position must also survive a quit that beats the debounce.
@@ -144,6 +154,7 @@ export function App(): React.JSX.Element {
         location: pane?.location ?? defaultUiState.location,
         cursor: cursorRef.current,
         vim,
+        theme: themeName,
       })
     }
     window.addEventListener('beforeunload', flushState)
@@ -151,7 +162,7 @@ export function App(): React.JSX.Element {
       window.removeEventListener('beforeunload', flushState)
       flushState()
     }
-  }, [pane, vim])
+  }, [pane, vim, themeName])
 
   if (error !== null) {
     return (
@@ -259,6 +270,13 @@ export function App(): React.JSX.Element {
             onCursor={onCursor}
             initialCursor={restored}
             onError={err => setError(err.message)}
+          />
+        )}
+        {panelOpen && (
+          <ThemePanel
+            control={theme}
+            occlusion={{ covering: metrics.streamOcclusion }}
+            onClose={() => setPanelOpen(false)}
           />
         )}
       </Frame>

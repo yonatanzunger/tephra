@@ -9,6 +9,8 @@ import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
 import { Notebook } from './w/notebook.ts'
+import { listThemes, saveTheme, seedThemes } from './w/themes.ts'
+import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 
 // Before anything reads it. Electron takes the app name from package.json's
@@ -126,6 +128,14 @@ app.whenReady().then(async () => {
   notebook = await Notebook.open(configuredRoot === undefined ? {} : { root: configuredRoot })
   service = new DocumentService(notebook)
   registerDocumentIpc(service)
+
+  // Seeded before the window opens, so the first launch already has a themes
+  // directory to look at rather than an empty one that fills in later.
+  await seedThemes(notebook)
+  ipcMain.handle(CHANNEL.listThemes, () => (notebook === null ? [] : listThemes(notebook)))
+  ipcMain.handle(CHANNEL.saveTheme, (_e, theme: Theme) =>
+    notebook === null ? undefined : saveTheme(notebook, theme),
+  )
 
   // The renderer owns the vim setting — it is loaded from ui-state.json and
   // saved per device (D30). The menu's checkmark is a view of that, kept honest

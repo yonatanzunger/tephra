@@ -27,6 +27,8 @@ export const CHANNEL = {
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',
   extend: 'tephra:win:extend',
+  listThemes: 'tephra:theme:list',
+  saveTheme: 'tephra:theme:save',
   loadUiState: 'tephra:ui:load',
   saveUiState: 'tephra:ui:save',
   /** renderer → main: the menu's checkmark follows the app, not the other way. */

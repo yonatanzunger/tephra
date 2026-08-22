@@ -299,6 +299,34 @@ export async function runVerify(scene: string): Promise<void> {
       say('afterRedo', { hasFirst: back.includes('FIRST.'), hasSecond: back.includes('SECOND.') })
     }
 
+    if (scene === 'theme') {
+      const themes = await window.tephra.doc.listThemes()
+      say('themesOnDisk', themes.map(t => `${t.name}:${t.measure}ch/${t.size}px`))
+      const root = document.documentElement
+      say('appliedTokens', {
+        surface: root.style.getPropertyValue('--surface'),
+        text: root.style.getPropertyValue('--text'),
+        accent: root.style.getPropertyValue('--accent'),
+        face: root.style.getPropertyValue('--font-body').slice(0, 24),
+        theme: root.dataset.theme ?? '',
+      })
+      const measured = (): unknown => {
+        const content = document.querySelector('.cm-content')
+        if (content === null) return null
+        const style = getComputedStyle(content)
+        return {
+          measurePx: Math.round(content.getBoundingClientRect().width - parseFloat(style.paddingRight)),
+          fontSize: getComputedStyle(document.querySelector('.cm-line') as Element).fontSize,
+        }
+      }
+      say('beforePanel', measured())
+      say('panelOpened', await window.tephra.clickMenu('Typography…'))
+      await settle(600)
+      say('panelPresent', document.querySelector('.theme-panel') !== null)
+      say('consequence', document.querySelector('.theme-consequence')?.textContent?.trim() ?? '')
+      await settle(4000)
+    }
+
     if (scene === 'chrome') {
       const bar = document.querySelector('.titlebar')
       const app = document.querySelector('.app')
