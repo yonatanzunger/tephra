@@ -216,3 +216,63 @@ importing one real document and trying to live with it.
 This is the same failure the frame studies already produced once in another form: a readout that measured only the text column's left edge certified an arrangement as steady while its measure narrowed by 200px (D42). **An instrument that cannot see the failure it is pointed at converts an open question into a false answer**, and a desktop browser is exactly that instrument for a phone.
 
 **One constraint is already settled** and does not need re-testing: vim is never used on mobile (Spike A′, D15).
+
+
+## Q11: What should revealing markup do to the line under it?
+
+**Status:** open, and **more consequential than it looks**. Raised on seeing the
+first construct that conceals its own delimiters.
+
+**The tension, in one sentence.** D42 spent a whole design study establishing
+that *nothing moves* — the frame reserves the nav's column and the annotation
+gutter so that showing or hiding either reflows nothing. Reveal-on-cursor
+violates exactly that principle **inside the line**: put the caret in a bold
+word and four characters appear, the line rewraps, and everything after it
+shifts. The rule the frame obeys, the text does not.
+
+It is not hypothetical: concealing `**` is two characters at each end, an image
+is an entire widget collapsing to a URL, and a table is a rendered block turning
+back into pipes. The larger the construct, the larger the jump, and the jump
+happens on *cursor motion* — the highest-frequency thing that occurs.
+
+### The options, none yet chosen
+
+**(a) Reveal on cursor — what is built now.** Simple, honest about the fact that
+the document is markdown, and it is what makes the text editable at all without
+a separate mode. It reflows.
+
+**(b) Never conceal; quiet the marks instead** — the delimiters stay in the text
+at reduced opacity or size, present but recessive. **Zero reflow, ever.** Costs
+some visual noise, and small type at low contrast fights R1's legibility
+requirement directly.
+
+**(c) Conceal always; edit emphasis by command** rather than by typing marks.
+No reflow, but it breaks the promise that this is a markdown file you can type
+into, and R26's exit depends on that promise being real.
+
+**(d) Reveal at line granularity** — the whole line the caret is on shows its
+source, always, rather than the construct under the caret. Still reflows, but
+once per line and predictably, and the eye is already on that line.
+
+**(e) Reserve the marks' width** — conceal them but keep their advance width, so
+revealing changes glyphs rather than metrics. Works for delimiters, does not
+generalise to widgets, and produces odd-looking gaps.
+
+### What constrains the answer
+
+**Vim, which has already forced one decision here.** Spike A found that vim
+ignores `atomicRanges` — the cursor froze at a widget edge — and reveal-on-cursor
+was made *mandatory* as the fix (D15, D16). Option (c) is therefore probably
+unavailable while vim is on, which may mean the answer differs by mode, which is
+its own kind of surprise.
+
+**And it interacts with the gutter.** Once marginal commentary exists (R27), a
+reflow does not merely move text — it moves text away from the note anchored
+beside it. Whatever this settles on has to still be true when the margin is full.
+
+**How to settle it:** live with (a), which is built, and notice whether the
+jumping is actually irritating in use or merely theoretically wrong. The frame
+studies are the precedent — the question was settled by building the
+arrangements and reacting to them, not by argument. **The cheap experiment is
+(b)**, which is a stylesheet change rather than a mechanism change, and can be
+put behind a theme parameter to be compared directly.

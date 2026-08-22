@@ -73,11 +73,14 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     note: 'Wide margins, a narrow measure, old-style figures. The 15th-century page this app takes its margins from.',
     face: "'Hoefler Text', Baskerville, Georgia, serif",
     size: 20,
-    measure: 54,
+    // 62ch, settled by reading real prose rather than sample paragraphs. It
+    // costs about 96px of margin to the capture stream's overlay on a 1512px
+    // laptop, which the panel showed at the time and which was judged worth it.
+    measure: 62,
     gutter: 19,
     gutterGap: 3,
     leading: 1.72,
-    paragraphSpace: 0.75,
+    paragraphSpace: 0.7,
     blankLine: 0.55,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,

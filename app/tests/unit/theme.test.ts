@@ -20,13 +20,18 @@ test('every built-in theme survives a round trip', () => {
   }
 })
 
-test('the default theme leaves the capture stream room to land on slack', () => {
-  // D42's arithmetic and D41's parameters meet here: the default must not be a
-  // theme whose measure forces the overlay to cover the annotation gutter on the
-  // machine this is written on. 54ch + 19ch + 3ch at 20px is comfortably inside
-  // a 1512px laptop once the nav's 248px is spent.
+test('the default measure is a reading measure, not an inherited accident', () => {
+  // This exists because the previous default was 74ch, carried over from Spike A
+  // when the text was centred and there was no gutter beside it — nobody chose
+  // it for reading. The classic guidance is 45–75 characters; the rail is there
+  // to catch another number arriving by inheritance rather than by judgement.
+  //
+  // It deliberately does NOT assert that the capture stream lands on slack. That
+  // was the earlier rule, and it turned a trade into a prohibition: the overlay
+  // covering some margin is recoverable and the panel states the cost live, so
+  // spending it is a choice the reader gets to make (D42, amended).
   const theme = defaultTheme()
-  assert.ok(theme.measure <= 58, `default measure ${theme.measure} is too wide`)
+  assert.ok(theme.measure >= 45 && theme.measure <= 75, `default measure ${theme.measure}`)
   assert.ok(theme.gutter > 0, 'the gutter must be reserved in every theme')
 })
 

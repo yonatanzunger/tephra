@@ -49,6 +49,22 @@ const TABLE_DELIM = /^\s*\|?[\s:|-]{3,}\|?\s*$/
 const IMAGE_ALONE = /^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/
 const HEADING = /^(#{1,6})\s+/
 
+// Emphasis delimiters. These conceal the MARKS and leave the text, which is why
+// each match yields two decorations rather than one — unlike math or an image,
+// where the whole construct is replaced by a widget.
+//
+// The guards are load-bearing. `**` must be tried before `*`, or the first
+// asterisk of a strong run matches as emphasis and the pair is mis-split. A
+// delimiter may not be followed (opening) or preceded (closing) by a space,
+// which is CommonMark's rule and also what stops `2 * 3 * 4` from becoming
+// italic. Underscores additionally may not sit against word characters, or
+// `some_file_name` loses its middle.
+const STRONG_STAR = /(?<!\*)\*\*(?!\s)((?:[^*\n]|\*(?!\*))+?)(?<!\s)\*\*(?!\*)/g
+const EM_STAR = /(?<![*\w])\*(?!\s|\*)([^*\n]+?)(?<!\s)\*(?!\*)/g
+const STRONG_UNDER = /(?<![\w_])__(?!\s)([^_\n]+?)(?<!\s)__(?![\w_])/g
+const EM_UNDER = /(?<![\w_])_(?!\s|_)([^_\n]+?)(?<!\s)_(?![\w_])/g
+const CODE_SPAN = /`+[^`\n]*`+/g
+
 const katexCache = new Map<string, string>()
 
 function renderMath(src: string, display: boolean): string {
@@ -148,6 +164,23 @@ class TableWidget extends WidgetType {
   }
 }
 
+/**
+ * Where backticks are on this line. Emphasis inside a code span is literal —
+ * `a *b* c` is three words and two asterisks — so concealing marks there would
+ * hide characters that are part of the content. Flagged in
+ * `implementation-notes.md` §5a as a thing to watch, and this is the watching.
+ */
+function codeSpans(text: string): readonly [number, number][] {
+  const spans: [number, number][] = []
+  CODE_SPAN.lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = CODE_SPAN.exec(text)) !== null) spans.push([m.index, m.index + m[0].length])
+  return spans
+}
+
+const insideCode = (spans: readonly [number, number][], at: number): boolean =>
+  spans.some(([from, to]) => at >= from && at < to)
+
 function overlapsCursor(state: EditorState, from: number, to: number): boolean {
   return state.selection.ranges.some(r => r.from <= to && r.to >= from)
 }
@@ -227,6 +260,38 @@ function buildInline(view: EditorView): DecorationSet {
         const to2 = from2 + m[0].length
         if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
         decos.push({ from: from2, to: to2, deco: Decoration.replace({ widget: new MathWidget(m[1] as string, false) }) })
+      }
+
+      // Emphasis: hide the marks, keep the text. The styling itself comes from
+      // `proseHighlight` via lezer's tags, which is why the text was already
+      // bold or italic while the asterisks sat there wearing the same weight.
+      //
+      // TODO (Q11): revealing on cursor REFLOWS the line — four characters
+      // appear and everything after them shifts. That is precisely what D42
+      // spent a study forbidding for the frame, happening inside the line
+      // instead, and on the highest-frequency event there is. The alternative
+      // worth trying first is not concealing at all but quieting the marks,
+      // which never reflows and is a stylesheet change rather than a mechanism
+      // change. Left as-is deliberately: settle it by living with it, the way
+      // the frame arrangements were settled.
+      const spans = codeSpans(text)
+      for (const [pattern, width] of [
+        [STRONG_STAR, 2],
+        [STRONG_UNDER, 2],
+        [EM_STAR, 1],
+        [EM_UNDER, 1],
+      ] as const) {
+        pattern.lastIndex = 0
+        while ((m = pattern.exec(text)) !== null) {
+          if (insideCode(spans, m.index)) continue
+          const from2 = line.from + m.index
+          const to2 = from2 + m[0].length
+          if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
+          // TWO decorations, one per delimiter run, with the content between
+          // them left alone — a single replace would take the text as well.
+          decos.push({ from: from2, to: from2 + width, deco: Decoration.replace({}) })
+          decos.push({ from: to2 - width, to: to2, deco: Decoration.replace({}) })
+        }
       }
     }
   }

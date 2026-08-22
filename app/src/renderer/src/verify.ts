@@ -299,6 +299,47 @@ export async function runVerify(scene: string): Promise<void> {
       say('afterRedo', { hasFirst: back.includes('FIRST.'), hasSecond: back.includes('SECOND.') })
     }
 
+    if (scene === 'emphasis') {
+      const sample = [
+        'A **bold** claim and an *italic* aside.',
+        'Also __strong__ and _slanted_ with underscores.',
+        'In code, `a *b* c` keeps its asterisks.',
+        'The file some_file_name.txt keeps its middle.',
+        'Arithmetic 2 * 3 * 4 is not emphasis.',
+        'Nested **bold with *inner* italic** here.',
+        '',
+      ].join('\n')
+      view.dispatch({ changes: { from: view.state.doc.length, insert: sample }, userEvent: 'input.type' })
+      await settle(600)
+
+      const live = (): EditorViewLike =>
+        (globalThis as unknown as { __view: EditorViewLike }).__view
+      const rendered = (): string =>
+        [...document.querySelectorAll('.cm-line')].map(l => l.textContent ?? '').join('\n')
+
+      // Park the caret far away, so nothing is revealed by proximity.
+      live().dispatch({ selection: { anchor: 0 } })
+      await settle(300)
+      const shown = rendered()
+      say('concealed', {
+        bold: shown.includes('A bold claim'),
+        italic: shown.includes('an italic aside'),
+        strongUnder: shown.includes('Also strong and'),
+        emUnder: shown.includes('and slanted with'),
+        codeKeepsStars: shown.includes('`a *b* c`'),
+        filenameIntact: shown.includes('some_file_name.txt'),
+        arithmeticIntact: shown.includes('2 * 3 * 4'),
+      })
+      say('stillInDocument', live().state.doc.toString().includes('**bold**'))
+
+      // And the marks come back when the caret is inside them.
+      const at = live().state.doc.toString().indexOf('**bold**')
+      live().dispatch({ selection: { anchor: at + 3 } })
+      await settle(300)
+      say('revealedUnderCursor', rendered().includes('**bold**'))
+      await settle(200)
+    }
+
     if (scene === 'theme') {
       const themes = await window.tephra.doc.listThemes()
       say('themesOnDisk', themes.map(t => `${t.name}:${t.measure}ch/${t.size}px`))
