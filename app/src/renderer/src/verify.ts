@@ -121,6 +121,225 @@ export async function runVerify(scene: string): Promise<void> {
       say('lineBoxes', lines.slice(0, 8))
     }
 
+    if (scene === 'frame') {
+      // D42's guarantee, measured in the real app rather than in a proof sheet:
+      // toggling the nav or the capture stream must move nothing. Position AND
+      // width, because the studies once certified an arrangement as steady on
+      // the left edge alone while its measure narrowed by 200px.
+      const geometry = (): { left: number; width: number } => {
+        const content = document.querySelector('.cm-content')
+        if (content === null) return { left: -1, width: -1 }
+        const box = content.getBoundingClientRect()
+        // The measure is the content box; the reserved gutter is padding, and
+        // counting it as text would hide exactly the failure being looked for.
+        const style = getComputedStyle(content)
+        return {
+          left: Math.round(box.left),
+          width: Math.round(box.width - parseFloat(style.paddingRight)),
+        }
+      }
+
+      const press = (label: string): void => {
+        const button = [...document.querySelectorAll('.titlebar button')].find(
+          b => (b.textContent ?? '').includes(label),
+        ) as HTMLButtonElement | undefined
+        if (button === undefined || button.disabled) {
+          say('cannotPress', { label, present: button !== undefined })
+          return
+        }
+        button.click()
+      }
+
+      const frame = document.querySelector('.frame') as HTMLElement | null
+      const reading = document.querySelector('.frame-reading') as HTMLElement | null
+      const contentEl = document.querySelector('.cm-content') as HTMLElement | null
+      const app = document.querySelector('.app') as HTMLElement | null
+      say('geometryInputs', {
+        inner: window.innerWidth,
+        app: Math.round(app?.getBoundingClientRect().width ?? -1),
+        streamMax: (globalThis as unknown as { __metrics?: { streamMax: number } }).__metrics?.streamMax ?? 'unset',
+        frame: Math.round(frame?.getBoundingClientRect().width ?? -1),
+        readingInner: reading === null ? -1 : Math.round(reading.clientWidth - 2 * parseFloat(getComputedStyle(reading).paddingLeft)),
+        measureVar: frame?.style.getPropertyValue('--measure') ?? '',
+        gutterVar: frame?.style.getPropertyValue('--gutter') ?? '',
+        folded: frame?.dataset.gutter ?? '',
+        contentBox: contentEl === null ? -1 : Math.round(contentEl.getBoundingClientRect().width),
+      })
+      say('navShown', geometry())
+
+      press('Sections')
+      await settle(300)
+      say('navHidden', geometry())
+      say('navSlotStillSpends', {
+        width: Math.round(
+          document.querySelector('.frame-nav-slot')?.getBoundingClientRect().width ?? -1,
+        ),
+      })
+
+      press('Sections')
+      await settle(300)
+      say('navShownAgain', geometry())
+
+      const streamButton = [...document.querySelectorAll('.titlebar button')].find(
+        b => (b.textContent ?? '').includes('Stream'),
+      ) as HTMLButtonElement | undefined
+      say('streamOffered', streamButton?.disabled === false)
+
+      press('Stream')
+      await settle(300)
+      say('streamOpen', geometry())
+      say('streamColumn', {
+        width: Math.round(
+          document.querySelector('.frame-stream')?.getBoundingClientRect().width ?? 0,
+        ),
+      })
+
+      // And the gutter must still be inside the reading area, which is the
+      // failure the width check alone would miss.
+      if (contentEl !== null && reading !== null) {
+        say('gutterPastEdge', Math.round(
+          contentEl.getBoundingClientRect().right -
+            (reading.getBoundingClientRect().right - parseFloat(getComputedStyle(reading).paddingRight)),
+        ))
+      }
+
+      press('Stream')
+      await settle(300)
+      say('streamClosed', geometry())
+
+      // The default window is too narrow for the stream to be offered at all,
+      // so widen it and run the same checks where the answer is different. A
+      // rule that has only ever been exercised on its refusing branch is a rule
+      // nobody has tested.
+      // resizeTo is clamped to the display, so the harness launches a second
+      // time at a width this screen does not have rather than asking for one.
+      await settle(200)
+      say('wideWindow', { inner: window.innerWidth })
+      say('wideNavShown', geometry())
+
+      const wideButton = [...document.querySelectorAll('.titlebar button')].find(
+        b => (b.textContent ?? '').includes('Stream'),
+      ) as HTMLButtonElement | undefined
+      say('wideStreamOffered', wideButton?.disabled === false)
+
+      press('Stream')
+      await settle(400)
+      say('wideStreamOpen', geometry())
+      say('wideStreamColumn', {
+        width: Math.round(
+          document.querySelector('.frame-stream')?.getBoundingClientRect().width ?? 0,
+        ),
+      })
+      if (contentEl !== null && reading !== null) {
+        say('widePastEdge', Math.round(
+          contentEl.getBoundingClientRect().right -
+            (reading.getBoundingClientRect().right - parseFloat(getComputedStyle(reading).paddingRight)),
+        ))
+      }
+
+      press('Sections')
+      await settle(300)
+      say('wideStreamOpenNavHidden', geometry())
+
+      press('Stream')
+      await settle(300)
+      say('wideStreamClosed', geometry())
+    }
+
+    if (scene === 'streamon') {
+      const button = [...document.querySelectorAll('.titlebar button')].find(
+        b => (b.textContent ?? '').includes('Stream'),
+      ) as HTMLButtonElement | undefined
+      say('streamDisabled', button?.disabled ?? 'missing')
+      button?.click()
+      await settle(400)
+      const panel = document.querySelector('.frame-stream')
+      const content = document.querySelector('.cm-content')
+      say('overlay', {
+        width: Math.round(panel?.getBoundingClientRect().width ?? -1),
+        covering: (panel as HTMLElement | null)?.dataset.covering ?? '',
+        textLeft: Math.round(content?.getBoundingClientRect().left ?? -1),
+      })
+      await settle(4000)
+    }
+
+    if (scene === 'navoff') {
+      // Dismiss the nav and hold, so a screenshot can show what the reserved
+      // column looks like when nothing is drawn in it. Reported as "a vertical
+      // stripe of coloration left behind, which looks wrong".
+      const button = [...document.querySelectorAll('.titlebar button')].find(
+        b => (b.textContent ?? '').includes('Sections'),
+      ) as HTMLButtonElement | undefined
+      button?.click()
+      await settle(400)
+      const slot = document.querySelector('.frame-nav-slot')
+      const reading = document.querySelector('.frame-reading')
+      say('whatShowsThere', {
+        slotVisibility: slot === null ? 'missing' : getComputedStyle(slot).visibility,
+        frameGround: getComputedStyle(document.querySelector('.frame') as Element).backgroundColor,
+        readingGround: reading === null ? '' : getComputedStyle(reading).backgroundColor,
+      })
+      await settle(4000)
+    }
+
+    if (scene === 'today') {
+      // Reported: pressing `today` blanks the whole screen. Catch what the click
+      // handler throws away — App calls `void pane.goToToday()`, so a rejection
+      // there disappears without trace.
+      const failures: string[] = []
+      addEventListener('unhandledrejection', e => failures.push(String(e.reason)))
+      addEventListener('error', e => failures.push(String(e.message)))
+
+      say('before', {
+        docLength: view.state.doc.length,
+        location: pane.location,
+        firstLine: view.state.doc.toString().slice(0, 40),
+      })
+
+      const today = [...document.querySelectorAll('.titlebar button')].find(
+        b => (b.textContent ?? '').trim() === 'today',
+      ) as HTMLButtonElement | undefined
+      today?.click()
+      await settle(1500)
+
+      const state = (label: string): void => {
+        const v = (globalThis as unknown as { __view?: EditorViewLike }).__view
+        say(label, {
+          docLength: v?.state.doc.length ?? -1,
+          location: pane.location,
+          lines: document.querySelectorAll('.cm-line').length,
+          contentWidth: Math.round(
+            document.querySelector('.cm-content')?.getBoundingClientRect().width ?? -1,
+          ),
+        })
+      }
+
+      // The path actually reported: pick a day from the nav, then press today.
+      const navDate = document.querySelectorAll('.nav-dates button')[1] as HTMLButtonElement | undefined
+      say('navDateLabel', navDate?.textContent ?? 'none')
+      navDate?.click()
+      await settle(1200)
+      state('afterNavDate')
+
+      today?.click()
+      await settle(1200)
+      state('afterTodayFromDate')
+
+      today?.click()
+      await settle(1200)
+      state('afterTodayAgain')
+
+      const live = (globalThis as unknown as { __view?: EditorViewLike }).__view
+      say('after', {
+        docLength: live?.state.doc.length ?? -1,
+        location: pane.location,
+        firstLine: live?.state.doc.toString().slice(0, 40) ?? '',
+        editorsInDom: document.querySelectorAll('.cm-editor').length,
+        linesInDom: document.querySelectorAll('.cm-line').length,
+      })
+      say('failures', failures)
+    }
+
     if (scene === 'reopen') {
       const head = view.state.selection.main.head
       say('buffer', view.state.doc.toString())

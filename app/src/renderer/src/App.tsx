@@ -1,7 +1,7 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { BufferPosition, DocumentPosition, SegmentKey } from '@shared/document-api.ts'
+import type { BufferPosition, DateKey, DocumentPosition, SegmentKey } from '@shared/document-api.ts'
 import { defaultUiState, type UiState } from '@shared/ui-state.ts'
 import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
@@ -9,6 +9,9 @@ import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { Editor } from './editor/Editor'
 import { defaultTypography, type Typography } from './editor/theme'
 import { widgetOptions } from './editor/widgets'
+import { Frame, useStream } from './frame/Frame'
+import { Nav } from './frame/Nav'
+import { useFrameMetrics } from './frame/useFrame'
 
 export function App(): React.JSX.Element {
   const [doc, setDoc] = useState<RemoteDocument | null>(null)
@@ -18,6 +21,15 @@ export function App(): React.JSX.Element {
   const [typography] = useState<Typography>(defaultTypography)
   const [error, setError] = useState<string | null>(null)
   const [diverged, setDiverged] = useState<{ date: string } | null>(null)
+  const [navVisible, setNavVisible] = useState(true)
+  const [extent, setExtent] = useState<{ first: DateKey; last: DateKey } | null>(null)
+  const [frameEl, setFrameEl] = useState<HTMLDivElement | null>(null)
+
+  const metrics = useFrameMetrics(frameEl, typography)
+
+  // Temporary, for the frame self-check. Goes away with verify.ts.
+  ;(globalThis as unknown as { __metrics: typeof metrics }).__metrics = metrics
+  const stream = useStream(metrics)
 
   const docWindow = usePaneWindow(pane)
   const location = usePaneLocation(pane)
@@ -64,6 +76,13 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     return window.tephra.doc.onDiverged(d => setDiverged({ date: d.date }))
   }, [])
+
+  // What the notebook actually covers, so the nav offers days that exist rather
+  // than a fixed span reaching into a past that has none.
+  useEffect(() => {
+    if (doc === null) return
+    void window.tephra.doc.extent().then(setExtent)
+  }, [doc])
 
   // Undo is document-scoped and reached past the facade on purpose (D26). When
   // it lands outside the loaded region the Pane is told to go there — which is
@@ -142,11 +161,33 @@ export function App(): React.JSX.Element {
         <button className="nav" disabled={pane?.canGoForward !== true} onClick={() => void pane?.forward()}>
           ›
         </button>
+        <button
+          className="nav labelled"
+          aria-pressed={navVisible}
+          title="Show or hide the sections list"
+          onClick={() => setNavVisible(v => !v)}
+        >
+          <span aria-hidden="true">☰</span> Sections
+        </button>
         <span className="title">{title}</span>
         <button className="nav" onClick={() => void pane?.goToToday()}>
           today
         </button>
         <span className="spacer" />
+        {/* Refused, not hidden. A control that vanishes when the window narrows
+            is a puzzle; one that declines and says why is an explanation. */}
+        <button
+          className="nav"
+          aria-pressed={stream.open}
+          title={
+            metrics.streamOcclusion > 0
+              ? `Open today beside what you are reading. This window is narrow, so it will cover about ${Math.round(metrics.streamOcclusion)}px of the margin — nothing moves, and closing it puts it back.`
+              : 'Open today beside what you are reading'
+          }
+          onClick={stream.toggle}
+        >
+          <span aria-hidden="true">▤</span> Stream
+        </button>
         <label className="toggle">
           <input type="checkbox" checked={vim} onChange={e => setVim(e.target.checked)} /> vim
         </label>
@@ -170,28 +211,58 @@ export function App(): React.JSX.Element {
         </div>
       )}
 
-      {boundary?.earlier.kind === 'extendable' && (
-        <button className="edge" onClick={() => void pane?.extend('earlier')}>
-          ▲ earlier
-        </button>
-      )}
-      {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
+      <Frame
+        metrics={metrics}
+        navVisible={navVisible}
+        streamOpen={stream.open}
+        frameRef={setFrameEl}
+        nav={
+          <Nav
+            today={doc?.today ?? null}
+            here={location?.kind === 'date' ? location.date : null}
+            extent={extent}
+            onGoTo={date => void pane?.goTo({ kind: 'date', date })}
+          />
+        }
+        stream={
+          <>
+            <div className="stream-head">Today</div>
+            <div className="stream-body">
+              {/* The column is real and its width is honest; what goes in it is
+                  a second editor bound to the end of today, which is its own
+                  piece of work. Reserved here so the frame can be judged. */}
+              <p>
+                The capture surface lands here — the end of today, always ready
+                to type into, so jotting while reading something else costs no
+                navigation (Q7c).
+              </p>
+            </div>
+          </>
+        }
+      >
+        {boundary?.earlier.kind === 'extendable' && (
+          <button className="edge" onClick={() => void pane?.extend('earlier')}>
+            ▲ earlier
+          </button>
+        )}
+        {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
 
-      {docWindow === null ? (
-        <main className="scaffold">
-          <p className="sub">Opening…</p>
-        </main>
-      ) : (
-        <Editor
-          window={docWindow}
-          vim={vim}
-          typography={typography}
-          onViewport={onViewport}
-          onCursor={onCursor}
-          initialCursor={restored}
-          onError={err => setError(err.message)}
-        />
-      )}
+        {docWindow === null ? (
+          <main className="scaffold">
+            <p className="sub">Opening…</p>
+          </main>
+        ) : (
+          <Editor
+            window={docWindow}
+            vim={vim}
+            typography={typography}
+            onViewport={onViewport}
+            onCursor={onCursor}
+            initialCursor={restored}
+            onError={err => setError(err.message)}
+          />
+        )}
+      </Frame>
     </div>
   )
 }

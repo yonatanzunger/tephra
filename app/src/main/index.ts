@@ -3,6 +3,7 @@
 // CodeMirror buffer, and nothing else.
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
@@ -22,10 +23,37 @@ declareScheme()
 // from a renderer with our preload attached. Production always uses the scheme.
 const DEV_SERVER = process.env['ELECTRON_RENDERER_URL']
 
+
+/**
+ * Write a PNG of the window and quit. Every test in this project checks state,
+ * which is why hand-testing found the invisible selection, the cut-off sheet and
+ * the sans-serif Hebrew that no assertion could see (notes.md). The visual
+ * milestone needs an instrument that looks at the pixels.
+ */
+async function captureAndQuit(win: BrowserWindow, to: string): Promise<void> {
+  const delay = Number(process.env.TEPHRA_SHOT_DELAY)
+  await new Promise(resolve => setTimeout(resolve, Number.isFinite(delay) && delay > 0 ? delay : 2_500))
+  const image = await win.webContents.capturePage()
+  await writeFile(to, image.toPNG())
+  app.quit()
+}
+
 function createWindow(): BrowserWindow {
+  // Width-dependent behaviour is the whole substance of D42 — the gutter folds
+  // at one width, the capture stream is refused at another — and this desk's
+  // display cannot produce the widths where those rules change. A window may be
+  // larger than the screen it is on, so the acceptance harness sets this to
+  // exercise branches that are otherwise unreachable here.
+  const debugWidth = Number(process.env.TEPHRA_WINDOW_WIDTH)
+  const oversize = Number.isFinite(debugWidth) && debugWidth > 0
   const win = new BrowserWindow({
-    width: 1400,
+    width: oversize ? debugWidth : 1400,
     height: 950,
+    // macOS clamps a window to the display's work area, which silently turned a
+    // request for 2000px into 1512px and made the harness report a refusal as
+    // though the rule had been tested. This is the switch that lets the window
+    // be bigger than the screen it is on.
+    enableLargerThanScreen: oversize,
     show: false,
     title: 'Tephra',
     titleBarStyle: 'hiddenInset',
@@ -38,7 +66,11 @@ function createWindow(): BrowserWindow {
     },
   })
 
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => {
+    win.show()
+    const shot = process.env.TEPHRA_SHOT
+    if (shot !== undefined && shot !== '') void captureAndQuit(win, shot)
+  })
 
   // Temporary: surface the renderer's self-check, and exit when it finishes.
   if (process.env['TEPHRA_VERIFY']) {

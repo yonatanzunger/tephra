@@ -13,7 +13,7 @@
 // may land outside the loaded region; two histories over one text diverge.
 
 import { ChangeSet, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
-import { EditorView, crosshairCursor, drawSelection, keymap, rectangularSelection } from '@codemirror/view'
+import { EditorView, crosshairCursor, drawSelection, keymap, placeholder, rectangularSelection } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
@@ -59,6 +59,10 @@ export function bindEditor(options: BindOptions): Binding {
     state: EditorState.create({
       doc: docWindow.text,
       extensions: [
+        // A day with nothing in it yet is the ordinary case first thing in the
+        // morning, and with no gutter, no caret cue and no chrome it renders as
+        // a blank rectangle — indistinguishable from the app having failed.
+        placeholder('Nothing here yet. Start typing.'),
         vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         markdown(),

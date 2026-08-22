@@ -121,7 +121,7 @@ The stream is **oldest-first, appended at the end** — the paper-notebook order
 
 **(b) Does a jump move the current window, or open another?** D10 already has "current window or new window" as an entry-activation choice, so the likely answer is: a jump moves this window and keeps a back stack, browser-fashion, with open-in-new-window as an explicit gesture.
 
-**(c) One editor pane, or a privileged place for the stream? — PARTLY ANSWERED (D42).** The *frame* now has a place for it: a reserved third column, opened on demand, elastic between 210px and 300px, refused below the width at which it would push the annotation gutter off the edge (about 1512px of window for the full 300px). What remains open is the original question — whether it earns its width in use, or whether a one-key jump to today suffices. That is answered by living with it, not by measuring.
+**(c) One editor pane, or a privileged place for the stream? — PARTLY ANSWERED (D42, as amended).** The *frame* now has a place for it: an overlay pinned to the right edge, available at every width, landing on slack when there is any and covering the gutter when there is not. What remains open is the original question — whether it earns its width in use, or whether a one-key jump to today suffices. That is answered by living with it, not by measuring.
 
 The original framing: One pane is simpler, but then jotting in today's stream while reading a note costs a navigation — friction on the highest-frequency gesture. Portal's answer was a separate capture surface: *"the widget is the capture surface, not the editor; capture is gesture, type, enter."* Probably deferrable: one pane plus a one-key "go to today", and a capture affordance only if that proves frictional.
 

@@ -65,3 +65,39 @@ Portal's `notes.md` accumulated design lessons that were expensive to learn and 
 - **Every rule in an implementation note must carry the failure it prevents.** A rule without a reason reads as an oddity and gets optimised away by whoever touches the code next — who is usually the same person, later.
 - **A path that fires once every few years is broken when it fires.** Rare paths need a test that forces them; waiting for the condition to occur naturally means discovering the bug at the worst moment.
 - **"Don't depend on anything" is really a question about which kind of dependency.** A *system* dependency risks presence, version skew and the user's environment. A *bundled native* one moves that fragility inside the build. A *pure-language* one has the simplest build story and inherits the library's limits. Only the first is categorically bad. `[for: architecture-design]`
+
+
+## The instrument gap, fourth instance — and what closed it
+
+Building the frame (D42) produced four failures in a row that no assertion in
+this project could have caught, and each was found by a different accident:
+
+1. **The measure was never applied.** CodeMirror lays its scroller out as a flex
+   row and gives `.cm-content` `flex-grow`, so a plain `width` was stretched away
+   and the measure silently became "whatever is available" — the exact failure
+   the frame exists to prevent, arriving through the back door. Found by dumping
+   the computed geometry, not by any test.
+2. **The folded column collapsed to zero.** With `flex: 0 0 auto` and `width:
+   auto`, shrink-to-fit around an empty document is 0px. Every steady/steady
+   check passed while the text column had no width at all.
+3. **A build that failed and a harness that ran anyway.** A duplicate binding
+   broke the renderer build; `npm run build --silent` swallowed it, the app
+   launched the previous bundle, and the measurements looked plausible. This is
+   the second time a silently stale harness has produced confident wrong answers.
+4. **The heading size compounded.** `1.85em` on the line *and* `1.85em` on the
+   inline mark rendered at 3.4em. It looked like a display face rather than like
+   a bug, and no test asserts font sizes.
+
+**Two patches that were themselves instruments, not fixes.** `TEPHRA_WINDOW_WIDTH`
+exists because this desk's display is 1512px and D42's rules change at widths it
+cannot produce — a rule only ever exercised on its refusing branch is a rule
+nobody has tested. It needs `enableLargerThanScreen`, because macOS silently
+clamped a 2000px request to 1512 and the harness dutifully reported the refusal
+as though it had been checked.
+
+**`TEPHRA_SHOT` is the standing answer.** It writes a PNG of the window and
+quits. Every test here checks state, which is why hand-testing — not the suite —
+found the invisible selection, the cut-off proof sheet, the sans-serif Hebrew,
+and now the compounded heading. A visual milestone needs an instrument that
+looks at pixels, and looking at one screenshot found in a second what 140 passing
+tests could not see.

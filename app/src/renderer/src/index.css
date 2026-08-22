@@ -39,6 +39,132 @@ body {
 /* ── application shell ────────────────────────────────────────────────── */
 .app { display: flex; flex-direction: column; height: 100%; }
 
+/* ── the frame (D42) ──────────────────────────────────────────────────────
+   Reserved: the nav can be dismissed, but its column is spent either way, so
+   nothing moves when it goes. The text column is left-anchored with the slack
+   to its right, which is where the capture stream comes from — never out of
+   the measure, and never out of the annotation gutter.
+
+   The grid's track sizes are set inline by Frame.tsx from the one calculation
+   in metrics.ts. They are not repeated here on purpose. */
+.frame {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  position: relative;
+  /* The same paper as the reading area, NOT the app's ground. The nav's column
+     is spent whether or not the nav is drawn (D42), so when it is dismissed
+     this background is what shows — and a ground-coloured 248px band beside
+     white paper reads as a stripe left behind by something that failed to
+     disappear properly. */
+  background: rgb(var(--surface));
+}
+
+.frame-nav-slot {
+  min-width: 0;
+  overflow-y: auto;
+  background: rgb(var(--surface-ground));
+  border-right: 1px solid rgb(var(--border));
+}
+/* Hidden, not removed. Removing it would give its width back to the reading
+   area and shift every line — the naive arrangement, measured at a 499px jump. */
+.frame-nav-slot[data-hidden='true'] { visibility: hidden; }
+
+.frame-reading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-inline: 0.3in;   /* the nav's edge and the first character may not touch */
+  background: rgb(var(--surface));
+}
+
+/* Pinned to the frame's right edge and floating above the page. On a wide
+   window this is empty paper and it costs nothing; on a laptop it covers the
+   gutter and some text, which is a trade worth making for a surface whose whole
+   purpose is being typed into without looking. Nothing under it moves. */
+.frame-stream {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--stream-w, 300px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgb(var(--border));
+  background: rgb(var(--surface-ground));
+}
+/* Only when it is actually covering something does it need to read as being on
+   top of it. Over slack, a shadow would be a claim about a depth that is not
+   there. */
+.frame-stream[data-covering='true'] {
+  box-shadow: -18px 0 34px -18px rgb(0 0 0 / 0.18);
+}
+
+/* The measure and the reserved gutter. Specificity deliberately above the
+   theme CodeMirror injects, which lands later in the document. */
+.frame .frame-reading .cm-content {
+  box-sizing: content-box;
+  /* CodeMirror lays the scroller out as a flex row and gives .cm-content
+     flex-grow, so a plain `width` is stretched away and the measure silently
+     becomes "whatever is available" — which is exactly the failure this whole
+     frame exists to prevent, arriving through the back door. Opt out of the
+     flexing before setting the width. */
+  flex: 0 0 auto;
+  width: var(--measure);
+  max-width: 100%;
+  margin: 0;
+  padding-right: var(--gutter);
+}
+
+/* Below the width where the gutter fits beside the text, it folds: marginal
+   notes will sit beneath the paragraph they belong to. Position is the right
+   thing to give up first; legibility is not. This band went unhandled in the
+   frame studies for 350px of width, with the gutter simply hanging off the
+   right edge. */
+.frame[data-gutter='folded'] .frame-reading .cm-content {
+  padding-right: 0;
+}
+
+/* ── nav ──────────────────────────────────────────────────────────────── */
+.frame-nav { padding: 1rem 0 1.5rem; font-size: 13px; }
+.nav-section { margin-bottom: .2rem; }
+.nav-head {
+  display: flex; align-items: center; gap: .45rem; width: 100%;
+  font: inherit; font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+  color: rgb(var(--text-muted)); background: none; border: 0;
+  padding: .5rem 1.1rem .35rem; cursor: pointer; text-align: left;
+}
+.nav-head .caret { font-size: 9px; opacity: .7; }
+.nav-head:hover { color: rgb(var(--text)); }
+.nav-head:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: -2px; }
+
+.nav-dates { display: flex; flex-wrap: wrap; gap: .2rem; padding: 0 .8rem; }
+.nav-dates button {
+  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-muted)); background: none; border: 0;
+  border-radius: 4px; padding: .15rem .45rem; cursor: pointer;
+}
+.nav-dates button:hover { background: rgb(var(--surface-muted)); color: rgb(var(--text)); }
+.nav-dates button.here { background: rgb(var(--accent) / .16); color: rgb(var(--text-heading)); }
+
+.nav-absent {
+  margin: 1.6rem 1.1rem 0; padding-top: .9rem;
+  border-top: 1px solid rgb(var(--border));
+  font-size: 11px; line-height: 1.5; color: rgb(var(--text-muted));
+}
+
+/* ── capture stream ───────────────────────────────────────────────────── */
+.stream-head {
+  font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
+  color: rgb(var(--text-muted)); padding: .85rem 1.1rem .55rem;
+  border-bottom: 1px solid rgb(var(--border));
+}
+.stream-body {
+  flex: 1; overflow-y: auto; padding: 1rem 1.1rem;
+  font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  color: rgb(var(--text-muted));
+}
+
 .titlebar {
   display: flex; align-items: center; gap: 1rem;
   padding: .5rem 1rem .5rem 5.5rem;   /* room for the traffic lights */
@@ -84,6 +210,15 @@ body {
 .cm-line.tx-h4, .cm-line.tx-h5, .cm-line.tx-h6 { font-weight: 600; color: rgb(var(--text-heading)); padding-top: .7em; }
 
 .cm-vim-panel { font-family: var(--font-mono) !important; font-size: 12px !important; }
+
+.cm-placeholder { color: rgb(var(--text-muted)); font-style: italic; }
+
+/* Chrome buttons that carry a word as well as a glyph. The proof sheet had
+   "≡ Sections" and it read better than the bare hamburger, which asks the
+   reader to remember what it opens. */
+.titlebar .nav.labelled { display: inline-flex; align-items: center; gap: .35rem; }
+.titlebar .nav[aria-pressed='true'] { background: rgb(var(--surface-muted)); color: rgb(var(--text)); }
+.titlebar .nav:disabled { opacity: .35; cursor: default; }
 
 .titlebar .nav {
   -webkit-app-region: no-drag;
