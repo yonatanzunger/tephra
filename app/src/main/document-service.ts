@@ -15,6 +15,8 @@ import type { Anomaly } from '../shared/anomalies.ts'
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, TypedSpan, DocumentPosition } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
+import { Repository } from './w/repo.ts'
+import type { RelPath } from './w/layout.ts'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
@@ -40,6 +42,32 @@ export interface MessageSink {
 const QUIESCE_MS = 1_000
 const MAX_INTERVAL_MS = 5_000
 
+/**
+ * The third tier (D32). Same shape as the file tier and for the same reason:
+ * **quiescence alone fails under precisely the condition this notebook exists
+ * for.** Writing continuously for an hour never reaches quiescence, so without
+ * a ceiling the commit would never happen and the whole hour would live in one
+ * commit — or in none, if the process died.
+ */
+const COMMIT_QUIESCE_MS = 5 * 60_000
+const COMMIT_MAX_MS = 30 * 60_000
+
+export interface ServiceOptions {
+  /**
+   * Overridable so the tiers can be tested in milliseconds rather than by
+   * waiting half an hour. **Both tiers, because they are chained**: a commit is
+   * scheduled by a file write, so a test that compresses only the commit tier
+   * is still waiting on the file tier's one-second quiescence and concludes,
+   * wrongly, that the commit never happens.
+   */
+  readonly quiesceMs?: number
+  readonly maxIntervalMs?: number
+  readonly commitQuiesceMs?: number
+  readonly commitMaxMs?: number
+  /** Off for tests that only want the document. */
+  readonly history?: boolean
+}
+
 export class DocumentService {
   readonly #doc: StreamDocument
   readonly #windows = new Map<WindowId, StreamWindow>()
@@ -51,18 +79,72 @@ export class DocumentService {
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #dirtySince: number | null = null
 
+  #repo: Repository | null = null
+  #commitTimer: ReturnType<typeof setTimeout> | null = null
+  #commitDirtySince: number | null = null
+  readonly #quiesceMs: number
+  readonly #maxIntervalMs: number
+  readonly #commitQuiesceMs: number
+  readonly #commitMaxMs: number
+  readonly #wantsHistory: boolean
+
+  /** Paths written since the last commit — what gets staged, nothing else. */
+  readonly #pendingPaths = new Set<RelPath>()
+  /**
+   * Paths changed by something that is not us, kept SEPARATE.
+   *
+   * They are committed on the same timers, because a notebook left open for
+   * days would otherwise leave every hand-edit outside the safety net until the
+   * next restart — and hand-editing is a supported way to use this (D5, R26).
+   *
+   * But they get their own commit. Folding someone else's edit into a commit
+   * whose message quotes what *I* typed produces a history that misattributes
+   * both, and the log's whole job is to be trustworthy a year later.
+   */
+  readonly #pendingExternal = new Set<RelPath>()
+  /** Dates touched since the last commit, for the message. */
+  readonly #pendingDates = new Set<string>()
+  /** The first line of the most recent insertion, for the message. */
+  #headline = ''
+
   readonly #notebook: Notebook
 
-  constructor(notebook: Notebook) {
+  constructor(notebook: Notebook, options: ServiceOptions = {}) {
     this.#notebook = notebook
     this.#doc = new StreamDocument(notebook)
+    this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
+    this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
+    this.#commitQuiesceMs = options.commitQuiesceMs ?? COMMIT_QUIESCE_MS
+    this.#commitMaxMs = options.commitMaxMs ?? COMMIT_MAX_MS
+    this.#wantsHistory = options.history !== false
+
+    // What went into the commit message, gathered as it happens. Reconstructing
+    // it later would mean diffing, and the point of quoting the text is that it
+    // is right there at the moment of the change.
+    this.#doc.onChanged(change => {
+      // An external change must not colour OUR commit message. Measured before
+      // this guard existed: a hand-edit set the headline, and the next commit
+      // triggered by typing quoted text its author never wrote.
+      if (change.origin === 'external') return
+      for (const edit of change.edits) {
+        this.#pendingDates.add(edit.span.begin.segment as string)
+        const line = edit.payload.split('\n').find(l => l.trim() !== '')
+        if (line !== undefined) this.#headline = line.trim()
+      }
+    })
 
     // Hand-editing is a feature, so the app has to notice. Queued with the
     // edits, because a reload racing a write is the corruption this whole
     // layer exists to avoid.
     notebook.onExternalChange(changes => {
       void this.#serial(async () => {
-        for (const change of changes) await this.#doc.externalChanged(change.rel)
+        for (const change of changes) {
+          await this.#doc.externalChanged(change.rel)
+          // The watcher is how the app learns what it did not write, which is
+          // exactly what D34 says to rely on instead of scanning the tree.
+          this.#pendingExternal.add(change.rel)
+        }
+        this.#scheduleCommit()
       })
     })
 
@@ -193,7 +275,105 @@ export class DocumentService {
 
   async flush(): Promise<void> {
     this.#cancelFlush()
-    await this.#serial(() => this.#doc.flush())
+    const written = await this.#serial(() => this.#doc.writeDirty())
+    for (const rel of written) this.#pendingPaths.add(rel)
+    if (written.length > 0) this.#scheduleCommit()
+  }
+
+  // ── the commit tier (D32) ────────────────────────────────────
+
+  /**
+   * Open the repository and reconcile whatever happened while the app was not
+   * running. Separate from the constructor because it does real I/O and can
+   * legitimately be skipped — a test that only wants the document should not
+   * pay for a git repository.
+   */
+  async startHistory(): Promise<void> {
+    if (!this.#wantsHistory) return
+    this.#repo = await Repository.open(this.#notebook.root)
+    const existing = await this.#repo.log(1)
+    await this.#repo.commitOutstanding(
+      existing.length === 0 ? 'Opened the notebook' : 'Changes made outside Tephra',
+    )
+  }
+
+  /**
+   * Commit now. Flushes first, because committing a file the editor has not
+   * written yet records the previous state and quietly loses the newest work
+   * from the history — the one place it was supposed to be safe.
+   */
+  async commitNow(): Promise<string | null> {
+    this.#cancelCommit()
+    if (this.#repo === null) return null
+    await this.flush()
+    await this.#commitExternal()
+    if (this.#pendingPaths.size === 0) return null
+
+    const paths = [...this.#pendingPaths]
+    const message = this.#message()
+    this.#pendingPaths.clear()
+    this.#pendingDates.clear()
+    this.#headline = ''
+    return this.#repo.commit(paths, message)
+  }
+
+  /**
+   * Commit whatever changed outside the app, as its own commit.
+   *
+   * Runs before ours in a tick, so that when both happened the log reads in the
+   * order they occurred: someone else's edit was already on disk when we wrote
+   * ours on top of it.
+   */
+  async #commitExternal(): Promise<void> {
+    if (this.#repo === null || this.#pendingExternal.size === 0) return
+    const paths = [...this.#pendingExternal]
+    this.#pendingExternal.clear()
+    await this.#repo.commit(paths, 'Changes made outside Tephra')
+  }
+
+  /**
+   * The message quotes the first line of what changed, prefixed by the dates
+   * touched — chosen because the job is finding a lost paragraph a year later,
+   * and a timestamp does not help with that.
+   *
+   * NOTE for the purge procedure (T10): this puts content in the commit
+   * message as well as the blob, so deleted text lives in two places per commit
+   * and a purge must rewrite messages too.
+   */
+  #message(): string {
+    const dates = [...this.#pendingDates].sort()
+    const where =
+      dates.length === 0
+        ? 'notebook'
+        : dates.length === 1
+          ? (dates[0] as string)
+          : `${dates[0] as string}..${dates[dates.length - 1] as string}`
+    const text = this.#headline.length > 72 ? `${this.#headline.slice(0, 71)}\u2026` : this.#headline
+    return text === '' ? where : `${where} \u00b7 ${text}`
+  }
+
+  #scheduleCommit(): void {
+    if (this.#repo === null) return
+    if (this.#pendingPaths.size === 0 && this.#pendingExternal.size === 0) return
+    const now = Date.now()
+    this.#commitDirtySince ??= now
+    if (this.#commitTimer !== null) clearTimeout(this.#commitTimer)
+    const remaining = this.#commitMaxMs - (now - this.#commitDirtySince)
+    this.#commitTimer = setTimeout(
+      () => void this.commitNow(),
+      Math.max(0, Math.min(this.#commitQuiesceMs, remaining)),
+    )
+  }
+
+  #cancelCommit(): void {
+    if (this.#commitTimer !== null) clearTimeout(this.#commitTimer)
+    this.#commitTimer = null
+    this.#commitDirtySince = null
+  }
+
+  /** The history, for reading. Null when history is off. */
+  get repository(): Repository | null {
+    return this.#repo
   }
 
   /**
@@ -204,8 +384,11 @@ export class DocumentService {
     const now = Date.now()
     this.#dirtySince ??= now
     if (this.#flushTimer !== null) clearTimeout(this.#flushTimer)
-    const remaining = MAX_INTERVAL_MS - (now - this.#dirtySince)
-    this.#flushTimer = setTimeout(() => void this.flush(), Math.max(0, Math.min(QUIESCE_MS, remaining)))
+    const remaining = this.#maxIntervalMs - (now - this.#dirtySince)
+    this.#flushTimer = setTimeout(
+      () => void this.flush(),
+      Math.max(0, Math.min(this.#quiesceMs, remaining)),
+    )
   }
 
   #cancelFlush(): void {
@@ -214,9 +397,18 @@ export class DocumentService {
     this.#dirtySince = null
   }
 
-  /** Quiesce: write anything outstanding and stop the timer. */
+  /**
+   * Quiesce: write anything outstanding, commit it, and stop the timers.
+   *
+   * Session end is the third of the commit tier's three triggers (D32), and the
+   * important one — it is what makes "I wrote for ten minutes and quit" land in
+   * the history rather than waiting for a quiescence that will never come.
+   */
   async stop(): Promise<void> {
     await this.flush()
+    await this.commitNow()
+    this.#cancelFlush()
+    this.#cancelCommit()
   }
 
   releaseWindow(id: WindowId): void {

@@ -277,3 +277,122 @@ because `autoExtendOnApproach` is false (D36) — so it is a rule that has only
 ever been exercised on its refusing branch. **The trigger to test it is already
 written down**: D36 names the moment that flag is set true as the moment the
 deferred measurement comes due. This belongs on the same list.
+
+## The commit tier (D32, M1 bullet 2)
+
+**The repository is the notebook directory**, not a store beside it — that is
+what makes the exit extend to the history. An existing repository is adopted and
+never re-initialised: the owner may have run `git init` there themselves, or be
+keeping the notebook in a repository older than Tephra, and clobbering it would
+destroy exactly what this feature protects.
+
+**Never a whole-tree scan on the hot path**, per D34. The writer reports what it
+wrote — `StreamDocument.writeDirty` returns the paths — and the commit stages
+those. `statusMatrix` runs in exactly one place: `commitOutstanding`, at
+startup, reconciling whatever happened while the app was closed.
+
+**`Document.flush()` still returns nothing, deliberately.** `document-api.ts` is
+the X-to-Z contract and **Z must never learn file paths**; that mapping belongs
+to storage. Main-side callers that legitimately need them hold a
+`StreamDocument`, not the interface, and call `writeDirty`.
+
+**A quiet notebook accrues no commits.** Staging an unchanged file still counts
+as staged, so the question "did anything really change" has to be asked *before*
+staging, per path — after `git.add` everything reads as "added". Without that, a
+quiet notebook would gain an empty commit every half hour forever until the log
+was useless for its one job.
+
+**The two tiers are chained, and testing has to know it.** A commit is scheduled
+by a file write, so both intervals are constructor options: a test that
+compressed only the commit tier would still be waiting on the file tier's
+one-second quiescence and would conclude, wrongly, that the commit never
+happens. That is precisely what happened on the first run.
+
+### The harness now chooses how the app dies
+
+The verify harness ended sessions with `app.exit(0)`, which terminates without
+firing `before-quit` — so `stop()` never ran and the harness had never once
+exercised graceful shutdown. It now quits properly by default, with
+`TEPHRA_EXIT=abrupt` for the other path. Both are needed, and the contrast is
+the clearest demonstration of what the tier does:
+
+```
+graceful   a57741e 2026-08-22 · A first sentence, typed by hand.
+           46f7d07 Opened the notebook          working tree clean
+
+abrupt     2d76a24 Opened the notebook          ?? stream/
+```
+
+**And reopening the crashed notebook reconciles it**: the startup scan commits
+the orphaned work as "Changes made outside Tephra", the tree comes back clean,
+and the text is in the history. The file tier had already saved the *text*; what
+the crash cost was only its place in the history, and that is recovered on the
+next launch rather than lost.
+
+## Two questions asked of the commit tier, and what they turned up
+
+### "Are external edits committed, or must they be committed explicitly?"
+
+**Measured before answering: neither — they were not committed at all until the
+next launch.** The code reads as though they were, because `onChanged` fires for
+external changes too, but the paths staged come only from what the app itself
+wrote. A notebook is left open for days, and hand-editing is a supported way to
+use it (D5, R26), so that left every hand-edit outside the safety net until a
+restart.
+
+**Now: committed on the same timers, as their own commit.** Folding someone
+else's edit into a commit whose message quotes what *I* typed produces a history
+that misattributes both, and the log's whole job is to be trustworthy a year
+later. External work commits as "Changes made outside Tephra"; ours quotes ours.
+
+**And the subtler half of the same bug:** because `onChanged` fired for external
+changes, a hand-edit set the headline, and the next commit triggered by typing
+**quoted text its author never wrote**. Guarded, with a test.
+
+### The feedback loop that was found by looking rather than asserting
+
+`git ls-tree HEAD` on a real notebook showed `.git/index`,
+`.git/refs/heads/main` and loose objects **inside the repository's own history**.
+
+The repository lives *inside* the notebook directory, so the watcher sees it —
+and every commit rewrites those files, which the watcher reports as an external
+change, which schedules another commit, which rewrites them again. A tier that
+feeds itself forever, and a tree that can never reach clean.
+
+`isLocal` became `isMachinery`, covering `.git/` as well as `.tephra/`, applied
+in the watcher (so the events never arrive), in staging and in the startup scan.
+The regression test asserts three things: git's directory is not in the history,
+the tier comes to rest, and the tree can actually reach clean.
+
+**Neither of these came from a failing test.** One came from a question about
+intent, the other from reading `ls-tree` output on a scratch notebook — the same
+lesson as the screenshots: instruments that check state cannot see a thing they
+were not pointed at.
+
+## Verification mode is now one gate
+
+Every `TEPHRA_*` affordance — scene running, screenshot capture, the
+oversized-window override, menu automation, abrupt exit, the git check — is a
+back door: an environment variable that makes the app write a file anywhere,
+drive its own menus, or terminate without saving. Individually small;
+collectively a surface that grew whenever a test needed something, and **nobody
+audits a surface with no name.**
+
+They now pass through `VERIFY_MODE` in `main/verify-mode.ts`:
+
+```ts
+!app.isPackaged && process.env['TEPHRA_VERIFY_MODE'] === '1'
+```
+
+**`app.isPackaged` is the outer gate and is not overridable** — a shipped
+application has no verification affordances whatever the environment says, which
+is the property worth having, since the environment is exactly what someone who
+can launch the app controls. Inside development it still has to be asked for, so
+an ordinary `./run.sh` has none of them either. When it is on, the app says so
+on stderr at startup.
+
+`TEPHRA_ROOT` deliberately stays outside the gate: choosing which notebook to
+open is ordinary configuration, and it is how `run.sh --scratch` works.
+
+Verified both ways — with the flag absent, a scene does not run and no
+screenshot is written even when `TEPHRA_VERIFY` and `TEPHRA_SHOT` are both set.

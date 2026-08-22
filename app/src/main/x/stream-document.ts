@@ -13,7 +13,7 @@ import type {
 import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
-import { dayFile, parseDayFile } from '../w/layout.ts'
+import { dayFile, parseDayFile , type RelPath } from '../w/layout.ts'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { Segment } from './segment.ts'
@@ -526,7 +526,23 @@ export class StreamDocument implements Document {
 
   // ── lifecycle ──────────────────────────────────────────────
 
+  /**
+   * Satisfies the `Document` interface, which returns nothing on purpose:
+   * `document-api.ts` is the X-to-Z contract, and **Z must never learn file
+   * paths** — that mapping belongs to storage, and handing it upward is the
+   * layering violation `architecture.md` spends a rule forbidding.
+   *
+   * Main-side callers that legitimately need the paths — the commit tier does,
+   * so it can stage what it wrote instead of scanning the tree (D34) — use
+   * `writeDirty` directly. They hold a `StreamDocument`, not the interface.
+   */
   async flush(): Promise<void> {
+    await this.writeDirty()
+  }
+
+  /** Write every dirty segment, and report which files that touched. */
+  async writeDirty(): Promise<readonly RelPath[]> {
+    const written: RelPath[] = []
     for (const segment of this.#segments.values()) {
       // A diverged segment is frozen: writing it would destroy the hand-edit
       // that caused the divergence, which is the one outcome nothing recovers.
@@ -534,7 +550,9 @@ export class StreamDocument implements Document {
       const text = segment.serialise()
       await this.#notebook.write(segment.rel, text)
       segment.markClean(text)
+      written.push(segment.rel)
     }
+    return written
   }
 
   async reload(): Promise<void> {

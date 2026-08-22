@@ -16,6 +16,7 @@
 
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { CHANNEL } from '../shared/ipc.ts'
+import { VERIFY_MODE } from './verify-mode.ts'
 
 export interface MenuState {
   /** Vim mode, mirrored from the renderer so the checkmark tells the truth. */
@@ -94,7 +95,7 @@ export function installMenu(): void {
 
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
-  if (process.env['TEPHRA_VERIFY'] !== undefined) {
+  if (VERIFY_MODE) {
     console.log(
       `VERIFY-MAIN appName=${app.getName()} firstMenu=${menu.items[0]?.label} ` +
         `about=${menu.items[0]?.submenu?.items[0]?.label} quit=${menu.items[0]?.submenu?.items.at(-1)?.label}`,

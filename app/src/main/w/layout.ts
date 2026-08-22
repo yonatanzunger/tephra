@@ -123,6 +123,24 @@ export function isLocal(rel: RelPath): boolean {
   return rel === LOCAL_DIR || rel.startsWith(`${LOCAL_DIR}/`)
 }
 
+/** Git's own directory. Machinery, not notebook content, and never ours to touch. */
+export const GIT_DIR = '.git'
+
+/**
+ * Paths the app must never treat as notebook content: its own machine-local
+ * state, and git's internals.
+ *
+ * **`.git/` is the one that bites.** It lives inside the notebook directory, so
+ * the watcher sees it; and every commit rewrites `.git/index` and
+ * `.git/refs/heads/main`, which the watcher then reports as an external change,
+ * which schedules another commit, which rewrites them again. Measured: a
+ * notebook that had been touched once was committing `.git/objects/...` into
+ * itself and could never reach a clean tree.
+ */
+export function isMachinery(rel: RelPath): boolean {
+  return isLocal(rel) || rel === GIT_DIR || rel.startsWith(`${GIT_DIR}/`)
+}
+
 /**
  * Filesystem-safe, readable, and stable. Not reversible, and not meant to be:
  * the file's own frontmatter is authoritative for its title (format-spec), so

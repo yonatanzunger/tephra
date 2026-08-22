@@ -20,7 +20,7 @@ import { watch, type FSWatcher } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { hashContent, readText } from './atomic.ts'
-import { isLocal, type RelPath } from './layout.ts'
+import { isMachinery, type RelPath } from './layout.ts'
 
 /**
  * Deliberately not 'created' vs 'modified'. A recursive watcher cannot reliably
@@ -119,8 +119,10 @@ export class NotebookWatcher {
 
   #ignored(rel: RelPath): boolean {
     // `.tephra/` is machine-local and we write it constantly — the WAL alone
-    // would be a permanent event storm. Temp files are ours mid-write.
-    if (isLocal(rel)) return true
+    // would be a permanent event storm. `.git/` is worse than an event storm:
+    // committing rewrites it, so reporting it as an external change makes the
+    // commit tier feed itself forever. Temp files are ours mid-write.
+    if (isMachinery(rel)) return true
     const name = rel.slice(rel.lastIndexOf('/') + 1)
     return name.startsWith('.') && name.includes('.tmp-')
   }
