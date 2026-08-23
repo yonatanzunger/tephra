@@ -131,7 +131,7 @@ Never synced, and — with one deliberate exception noted below — entirely dis
 
 **What bounds rewind is the session, not a retention period.** `rewindTo` (D29) reaches any generation in the in-memory undo stack, which begins at process start; older states are reached through `History.restore` at commit granularity. Undo therefore does not survive a restart — accepted deliberately (D32), on the grounds that this is VSCode plus git, used daily without friction, where the post-restart recovery path is the history rather than ⌘Z.
 
-**One consequence that must be stated, not discovered: deleting text from Tephra does not delete it from the repository.** It survives there permanently, and from v2a on the hub as well, so purging genuinely-unwanted content is a history rewrite rather than a deletion. **The mitigation is a documented purge procedure, not a button**, and it is honest about costing a force-push after v2a. Because v1 has no remote, the exposure is bounded to one machine and the procedure is owed **before the first push, not before the first commit** (T10, D36).
+**One consequence that must be stated, not discovered: deleting text from Tephra does not delete it from the repository.** It survives there permanently, and from v2a on the hub as well, so purging genuinely-unwanted content is a history rewrite rather than a deletion. **The mitigation is a documented purge procedure, not a button** — [purge-procedure.md](purge-procedure.md) — and it is honest about costing a force-push after v2a. Because v1 has no remote, the exposure is bounded to one machine and the procedure is owed **before the first push, not before the first commit** (T10, D36).
 
 ## Degradation — the hand-editing contract
 

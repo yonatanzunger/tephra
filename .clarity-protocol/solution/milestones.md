@@ -112,7 +112,9 @@ and the WAL have been built on the assumption.
 5. ✅ **The WAL.** Changes since the last file write, batched at ~50 ms, at the
    `.tephra/wal` path already reserved in `layout.ts`. Closes the seconds-wide
    window that the file tier leaves open.
-6. **The purge procedure.** Documented, not a button (T10, D36).
+6. ✅ **The purge procedure.** Documented, not a button (T10, D36) —
+   `purge-procedure.md`. Every command in it was run against a scratch notebook
+   carrying the target text in both a day file and a version reason.
 7. **`npm run m1`.** The acceptance run, mirroring M0's: kill the app mid-write
    and lose nothing; recover a deleted paragraph from a commit; force a split and
    read the parts back as a single day.
