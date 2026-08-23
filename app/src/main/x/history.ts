@@ -18,7 +18,7 @@
 
 import { dayFile } from '../w/layout.ts'
 import { parseFile } from './frontmatter.ts'
-import type { Repository } from '../w/repo.ts'
+import type { Repository } from '../w/repository.ts'
 import type { DateKey, VersionId } from '../../shared/document-api.ts'
 import type { Version } from '../../shared/history-api.ts'
 
@@ -32,22 +32,15 @@ export class StreamHistory {
     this.#repo = repo
   }
 
+  // No translation left to do: the store already speaks versions and reasons.
+  // What X adds is the DAY — turning the reader's unit into a path, which is
+  // the mapping that stops here and never travels upward.
   async versions(limit = 50): Promise<readonly Version[]> {
-    const commits = await this.#repo.log(limit)
-    return commits.map(c => ({
-      id: c.oid as VersionId,
-      at: new Date(c.at * 1000),
-      reason: c.message === '' ? null : c.message,
-    }))
+    return this.#repo.versions('latest', limit)
   }
 
   async versionsTouching(date: DateKey, limit = 50): Promise<readonly Version[]> {
-    const commits = await this.#repo.logFor(dayFile(date), limit)
-    return commits.map(c => ({
-      id: c.oid as VersionId,
-      at: new Date(c.at * 1000),
-      reason: c.message === '' ? null : c.message,
-    }))
+    return this.#repo.versionsTouching(dayFile(date), 'latest', limit)
   }
 
   /**
@@ -61,7 +54,7 @@ export class StreamHistory {
   async readDay(version: VersionId, date: DateKey): Promise<string | null> {
     const bodies: string[] = []
     for (let part = 1; part <= MAX_PARTS; part++) {
-      const text = await this.#repo.readAt(version, dayFile(date, part))
+      const text = await this.#repo.contentAt(version, dayFile(date, part))
       if (text === null) break
       bodies.push(parseFile(text).body)
     }
@@ -69,8 +62,7 @@ export class StreamHistory {
   }
 
   async status(): Promise<{ readonly dirty: boolean; readonly lastCommit: VersionId | null }> {
-    const [latest] = await this.#repo.log(1)
-    return { dirty: false, lastCommit: (latest?.oid ?? null) as VersionId | null }
+    return { dirty: false, lastCommit: await this.#repo.latest() }
   }
 
   /** M2. Throwing beats pretending — the same rule M0 applied to `branch`. */

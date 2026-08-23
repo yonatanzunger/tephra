@@ -13,9 +13,10 @@
 
 import type { Anomaly } from '../shared/anomalies.ts'
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
-import type { DateKey, TypedSpan, DocumentPosition } from '../shared/document-api.ts'
+import type { DateKey, DocumentPosition, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
-import { Repository } from './w/repo.ts'
+import { GitRepository } from './w/git-repository.ts'
+import type { Repository } from './w/repository.ts'
 import type { RelPath } from './w/layout.ts'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
@@ -43,14 +44,16 @@ const QUIESCE_MS = 1_000
 const MAX_INTERVAL_MS = 5_000
 
 /**
- * The third tier (D32). Same shape as the file tier and for the same reason:
+ * The third tier (D32) — recording a recoverable VERSION of the notebook, not
+ * "committing", which is one store's word for it. Same shape as the file tier
+ * and for the same reason:
  * **quiescence alone fails under precisely the condition this notebook exists
  * for.** Writing continuously for an hour never reaches quiescence, so without
  * a ceiling the commit would never happen and the whole hour would live in one
  * commit — or in none, if the process died.
  */
-const COMMIT_QUIESCE_MS = 5 * 60_000
-const COMMIT_MAX_MS = 30 * 60_000
+const VERSION_QUIESCE_MS = 5 * 60_000
+const VERSION_MAX_MS = 30 * 60_000
 
 export interface ServiceOptions {
   /**
@@ -62,8 +65,8 @@ export interface ServiceOptions {
    */
   readonly quiesceMs?: number
   readonly maxIntervalMs?: number
-  readonly commitQuiesceMs?: number
-  readonly commitMaxMs?: number
+  readonly versionQuiesceMs?: number
+  readonly versionMaxMs?: number
   /** Off for tests that only want the document. */
   readonly history?: boolean
 }
@@ -80,16 +83,16 @@ export class DocumentService {
   #dirtySince: number | null = null
 
   #repo: Repository | null = null
-  #commitTimer: ReturnType<typeof setTimeout> | null = null
-  #commitDirtySince: number | null = null
+  #versionTimer: ReturnType<typeof setTimeout> | null = null
+  #versionDirtySince: number | null = null
   readonly #quiesceMs: number
   readonly #maxIntervalMs: number
-  readonly #commitQuiesceMs: number
-  readonly #commitMaxMs: number
+  readonly #versionQuiesceMs: number
+  readonly #versionMaxMs: number
   readonly #wantsHistory: boolean
 
   /** Something is unsaved or uncommitted; the tier has work to do. */
-  #commitPending = false
+  #unsavedWork = false
   /** Whether anything outside the app changed since the last commit. */
   #sawExternal = false
   /** Dates touched since the last commit, for the message. */
@@ -104,8 +107,8 @@ export class DocumentService {
     this.#doc = new StreamDocument(notebook)
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
     this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
-    this.#commitQuiesceMs = options.commitQuiesceMs ?? COMMIT_QUIESCE_MS
-    this.#commitMaxMs = options.commitMaxMs ?? COMMIT_MAX_MS
+    this.#versionQuiesceMs = options.versionQuiesceMs ?? VERSION_QUIESCE_MS
+    this.#versionMaxMs = options.versionMaxMs ?? VERSION_MAX_MS
     this.#wantsHistory = options.history !== false
 
     // What went into the commit message, gathered as it happens. Reconstructing
@@ -133,8 +136,8 @@ export class DocumentService {
         // is that a commit becomes worth scheduling, and that the message
         // admits the notebook was edited from outside.
         this.#sawExternal = true
-        this.#commitPending = true
-        this.#scheduleCommit()
+        this.#unsavedWork = true
+        this.#scheduleVersion()
       })
     })
 
@@ -267,8 +270,8 @@ export class DocumentService {
     this.#cancelFlush()
     const written = await this.#serial(() => this.#doc.writeDirty())
     if (written.length > 0) {
-      this.#commitPending = true
-      this.#scheduleCommit()
+      this.#unsavedWork = true
+      this.#scheduleVersion()
     }
   }
 
@@ -280,45 +283,45 @@ export class DocumentService {
    * legitimately be skipped — a test that only wants the document should not
    * pay for a git repository.
    */
-  async startHistory(): Promise<void> {
+  async openHistory(): Promise<void> {
     if (!this.#wantsHistory) return
-    this.#repo = await Repository.open(this.#notebook.root)
-    const existing = await this.#repo.log(1)
-    await this.#repo.commitAll(
-      existing.length === 0 ? 'Opened the notebook' : 'Changes made outside Tephra',
-    )
+    this.#repo = await GitRepository.open(this.#notebook.root)
+    const first = (await this.#repo.latest()) === null
+    await this.#repo.save(first ? 'Opened the notebook' : 'Changes made outside Tephra')
   }
 
   /**
-   * Commit now. Flushes first, because committing a file the editor has not
-   * written yet records the previous state and quietly loses the newest work
-   * from the history — the one place it was supposed to be safe.
+   * Record a version of the notebook now.
+   *
+   * Flushes first: saving a file the editor has not written yet records the
+   * previous state and quietly loses the newest work from the history — the one
+   * place it was supposed to be safe.
    */
-  async commitNow(): Promise<string | null> {
-    this.#cancelCommit()
+  async saveVersion(): Promise<VersionId | null> {
+    this.#cancelVersion()
     if (this.#repo === null) return null
     await this.flush()
 
-    const message = this.#message()
+    const message = this.#reason()
     this.#pendingDates.clear()
     this.#headline = ''
     this.#sawExternal = false
-    this.#commitPending = false
-    // `commitAll` finds what changed for itself, the way `git add -A` does.
-    // Nothing is tracked here on its behalf.
-    return this.#repo.commitAll(message)
+    this.#unsavedWork = false
+    // The store finds what changed for itself. Nothing is tracked here on its
+    // behalf, and nothing here knows how it is stored.
+    return this.#repo.save(message)
   }
 
   /**
-   * The message quotes the first line of what changed, prefixed by the dates
-   * touched — chosen because the job is finding a lost paragraph a year later,
+   * The reason a version was recorded: the first line of what changed, prefixed
+   * by the dates touched — chosen because the job is finding a lost paragraph a year later,
    * and a timestamp does not help with that.
    *
-   * NOTE for the purge procedure (T10): this puts content in the commit
-   * message as well as the blob, so deleted text lives in two places per commit
+   * NOTE for the purge procedure (T10): this puts content in the version's
+   * reason as well as in the file, so deleted text lives in two places per commit
    * and a purge must rewrite messages too.
    */
-  #message(): string {
+  #reason(): string {
     const dates = [...this.#pendingDates].sort()
     const where =
       dates.length === 0
@@ -335,23 +338,23 @@ export class DocumentService {
     return `${where} \u00b7 ${text}${this.#sawExternal ? ' (with changes made outside Tephra)' : ''}`
   }
 
-  #scheduleCommit(): void {
+  #scheduleVersion(): void {
     if (this.#repo === null) return
-    if (!this.#commitPending) return
+    if (!this.#unsavedWork) return
     const now = Date.now()
-    this.#commitDirtySince ??= now
-    if (this.#commitTimer !== null) clearTimeout(this.#commitTimer)
-    const remaining = this.#commitMaxMs - (now - this.#commitDirtySince)
-    this.#commitTimer = setTimeout(
-      () => void this.commitNow(),
-      Math.max(0, Math.min(this.#commitQuiesceMs, remaining)),
+    this.#versionDirtySince ??= now
+    if (this.#versionTimer !== null) clearTimeout(this.#versionTimer)
+    const remaining = this.#versionMaxMs - (now - this.#versionDirtySince)
+    this.#versionTimer = setTimeout(
+      () => void this.saveVersion(),
+      Math.max(0, Math.min(this.#versionQuiesceMs, remaining)),
     )
   }
 
-  #cancelCommit(): void {
-    if (this.#commitTimer !== null) clearTimeout(this.#commitTimer)
-    this.#commitTimer = null
-    this.#commitDirtySince = null
+  #cancelVersion(): void {
+    if (this.#versionTimer !== null) clearTimeout(this.#versionTimer)
+    this.#versionTimer = null
+    this.#versionDirtySince = null
   }
 
   /** The history, for reading. Null when history is off. */
@@ -389,9 +392,9 @@ export class DocumentService {
    */
   async stop(): Promise<void> {
     await this.flush()
-    await this.commitNow()
+    await this.saveVersion()
     this.#cancelFlush()
-    this.#cancelCommit()
+    this.#cancelVersion()
   }
 
   releaseWindow(id: WindowId): void {

@@ -155,7 +155,7 @@ app.whenReady().then(async () => {
   // AFTER seeding, so the first commit includes the themes it just wrote — and
   // before any window opens, so the reconciliation of whatever happened while
   // the app was closed lands before this session starts adding to it.
-  await service.startHistory()
+  await service.openHistory()
   ipcMain.handle(CHANNEL.listThemes, () => (notebook === null ? [] : listThemes(notebook)))
   ipcMain.handle(CHANNEL.saveTheme, (_e, theme: Theme) =>
     notebook === null ? undefined : saveTheme(notebook, theme),

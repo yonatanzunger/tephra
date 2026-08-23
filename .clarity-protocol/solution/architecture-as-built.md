@@ -23,6 +23,8 @@ flowchart TB
     end
     subgraph W["W — infrastructure"]
       NB["Notebook<br/><i>main/w/notebook.ts</i><br/>read · write · list · watch"]
+      REPO["Repository <i>(interface)</i><br/><i>main/w/repository.ts</i><br/>save · versions · contentAt · moveTo"]
+      GIT["GitRepository<br/><i>main/w/git-repository.ts</i><br/>one implementation"]
       WBITS["layout · atomic · lock · watcher · themes<br/><i>main/w/</i>"]
     end
     SVC["DocumentService<br/><i>main/document-service.ts</i><br/>serial queue, write tiers<br/><b>Electron-free</b>"]
@@ -51,6 +53,9 @@ flowchart TB
   DW --> SD
   SEG --> PARSE
   SD --> NB
+  GIT -.implements.-> REPO
+  HIST["StreamHistory<br/><i>main/x/history.ts</i>"] --> REPO
+  SVC --> REPO
   NB --> WBITS
   SVC --> SD
   SVC --> DW
@@ -86,6 +91,7 @@ where a character is.
 | across processes | The exposed surface itself | `preload/index.ts` (+ `.d.ts`) |
 | X ↔ W | Files, listing, watching | `Notebook` in `main/w/notebook.ts` |
 | X ↔ W | Where a file goes | `main/w/layout.ts` |
+| X ↔ W | Durable versioned storage | `Repository` in `main/w/repository.ts` |
 | anywhere | Themes | `shared/theme.ts` |
 | anywhere | Format anomalies | `shared/anomalies.ts` |
 | anywhere | Extent policy, screens→chars | `shared/extent.ts` |
@@ -106,6 +112,8 @@ both projects, for that reason.
 | An edit crossing midnight is split | `DocumentWindow.#toDocumentEdits` — property-tested over every range |
 | Which day owns a boundary offset | `DocumentWindow.#segmentAt`; the later day owns it |
 | Undo and redo | `StreamDocument.#stepBack` / `redo`; both directions derived there |
+| Work is saved to history | `DocumentService` commit tier → `Repository.save` |
+| Reading an old version | `StreamHistory.readDay` → `Repository.contentAt` |
 | Undo that lands off-screen | `App.tsx`, the `revealing` wrapper — navigates to it |
 | External edits are adopted | `Notebook` watcher → `StreamDocument`; divergence is surfaced, never resolved (D12) |
 | Text is written to disk | `DocumentService` write tiers — quiescence **and** a ceiling |

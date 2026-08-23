@@ -925,3 +925,68 @@ electron-vite gives renderer HMR, which is worth having for the phase this build
 **What survives unchanged.** Reserved: the nav's column is spent whether or not the nav is drawn. The measure is a fixed track with the slack to its right. The gutter never yields *width*, and the fold below ~1211px is untouched. The text's left edge and its measure are now provably independent of the stream, since an overlay cannot reflow what is under it — measured in the app at 900, 1200, 1400, 1700 and 2000px, with the nav and the stream toggled at each.
 
 **What would reopen this.** Living with it. Q7(c) asks whether the capture surface earns its width at all, and the honest test is whether the one-key jump to today proves frictional in practice. The frame decision does not depend on that answer — the stream is additive to a frame that already reserves its columns.
+
+## D43: Storage is an interface; git is one implementation of it
+
+**Date:** 2026-08-22
+**Status:** decided
+**Refines:** D32, D34
+
+**Decision.** `Repository` is an interface describing what Tephra needs from
+durable versioned storage — `save`, `versions`, `versionsTouching`,
+`contentAt`, `moveTo`, `latest` — and `GitRepository` is one implementation of
+it. The vocabulary is the app's: **versions**, not commits; **reasons**, not
+messages; `VersionId`, not `oid`.
+
+**Why the naming mattered enough to redo.** The first cut called the method
+`commitAll` and returned a forty-character string. That is an API describing its
+mechanism rather than its purpose, and the cost is not aesthetic: the moment the
+interface says *commit*, every layer above starts thinking in git, and the
+choice of git stops being a decision and becomes an assumption. **D34 already
+schedules a revisit at v2a, and that revisit is only cheap if the seam exists
+before it is needed.**
+
+**`moveTo(target)` takes `'latest'` as a magic target**, which is the case that
+made the gap obvious: a second machine opening a notebook it has just received
+wants the tip of the line and does not know a single version id. Resolving
+`'latest'` to the branch rather than to HEAD is also what makes it correct after
+a move to an earlier version, when HEAD is exactly the wrong answer.
+
+**What did not change.** The store is still the notebook directory itself, still
+readable by standard `git`, still verified as such in the tests. This is a
+renaming and a seam, not a redesign — but it is the difference between "we chose
+git" and "we assumed git".
+
+### Three refinements from the same review
+
+**Versions are a TREE, not a list.** `versions()` walks *ancestry* from a point;
+it does not enumerate everything saved. Once branching exists there will be
+versions no walk from `'latest'` ever reaches, and code written against "all
+versions newest first" would look correct until the first branch existed. The
+signature now takes the point to walk back from — `versions(from = 'latest')` —
+so the linearity is visibly a property of the walk rather than of the store.
+
+**Branching and merging belong to this interface**, and are documented in it
+without being built. They are operations on the version tree, and the tree is
+what this interface exists to own; a merge implemented above the seam would
+require the layer above to understand how versions relate, which is precisely
+the knowledge the seam contains. **The division of labour on merging is already
+decided**: the *deep* part — three-way reconciliation, and append-union for day
+files — is storage's, while the *policy* is not, because D12 says divergence is
+surfaced and never auto-resolved. `merge` will report an outcome; it will never
+decide what the reader meant. v2a work.
+
+**The leak had spread past the store.** `DocumentService.commitNow`,
+`#scheduleCommit`, `COMMIT_QUIESCE_MS` and the rest were the same mistake one
+layer up — the *service* does not commit, it **records a version**, and the word
+"commit" is one store's name for how. Renamed to `saveVersion`, `#scheduleVersion`,
+`VERSION_QUIESCE_MS`; `#message()` became `#reason()`, matching the store's own
+vocabulary. Renaming an interface without renaming its callers leaves the leak
+in place and merely moves it.
+
+**The fourth correction in one sitting, all the same shape.** A tracked-path set
+that a measurement dissolved; a hand-rolled hash comparison that
+`git add -A` dissolved; and now an API shaped like its implementation. Each was
+found by someone asking why the code did not look like the obvious thing.
+**The obvious thing is the null hypothesis, and departing from it needs a
+reason that has been checked.**

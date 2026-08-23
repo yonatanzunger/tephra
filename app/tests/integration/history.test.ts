@@ -9,10 +9,10 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Repository } from '../../src/main/w/repo.ts'
+import { GitRepository } from '../../src/main/w/git-repository.ts'
 import { StreamHistory } from '../../src/main/x/history.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import type { DateKey, VersionId } from '../../src/shared/document-api.ts'
+import type { DateKey, VersionId  } from '../../src/shared/document-api.ts'
 
 const d = (s: string): DateKey => s as DateKey
 const DAY = d('2026-08-22')
@@ -25,7 +25,7 @@ async function history(t: TestContext) {
   const dir = await mkdtemp(join(tmpdir(), 'tephra-hist-'))
   await mkdir(join(dir, 'stream', '2026', '08'), { recursive: true })
   await writeFile(join(dir, '.gitignore'), '.tephra/\n')
-  const repo = await Repository.open(dir)
+  const repo = await GitRepository.open(dir)
   t.after(() => rm(dir, { recursive: true, force: true }))
   return { dir, repo, hist: new StreamHistory(repo) }
 }
@@ -36,9 +36,9 @@ const write = (dir: string, date: DateKey, body: string, part = 1): Promise<void
 test('versions come back newest first, carrying their message', async t => {
   const { dir, repo, hist } = await history(t)
   await write(dir, DAY, 'One.\n')
-  await repo.commitAll('2026-08-22 · One.')
+  await repo.save('2026-08-22 · One.')
   await write(dir, DAY, 'Two, and rather longer than the first.\n')
-  await repo.commitAll('2026-08-22 · Two.')
+  await repo.save('2026-08-22 · Two.')
 
   const versions = await hist.versions()
   assert.equal(versions.length, 2)
@@ -51,7 +51,7 @@ test('a day reads back WITHOUT its frontmatter', async t => {
   // "copy the paragraph out" mean "and then delete the header".
   const { dir, repo, hist } = await history(t)
   await write(dir, DAY, 'The paragraph itself.\n')
-  const oid = await repo.commitAll('wrote it')
+  const oid = await repo.save('wrote it')
 
   const text = await hist.readDay(oid as VersionId, DAY)
   assert.equal(text, 'The paragraph itself.\n')
@@ -61,9 +61,9 @@ test('a day reads back WITHOUT its frontmatter', async t => {
 test('THE POINT: text deleted later is readable at an earlier version', async t => {
   const { dir, repo, hist } = await history(t)
   await write(dir, DAY, 'A paragraph I will delete by accident.\n')
-  const before = await repo.commitAll('wrote it')
+  const before = await repo.save('wrote it')
   await write(dir, DAY, 'Oops.\n')
-  await repo.commitAll('destroyed it')
+  await repo.save('destroyed it')
 
   assert.match((await hist.readDay(before as VersionId, DAY)) ?? '', /delete by accident/)
   assert.equal(await hist.readDay((await hist.versions())[0]?.id ?? ('' as VersionId), DAY), 'Oops.\n')
@@ -75,7 +75,7 @@ test('a day that did not exist at that version reads as null, not as empty', asy
   // the first must say so.
   const { dir, repo, hist } = await history(t)
   await write(dir, OTHER, 'Only yesterday exists.\n')
-  const oid = await repo.commitAll('first')
+  const oid = await repo.save('first')
 
   assert.equal(await hist.readDay(oid as VersionId, DAY), null)
   assert.equal(await hist.readDay(oid as VersionId, OTHER), 'Only yesterday exists.\n')
@@ -88,7 +88,7 @@ test('a split day reads back as ONE day', async t => {
   const { dir, repo, hist } = await history(t)
   await write(dir, DAY, 'First half.\n', 1)
   await write(dir, DAY, 'Second half.\n', 2)
-  const oid = await repo.commitAll('a long day')
+  const oid = await repo.save('a long day')
 
   assert.equal(await hist.readDay(oid as VersionId, DAY), 'First half.\nSecond half.\n')
 })
@@ -96,11 +96,11 @@ test('a split day reads back as ONE day', async t => {
 test('versionsTouching narrows to one day', async t => {
   const { dir, repo, hist } = await history(t)
   await write(dir, DAY, 'Today.\n')
-  await repo.commitAll('touched today')
+  await repo.save('touched today')
   await write(dir, OTHER, 'Yesterday.\n')
-  await repo.commitAll('touched yesterday')
+  await repo.save('touched yesterday')
   await write(dir, DAY, 'Today again.\n')
-  await repo.commitAll('touched today again')
+  await repo.save('touched today again')
 
   const forToday = await hist.versionsTouching(DAY)
   assert.deepEqual(

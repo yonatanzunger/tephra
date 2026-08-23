@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocumentService } from '../../src/main/document-service.ts'
-import type { BufferPosition } from '../../src/shared/document-api.ts'
+import type { BufferPosition , VersionId } from '../../src/shared/document-api.ts'
 
 const bp = (n: number): BufferPosition => n as BufferPosition
 const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
@@ -24,11 +24,11 @@ async function service(t: TestContext, options = {}) {
   const svc = new DocumentService(nb, {
     quiesceMs: 20,
     maxIntervalMs: 60,
-    commitQuiesceMs: 120,
-    commitMaxMs: 600,
+    versionQuiesceMs: 120,
+    versionMaxMs: 600,
     ...options,
   })
-  await svc.startHistory()
+  await svc.openHistory()
   t.after(async () => {
     // stop() BEFORE closing the notebook. Without it a pending timer fires
     // against a closed notebook after the test has ended, which node reports as
@@ -54,9 +54,9 @@ async function type(svc: DocumentService, text: string): Promise<void> {
 
 test('opening a fresh notebook makes an initial commit', async t => {
   const { svc } = await service(t)
-  const log = await svc.repository?.log()
+  const log = await svc.repository?.versions()
   assert.equal(log?.length, 1)
-  assert.equal(log?.[0]?.message, 'Opened the notebook')
+  assert.equal(log?.[0]?.reason, 'Opened the notebook')
 })
 
 test('typing commits after quiescence, and the message quotes the text', async t => {
@@ -64,43 +64,43 @@ test('typing commits after quiescence, and the message quotes the text', async t
   await type(svc, 'A sentence worth finding again later.\n')
 
   await wait(500)
-  const log = await svc.repository?.log()
+  const log = await svc.repository?.versions()
   assert.equal(log?.length, 2, 'one new commit')
-  assert.match(log?.[0]?.message ?? '', /A sentence worth finding again later\./)
-  assert.match(log?.[0]?.message ?? '', /^\d{4}-\d{2}-\d{2}/, 'prefixed by the date touched')
+  assert.match(log?.[0]?.reason ?? '', /A sentence worth finding again later\./)
+  assert.match(log?.[0]?.reason ?? '', /^\d{4}-\d{2}-\d{2}/, 'prefixed by the date touched')
 })
 
 test('THE CEILING: continuous writing still commits', async t => {
   // The correction D32 records: quiescence alone fails under precisely the
   // condition this notebook exists for. Writing without pause never reaches
   // quiescence, so without a ceiling an hour of work would never be committed.
-  const { svc } = await service(t, { commitQuiesceMs: 10_000, commitMaxMs: 400 })
+  const { svc } = await service(t, { versionQuiesceMs: 10_000, versionMaxMs: 400 })
   const started = Date.now()
   while (Date.now() - started < 700) {
     await type(svc, 'more, ')
     await wait(40)
   }
-  const log = await svc.repository?.log()
+  const log = await svc.repository?.versions()
   assert.ok((log?.length ?? 0) >= 2, `the ceiling fired despite no quiet moment (${log?.length} commits)`)
 })
 
 test('session end commits what is outstanding', async t => {
   // The trigger that makes "I wrote for ten minutes and quit" land in the
   // history rather than waiting for a quiescence that never comes.
-  const { svc } = await service(t, { commitQuiesceMs: 60_000, commitMaxMs: 60_000 })
+  const { svc } = await service(t, { versionQuiesceMs: 60_000, versionMaxMs: 60_000 })
   await type(svc, 'Written just before quitting.\n')
   await svc.stop()
 
-  const log = await svc.repository?.log()
+  const log = await svc.repository?.versions()
   assert.equal(log?.length, 2)
-  assert.match(log?.[0]?.message ?? '', /Written just before quitting\./)
+  assert.match(log?.[0]?.reason ?? '', /Written just before quitting\./)
 })
 
 test('a quiet session adds no commits at all', async t => {
   const { svc } = await service(t)
   await wait(400)
   await svc.stop()
-  assert.equal((await svc.repository?.log())?.length, 1, 'still just the initial commit')
+  assert.equal((await svc.repository?.versions())?.length, 1, 'still just the initial commit')
 })
 
 test('the committed file contains what was typed', async t => {
@@ -109,12 +109,12 @@ test('the committed file contains what was typed', async t => {
   await type(svc, 'Durable prose.\n')
   await svc.stop()
 
-  const log = await svc.repository?.log()
-  const oid = log?.[0]?.oid ?? ''
+  const log = await svc.repository?.versions()
+  const oid = log?.[0]?.id ?? ('' as VersionId)
   const info = await svc.info()
   const [y, m] = info.today.split('-')
   const rel = `stream/${y}/${m}/${info.today}.md`
-  const inCommit = await svc.repository?.readAt(oid, rel as never)
+  const inCommit = await svc.repository?.contentAt(oid, rel as never)
   assert.match(inCommit ?? '', /Durable prose\./)
   assert.match(await readFile(join(root, rel), 'utf8'), /Durable prose\./)
 })
@@ -123,9 +123,9 @@ test('the machine-local directory never reaches the history', async t => {
   const { svc } = await service(t)
   await type(svc, 'Something.\n')
   await svc.stop()
-  const oid = (await svc.repository?.log())?.[0]?.oid ?? ''
-  assert.equal(await svc.repository?.readAt(oid, '.tephra/ui-state.json' as never), null)
-  assert.equal(await svc.repository?.readAt(oid, '.tephra/wal' as never), null)
+  const oid = (await svc.repository?.versions())?.[0]?.id ?? ('' as VersionId)
+  assert.equal(await svc.repository?.contentAt(oid, '.tephra/ui-state.json' as never), null)
+  assert.equal(await svc.repository?.contentAt(oid, '.tephra/wal' as never), null)
 })
 
 async function watched(t: TestContext, options = {}) {
@@ -134,11 +134,11 @@ async function watched(t: TestContext, options = {}) {
   const svc = new DocumentService(nb, {
     quiesceMs: 20,
     maxIntervalMs: 60,
-    commitQuiesceMs: 120,
-    commitMaxMs: 600,
+    versionQuiesceMs: 120,
+    versionMaxMs: 600,
     ...options,
   })
-  await svc.startHistory()
+  await svc.openHistory()
   t.after(async () => {
     await svc.stop()
     await nb.close()
@@ -157,15 +157,15 @@ test('a file edited outside Tephra is committed while the app is still running',
   // next launch would make "the corpus is safe" false for exactly the case the
   // format was designed to allow.
   const { svc, root, rel, today } = await watched(t)
-  const before = (await svc.repository?.log())?.length ?? 0
+  const before = (await svc.repository?.versions())?.length ?? 0
 
   await writeFile(join(root, rel), `---\ndate: ${today}\n---\n\nTyped in another editor.\n`)
   await wait(900)
 
-  const log = await svc.repository?.log()
+  const log = await svc.repository?.versions()
   assert.equal(log?.length, before + 1, 'the hand-edit was committed')
-  assert.equal(log?.[0]?.message, 'Changes made outside Tephra')
-  assert.match((await svc.repository?.readAt(log?.[0]?.oid ?? '', rel as never)) ?? '', /another editor/)
+  assert.equal(log?.[0]?.reason, 'Changes made outside Tephra')
+  assert.match((await svc.repository?.contentAt(log?.[0]?.id ?? ('' as VersionId), rel as never)) ?? '', /another editor/)
 })
 
 test("someone else's edit never ends up quoted in OUR commit message", async t => {
@@ -180,13 +180,19 @@ test("someone else's edit never ends up quoted in OUR commit message", async t =
   await type(svc, 'My own sentence.\n')
   await svc.stop()
 
-  const log = await svc.repository?.log()
-  const ours = log?.find(c => c.message.includes('My own sentence'))
+  const log = await svc.repository?.versions()
+  const ours = log?.find(c => c.reason?.includes('My own sentence'))
   assert.ok(ours !== undefined, 'our typing produced its own commit')
-  assert.doesNotMatch(ours.message, /WORDS FROM ELSEWHERE/, 'and it quotes only what we wrote')
+  assert.doesNotMatch(ours.reason ?? '', /WORDS FROM ELSEWHERE/, 'and it quotes only what we wrote')
+
+  // The hand-edit is recorded, somewhere. Whether it lands in its own version
+  // or shares ours depends on whether the timer fired between the two, which is
+  // timing and not meaning — so the assertion is that it is in the history at
+  // all, not which version holds it. When they DO share one, the reason says so;
+  // that suffix is checked where it can be made deterministic.
   assert.ok(
-    log?.some(c => c.message === 'Changes made outside Tephra'),
-    'the hand-edit is recorded, separately',
+    log?.some(v => (v.reason ?? '').includes('outside Tephra')),
+    'and the work from elsewhere is in the history too',
   )
 })
 
@@ -208,9 +214,9 @@ test('REGRESSION: git’s own directory is never committed, and never feeds the 
   assert.doesNotMatch(tracked, /\.tephra\//, 'nor is the machine-local state')
   assert.match(tracked, /stream\//, 'but the notebook is')
 
-  const settled = (await svc.repository?.log())?.length ?? 0
+  const settled = (await svc.repository?.versions())?.length ?? 0
   await wait(700) // long enough for another tier cycle, if one were coming
-  assert.equal((await svc.repository?.log())?.length, settled, 'the tier came to rest')
+  assert.equal((await svc.repository?.versions())?.length, settled, 'the tier came to rest')
 
   assert.equal(
     execFileSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' }).trim(),
