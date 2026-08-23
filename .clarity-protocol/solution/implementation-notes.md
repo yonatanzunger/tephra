@@ -420,3 +420,39 @@ know about.
 **Null and empty are different answers.** A day that did not exist at a version
 reads as null; a day that existed and was blank reads as `''`. A browser showing
 one pane for both would be lying about one of them.
+
+## The day-file split (M1 bullet 4)
+
+**The rule is a pure function** — `splitBody(body, threshold)` — because the
+correctness lives in the rule, not in the plumbing, and a pure function can be
+tested at thresholds a real day will never reach.
+
+**Prefix-stability is what the rule exists for**, and it is stronger than
+determinism. Scanning left to right and closing each part as soon as it can be
+closed is what buys it: no part's boundary is ever chosen with knowledge of what
+comes after it. Tested by appending forty times and asserting that every part
+but the last stays byte-identical — because a boundary that moved would rewrite
+part 1 for a change that only touched the end, and under sync that is **a
+conflict manufactured out of a change nobody made**.
+
+**A paragraph bigger than the threshold is kept whole**, and the part is allowed
+to be oversized. Splitting inside it would cut a sentence in half in a file
+somebody may open in another editor; a rare, visible, harmless overflow beats
+silent damage to the text.
+
+**The common path is untouched.** A day that fits in one file still takes the
+original splice path, preserving byte for byte what it did not change — which is
+what stops every save becoming a diff of reformatted YAML. Only a day past the
+threshold takes the second path, where later parts have no original bytes to
+preserve and are rendered fresh. Making the always-case pay for the
+once-in-a-career case would be the wrong trade.
+
+**A shrinking day deletes its own tail.** An orphaned part 2 would be read back
+as part of the day forever, silently restoring text that had been deleted — the
+worst kind of leftover, and one nothing else would catch.
+
+**Two traps found while testing, both in the tests rather than the code.**
+`x?.length ?? 0 > 0` parses as `x?.length ?? (0 > 0)`. And `2026-03-14.2.md`
+sorts *before* `2026-03-14.md`, because `'2'` precedes `'m'` — so **filename
+order is not part order**, and nothing should ever assume it is. The frontmatter
+`part` key is what orders them, which is what the format says.

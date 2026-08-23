@@ -80,12 +80,15 @@ export class StreamDocument implements Document {
     const held = this.#segments.get(date)
     if (held !== undefined) return held
 
+    // Parts coalesce into one date span above storage (D20), so this is the
+    // only place that knows a day can be more than one file. Part 1 carries the
+    // frontmatter and the original bytes; the rest contribute body only.
     const rel = dayFile(date)
     const text = await this.#notebook.read(rel)
     const segment =
       text === null
         ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'stream')))
-        : Segment.load(date, rel, text)
+        : Segment.load(date, rel, text + (await this.#laterParts(date)))
     this.#segments.set(date, segment)
     return segment
   }
@@ -547,12 +550,34 @@ export class StreamDocument implements Document {
       // A diverged segment is frozen: writing it would destroy the hand-edit
       // that caused the divergence, which is the one outcome nothing recovers.
       if (!segment.dirty || segment.readOnly || segment.diverged) continue
-      const text = segment.serialise()
-      await this.#notebook.write(segment.rel, text)
-      segment.markClean(text)
-      written.push(segment.rel)
+
+      const files = segment.files()
+      for (const file of files) {
+        await this.#notebook.write(file.rel, file.text)
+        written.push(file.rel)
+      }
+      // A day that shrank back below the threshold must not leave its old tail
+      // behind: an orphaned part 2 would be read back as part of the day
+      // forever, silently duplicating text that was deleted.
+      for (let part = files.length + 1; ; part++) {
+        const stale = dayFile(segment.date, part)
+        if (!(await this.#notebook.has(stale))) break
+        await this.#notebook.remove(stale)
+        written.push(stale)
+      }
+      segment.markClean(files[0]?.text ?? segment.serialise())
     }
     return written
+  }
+
+  /** Bodies of parts 2..n, concatenated. Empty for the ordinary one-part day. */
+  async #laterParts(date: DateKey): Promise<string> {
+    let out = ''
+    for (let part = 2; ; part++) {
+      const text = await this.#notebook.read(dayFile(date, part))
+      if (text === null) return out
+      out += parseFile(text).body
+    }
   }
 
   async reload(): Promise<void> {

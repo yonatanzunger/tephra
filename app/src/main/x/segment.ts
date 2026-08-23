@@ -6,9 +6,11 @@
 // keyword would silently move every position in the day.
 
 import type { DateKey, TypedSpan } from '../../shared/document-api.ts'
-import { parseFile, spliceBody, type ParsedFile } from './frontmatter.ts'
+import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
 import { resolveAnchors, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
 import { findAnomalies } from './anomalies.ts'
+import { splitBody, SPLIT_THRESHOLD } from './split.ts'
+import { dayFile } from '../w/layout.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import type { RelPath } from '../w/layout.ts'
 
@@ -112,6 +114,37 @@ export class Segment {
   /** The bytes to write: original file with only the body replaced. */
   serialise(): string {
     return spliceBody(this.#original, this.#parsed, this.#body)
+  }
+
+  /**
+   * The files this day should become — one entry per part (format-spec, D20).
+   *
+   * **A day that fits in one file takes the untouched path**: the original bytes
+   * with only the body spliced in, preserving everything it did not change byte
+   * for byte. That is the case essentially always, and it is the one where a
+   * regenerated file would silently reformat YAML key order or list markers and
+   * turn every save into a diff.
+   *
+   * Only a day past the threshold takes the second path, where later parts have
+   * no original bytes to preserve and are rendered fresh. Trading byte-exactness
+   * for the ability to split at all is a fair trade in a case that arrives once
+   * every few years; making the common case pay for it would not be.
+   */
+  files(threshold = SPLIT_THRESHOLD): readonly { rel: RelPath; text: string }[] {
+    const parts = splitBody(this.#body, threshold)
+    if (parts.length === 1) return [{ rel: this.rel, text: this.serialise() }]
+
+    const base = this.#parsed.frontmatter ?? frontmatterFor(this.date, 'stream')
+    return parts.map((body, i) => {
+      const part = i + 1
+      if (part === 1) {
+        return { rel: dayFile(this.date, 1), text: spliceBody(this.#original, this.#parsed, body) }
+      }
+      return {
+        rel: dayFile(this.date, part),
+        text: renderFrontmatter({ ...base, part }) + body,
+      }
+    })
   }
 
   markClean(written: string): void {

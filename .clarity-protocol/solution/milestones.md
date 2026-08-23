@@ -88,22 +88,22 @@ and the WAL have been built on the assumption.
 
 ### The checklist
 
-1. **Verify `isomorphic-git`.** init, add, commit, log, read a blob, checkout —
+1. ✅ **Verify `isomorphic-git`.** init, add, commit, log, read a blob, checkout —
    in the real Electron main process, against a scratch repository. **The
    acceptance test is D34's: standard `git` must be able to read it.** A
    repository only Tephra can read defeats the entire reason git was chosen.
-2. **The commit tier.** Repository at the notebook root. Commits on ~5 min
+2. ✅ **The version tier.** Repository at the notebook root. Commits on ~5 min
    quiescence **or** every 30 min **or** session end (D32). `.tephra/` stays
    ignored — the bootstrap `.gitignore` already does this; `config/` is
    committed, because a theme somebody crafted is authored work (D41).
-3. **History as its own X object.** Document stops owning durable history;
+3. ✅ **History as its own X object.** Document stops owning durable history;
    `Document.undo` and `rewindTo` stay volatile and session-scoped (D32).
    **v1 scope: browse and copy out** — list commits, view a file at a version,
    lift text by hand. It is the smallest thing that makes the history real, and
    it never writes, so it cannot itself lose anything.
    `History.restore(version, doc, span?)` lands in **M2**, where spans already
    exist as a first-class idea.
-4. **Day-file split at 1 MB.** Prefix-stable, at the last paragraph boundary at
+4. ✅ **Day-file split at 1 MB.** Prefix-stable, at the last paragraph boundary at
    or before the threshold; parts coalesce into one date span above the storage
    layer (D20), so the split stays invisible to the API. **With a forced test
    using a synthetic oversized day** — at ~100 KB a day this will essentially

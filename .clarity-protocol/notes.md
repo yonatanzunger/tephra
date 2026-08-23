@@ -248,3 +248,59 @@ characters converted, verified by asserting zero bytes above 127 remain.
 
 Worth remembering for anything else published this way: **portable means ASCII
 when the wrapper owns the head.**
+
+# Two principles, and the evidence for them
+
+Stated by the author after a review in which both were violated three times in
+one sitting. Recorded here rather than in a decision because they are not about
+this project.
+
+## 1. Start from the simple and stupid solution. Get fancier only for a specific reason.
+
+The storage layer was built three times in an afternoon:
+
+| version | what it was | why it went |
+|---|---|---|
+| tracked paths | a set accumulating what the app wrote, fed by the writer and the watcher | the performance claim behind it had never been measured — whole-tree status is **0.19 s** on a twenty-year corpus |
+| hand-rolled hashing | comparing blob ids by hand, plus a parameter for feeding it paths | `git add -A` already does this, correctly, because `add` hashes as it walks |
+| `add -A` | eleven lines | — |
+
+197 lines became 135, an accumulating set in the service disappeared, and the
+writer stopped having to report what it wrote. **The simple version was also the
+more correct one**: a tracked-path list silently omits anything written by a
+code path that forgets to report itself, and a scan has no such gap. That is the
+part worth remembering — the fancy version was not a trade of simplicity for
+safety. It was worse at both.
+
+## 2. Each subsystem's API uses the nouns and verbs native to *it*, never to its implementation.
+
+`Repository.commitAll()` returning a forty-character string is an API describing
+its mechanism. The cost is not aesthetic: **the moment the interface says
+*commit*, every layer above starts thinking in git, and the choice of git stops
+being a decision and becomes an assumption.** D34 already schedules a revisit at
+v2a; that revisit is only cheap if the seam exists before it is needed.
+
+It became `save(reason) -> VersionId | null`, with `versions`, `contentAt` and
+`moveTo`. And the leak had already spread one layer up — `DocumentService`
+had `commitNow`, `#scheduleCommit`, `COMMIT_QUIESCE_MS`. **Renaming an interface
+without renaming its callers relocates a leak rather than removing it.**
+
+## What actually caught them, which is the useful part
+
+Both principles are easy to agree with in the abstract and hard to apply to your
+own code in the moment — because when you write the complex version you have a
+reason in your head, and the reason feels sufficient. "Whole-tree status is
+O(files)" is a real sentence about a real property. It was just never checked
+against a clock.
+
+Every one of these was found by an outside reader asking a version of the same
+question: **"why doesn't this look like the way that is normally done?"**
+
+- *"Why aren't we just doing `git add`, `git commit`?"*
+- *"I've never seen a call to `git add` have this problem."*
+- *"`commitAll` leaks an implementation detail into the API."*
+
+So the operational form of both principles is a review question rather than a
+design rule: **the ordinary way is the null hypothesis, and departing from it
+requires a reason that has been checked, not merely held.** An unfamiliar shape
+in a well-worn operation is a bug report about the code, not evidence of care.
