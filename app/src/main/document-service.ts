@@ -15,6 +15,7 @@ import type { Anomaly } from '../shared/anomalies.ts'
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, DocumentPosition, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
+import { Wal, type WalRecord } from './w/wal.ts'
 import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
 import type { RelPath } from './w/layout.ts'
@@ -52,6 +53,12 @@ const MAX_INTERVAL_MS = 5_000
  * a ceiling the commit would never happen and the whole hour would live in one
  * commit — or in none, if the process died.
  */
+/**
+ * The first tier (D32). Small enough that what it can lose is a few keystrokes;
+ * large enough that a burst of typing is one write rather than thirty.
+ */
+const WAL_BATCH_MS = 50
+
 const VERSION_QUIESCE_MS = 5 * 60_000
 const VERSION_MAX_MS = 30 * 60_000
 
@@ -63,6 +70,7 @@ export interface ServiceOptions {
    * is still waiting on the file tier's one-second quiescence and concludes,
    * wrongly, that the commit never happens.
    */
+  readonly walBatchMs?: number
   readonly quiesceMs?: number
   readonly maxIntervalMs?: number
   readonly versionQuiesceMs?: number
@@ -91,11 +99,17 @@ export class DocumentService {
   readonly #versionMaxMs: number
   readonly #wantsHistory: boolean
 
-  /** Something is unsaved or uncommitted; the tier has work to do. */
+  /** Something is unwritten or unversioned; the tiers have work to do. */
   #unsavedWork = false
-  /** Whether anything outside the app changed since the last commit. */
+  /** Whether anything outside the app changed since the last version. */
   #sawExternal = false
-  /** Dates touched since the last commit, for the message. */
+
+  readonly #wal: Wal
+  readonly #walBatchMs: number
+  #walPending: WalRecord[] = []
+  #walTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Dates touched since the last version, for its reason. */
   readonly #pendingDates = new Set<string>()
   /** The first line of the most recent insertion, for the message. */
   #headline = ''
@@ -105,6 +119,8 @@ export class DocumentService {
   constructor(notebook: Notebook, options: ServiceOptions = {}) {
     this.#notebook = notebook
     this.#doc = new StreamDocument(notebook)
+    this.#wal = new Wal(notebook)
+    this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
     this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
     this.#versionQuiesceMs = options.versionQuiesceMs ?? VERSION_QUIESCE_MS
@@ -114,6 +130,21 @@ export class DocumentService {
     // What went into the commit message, gathered as it happens. Reconstructing
     // it later would mean diffing, and the point of quoting the text is that it
     // is right there at the moment of the change.
+    // Into the log before the file tier gets to it: that gap is the whole
+    // reason the log exists.
+    this.#doc.onJournal((date, baseLen, edits) => {
+      for (const edit of edits) {
+        this.#walPending.push({
+          date: date as string,
+          baseLen,
+          from: edit.from,
+          to: edit.to,
+          insert: edit.insert,
+        })
+      }
+      this.#scheduleWal()
+    })
+
     this.#doc.onChanged(change => {
       // An external change must not colour OUR commit message. Measured before
       // this guard existed: a hand-edit set the headline, and the next commit
@@ -269,13 +300,60 @@ export class DocumentService {
   async flush(): Promise<void> {
     this.#cancelFlush()
     const written = await this.#serial(() => this.#doc.writeDirty())
+    // ORDER MATTERS: files first, then the log. A crash between the two replays
+    // edits the files already contain, which is exactly what `baseLen` makes
+    // harmless. The other order would lose them outright.
+    if (this.#walTimer !== null) clearTimeout(this.#walTimer)
+    this.#walTimer = null
+    this.#walPending = []
+    await this.#wal.clear()
     if (written.length > 0) {
       this.#unsavedWork = true
       this.#scheduleVersion()
     }
   }
 
-  // ── the commit tier (D32) ────────────────────────────────────
+  // ── the write-ahead log (D32) ────────────────────────────────
+
+  #scheduleWal(): void {
+    if (this.#walTimer !== null) return
+    this.#walTimer = setTimeout(() => {
+      this.#walTimer = null
+      const batch = this.#walPending
+      this.#walPending = []
+      void this.#wal.append(batch)
+    }, this.#walBatchMs)
+  }
+
+  /**
+   * Replay whatever the last session did not manage to write, and write it.
+   *
+   * Called once at startup, before any window opens. A record whose day is not
+   * the length that record expected is skipped: it is already in the file,
+   * because the crash landed after the write and before the log was cleared.
+   * Later records then match again, so recovery resumes wherever the files
+   * actually got to rather than refusing wholesale.
+   */
+  async recover(): Promise<number> {
+    const records = await this.#wal.read()
+    if (records.length === 0) return 0
+
+    let applied = 0
+    for (const record of records) {
+      const segment = await this.#doc.segment(record.date as DateKey)
+      if (segment.readOnly || segment.diverged) continue
+      if (segment.length !== record.baseLen) continue // already on disk
+      const body = segment.body
+      segment.setBody(body.slice(0, record.from) + record.insert + body.slice(record.to))
+      applied++
+    }
+
+    if (applied > 0) await this.flush()
+    else await this.#wal.clear()
+    return applied
+  }
+
+  // ── the version tier (D32) ───────────────────────────────────
 
   /**
    * Open the repository and reconcile whatever happened while the app was not
@@ -395,6 +473,8 @@ export class DocumentService {
     await this.saveVersion()
     this.#cancelFlush()
     this.#cancelVersion()
+    if (this.#walTimer !== null) clearTimeout(this.#walTimer)
+    this.#walTimer = null
   }
 
   releaseWindow(id: WindowId): void {

@@ -42,6 +42,9 @@ export class StreamDocument implements Document {
   #lastUserEditAt = 0
 
   readonly #changeHandlers = new Set<(c: DocumentChange) => void>()
+  readonly #journalHandlers = new Set<
+    (date: DateKey, baseLen: number, edits: readonly TextEdit[]) => void
+  >()
   readonly #divergeHandlers = new Set<(d: Divergence) => void>()
 
   /** Windows that need telling when something else changes the text. */
@@ -323,6 +326,13 @@ export class StreamDocument implements Document {
       }
       const sorted = [...list].sort((a, b) => a.from - b.from)
       inverse.set(date, invertEdits(segment.body, sorted))
+      // Emitted here because HERE is the only place the pre-edit length still
+      // exists. Anywhere downstream the edit has already been applied, and the
+      // log's whole safety property depends on knowing what the day looked like
+      // before it — see `WalRecord.baseLen`.
+      if (record && origin !== 'external') {
+        for (const handler of this.#journalHandlers) handler(date, segment.body.length, sorted)
+      }
       segment.setBody(applyEdits(segment.body, sorted))
     }
 
@@ -578,6 +588,18 @@ export class StreamDocument implements Document {
       if (text === null) return out
       out += parseFile(text).body
     }
+  }
+
+  /**
+   * Told about each batch of text edits as it is applied, with the length of the
+   * day BEFORE it. The write-ahead log is the only subscriber; nothing else
+   * needs pre-edit state, and nothing else should be given it.
+   */
+  onJournal(
+    handler: (date: DateKey, baseLen: number, edits: readonly TextEdit[]) => void,
+  ): () => void {
+    this.#journalHandlers.add(handler)
+    return () => this.#journalHandlers.delete(handler)
   }
 
   async reload(): Promise<void> {

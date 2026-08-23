@@ -109,7 +109,7 @@ and the WAL have been built on the assumption.
    using a synthetic oversized day** — at ~100 KB a day this will essentially
    never fire on its own, and a path that fires once every few years is broken
    when it fires.
-5. **The WAL.** Changes since the last file write, batched at ~50 ms, at the
+5. ✅ **The WAL.** Changes since the last file write, batched at ~50 ms, at the
    `.tephra/wal` path already reserved in `layout.ts`. Closes the seconds-wide
    window that the file tier leaves open.
 6. **The purge procedure.** Documented, not a button (T10, D36).

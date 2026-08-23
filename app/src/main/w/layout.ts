@@ -29,7 +29,13 @@ export const LOCAL_DIR = '.tephra'
 export const LOCAL = {
   version: `${LOCAL_DIR}/version`,
   lock: `${LOCAL_DIR}/lock`,
+  /**
+   * The log's HOME, a directory — which is why it appears in `REQUIRED_DIRS`.
+   * Keeping it a directory leaves room to segment or rotate the log later
+   * without moving anything, and costs one path constant now.
+   */
   wal: `${LOCAL_DIR}/wal`,
+
   index: `${LOCAL_DIR}/index`,
   issues: `${LOCAL_DIR}/issues.json`,
   attachmentsManifest: `${LOCAL_DIR}/attachments.manifest`,
@@ -160,4 +166,13 @@ export function slug(name: string): string {
 /** Where a theme lives. The filename is the theme's identity (D41). */
 export function themeFile(name: string): RelPath {
   return `${THEMES_DIR}/${slug(name)}.json`
+}
+
+/**
+ * One write-ahead log per document — `.tephra/wal/<doc-id>.jsonl`, exactly as
+ * `format-spec.md` lays it out. v1 has a single document, the stream, but the
+ * shape is the spec's and costs nothing to honour now.
+ */
+export function walFile(docId: string): RelPath {
+  return `${LOCAL_DIR}/wal/${slug(docId)}.jsonl`
 }

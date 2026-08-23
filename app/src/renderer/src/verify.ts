@@ -380,6 +380,19 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'crash') {
+      // Type, wait past the WAL batch but nowhere near the file tier, and die.
+      // TEPHRA_EXIT=abrupt makes app.exit() skip before-quit entirely, which is
+      // the closest thing to a crash that can be arranged on purpose.
+      const at = view.state.doc.length
+      view.dispatch({
+        changes: { from: at, insert: 'SURVIVES-THE-CRASH: a sentence typed and never saved.\n' },
+        userEvent: 'input.type',
+      })
+      await settle(300)
+      say('typed', view.state.doc.toString().includes('SURVIVES-THE-CRASH'))
+    }
+
     if (scene === 'undo-away') {
       // FALSIFICATION: App.tsx claims that when undo lands outside the loaded
       // region "the Pane is told to go there". Nothing in the renderer does

@@ -150,6 +150,12 @@ app.whenReady().then(async () => {
 
   // Seeded before the window opens, so the first launch already has a themes
   // directory to look at rather than an empty one that fills in later.
+  // BEFORE anything else touches the corpus: replay whatever the last session
+  // did not manage to write. Opening a window first would show the reader a
+  // document missing its final seconds, and then change it under them.
+  const recovered = await service.recover()
+  if (recovered > 0) console.log(`Tephra: recovered ${recovered} unsaved edit(s) from the log`)
+
   await seedThemes(notebook)
 
   // AFTER seeding, so the first commit includes the themes it just wrote — and

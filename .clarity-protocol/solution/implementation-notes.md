@@ -456,3 +456,47 @@ worst kind of leftover, and one nothing else would catch.
 sorts *before* `2026-03-14.md`, because `'2'` precedes `'m'` — so **filename
 order is not part order**, and nothing should ever assume it is. The frontmatter
 `part` key is what orders them, which is what the format says.
+
+## The write-ahead log (M1 bullet 5)
+
+**One record shape, and the field that matters is `baseLen`.** A record is a
+day, a text edit, and *the day's length before that edit*. The length is what
+makes replay safe to run twice — and it has to be, because a crash can land
+after the files were written and before the log was cleared. Replaying then
+would append the same paragraph a second time, silently, to the one place it was
+supposed to be safe. On replay a record whose day is not the length it expected
+is skipped as already applied; later records match again, so recovery resumes
+wherever the files actually got to rather than refusing wholesale.
+
+**The record is emitted from inside `StreamDocument.#applyAndRecord`**, because
+that is the only place the pre-edit length still exists. Anywhere downstream the
+edit has already been applied. `onJournal` has exactly one subscriber and gives
+out pre-edit state, which nothing else needs and nothing else should have.
+
+**Files first, then clear the log.** The other order loses the edits outright if
+the process dies between the two; this order duplicates them, and `baseLen`
+makes duplication harmless. Choose the failure you can undo.
+
+**A torn last line is expected, not exceptional.** A crash is exactly the event
+that leaves half a line behind, and refusing to recover anything because the
+final fragment is incomplete would give up at the precise moment the log was
+needed.
+
+**Two places the existing design was already right and the implementation was
+not.** `.tephra/wal` is in `REQUIRED_DIRS` — a *directory*, so the log can be
+segmented later — and my first version wrote a file at that exact path, which
+failed with `EISDIR`. And `format-spec.md` specifies `wal/<doc-id>.jsonl`, one
+log per document; v1 has only the stream, but honouring the shape now costs
+nothing. **Both were caught by reading what was already written down rather than
+by a test.**
+
+**One deliberate divergence from the spec, recorded.** It describes the log as
+holding serialised `DocumentChange` records. What is written is narrower: per-day
+text edits plus `baseLen`. A `DocumentChange` carries generations, and a
+`SessionGeneration` dies with its process (D33) — so the part of it that would
+survive a crash is exactly the part being written, and the rest would be noise.
+
+**Verified against a real crash**, not a simulated one: a live app typed a
+sentence, `TEPHRA_EXIT=abrupt` killed it without running `before-quit`, and the
+day file did not exist at all. Reopening printed *"recovered 1 unsaved edit(s)
+from the log"* and the sentence was in the buffer and on disk.
