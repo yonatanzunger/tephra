@@ -33,7 +33,7 @@ test('a first commit records the file', async t => {
   const repo = await Repository.open(dir)
   await put(dir, DAY, 'The first paragraph.\n')
 
-  const oid = await repo.commit([DAY], '2026-08-22 · The first paragraph.')
+  const oid = await repo.commitAll('2026-08-22 · The first paragraph.')
   assert.ok(oid !== null && oid.length === 40)
 
   const log = await repo.log()
@@ -50,10 +50,10 @@ test('a quiet notebook does NOT accrue empty commits', async t => {
   const dir = await scratch(t)
   const repo = await Repository.open(dir)
   await put(dir, DAY, 'Something.\n')
-  await repo.commit([DAY], 'first')
+  await repo.commitAll('first')
 
   for (let i = 0; i < 5; i++) {
-    assert.equal(await repo.commit([DAY], `tick ${i}`), null, 'nothing changed, nothing committed')
+    assert.equal(await repo.commitAll(`tick ${i}`), null, 'nothing changed, nothing committed')
   }
   assert.equal((await repo.log()).length, 1)
 })
@@ -63,9 +63,9 @@ test('text overwritten in a later commit is recoverable from the earlier one', a
   const dir = await scratch(t)
   const repo = await Repository.open(dir)
   await put(dir, DAY, 'A paragraph I will regret deleting.\n')
-  const first = await repo.commit([DAY], 'wrote it')
+  const first = await repo.commitAll('wrote it')
   await put(dir, DAY, 'Something else entirely.\n')
-  await repo.commit([DAY], 'replaced it')
+  await repo.commitAll('replaced it')
 
   assert.ok(first !== null)
   const recovered = await repo.readAt(first, DAY)
@@ -76,10 +76,10 @@ test('a deleted file is committed as a deletion, not as a failure', async t => {
   const dir = await scratch(t)
   const repo = await Repository.open(dir)
   await put(dir, DAY, 'Here for now.\n')
-  await repo.commit([DAY], 'wrote it')
+  await repo.commitAll('wrote it')
 
   await rm(join(dir, DAY))
-  const oid = await repo.commit([DAY], 'deleted it')
+  const oid = await repo.commitAll('deleted it')
   assert.ok(oid !== null, 'a deletion is a change worth committing')
   assert.equal(await repo.readAt(oid, DAY), null, 'gone at the new commit')
 })
@@ -94,7 +94,7 @@ test('the machine-local directory is never committed', async t => {
   await put(dir, '.tephra/wal', 'machine-local')
   await put(dir, DAY, 'Real content.\n')
 
-  const oid = await repo.commit([rel('.tephra/wal'), DAY], 'first')
+  const oid = await repo.commitAll('first')
   assert.ok(oid !== null)
   assert.equal(await repo.readAt(oid, rel('.tephra/wal')), null, 'the WAL is not in the tree')
   assert.match((await repo.readAt(oid, DAY)) ?? '', /Real content/)
@@ -124,18 +124,18 @@ test('the startup scan catches what changed while the app was closed', async t =
   const dir = await scratch(t)
   const repo = await Repository.open(dir)
   await put(dir, DAY, 'Session one.\n')
-  await repo.commit([DAY], 'session one')
+  await repo.commitAll('session one')
 
   // Edited by something else entirely, with Tephra not running.
   await put(dir, DAY, 'Edited in another program.\n')
   await put(dir, 'stream/2026/08/2026-08-23.md', 'A day created by hand.\n')
 
-  const oid = await repo.commitOutstanding('Changes made outside Tephra')
+  const oid = await repo.commitAll('Changes made outside Tephra')
   assert.ok(oid !== null, 'the scan found them')
   assert.match((await repo.readAt(oid, DAY)) ?? '', /another program/)
   assert.match((await repo.readAt(oid, rel('stream/2026/08/2026-08-23.md'))) ?? '', /by hand/)
 
-  assert.equal(await repo.commitOutstanding('again'), null, 'and nothing is left outstanding')
+  assert.equal(await repo.commitAll('again'), null, 'and nothing is left outstanding')
 })
 
 test('what we write is readable by the git binary', async t => {
@@ -150,7 +150,7 @@ test('what we write is readable by the git binary', async t => {
   // file leaves it untracked, so the tree is not clean and, worse, anyone who
   // cloned the notebook would not know to ignore `.tephra/`. The bootstrap
   // writes that file; the first commit has to carry it.
-  await repo.commitOutstanding('a commit')
+  await repo.commitAll('a commit')
 
   execFileSync('git', ['-C', dir, 'fsck', '--strict'], { encoding: 'utf8' })
   const log = execFileSync('git', ['-C', dir, 'log', '--oneline'], { encoding: 'utf8' })
@@ -163,4 +163,39 @@ test('what we write is readable by the git binary', async t => {
     'a clone must know to ignore the machine-local directory',
   )
   void readFile
+})
+
+test('REGRESSION: an edit that does not change the file’s LENGTH is still committed', async t => {
+  // isomorphic-git's `status` and `statusMatrix` are stat-based and both report
+  // "unmodified" here — measured, and still wrong more than a second later,
+  // while the git binary correctly says the file is modified. Same-length edits
+  // are ordinary in a notebook: fixing a typo, swapping a word, correcting a
+  // digit. Trusting either primitive meant those edits reached the disk and
+  // were SILENTLY never committed, which is the exact failure this milestone
+  // exists to remove. Detection is by content hash now.
+  const dir = await scratch(t)
+  const repo = await Repository.open(dir)
+  await put(dir, DAY, 'Teh quick brown fox.\n')
+  await repo.commitAll('with the typo')
+
+  await put(dir, DAY, 'The quick brown fox.\n') // same length, one letter moved
+
+  // No hint needed: `add` hashes as it walks, so the same second and the same
+  // length are both irrelevant to it.
+  const oid = await repo.commitAll('typo fixed')
+  assert.ok(oid !== null, 'the fix was committed')
+  assert.match((await repo.readAt(oid, DAY)) ?? '', /^The quick/m)
+  assert.equal((await repo.log()).length, 2)
+})
+
+test('REGRESSION: the startup scan also catches a same-length change', async t => {
+  const dir = await scratch(t)
+  const repo = await Repository.open(dir)
+  await put(dir, DAY, 'AAAAAAAAAA\n')
+  await repo.commitAll('first')
+
+  await put(dir, DAY, 'BBBBBBBBBB\n') // identical length, app not running
+  const oid = await repo.commitAll('caught at startup')
+  assert.ok(oid !== null, 'the scan noticed')
+  assert.match((await repo.readAt(oid, DAY)) ?? '', /BBBB/)
 })

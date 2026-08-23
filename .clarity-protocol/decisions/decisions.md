@@ -645,6 +645,85 @@ reverse, which matters just as much because a notebook is a visible directory
 read back correctly by us, blob and all. Text overwritten in a later commit is
 recoverable from an earlier one, and `.tephra/` is honoured as ignored.
 
+### A narrow library limitation, and a premise of this decision overturned — 2026-08-22
+
+**First, a correction to a claim made here earlier today and now withdrawn.** It
+was recorded that `isomorphic-git` "misses same-length edits", supposedly still
+wrong more than a second later. That measurement was wrong: the delay was placed
+*after* the write, which does not move a file's mtime, so it tested nothing.
+
+**What is actually true is much narrower — the classic racy-timestamp window.**
+A same-length edit landing in the *same filesystem second* as the previous `add`
+reads as `unmodified`; the identical edit one second later reads as `*modified`,
+correctly. Real git closes this window by re-reading content when the mtime ties
+the index; `isomorphic-git` does not. A real limitation, an edge case, not a
+broken library — a library with 474 releases would not survive the defect first
+described.
+
+**And it needs no guarding at all**, which took one more round to see.
+`git.add({ filepath: '.' })` — the idiomatic call — **hashes as it walks**, so
+the index's stat cache never enters into it and the window simply does not
+apply. The hand-rolled content comparison, and the list of paths handed in to be
+looked at, were an elaborate way of doing what `add` already does correctly.
+Both are gone.
+
+Confirmed by measurement rather than by reading: the same-length edit inside the
+same second stages correctly through `add`, and `.gitignore` is honoured so
+`.tephra/` stays out.
+
+### D34's performance premise does not survive measurement
+
+D34 argued that whole-tree status is O(files) and "we never need it on the hot
+path", and prescribed tracking the paths the app writes instead. **That premise
+was never measured. Measured now**, on a synthetic twenty-year corpus of 7 300
+day files totalling 715 MB:
+
+| operation | time |
+|---|---|
+| `statusMatrix`, whole tree | **0.19 s** |
+| content hash, one known path | 0.004 s |
+| `status()`, one known path | 0.005 s |
+
+**190 ms, at a five-minute cadence.** The cost the design was avoiding does not
+exist at this scale, and avoiding it bought real complexity: an accumulating
+path set in the service, a writer obliged to report what it wrote, and the
+watcher feeding the same set from the other side.
+
+**And the simple version is more correct.** A tracked-path list silently omits
+anything written by a code path that forgets to report itself; a scan has no
+such gap. Simpler *and* safer is not a trade.
+
+**So the commit is now literally `git add -A && git commit`** —
+`Repository.commitAll(message)`, and nothing else. `add({filepath: '.'})`, then
+`git.remove` for the deletions `add` leaves behind exactly as `git add .` does,
+then commit if anything differs from HEAD. No path list, no hint parameter, no
+hand-rolled hashing. `commitOutstanding` is gone too: startup reconciliation is
+the same call as every other commit.
+
+Measured on the twenty-year corpus: `add` 2.4 s cold, **1.4 s** warm, plus
+0.19 s for the status pass. Slower than the 0.19 s of the clever version and
+worth every millisecond at a five-minute cadence.
+
+| version | repo.ts | machinery |
+|---|---|---|
+| tracked paths + hashing | 197 lines | path set in the service, writer reporting its writes, watcher feeding the set |
+| `add -A` | **135 lines** | none |
+
+**What survives of D34's reasoning:** the choice of library, its verification,
+and the caveat about the v2a revisit. What does not is the prescription built on
+an unmeasured performance claim. Recorded because the shape recurs: *a
+performance argument that has not been measured is a design constraint invented
+for free.*
+
+**And a second lesson from the same thread, which took two rounds of pushback to
+land.** Having decided the tracked-path design was wrong, the first replacement
+still kept its hand-rolled hashing and a parameter to feed it paths — a stranger
+API than the thing it replaced. The question that dissolved it was simply *"why
+can't `statusMatrix` feed `add` directly?"*, which is the question anyone
+familiar with git would ask first. **When an implementation of a well-worn
+operation looks nothing like how that operation is normally written, the
+unfamiliar shape is the bug report.**
+
 **Kept as `main/w/verify-git.ts`, behind `TEPHRA_VERIFY_GIT`**, rather than
 deleted — the question returns on every Electron upgrade and now costs one env
 var to re-ask.

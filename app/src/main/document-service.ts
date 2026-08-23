@@ -88,20 +88,10 @@ export class DocumentService {
   readonly #commitMaxMs: number
   readonly #wantsHistory: boolean
 
-  /** Paths written since the last commit — what gets staged, nothing else. */
-  readonly #pendingPaths = new Set<RelPath>()
-  /**
-   * Paths changed by something that is not us, kept SEPARATE.
-   *
-   * They are committed on the same timers, because a notebook left open for
-   * days would otherwise leave every hand-edit outside the safety net until the
-   * next restart — and hand-editing is a supported way to use this (D5, R26).
-   *
-   * But they get their own commit. Folding someone else's edit into a commit
-   * whose message quotes what *I* typed produces a history that misattributes
-   * both, and the log's whole job is to be trustworthy a year later.
-   */
-  readonly #pendingExternal = new Set<RelPath>()
+  /** Something is unsaved or uncommitted; the tier has work to do. */
+  #commitPending = false
+  /** Whether anything outside the app changed since the last commit. */
+  #sawExternal = false
   /** Dates touched since the last commit, for the message. */
   readonly #pendingDates = new Set<string>()
   /** The first line of the most recent insertion, for the message. */
@@ -138,12 +128,12 @@ export class DocumentService {
     // layer exists to avoid.
     notebook.onExternalChange(changes => {
       void this.#serial(async () => {
-        for (const change of changes) {
-          await this.#doc.externalChanged(change.rel)
-          // The watcher is how the app learns what it did not write, which is
-          // exactly what D34 says to rely on instead of scanning the tree.
-          this.#pendingExternal.add(change.rel)
-        }
+        for (const change of changes) await this.#doc.externalChanged(change.rel)
+        // Nothing to collect: the commit scans for itself. All that is needed
+        // is that a commit becomes worth scheduling, and that the message
+        // admits the notebook was edited from outside.
+        this.#sawExternal = true
+        this.#commitPending = true
         this.#scheduleCommit()
       })
     })
@@ -276,8 +266,10 @@ export class DocumentService {
   async flush(): Promise<void> {
     this.#cancelFlush()
     const written = await this.#serial(() => this.#doc.writeDirty())
-    for (const rel of written) this.#pendingPaths.add(rel)
-    if (written.length > 0) this.#scheduleCommit()
+    if (written.length > 0) {
+      this.#commitPending = true
+      this.#scheduleCommit()
+    }
   }
 
   // ── the commit tier (D32) ────────────────────────────────────
@@ -292,7 +284,7 @@ export class DocumentService {
     if (!this.#wantsHistory) return
     this.#repo = await Repository.open(this.#notebook.root)
     const existing = await this.#repo.log(1)
-    await this.#repo.commitOutstanding(
+    await this.#repo.commitAll(
       existing.length === 0 ? 'Opened the notebook' : 'Changes made outside Tephra',
     )
   }
@@ -306,29 +298,15 @@ export class DocumentService {
     this.#cancelCommit()
     if (this.#repo === null) return null
     await this.flush()
-    await this.#commitExternal()
-    if (this.#pendingPaths.size === 0) return null
 
-    const paths = [...this.#pendingPaths]
     const message = this.#message()
-    this.#pendingPaths.clear()
     this.#pendingDates.clear()
     this.#headline = ''
-    return this.#repo.commit(paths, message)
-  }
-
-  /**
-   * Commit whatever changed outside the app, as its own commit.
-   *
-   * Runs before ours in a tick, so that when both happened the log reads in the
-   * order they occurred: someone else's edit was already on disk when we wrote
-   * ours on top of it.
-   */
-  async #commitExternal(): Promise<void> {
-    if (this.#repo === null || this.#pendingExternal.size === 0) return
-    const paths = [...this.#pendingExternal]
-    this.#pendingExternal.clear()
-    await this.#repo.commit(paths, 'Changes made outside Tephra')
+    this.#sawExternal = false
+    this.#commitPending = false
+    // `commitAll` finds what changed for itself, the way `git add -A` does.
+    // Nothing is tracked here on its behalf.
+    return this.#repo.commitAll(message)
   }
 
   /**
@@ -349,12 +327,17 @@ export class DocumentService {
           ? (dates[0] as string)
           : `${dates[0] as string}..${dates[dates.length - 1] as string}`
     const text = this.#headline.length > 72 ? `${this.#headline.slice(0, 71)}\u2026` : this.#headline
-    return text === '' ? where : `${where} \u00b7 ${text}`
+    // One scan means a commit may carry work from elsewhere alongside ours.
+    // Saying so is the honest version of the earlier attempt to separate them:
+    // the message quotes only what WE wrote, and admits when that is not the
+    // whole story.
+    if (text === '') return this.#sawExternal ? 'Changes made outside Tephra' : where
+    return `${where} \u00b7 ${text}${this.#sawExternal ? ' (with changes made outside Tephra)' : ''}`
   }
 
   #scheduleCommit(): void {
     if (this.#repo === null) return
-    if (this.#pendingPaths.size === 0 && this.#pendingExternal.size === 0) return
+    if (!this.#commitPending) return
     const now = Date.now()
     this.#commitDirtySince ??= now
     if (this.#commitTimer !== null) clearTimeout(this.#commitTimer)

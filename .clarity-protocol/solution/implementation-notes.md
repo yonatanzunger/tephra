@@ -396,3 +396,27 @@ open is ordinary configuration, and it is how `run.sh --scratch` works.
 
 Verified both ways — with the flag absent, a scene does not run and no
 screenshot is written even when `TEPHRA_VERIFY` and `TEPHRA_SHOT` are both set.
+
+## History as its own X object (M1 bullet 3)
+
+**Read-only, deliberately.** `restore` throws and says it arrives in M2, on the
+rule M0 used for `untag` and `branch`. A restore that quietly did nothing would
+be the worst possible behaviour for the one feature people reach for in a panic.
+
+**The contract needed one extension when it met the implementation.**
+`history-api.ts` had `read(version, doc)`, which is exactly right for a note or
+a fileset and wrong for the stream: the stream is one document by design (D8),
+so "the document at a version" is twenty years of text. A **day** is the unit a
+reader addresses, and it is already the stream's ordering axis (D9) — so
+`readDay(version, date)` and `versionsTouching(date)` joined the interface, with
+the reasoning recorded there rather than here.
+
+**What history returns is what the reader saw**, not what the file held:
+frontmatter stripped, parts joined (D20). Handing back the frontmatter would
+make "copy the paragraph out" mean "and then delete the header", and a day that
+crossed the split threshold in 2031 was never something the reader agreed to
+know about.
+
+**Null and empty are different answers.** A day that did not exist at a version
+reads as null; a day that existed and was blank reads as `''`. A browser showing
+one pane for both would be lying about one of them.

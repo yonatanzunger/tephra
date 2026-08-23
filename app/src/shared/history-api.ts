@@ -8,7 +8,7 @@
 //
 // W supplies the git mechanics; X supplies the concept.
 
-import type { DocumentId, VersionId } from './document-api.ts'
+import type { DateKey, DocumentId, VersionId } from './document-api.ts'
 
 export interface Version {
   readonly id: VersionId
@@ -21,6 +21,31 @@ export interface History {
   versions(range?: { since?: Date; until?: Date }): Promise<readonly Version[]>
   /** The document's text as it was at that version. */
   read(version: VersionId, doc: DocumentId): Promise<string>
+
+  // ── the stream needs a smaller unit than "the document" ──────
+  //
+  // Added when this met the implementation. For a single-file document — a
+  // note, a pinned list, a fileset — `read(version, doc)` is exactly right. For
+  // the STREAM it is not: the stream is one document by design (D8), so
+  // "the document at a version" is twenty years of text, which is not something
+  // anyone wants handed to them.
+  //
+  // A day is the unit a reader actually addresses, and it is the unit the
+  // storage layer already splits on. This is not a second addressing scheme —
+  // a DateKey is the stream's own ordering axis (D9), the same one navigation
+  // and positions use.
+
+  /**
+   * A day's text as it was at that version, with frontmatter stripped: what the
+   * reader saw, not what the file held. Null if the day did not exist then.
+   *
+   * Parts are concatenated (D20), so a day that has since been split reads back
+   * as the single day it always appeared to be.
+   */
+  readDay(version: VersionId, date: DateKey): Promise<string | null>
+
+  /** The versions that touched one day, newest first. */
+  versionsTouching(date: DateKey, limit?: number): Promise<readonly Version[]>
   /**
    * WHOLE DOCUMENTS ONLY. Restoring part of an old version would need a span
    * addressing text inside a version that was never loaded, so it carries no
