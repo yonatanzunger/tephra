@@ -21,6 +21,7 @@ import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
 import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, EditOrigin } from '@shared/document-api.ts'
 import { widgetExtensions } from './widgets.ts'
+import { contextMenu, readSelection, reportSelection, type Selection } from './range-commands.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
 
@@ -45,6 +46,8 @@ export interface BindOptions {
 
 export interface Binding {
   readonly view: EditorView
+  /** The selection right now, in document terms. See `readSelection`. */
+  selection(): Selection
   setVim(on: boolean): void
   setTypography(t: Typography): void
   destroy(): void
@@ -59,6 +62,10 @@ export function bindEditor(options: BindOptions): Binding {
     state: EditorState.create({
       doc: docWindow.text,
       extensions: [
+        // The caret is reported upward so menu items grey correctly, and a
+        // right-click raises the same commands the menu bar shows.
+        reportSelection(),
+        contextMenu(),
         // A day with nothing in it yet is the ordinary case first thing in the
         // morning, and with no gutter, no caret cue and no chrome it renders as
         // a blank rectangle — indistinguishable from the app having failed.
@@ -107,6 +114,9 @@ export function bindEditor(options: BindOptions): Binding {
 
   return {
     view,
+    selection(): Selection {
+      return readSelection(view, docWindow)
+    },
     setVim(on: boolean): void {
       view.dispatch({ effects: vimCompartment.reconfigure(vimExtensions(on)) })
       view.focus()

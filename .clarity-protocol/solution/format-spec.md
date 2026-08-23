@@ -59,6 +59,19 @@ The API needs anchors that travel with the text, and tags over freely-overlappin
 
 **Subject names** are free text without newlines or `-->`. They are **compared case-insensitively and whitespace-normalised, but stored as typed** — so *House Deal* and *house deal* are one subject and the capitalisation survives.
 
+**A marker never begins a line, and is never appended to a delimiter line.**
+This is a rule about where the bytes may sit, not about what they mean, and it
+is forced by CommonMark rather than chosen: a comment beginning a paragraph's
+first line turns the whole paragraph into an HTML block, so its formatting dies
+in *every* renderer; and appending to a line whose meaning is its exact contents
+— a code fence, a table row, a setext underline — stops that line being what it
+was, which in the case of a closing fence means everything after it becomes
+source code. So a marker asked for at a line start moves back to the end of the
+line above, unless that line is a delimiter or there is no line above, in which
+case it takes a line of its own. Both faults were found by doing it wrong: the
+first by bookmarking a boldfaced phrase, the second by tagging the first line of
+prose after a fenced block.
+
 **Anchor names are unique within a file.** Across the corpus they may collide, and resolution then surfaces a picker rather than guessing (D11).
 
 ## The split rule

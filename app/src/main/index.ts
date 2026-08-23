@@ -4,7 +4,7 @@
 
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { clickMenuItem, installMenu, setMenuVim } from './menu.ts'
+import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection, setMenuVim } from './menu.ts'
 import { verifyMode, verifyEnv } from './verify-mode.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
@@ -13,6 +13,7 @@ import { Notebook } from './w/notebook.ts'
 import { listThemes, saveTheme, seedThemes } from './w/themes.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
+import type { SelectionState } from '../shared/commands.ts'
 
 // Before anything reads it. Electron takes the app name from package.json's
 // `name` field, which is the npm package name — lower case, and not what
@@ -181,6 +182,12 @@ app.whenReady().then(async () => {
   // by the renderer reporting it, never a second copy that could disagree.
   installMenu()
   ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
+  // The renderer owns the caret; main owns the menus. Each tells the other the
+  // one thing it knows, which is what keeps a greyed-out item honest.
+  ipcMain.on(CHANNEL.selectionChanged, (_e, selection: SelectionState) =>
+    setMenuSelection(selection),
+  )
+  ipcMain.on(CHANNEL.contextMenu, () => popRangeMenu())
 
   // Self-check only: lets a renderer scene pull a real menu item. Gated, because
   // nothing in the shipped app should be able to drive the menu bar.

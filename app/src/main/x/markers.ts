@@ -1,3 +1,5 @@
+import { applyEdits, type TextEdit } from './text-edits.ts'
+
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
 //
@@ -213,4 +215,245 @@ export function resolveAnchors(markers: readonly RawMarker[]): ReadonlyMap<strin
     if (!out.has(m.name)) out.set(m.name, m)
   }
   return out
+}
+
+/**
+ * Where a marker may actually be written.
+ *
+ * **A comment that begins a paragraph's first line swallows the whole line.**
+ * That is CommonMark's HTML-block rule, not a quirk of this editor — every
+ * markdown renderer does it — so `<!--tephra:mark x-->**bold** text` loses its
+ * bold everywhere, permanently, in the file. Found by bookmarking a boldfaced
+ * phrase and watching the formatting disappear.
+ *
+ * Measured against the real parser, four placements and only one is safe
+ * everywhere:
+ *
+ * | placement | result |
+ * |---|---|
+ * | starts a paragraph's first line | CommentBlock — all formatting on the line dies |
+ * | starts a continuation line | fine |
+ * | alone on its own line, mid-paragraph | **splits the paragraph in two** |
+ * | end of the previous line | fine in both cases |
+ *
+ * So the rule is: **a marker never begins a line.** When the requested offset is
+ * at a line start it moves back one character, before the newline — the same
+ * position in the text stream, and for a zero-width mark an identical place.
+ * At the very beginning of a body there is no previous line to move to, so the
+ * marker takes its own line and a newline follows it — and the same applies when
+ * the previous line is one whose meaning IS its exact contents. Appending to a
+ * closing code fence stops it closing anything, so the fence runs on and every
+ * marker after it becomes source code; appending to a table row or a setext
+ * underline breaks those the same way. Found by tagging the first line of prose
+ * after a fenced block.
+ */
+export function placeMarker(
+  body: string,
+  offset: number,
+  marker: string,
+): { readonly at: number; readonly text: string } {
+  const at = Math.max(0, Math.min(offset, body.length))
+  const startsLine = at === 0 || body[at - 1] === '\n'
+  const contentFollows = at < body.length && body[at] !== '\n'
+
+  if (!startsLine || !contentFollows) return { at, text: marker }
+  // Nothing before it to hide behind, or a previous line whose meaning is its
+  // exact contents: give it a line of its own. That is safe here precisely
+  // because both cases sit at a block boundary, so there is no paragraph open
+  // to be split.
+  if (at === 0 || !canAppendTo(previousLine(body, at))) return { at, text: `${marker}\n` }
+  return { at: at - 1, text: marker }
+}
+
+// ── writing tags ─────────────────────────────────────────────
+
+/**
+ * The body with a subject put over a range, or taken off one.
+ *
+ * **One algorithm for both, and for every case within each.** Tagging a range
+ * that already carries the subject must extend or merge the existing span
+ * (format-spec); untagging the middle of a span must split it in two; untagging
+ * an edge must trim it. Written as four special cases that is four chances to
+ * leave the file in a state where markers no longer alternate — and alternation
+ * is the *only* thing that makes pairing work without identifiers (D21).
+ *
+ * So it is interval arithmetic instead. Strip every marker for this subject,
+ * union or subtract the requested range, and write the resulting set back.
+ * Merging, splitting, trimming and extending are then the same code path, and
+ * alternation is true by construction, because the markers are emitted from a
+ * disjoint sorted set.
+ *
+ * **Returns a body rather than edits, deliberately.** The natural way to write
+ * this is as a batch of deletions and insertions — and it does not work, because
+ * an insertion's position is decided by text that the deletions are removing.
+ * A marker written at the start of a body is given its own line; deleting it
+ * takes that line; and the position the replacement was computed against no
+ * longer exists. Rewriting the string and letting `minimalReplacement` find the
+ * difference has no coordinate system to get wrong. The caller pays one
+ * replacement spanning the changed region, on an operation that happens once
+ * per menu invocation.
+ */
+export function tagBody(
+  body: string,
+  subject: string,
+  range: { readonly from: number; readonly to: number },
+  op: 'add' | 'remove',
+): string {
+  const key = subjectKey(subject)
+  const mine = scanMarkers(body).filter(
+    m => (m.kind === 'tag-start' || m.kind === 'tag-end') && subjectKey(m.name) === key,
+  )
+
+  // Capitalisation the user already chose is not overwritten by a later typing
+  // of the same subject: subjects compare case-insensitively but are stored as
+  // typed, and the earlier typing is the one already on the page.
+  const name = mine.length > 0 ? (mine[0] as RawMarker).name : subject.trim().replace(/\s+/g, ' ')
+
+  // Everything below happens on the body with this subject's markers gone, so
+  // that no offset depends on a marker that is about to move.
+  const cuts = mine.map(m => removal(body, m))
+  const clean = applyEdits(body, cuts)
+  const project = (offset: number): number => {
+    let shed = 0
+    for (const cut of cuts) {
+      if (offset >= cut.to) shed += cut.to - cut.from
+      else if (offset > cut.from) return cut.from - shed // inside a cut: to its near edge
+    }
+    return offset - shed
+  }
+
+  const existing = resolveTags(mine, body.length).map(t => ({
+    from: project(t.from),
+    to: project(t.to),
+  }))
+  const asked = { from: project(clamp(range.from, body.length)), to: project(clamp(range.to, body.length)) }
+  const wanted = normalise(op === 'add' ? [...existing, asked] : subtract(existing, asked), clean)
+
+  const others = scanMarkers(clean)
+  const inserts: { at: number; text: string }[] = []
+  for (const interval of wanted) {
+    inserts.push(placed(clean, others, interval.from, `<!--tephra:tag-start ${name}-->`))
+    inserts.push(placed(clean, others, interval.to, `<!--tephra:tag-end ${name}-->`))
+  }
+
+  // Right to left, so each splice leaves the offsets of the ones still to come
+  // untouched. Equal offsets keep document order, since the later insert is
+  // spliced first and ends up to the right.
+  let out = clean
+  for (let i = inserts.length - 1; i >= 0; i--) {
+    const insert = inserts[i] as { at: number; text: string }
+    out = out.slice(0, insert.at) + insert.text + out.slice(insert.at)
+  }
+  return out
+}
+
+const clamp = (offset: number, length: number): number => Math.max(0, Math.min(offset, length))
+
+/**
+ * Where a marker may actually land.
+ *
+ * Two hazards, both invisible until they have already corrupted a file: a
+ * marker may not begin a line (`placeMarker`), and it may not land INSIDE
+ * another marker's comment — which is reachable, because markers are hidden
+ * behind widgets and a selection may quietly contain one.
+ */
+function placed(
+  body: string,
+  markers: readonly RawMarker[],
+  at: number,
+  text: string,
+): { at: number; text: string } {
+  let where = at
+  for (const m of markers) {
+    if (where > m.from && where < m.to) where = m.to
+  }
+  return placeMarker(body, where, text)
+}
+
+/**
+ * What deleting a marker actually has to remove.
+ *
+ * A marker sitting alone on a line takes the line with it. Leaving the empty
+ * line behind is not neutral — `A\n<!--m-->\nB` becomes `A\n\nB`, which is **two
+ * paragraphs where there was one**. It is also what makes tagging and then
+ * untagging exactly reversible, since a marker written at the very start of a
+ * body is given its own line by `placeMarker` and there is nowhere else to put
+ * it.
+ */
+function removal(body: string, m: RawMarker): TextEdit {
+  const ownsLine = (m.from === 0 || body[m.from - 1] === '\n') && body[m.to] === '\n'
+  return { from: m.from, to: ownsLine ? m.to + 1 : m.to, insert: '' }
+}
+
+/** Sorted, merged where only whitespace separates them, trimmed to real text. */
+function normalise(
+  intervals: readonly { from: number; to: number }[],
+  body: string,
+): readonly { from: number; to: number }[] {
+  const sorted = [...intervals].filter(i => i.to > i.from).sort((a, b) => a.from - b.from || a.to - b.to)
+
+  const merged: { from: number; to: number }[] = []
+  for (const interval of sorted) {
+    const last = merged[merged.length - 1]
+    // Whitespace between two spans of the same subject is not a reason to keep
+    // them apart: tagging a word and then the word after it means one span, and
+    // a reader asking "everything tagged *house deal*" has never cared how many
+    // separate spans there are (format-spec).
+    if (last !== undefined && (interval.from <= last.to || body.slice(last.to, interval.from).trim() === '')) {
+      last.to = Math.max(last.to, interval.to)
+    } else {
+      merged.push({ ...interval })
+    }
+  }
+
+  // Trimmed to the text actually covered. A selection commonly runs a space or
+  // a newline past the last word, and a span holding no text at all tags
+  // nothing — this is also what makes tag-then-untag exactly reversible.
+  const out: { from: number; to: number }[] = []
+  for (const interval of merged) {
+    let { from, to } = interval
+    while (from < to && /\s/.test(body[from] as string)) from++
+    while (to > from && /\s/.test(body[to - 1] as string)) to--
+    if (to > from) out.push({ from, to })
+  }
+  return out
+}
+
+function subtract(
+  intervals: readonly { from: number; to: number }[],
+  cut: { from: number; to: number },
+): readonly { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = []
+  for (const interval of intervals) {
+    if (cut.to <= interval.from || cut.from >= interval.to) {
+      out.push(interval) // untouched
+      continue
+    }
+    if (cut.from > interval.from) out.push({ from: interval.from, to: cut.from })
+    if (cut.to < interval.to) out.push({ from: cut.to, to: interval.to })
+  }
+  return out
+}
+
+
+const previousLine = (body: string, at: number): string => {
+  const end = at - 1 // the newline before `at`
+  const start = body.lastIndexOf('\n', end - 1) + 1
+  return body.slice(start, end)
+}
+
+/**
+ * Whether a marker may be appended to this line without changing what it means.
+ *
+ * Prose can take a trailing comment; a line that IS a delimiter cannot, because
+ * the delimiter is recognised by the line holding nothing else.
+ */
+function canAppendTo(line: string): boolean {
+  const trimmed = line.trim()
+  if (trimmed === '') return true // a blank line is still blank to a parser
+  if (/^(`{3,}|~{3,})/.test(line.trimStart())) return false // a code fence, open or close
+  if (/^(-{3,}|={3,}|\*{3,}|_{3,})$/.test(trimmed)) return false // thematic break, setext rule
+  if (trimmed.startsWith('|')) return false // a table row
+  if (/^ {4,}/.test(line)) return false // inside an indented code block
+  return true
 }

@@ -167,6 +167,42 @@ body {
   font-size: 11px; line-height: 1.5; color: rgb(var(--text-muted));
 }
 
+/* ── prompt ───────────────────────────────────────────────────────────────
+   One short string, asked for and answered. Small on purpose: a range
+   operation should feel like a keystroke and a word, not a form. */
+.prompt-scrim {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 18vh;
+  background: rgb(var(--text) / .10);
+}
+.prompt {
+  width: min(26rem, calc(100% - 2rem));
+  display: flex; flex-direction: column; gap: .5rem;
+  padding: .9rem 1rem 1rem;
+  font-family: var(--font-ui); font-size: 13px; color: rgb(var(--text));
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 9px;
+  box-shadow: 0 18px 48px rgb(0 0 0 / .22);
+}
+.prompt label { font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+  color: rgb(var(--text-muted)); }
+.prompt input {
+  font: inherit; font-size: 15px; font-family: var(--font-body);
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 6px; padding: .4rem .5rem;
+}
+.prompt input:focus { outline: 2px solid rgb(var(--accent) / .5); outline-offset: -1px; }
+.prompt-actions { display: flex; align-items: center; gap: .6rem; margin-top: .2rem; }
+.prompt-actions button {
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  color: rgb(var(--surface)); background: rgb(var(--accent));
+  border: 1px solid transparent; border-radius: 6px; padding: .25rem .8rem;
+}
+.prompt-actions button:disabled { opacity: .4; cursor: default; }
+.prompt-actions .link { color: rgb(var(--text-muted)); background: none; border: 0; }
+.prompt-actions .link:hover { color: rgb(var(--text)); }
+
 /* ── format notes ─────────────────────────────────────────────────────────
    Not a warning. Every anomaly listed has already been handled safely, so the
    surface uses the tone of a note: no red, no triangle, no badge demanding to
@@ -343,6 +379,20 @@ body {
 
 .cm-placeholder { color: rgb(var(--text-muted)); font-style: italic; }
 
+/* Tephra's markers: present, named, out of the way. Zero-width in the text but
+   a real thing in the document, so the reader has to be able to see one before
+   they delete it by accident. */
+.tx-marker {
+  font-family: var(--font-ui); font-size: .62em; letter-spacing: .04em;
+  vertical-align: 0.28em; white-space: nowrap;
+  padding: .08em .42em; margin: 0 .12em; border-radius: 999px;
+  color: rgb(var(--surface)); background: rgb(var(--accent) / .82);
+}
+.tx-marker-tag-start, .tx-marker-tag-end {
+  color: rgb(var(--text-heading)); background: rgb(var(--accent) / .18);
+}
+.tx-marker-tag-end { opacity: .6; }
+
 /* Chrome buttons that carry a word as well as a glyph. The proof sheet had
    "≡ Sections" and it read better than the bare hamburger, which asks the
    reader to remember what it opens. */
@@ -372,3 +422,13 @@ body {
   border-bottom: 1px solid rgb(var(--status-warn) / .4);
   color: rgb(var(--text));
 }
+
+/* A markdown link, shown as its words. The target lives in the tooltip; the
+   underline is thin and low so it reads as prose that happens to lead
+   somewhere, rather than as a control. */
+.tx-link {
+  color: rgb(var(--accent)); cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.18em; text-decoration-color: rgb(var(--accent) / .45);
+}
+.tx-link:hover { text-decoration-color: rgb(var(--accent)); }

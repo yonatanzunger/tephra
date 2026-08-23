@@ -570,3 +570,108 @@ arithmetic, it is that the quantity had two homes.
 It was invisible until now because nothing had yet built a durable position from
 `doc.generation` after a keystroke. M0 restored the cursor at open, when the two
 still agreed.
+
+## A marker at the start of a line eats the line (M2.1)
+
+Bookmarking a boldfaced phrase broke it: `**Intrinsic S**` lost its bold and the
+raw `<!--tephra:mark …-->` sat in the text. Two independent faults, found by
+running the real `@lezer/markdown` parser rather than by reasoning about it:
+
+**One — CommonMark's HTML-block rule.** A comment that begins a paragraph's
+first line makes the *whole paragraph* an HTML block, so nothing inside it is
+markdown any more:
+
+| line | strong? | parsed as |
+|---|---|---|
+| `**Intrinsic S** is…` | yes | Paragraph |
+| `<!--tephra:mark …-->**Intrinsic S** is…` | **no** | CommentBlock |
+| `<!--tephra:mark …--> **Intrinsic S** is…` | **no** | CommentBlock |
+| `x<!--tephra:mark …-->**Intrinsic S**…` | yes | Paragraph + Comment |
+
+The user's instinct — restore the missing space — could not have worked, and the
+table says why: the space changes nothing, because it is *starting the line*
+that matters, not what follows. Giving the marker its own line is equally wrong;
+it splits a hard-wrapped paragraph in two.
+
+The only universally safe placement is the **end of the previous line**, which
+is what `placeMarker` in `src/main/x/markers.ts` now does. A marker asked for at
+a line's start moves back one character, joining the line above; everywhere else
+it stays exactly where it was asked for. The document position it marks is
+unchanged — this is a placement rule about bytes, not about meaning.
+
+**Two — the marker was never a widget.** D16 and the format spec both say
+markers render as widgets away from the cursor, "so it is rarely seen." Nothing
+had ever implemented that, and no test caught it because until M2.1 nothing
+wrote a marker. `MarkerWidget` now draws it as a small badge.
+
+The visible asterisks that remained after the fix are **not** a third fault:
+they are Q11's reveal-on-cursor behaviour, correct and still unsettled. My first
+verification run reported them as a failure because the scene parked the caret
+through a stale view handle and so never moved it off the phrase — a measurement
+error of exactly the kind `notes.md` keeps collecting.
+
+## Tagging is interval arithmetic, and returns a body (M2.2)
+
+Four things a tag operation has to do — extend a span, merge two, split one,
+trim an edge — are four special cases only if you write them that way. Each is a
+chance to leave the file with two `tag-start`s in a row, and **alternation is the
+only reason pairing works without identifiers** (D21), so the damage would be
+silent and permanent.
+
+`tagBody` reads the subject's spans out of the text, unions or subtracts the
+requested range, and writes the resulting disjoint set back. All four cases are
+then the same code, and alternation holds by construction.
+
+**It returns the new body, not a batch of edits, and that is the interesting
+part.** The natural implementation emits deletions for the old markers and
+insertions for the new ones — and it cannot be made correct, because an
+insertion's position is decided by text the deletions are removing. A marker
+written at the very start of a body is given its own line; deleting it takes
+that line with it; and the offset the replacement was computed against no longer
+exists. Rewriting the string and handing it to `minimalReplacement` has no
+coordinate system to get wrong. The cost is one replacement spanning the changed
+region, on an operation that happens once per menu invocation.
+
+Two rules fell out of writing the tests rather than out of thinking:
+
+- **A marker alone on a line takes the line with it when removed.** Leaving the
+  blank line behind turns one paragraph into two.
+- **Spans are trimmed to the text they cover.** A selection usually runs a space
+  past the last word, and a marker parked at the end of the line above leaves its
+  newline inside the span. Without trimming, untagging the visible words leaves a
+  one-character tag behind and the round trip is not exact — which is now
+  asserted directly: tag, untag, and the file is byte-for-byte what it was.
+
+## Branching, and a link that is actually a link (M2.3)
+
+The operation is D13's ordering made literal — create the file, update
+references, delete from the source — in one method, because assembled by Z from
+three primitives the guarantee is gone. Undo restores the stream but leaves the
+branched file, which is the same trade the ordering makes: **duplicated content
+is visible and fixable; lost content is not.**
+
+Two things the build settled that the design had left implicit:
+
+- **A link left as `[Titration curves](../../../notes/titration-curves.md)` is
+  not a path back, it is a line of punctuation to read past.** D13 says the link
+  is v1's *entire* findability mechanism for branched content, so it now renders
+  as its own words, underlined, with the target in the tooltip, and opens the
+  file. Ordinary markdown, so it keeps working in any other editor.
+- **A link target is data, not configuration.** It can be typed, pasted, or
+  arrive with an imported file (R28), so `../../..` repeated enough times reaches
+  anywhere on the machine. `resolveInsideNotebook` resolves and checks
+  containment, with the escape attempts written down as tests rather than left as
+  an assumption.
+
+### The same module-scope Electron fault, a third time
+
+`import { shell } from 'electron'` at the top of `document-service.ts` broke
+three integration suites at module load — they drive the service under plain
+node, which is a property worth having and which nothing had written down.
+
+It is the identical shape as `app.isPackaged` at module scope in `verify-mode.ts`
+and as `require('electron')` during module evaluation in the packaged build. The
+fix was not a lazy import but the layering telling the truth: **what a link means
+is a question about the notebook and answerable under node; opening a file is a
+question about the desktop.** So the service returns a path and `ipc.ts` opens
+it. The test failure was the design being pointed out, not an obstacle to it.

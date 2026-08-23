@@ -7,10 +7,12 @@ import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
 import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { Editor } from './editor/Editor'
+import type { Selection } from './editor/range-commands.ts'
 import { defaultTypography, type Typography } from './editor/theme'
 import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
+import { Prompt, type PromptRequest } from './frame/Prompt'
 import type { Anomaly } from '@shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -25,6 +27,7 @@ export function App(): React.JSX.Element {
   const [panelOpen, setPanelOpen] = useState(false)
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
+  const [prompt, setPrompt] = useState<PromptRequest | null>(null)
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
@@ -165,6 +168,92 @@ export function App(): React.JSX.Element {
     }
   }, [doc, docWindow])
 
+  // A range command, however it was reached — menu bar, accelerator, or the
+  // context menu. All three are renderings of one list (`shared/commands.ts`),
+  // so this is the single place any of them lands.
+  useEffect(() => {
+    if (doc === null) return
+    return window.tephra.doc.onRangeCommand(id => {
+      // Tag and untag are the same operation with opposite signs, so they are
+      // one branch: read the selection, ask for a subject, send it.
+      if (id === 'tag' || id === 'untag') {
+        const selection = selectionRef.current?.()
+        if (selection === undefined || selection.empty) return
+        const removing = id === 'untag'
+        if (removing && selection.subjects.length === 0) {
+          setError('Nothing in the selection carries a tag.')
+          return
+        }
+        setPrompt({
+          title: removing ? 'Remove which tag?' : 'Tag this passage as',
+          placeholder: 'a subject you will gather later',
+          // Prefilled with what is already there: when a passage carries one
+          // subject, removing it should be a keystroke rather than a spelling
+          // test. Selected on focus, so typing replaces it.
+          ...(selection.subjects.length > 0 ? { initial: selection.subjects[0] as string } : {}),
+          submitLabel: removing ? 'Remove' : 'Tag',
+          onSubmit: subject => {
+            const write = removing
+              ? window.tephra.doc.untag(selection.span, subject)
+              : window.tephra.doc.tag(selection.span, subject)
+            void write.catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : String(err))
+            })
+          },
+        })
+        return
+      }
+
+      if (id === 'branch') {
+        const selection = selectionRef.current?.()
+        if (selection === undefined || selection.empty) return
+        setPrompt({
+          title: 'Move this to its own file called',
+          placeholder: 'what the material is about',
+          submitLabel: 'Branch',
+          onSubmit: name => {
+            void window.tephra.doc.branch(selection.span, name).catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : String(err))
+            })
+          },
+        })
+        return
+      }
+
+      if (id === 'bookmark') {
+        // The degenerate range: a point. Captured NOW, before the prompt opens
+        // — the caret is where the reader left it, and a prompt taking focus is
+        // not a reason to bookmark somewhere else.
+        //
+        // Built from the cursor App already tracks for `ui-state`, stamped with
+        // the CURRENT generation. If the document moves under it while the
+        // prompt is open, the write fails loudly rather than landing in the
+        // wrong place — which is what D11's generations are for.
+        const stored = cursorRef.current
+        if (stored === null) return
+        const at: DocumentPosition = {
+          segment: stored.segment as SegmentKey,
+          offset: stored.offset as never,
+          generation: doc.generation,
+        }
+        setPrompt({
+          title: 'Name this bookmark',
+          placeholder: 'a word you will search for later',
+          submitLabel: 'Bookmark',
+          onSubmit: name => {
+            // A failed range operation must not vanish. The write can legitimately
+            // fail — a stale position if the document moved while the prompt was
+            // open — and swallowing that leaves the reader believing they
+            // bookmarked something.
+            void window.tephra.doc.setAnchor(at, name).catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : String(err))
+            })
+          },
+        })
+      }
+    })
+  }, [doc, pane])
+
   const onViewport = useCallback(
     (visible: { from: BufferPosition; to: BufferPosition }) => pane?.viewportChanged(visible),
     [pane],
@@ -173,6 +262,9 @@ export function App(): React.JSX.Element {
   // Where the caret is, remembered. Debounced because it moves on every
   // keystroke and this is a file write; the last position is the one that
   // matters, not every position on the way there.
+  // How to ask the editor what is selected, for as long as one is mounted.
+  const selectionRef = useRef<(() => Selection) | null>(null)
+
   const cursorRef = useRef<UiState['cursor']>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onCursor = useCallback(
@@ -321,6 +413,7 @@ export function App(): React.JSX.Element {
             onCursor={onCursor}
             initialCursor={restored}
             onError={err => setError(err.message)}
+            onSelectionReader={read => (selectionRef.current = read)}
           />
         )}
         {anomaliesOpen && (
@@ -333,6 +426,7 @@ export function App(): React.JSX.Element {
             }}
           />
         )}
+        {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
         {panelOpen && (
           <ThemePanel
             control={theme}

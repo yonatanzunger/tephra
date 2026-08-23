@@ -24,6 +24,11 @@ export const CHANNEL = {
   flush: 'tephra:doc:flush',
   spans: 'tephra:doc:spans',
   resolveAnchor: 'tephra:doc:resolveAnchor',
+  setAnchor: 'tephra:doc:setAnchor',
+  tag: 'tephra:doc:tag',
+  untag: 'tephra:doc:untag',
+  branch: 'tephra:doc:branch',
+  openLink: 'tephra:doc:openLink',
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',
   extend: 'tephra:win:extend',
@@ -38,6 +43,12 @@ export const CHANNEL = {
   setVim: 'tephra:ui:setVim',
   /** main → renderer: an Edit-menu command, which owns these keystrokes. */
   menuCommand: 'tephra:ui:menuCommand',
+  /** renderer → main: what the caret is doing, so menus enable correctly. */
+  selectionChanged: 'tephra:ui:selectionChanged',
+  /** renderer → main: pop the context menu at the pointer. */
+  contextMenu: 'tephra:ui:contextMenu',
+  /** main → renderer: a range command was chosen, however it was reached. */
+  rangeCommand: 'tephra:ui:rangeCommand',
   windowChanged: 'tephra:win:changed',
   windowReset: 'tephra:win:reset',
   diverged: 'tephra:doc:diverged',

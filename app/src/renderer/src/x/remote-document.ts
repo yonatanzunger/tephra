@@ -59,8 +59,27 @@ export class RemoteDocument implements Document {
     return doc
   }
 
+  /**
+   * The newest generation this process knows about.
+   *
+   * **Not just `#generation`.** That field is only refreshed at open and on
+   * undo/redo; ordinary edits travel through `RemoteWindow`, which learns the
+   * new generation from its own ack and has no reason to report it here. So the
+   * renderer held two mirrors of one number and they disagreed the moment
+   * anyone typed — and any position built from the document's copy was born
+   * stale. Measured, as `StalePositionError: position is from generation 1,
+   * expected 2`, the first time a bookmark was written after a keystroke.
+   *
+   * Taking the maximum makes the two agree by construction rather than by a
+   * notification that can be forgotten. D33's warning is about exactly this: a
+   * version axis is worth nothing if two objects each keep their own idea of it.
+   */
   get generation(): SessionGeneration {
-    return this.#generation
+    let newest = this.#generation as number
+    for (const window of this.#windows.values()) {
+      newest = Math.max(newest, window.generation as number)
+    }
+    return newest as SessionGeneration
   }
 
   get isDirty(): boolean {
@@ -71,8 +90,9 @@ export class RemoteDocument implements Document {
     return this.#today
   }
 
+  /** Same answer as `generation`; kept because the API declares both. */
   currentGeneration(): SessionGeneration {
-    return this.#generation
+    return this.generation
   }
 
   async read(span: Span): Promise<DocumentWindow> {

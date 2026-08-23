@@ -5,13 +5,14 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
+import type { SelectionState } from '../shared/commands.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
   ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
   SpansRequest, WindowChangedMessage, WindowId, WindowSnapshot,
 } from '../shared/ipc.ts'
-import type { DateKey, Divergence, DocumentPosition, TypedSpan } from '../shared/document-api.ts'
+import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan } from '../shared/document-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
 
 type Handler<T> = (message: T) => void
@@ -30,6 +31,11 @@ ipcRenderer.on(CHANNEL.diverged, (_e, message: Divergence) => {
   for (const handler of divergedHandlers) handler(message)
 })
 
+const rangeHandlers = new Set<Handler<string>>()
+ipcRenderer.on(CHANNEL.rangeCommand, (_e, id: string) => {
+  for (const handler of rangeHandlers) handler(id)
+})
+
 const menuHandlers = new Set<Handler<string>>()
 ipcRenderer.on(CHANNEL.menuCommand, (_e, command: string) => {
   for (const handler of menuHandlers) handler(command)
@@ -42,6 +48,8 @@ ipcRenderer.on(CHANNEL.setVim, (_e, value: boolean) => {
 
 const tephra = {
   hello: (): Promise<{ version: string; origin: string }> => ipcRenderer.invoke('tephra:hello'),
+  /** Follow a link found in the text. Main decides whether it may be followed. */
+  openLink: (target: string): Promise<boolean> => ipcRenderer.invoke(CHANNEL.openLink, target),
   /** Self-check only; the handler exists only when TEPHRA_VERIFY is set. */
   clickMenu: (label: string): Promise<boolean> => ipcRenderer.invoke('tephra:verify:menu', label),
 
@@ -59,6 +67,11 @@ const tephra = {
     spans: (request: SpansRequest): Promise<readonly TypedSpan[]> => ipcRenderer.invoke(CHANNEL.spans, request),
     resolveAnchor: (name: string): Promise<DocumentPosition | null> =>
       ipcRenderer.invoke(CHANNEL.resolveAnchor, name),
+    setAnchor: (at: DocumentPosition, name: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.setAnchor, at, name),
+    tag: (span: Span, subject: string): Promise<void> => ipcRenderer.invoke(CHANNEL.tag, span, subject),
+    untag: (span: Span, subject: string): Promise<void> => ipcRenderer.invoke(CHANNEL.untag, span, subject),
+    branch: (span: Span, name: string): Promise<DocumentId> => ipcRenderer.invoke(CHANNEL.branch, span, name),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
 
@@ -75,6 +88,16 @@ const tephra = {
     onMenuCommand(handler: Handler<string>): () => void {
       menuHandlers.add(handler)
       return () => menuHandlers.delete(handler)
+    },
+
+    /** What the caret is doing, so the menus can grey correctly. */
+    selectionChanged: (selection: SelectionState): void =>
+      ipcRenderer.send(CHANNEL.selectionChanged, selection),
+    /** Ask main to pop the native context menu at the pointer. */
+    contextMenu: (): void => ipcRenderer.send(CHANNEL.contextMenu),
+    onRangeCommand(handler: Handler<string>): () => void {
+      rangeHandlers.add(handler)
+      return () => rangeHandlers.delete(handler)
     },
 
     onWindowChanged(handler: Handler<WindowChangedMessage>): () => void {

@@ -386,3 +386,154 @@ test('a diverged day refuses further writes rather than failing quietly', async 
     /changed on disk/,
   )
 })
+
+// ── tagging (M2.2) ───────────────────────────────────────────
+//
+// The interval arithmetic itself is pinned down in tag-edits.test.ts. What can
+// only be tested here is what the document adds on top: that a range crossing
+// midnight becomes one span per day and still one undo step, and that the
+// markers reach the files.
+
+test('tagging writes markers into the day file', async t => {
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The house deal closed on Tuesday.\n'),
+  })
+  await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
+  const body = 'The house deal closed on Tuesday.\n'
+  const from = body.indexOf('house deal')
+  await doc.tag(
+    { begin: doc.positionAt(DAY, from), end: doc.positionAt(DAY, from + 'house deal'.length) },
+    'House Deal',
+  )
+  await doc.flush()
+
+  const written = await readFile(join(root, dayFile(DAY)), 'utf8')
+  assert.match(written, /<!--tephra:tag-start House Deal-->house deal<!--tephra:tag-end House Deal-->/)
+  assert.deepEqual((await doc.spans('tag')).map(s => s.name), ['House Deal'])
+})
+
+test('untagging puts the file back exactly as it was', async t => {
+  const original = dayText('2026-03-14', 'The house deal closed on Tuesday.\n')
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
+  await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
+  const span = { begin: doc.positionAt(DAY, 4), end: doc.positionAt(DAY, 14) }
+  await doc.tag(span, 'House Deal')
+
+  // Positions are stamped with a generation, so the span from before the tag
+  // is stale by construction (D11) — which is the point. Ask again.
+  const after = { begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 60) }
+  await doc.untag(after, 'house deal') // and by the other capitalisation
+  await doc.flush()
+
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), original)
+  assert.deepEqual(await doc.spans('tag'), [])
+})
+
+test('a range crossing midnight tags both days, and undoes in one step', async t => {
+  const { doc } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'Tuesday evening thoughts.\n'),
+    [dayFile(NEXT)]: dayText('2026-03-15', 'Wednesday morning thoughts.\n'),
+  })
+  await windowOver(doc, DAY, NEXT)
+  const before = doc.currentGeneration()
+  await doc.tag({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(NEXT, 26) }, 'overnight')
+
+  const tags = await doc.spans('tag')
+  assert.equal(tags.length, 2, 'one span per day: markers cannot pair across files')
+  assert.deepEqual([...new Set(tags.map(s => s.name))], ['overnight'])
+
+  await doc.undo()
+  assert.deepEqual(await doc.spans('tag'), [], 'one operation, one undo')
+  assert.equal(doc.currentGeneration() > before, true)
+})
+
+test('tagging text that already carries the subject is not an undo step', async t => {
+  const { doc } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The house deal closed on Tuesday.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  await doc.tag({ begin: doc.positionAt(DAY, 4), end: doc.positionAt(DAY, 14) }, 'House Deal')
+
+  // Offsets are read off the window rather than counted by hand: once markers
+  // are in the body, the text has moved, which is the whole reason positions
+  // carry a generation.
+  const reach = (text: string) => {
+    const from = w.text.indexOf(text)
+    assert.notEqual(from, -1, `"${text}" is not in the window`)
+    return { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) }
+  }
+
+  const settled = doc.currentGeneration()
+  await doc.tag(reach('Tuesday'), 'House Deal')
+  assert.notEqual(doc.currentGeneration(), settled, 'a second span IS a change')
+  assert.equal((await doc.spans('tag')).length, 2)
+
+  const now = doc.currentGeneration()
+  await doc.tag(reach('Tuesday'), 'House Deal')
+  assert.equal(doc.currentGeneration(), now, 'the same tag twice changes nothing')
+})
+
+// ── branching (M2.3) ─────────────────────────────────────────
+
+test('branching creates the file, then leaves a link where the text was', async t => {
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText(
+      '2026-03-14',
+      'Before.\n\nThe long argument about titration curves, which deserves its own\nplace to live.\n\nAfter.\n',
+    ),
+  })
+  const w = await windowOver(doc, DAY)
+  const text = 'The long argument about titration curves, which deserves its own\nplace to live.'
+  const from = w.text.indexOf(text)
+  const id = await doc.branch(
+    { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) },
+    'Titration curves',
+  )
+  await doc.flush()
+
+  assert.equal(id, 'notes/titration-curves.md')
+  const branched = await readFile(join(root, 'notes/titration-curves.md'), 'utf8')
+  assert.match(branched, /^---\ntephra: 1\nkind: markdown\ntitle: Titration curves\n---\n/)
+  assert.match(branched, /The long argument about titration curves/)
+  assert.doesNotMatch(branched, /^date:/m, 'a branched file is not in the dated stream (D27)')
+
+  const stream = await readFile(join(root, dayFile(DAY)), 'utf8')
+  assert.match(stream, /\[Titration curves\]\(\.\.\/\.\.\/\.\.\/notes\/titration-curves\.md\)/)
+  assert.doesNotMatch(stream, /deserves its own/, 'the text moved; it was not copied')
+  assert.match(stream, /Before\./)
+  assert.match(stream, /After\./)
+})
+
+test('branching twice under one name does not overwrite the first', async t => {
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'One thought here.\n\nAnother thought here.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const reach = (text: string) => {
+    const from = w.text.indexOf(text)
+    assert.notEqual(from, -1, `"${text}" is not in the window`)
+    return { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) }
+  }
+  await doc.branch(reach('One thought here.'), 'Thoughts')
+  const second = await doc.branch(reach('Another thought here.'), 'Thoughts')
+  await doc.flush()
+
+  assert.equal(second, 'notes/thoughts-2.md')
+  assert.match(await readFile(join(root, 'notes/thoughts.md'), 'utf8'), /One thought here\./)
+  assert.match(await readFile(join(root, 'notes/thoughts-2.md'), 'utf8'), /Another thought here\./)
+})
+
+test('branching is one undo step, and undo leaves the file rather than the hole', async t => {
+  const original = dayText('2026-03-14', 'Keep this.\n\nMove that.\n')
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
+  const w = await windowOver(doc, DAY)
+  const from = w.text.indexOf('Move that.')
+  await doc.branch({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 10)) }, 'That')
+  await doc.undo()
+  await doc.flush()
+
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), original, 'the stream is back')
+  // D13's ordering deliberately prefers duplicated content over lost content,
+  // and undoing into that state is the same trade: the branched file stays.
+  assert.equal(await readFile(join(root, 'notes/that.md'), 'utf8') !== '', true)
+})

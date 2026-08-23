@@ -65,6 +65,18 @@ const STRONG_UNDER = /(?<![\w_])__(?!\s)([^_\n]+?)(?<!\s)__(?![\w_])/g
 const EM_UNDER = /(?<![\w_])_(?!\s|_)([^_\n]+?)(?<!\s)_(?![\w_])/g
 const CODE_SPAN = /`+[^`\n]*`+/g
 
+// An ordinary markdown link. Deliberately ordinary: the link a branch leaves
+// behind is v1's ONLY path back to the branched material (D13), and it has to
+// keep working in any other editor as well as in this one. `!` in front makes
+// it an image, which is handled above.
+const LINK = /(?<!!)\[([^\]\n]+)\]\(([^)\s]+)\)/g
+
+// Tephra's own markers. D16 and format-spec both say these are rendered as
+// widgets away from the cursor — "so it is rarely seen" — and until now they
+// were not, so bookmarking a phrase left `<!--tephra:mark …-->` sitting in the
+// middle of the sentence.
+const TEPHRA_MARKER = /<!--tephra:(mark|tag-start|tag-end)[ \t]+([^\n]*?)-->/g
+
 const katexCache = new Map<string, string>()
 
 function renderMath(src: string, display: boolean): string {
@@ -181,6 +193,75 @@ function codeSpans(text: string): readonly [number, number][] {
 const insideCode = (spans: readonly [number, number][], at: number): boolean =>
   spans.some(([from, to]) => at >= from && at < to)
 
+/** A marker, as the reader should see it: present, named, and out of the way. */
+class MarkerWidget extends WidgetType {
+  readonly #kind: string
+  readonly #name: string
+
+  constructor(kind: string, name: string) {
+    super()
+    this.#kind = kind
+    this.#name = name
+  }
+
+  override eq(other: MarkerWidget): boolean {
+    return other.#kind === this.#kind && other.#name === this.#name
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = `tx-marker tx-marker-${this.#kind}`
+    span.textContent = this.#name
+    span.title = `${this.#kind === 'mark' ? 'Bookmark' : 'Tag'}: ${this.#name}`
+    return span
+  }
+
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
+/**
+ * A markdown link, drawn as the words it names.
+ *
+ * Following it is main's job, not the renderer's: what a target means — whether
+ * it is inside the notebook at all — is a question about the notebook, and the
+ * renderer has no business resolving paths.
+ */
+class LinkWidget extends WidgetType {
+  readonly #label: string
+  readonly #target: string
+
+  constructor(label: string, target: string) {
+    super()
+    this.#label = label
+    this.#target = target
+  }
+
+  override eq(other: LinkWidget): boolean {
+    return other.#label === this.#label && other.#target === this.#target
+  }
+
+  toDOM(): HTMLElement {
+    const el = document.createElement('span')
+    el.className = 'tx-link'
+    el.textContent = this.#label
+    el.title = this.#target
+    el.setAttribute('role', 'link')
+    el.addEventListener('mousedown', event => {
+      event.preventDefault()
+      event.stopPropagation()
+      void window.tephra.openLink(this.#target)
+    })
+    return el
+  }
+
+  /** The click belongs to the link, not to the editor underneath it. */
+  override ignoreEvent(): boolean {
+    return true
+  }
+}
+
 function overlapsCursor(state: EditorState, from: number, to: number): boolean {
   return state.selection.ranges.some(r => r.from <= to && r.to >= from)
 }
@@ -262,6 +343,42 @@ function buildInline(view: EditorView): DecorationSet {
         decos.push({ from: from2, to: to2, deco: Decoration.replace({ widget: new MathWidget(m[1] as string, false) }) })
       }
 
+      const spans = codeSpans(text)
+
+      // Tephra's markers, shown as a small badge rather than as raw comment
+      // syntax. A badge rather than nothing at all because a bookmark you
+      // cannot see is a bookmark you will delete by accident — the marker is
+      // zero-width in the text but it is a real thing in the document, and the
+      // reader is the one who has to know it is there.
+      TEPHRA_MARKER.lastIndex = 0
+      while ((m = TEPHRA_MARKER.exec(text)) !== null) {
+        if (insideCode(spans, m.index)) continue
+        const from2 = line.from + m.index
+        const to2 = from2 + m[0].length
+        if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
+        decos.push({
+          from: from2,
+          to: to2,
+          deco: Decoration.replace({ widget: new MarkerWidget(m[1] as string, m[2] as string) }),
+        })
+      }
+
+      // Links: show the words, keep the target in the tooltip and one click
+      // away. A link rendered as `[Titration curves](../../../notes/…)` is a
+      // path back that costs a line of prose to read past every time.
+      LINK.lastIndex = 0
+      while ((m = LINK.exec(text)) !== null) {
+        if (insideCode(spans, m.index)) continue
+        const from2 = line.from + m.index
+        const to2 = from2 + m[0].length
+        if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
+        decos.push({
+          from: from2,
+          to: to2,
+          deco: Decoration.replace({ widget: new LinkWidget(m[1] as string, m[2] as string) }),
+        })
+      }
+
       // Emphasis: hide the marks, keep the text. The styling itself comes from
       // `proseHighlight` via lezer's tags, which is why the text was already
       // bold or italic while the asterisks sat there wearing the same weight.
@@ -274,7 +391,6 @@ function buildInline(view: EditorView): DecorationSet {
       // which never reflows and is a stylesheet change rather than a mechanism
       // change. Left as-is deliberately: settle it by living with it, the way
       // the frame arrangements were settled.
-      const spans = codeSpans(text)
       for (const [pattern, width] of [
         [STRONG_STAR, 2],
         [STRONG_UNDER, 2],

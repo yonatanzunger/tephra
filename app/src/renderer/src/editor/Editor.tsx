@@ -13,6 +13,7 @@
 import { useEffect, useRef } from 'react'
 import type { BufferPosition, DocumentPosition, DocumentWindow } from '@shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
+import type { Selection } from './range-commands.ts'
 import type { Typography } from './theme'
 
 export interface EditorProps {
@@ -23,6 +24,14 @@ export interface EditorProps {
   readonly onCursor?: (at: DocumentPosition) => void
   readonly initialCursor?: DocumentPosition | null
   readonly onError?: (err: Error) => void
+  /**
+   * Handed a way to ask what is selected, for as long as this editor lives.
+   *
+   * A range command arrives from the menu, which is in main; the caret is here.
+   * Passing a reader upward — rather than pushing the selection up on every
+   * cursor motion — keeps the typing path clear.
+   */
+  readonly onSelectionReader?: (read: (() => Selection) | null) => void
 }
 
 export function Editor({
@@ -33,6 +42,7 @@ export function Editor({
   onCursor,
   initialCursor,
   onError,
+  onSelectionReader,
 }: EditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const binding = useRef<Binding | null>(null)
@@ -52,10 +62,12 @@ export function Editor({
       ...(onError !== undefined ? { onError } : {}),
     })
     binding.current = bound
+    onSelectionReader?.(() => bound.selection())
     bound.view.focus()
     // Temporary: the self-check drives this. Goes away with verify.ts.
     ;(globalThis as unknown as { __view: unknown }).__view = bound.view
     return () => {
+      onSelectionReader?.(null)
       bound.destroy()
       binding.current = null
     }

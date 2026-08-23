@@ -159,13 +159,19 @@ putting the commentary somewhere else to look at.
 1. ✅ **The gesture.** One command set, three ways in. Proven end to end by wiring
    **bookmark** through it — the degenerate range, a point, and the least that
    can go wrong while exercising the whole marker-writing path.
-2. **Tag a range with a subject; untag.** The same machinery over real ranges.
-   Subjects overlap freely (R12), and `untag` currently throws.
-3. **Branch a range into its own file.** ONE X operation — create → update
+2. ✅ **Tag a range with a subject; untag.** The same machinery over real ranges.
+   Subjects overlap freely (R12). Written as interval arithmetic rather than as
+   four cases — merge, extend, split, trim are one code path, so alternation
+   holds by construction — and `tagBody` returns a body rather than a batch of
+   edits, because an insertion's position depends on text the deletions remove.
+3. ✅ **Branch a range into its own file.** ONE X operation — create → update
    references → delete, **in that order**, because the ordering is the only
-   safety mechanism available without a cross-object transaction (D13). If Z
-   assembles it from three primitives the guarantee is gone and the failure mode
-   is dangling references. Finding a branched file independently is v2.
+   safety mechanism available without a cross-object transaction (D13). The
+   reference-updating step is present and empty, and says so: sections are the
+   finite set a branch must rewrite and they arrive in M3, but its POSITION in
+   the sequence is the part worth fixing now. The link left behind renders as its
+   own words and opens the file, since it is v1's only path back. Finding a
+   branched file independently is still v2.
 4. **Print a range.** Independent of the rest and mostly proven in Spike B: the
    web layer renders, the shell supplies the panel.
 5. **Settle Q8 and Q9**, with the machinery built and the question concrete.

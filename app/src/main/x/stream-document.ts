@@ -13,8 +13,9 @@ import type {
 import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
-import { dayFile, parseDayFile , type RelPath } from '../w/layout.ts'
+import { dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
+import { placeMarker, tagBody } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { Segment } from './segment.ts'
 import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
@@ -496,29 +497,146 @@ export class StreamDocument implements Document {
   // ── sugar, all of which compiles to replace ────────────────
 
   async tag(span: Span, subject: string): Promise<void> {
-    await this.replace(
-      [
-        { span: { begin: span.end, end: span.end }, payload: `<!--tephra:tag-end ${subject}-->` },
-        { span: { begin: span.begin, end: span.begin }, payload: `<!--tephra:tag-start ${subject}-->` },
-      ].sort((a, b) => (a.span.begin.offset as number) - (b.span.begin.offset as number)),
-      'operation',
-    )
+    await this.#retag(span, subject, 'add')
   }
 
-  async untag(_span: Span, _subject: string): Promise<void> {
-    throw new Error('untag is not implemented in M0')
+  async untag(span: Span, subject: string): Promise<void> {
+    await this.#retag(span, subject, 'remove')
+  }
+
+  /**
+   * Putting a subject on or taking it off, in ONE edit batch.
+   *
+   * One batch and not one per day, because a selection that crosses midnight is
+   * still one thing the reader did, and it should undo in one step (D23). The
+   * interval arithmetic itself is per segment, since alternation is a property
+   * of a body: markers in Tuesday's file cannot pair with markers in
+   * Wednesday's, so a range crossing the boundary becomes one span in each,
+   * which is what "spans may not overlap for a subject" already permits.
+   */
+  async #retag(span: Span, subject: string, op: 'add' | 'remove'): Promise<void> {
+    if (subject.trim() === '') return
+    const first = span.begin.segment as DateKey
+    const last = span.end.segment as DateKey
+
+    const edits: Edit[] = []
+    for (const date of await this.#datesAcross(span)) {
+      const segment = await this.segment(date)
+      const from = date === first ? (span.begin.offset as number) : 0
+      const to = date === last ? (span.end.offset as number) : segment.body.length
+      const replacement = minimalReplacement(segment.body, tagBody(segment.body, subject, { from, to }, op))
+      if (replacement === null) continue // this day did not change
+      edits.push({
+        span: {
+          begin: this.#positionAt(date, replacement.from),
+          end: this.#positionAt(date, replacement.to),
+        },
+        payload: replacement.insert,
+      })
+    }
+    if (edits.length === 0) return // nothing to do is not an undo step
+    await this.replace(edits, 'operation')
   }
 
   async setAnchor(at: DocumentPosition, name: string): Promise<void> {
-    await this.replace([{ span: { begin: at, end: at }, payload: `<!--tephra:mark ${name}-->` }], 'operation')
+    // Markers may not begin a line; see `placeMarker`. The position moves by at
+    // most one character, which for a zero-width mark is the same place.
+    const segment = await this.segment(at.segment as DateKey)
+    const placed = placeMarker(segment.body, at.offset as number, `<!--tephra:mark ${name}-->`)
+    const where = this.positionAt(at.segment as DateKey, placed.at)
+    await this.replace([{ span: { begin: where, end: where }, payload: placed.text }], 'operation')
   }
 
   async removeAnchor(_name: string): Promise<void> {
     throw new Error('removeAnchor is not implemented in M0')
   }
 
-  async branch(_span: Span, _name: string): Promise<DocumentId> {
-    throw new Error('branch is not implemented in M0')
+  /**
+   * Take a range out of the stream, make it its own file, and leave a link.
+   *
+   * **Create, then update references, then delete — in that order, in one X
+   * operation** (D13). The ordering is the only safety mechanism available
+   * without a transaction across two objects: if the process dies partway, the
+   * worst case is the text existing in both places, which is visible and
+   * fixable, rather than the text existing in neither. Assembled by Z from
+   * three primitives it would have no such guarantee, which is why this is one
+   * method and not three.
+   *
+   * The reference-updating step is presently empty and says so: sections are
+   * the finite set that must be rewritten on a branch (D11), and they arrive in
+   * M3. The step is written here rather than added later because its POSITION
+   * in the sequence is the part that matters.
+   */
+  async branch(span: Span, name: string): Promise<DocumentId> {
+    const title = name.trim()
+    if (title === '') throw new Error('a branched file needs a name')
+
+    const pieces: { date: DateKey; from: number; to: number; text: string }[] = []
+    for (const date of await this.#datesAcross(span)) {
+      const segment = await this.segment(date)
+      const from = date === (span.begin.segment as DateKey) ? (span.begin.offset as number) : 0
+      const to = date === (span.end.segment as DateKey) ? (span.end.offset as number) : segment.body.length
+      if (to > from) pieces.push({ date, from, to, text: segment.body.slice(from, to) })
+    }
+    const moved = pieces.map(p => p.text).join('\n').trim()
+    if (moved === '') throw new Error('there is nothing in the selection to branch')
+
+    // 1. CREATE. No date, ever: a branched file is not in the dated stream, and
+    //    giving it one to pretend otherwise is the contortion D27 refuses. The
+    //    title is carried in frontmatter because the slug is not reversible.
+    const rel = await this.#unusedNoteFile(title)
+    const header = renderFrontmatter({
+      tephra: 1,
+      date: null,
+      part: null,
+      kind: 'markdown',
+      extra: [['title', title]],
+    })
+    await this.#notebook.write(rel, `${header}\n${moved}\n`)
+
+    // 2. UPDATE REFERENCES. Nothing to update yet — see above.
+
+    // 3. DELETE, leaving the link in the first day the range touched. One batch,
+    //    so a branch is one undo step.
+    const first = pieces[0] as { date: DateKey; from: number; to: number }
+    const link = `[${title}](${relativePath(dayFile(first.date), rel)})`
+    await this.replace(
+      pieces.map((piece, index) => ({
+        span: {
+          begin: this.#positionAt(piece.date, piece.from),
+          end: this.#positionAt(piece.date, piece.to),
+        },
+        payload: index === 0 ? link : '',
+      })),
+      'operation',
+    )
+    return rel as DocumentId
+  }
+
+  /** The segments a span touches, in order. */
+  async #datesAcross(span: Span): Promise<readonly DateKey[]> {
+    const first = span.begin.segment as DateKey
+    const last = span.end.segment as DateKey
+    const dates = (await this.dates()).filter(
+      d => compareDateKeys(d, first) >= 0 && compareDateKeys(d, last) <= 0,
+    )
+    for (const date of [first, last]) if (!dates.includes(date)) dates.push(date)
+    return dates.sort(compareDateKeys)
+  }
+
+  /**
+   * A path no file is using. Two branches named the same thing is an ordinary
+   * thing to do a year apart, and silently writing over the first would destroy
+   * exactly the material this operation exists to preserve.
+   */
+  async #unusedNoteFile(title: string): Promise<RelPath> {
+    const base = noteFile(title)
+    if (!(await this.#notebook.has(base))) return base
+    for (let n = 2; n < 1000; n++) {
+      const candidate = base.replace(/\.md$/, `-${n}.md`) as RelPath
+      if (!(await this.#notebook.has(candidate))) return candidate
+    }
+    throw new Error(`there are already a thousand files named like ${base}`)
   }
 
   // ── change feed ────────────────────────────────────────────

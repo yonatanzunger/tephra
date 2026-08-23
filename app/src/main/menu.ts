@@ -16,22 +16,62 @@
 
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { CHANNEL } from '../shared/ipc.ts'
+import {
+  RANGE_COMMANDS,
+  isEnabled,
+  NO_SELECTION,
+  type SelectionState,
+} from '../shared/commands.ts'
 import { verifyMode } from './verify-mode.ts'
 
 export interface MenuState {
   /** Vim mode, mirrored from the renderer so the checkmark tells the truth. */
   vim: boolean
+  /** What the caret is doing, mirrored for the same reason. */
+  selection: SelectionState
 }
 
-const state: MenuState = { vim: false }
+const state: MenuState = { vim: false, selection: NO_SELECTION }
+
+function send(channel: string, value: unknown): void {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  win?.webContents.send(channel, value)
+}
+
+/**
+ * The range commands as menu items, built from `RANGE_COMMANDS` so the menu bar
+ * and the context menu cannot drift apart — they are two renderings of one list.
+ */
+function rangeItems(): MenuItemConstructorOptions[] {
+  return RANGE_COMMANDS.map(command => ({
+    label: command.label,
+    ...(command.accelerator === '' ? {} : { accelerator: command.accelerator }),
+    enabled: isEnabled(command, state.selection),
+    click: () => send(CHANNEL.rangeCommand, command.id),
+  }))
+}
+
+/** Pop the context menu where the pointer is. Same items, same enable rules. */
+export function popRangeMenu(): void {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (win === undefined) return
+  Menu.buildFromTemplate(rangeItems()).popup({ window: win })
+}
+
+/** Told by the renderer what the caret is doing; rebuilds so items grey correctly. */
+export function setMenuSelection(selection: SelectionState): void {
+  if (
+    state.selection.hasPoint === selection.hasPoint &&
+    state.selection.hasRange === selection.hasRange
+  ) {
+    return
+  }
+  state.selection = selection
+  installMenu()
+}
 
 /** Rebuild the menu. Cheap, and the only way to move a checkmark in Electron. */
 export function installMenu(): void {
-  const send = (channel: string, value: unknown): void => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    win?.webContents.send(channel, value)
-  }
-
   const template: MenuItemConstructorOptions[] = [
     {
       label: app.name,
@@ -66,6 +106,10 @@ export function installMenu(): void {
         { role: 'paste' },
         { role: 'selectAll' },
       ],
+    },
+    {
+      label: 'Range',
+      submenu: rangeItems(),
     },
     {
       label: 'View',

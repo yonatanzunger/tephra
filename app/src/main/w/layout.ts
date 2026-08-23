@@ -7,6 +7,8 @@
 import type { DateKey } from '../../shared/document-api.ts'
 import { asDateKey } from '../../shared/dates.ts'
 
+import { join, relative, resolve, sep } from 'node:path'
+
 export const STREAM_DIR = 'stream'
 
 /**
@@ -175,4 +177,47 @@ export function themeFile(name: string): RelPath {
  */
 export function walFile(docId: string): RelPath {
   return `${LOCAL_DIR}/wal/${slug(docId)}.jsonl`
+}
+
+/**
+ * A link from one notebook file to another, as markdown wants it.
+ *
+ * Relative, not absolute: the notebook is a directory a person may move, sync,
+ * or open in another editor, and every other link in the format is already
+ * relative (an attachment reads `../../../attachments/…`). The link left behind
+ * by a branch is v1's ONLY path back to the branched material (D13), so it has
+ * to keep working outside Tephra as well as inside it.
+ */
+export function relativePath(from: RelPath, to: RelPath): string {
+  const fromParts = from.split('/').slice(0, -1)
+  const toParts = to.split('/')
+  let shared = 0
+  while (shared < fromParts.length && shared < toParts.length - 1 && fromParts[shared] === toParts[shared]) {
+    shared++
+  }
+  const up = fromParts.length - shared
+  return [...Array<string>(up).fill('..'), ...toParts.slice(shared)].join('/')
+}
+
+
+/**
+ * Resolve a link found in a document's text to a path inside the notebook, or
+ * null if it leads out.
+ *
+ * **A document's text is data, not configuration.** It can be typed, pasted, or
+ * arrive with an imported file (R28), so `../../../..` repeated enough times
+ * reaches anywhere on the machine — and anything that opens what a link says
+ * without this check has handed that reach to a line of prose.
+ *
+ * Relative targets resolve from a day file's directory. Every day file sits at
+ * the same depth, `stream/YYYY/MM/`, so a well-formed relative link resolves to
+ * the same place whichever day it was written on; one that is not well-formed
+ * fails containment, which is the answer wanted anyway.
+ */
+export function resolveInsideNotebook(root: string, target: string): RelPath | null {
+  if (target === '' || /^[a-z][a-z0-9+.-]*:/i.test(target)) return null // a URI scheme is not a file
+  const base = resolve(root)
+  const at = resolve(join(base, STREAM_DIR, '0000', '00'), target)
+  if (at === base || !at.startsWith(base + sep)) return null
+  return relative(base, at).split(sep).join('/') as RelPath
 }

@@ -380,6 +380,177 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'branch') {
+      const select = (text: string): boolean => {
+        const from = view.state.doc.toString().indexOf(text)
+        if (from === -1) return false
+        view.dispatch({ selection: { anchor: from, head: from + text.length } })
+        return true
+      }
+
+      say('selected', select('A longer argument, worth its own file because it has outgrown\nthe day it was written on.'))
+      await settle(300)
+      say('menuItemFound', await window.tephra.clickMenu('Branch to Its Own File…'))
+      await settle(400)
+      const input = document.querySelector('.prompt input') as HTMLInputElement | null
+      say('promptOpened', input !== null)
+      if (input === null) { console.log('VERIFY done'); return }
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'Titration curves')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(120)
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(1200)
+
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      say('buffer', view.state.doc.toString())
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(500)
+      say('linkRendered', document.querySelectorAll('.cm-link, .tx-link, a').length)
+      say('onScreen', document.querySelector('.cm-content')?.textContent ?? '')
+      await settle(2000)
+    }
+
+    if (scene === 'tag') {
+      // Tagging and untagging, through the menu, the prompt, and the file.
+      const answer = async (item: string, text: string): Promise<boolean> => {
+        if (!(await window.tephra.clickMenu(item))) return false
+        await settle(400)
+        const input = document.querySelector('.prompt input') as HTMLInputElement | null
+        if (input === null) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, text)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(900)
+        return true
+      }
+
+      const select = (text: string): boolean => {
+        const from = view.state.doc.toString().indexOf(text)
+        if (from === -1) return false
+        view.dispatch({ selection: { anchor: from, head: from + text.length } })
+        return true
+      }
+
+      const before = view.state.doc.toString()
+      say('selected', select('Klein, Crawford and Alchian'))
+      await settle(300)
+      say('tagged', await answer('Tag…', 'House Deal'))
+      await window.tephra.doc.flush()
+
+      const tags = await window.tephra.doc.spans({ kind: 'tag' })
+      say('tagNames', tags.map(t => t.name))
+
+      // Markers touching the selection are revealed on purpose, so what the
+      // badges look like can only be asked with the caret somewhere else.
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(2200) // long enough to be looked at, not only measured
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      say('boldSurvives', document.querySelector('.cm-content')?.textContent?.includes('Intrinsic S') === true)
+      say('rawSyntaxVisible', (document.querySelector('.cm-content')?.textContent ?? '').includes('tephra:tag'))
+      say('badges', [...document.querySelectorAll('.tx-marker')].map(e => e.textContent))
+
+      // And off again. The prompt arrives prefilled with the subject already
+      // there, so answering it means pressing Enter.
+      say('reselected', select('Klein, Crawford and Alchian'))
+      await settle(300)
+      say('untagged', await answer('Remove Tag…', 'House Deal'))
+      await window.tephra.doc.flush()
+      say('tagsAfter', (await window.tephra.doc.spans({ kind: 'tag' })).map(t => t.name))
+
+      // The round trip is exact: the text is byte-for-byte what it started as.
+      say('restoredExactly', view.state.doc.toString() === before)
+      await settle(2500)
+    }
+
+    if (scene === 'bookmark-bold') {
+      // The reported case exactly: bookmark a boldfaced phrase at the very
+      // start of its line, which is where a comment would otherwise swallow
+      // the whole line's formatting.
+      const target = view.state.doc.toString().indexOf('**Intrinsic')
+      view.dispatch({ selection: { anchor: target } })
+      await settle(300)
+      say('caretAt', target)
+      say('menuItemFound', await window.tephra.clickMenu('Bookmark\u2026'))
+      await settle(400)
+      const input = document.querySelector('.prompt input') as HTMLInputElement | null
+      if (input === null) { say('promptOpened', false); console.log('VERIFY done'); return }
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'intrinsic-s')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(120)
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(900)
+      await window.tephra.doc.flush()
+
+      // Park the caret away so nothing is revealed by proximity, then look at
+      // what is actually on screen.
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+      await settle(400)
+      // Computed weight of the element actually containing the word. CodeMirror
+      // styles through a generated class, so looking for `<strong>` or an inline
+      // font-weight finds nothing whether or not the bold survived.
+      const bolded = [...document.querySelectorAll('.cm-line span')].find(
+        el => (el.textContent ?? '').includes('Intrinsic'),
+      )
+      say('boldWeight', bolded === undefined ? 'NO SPAN' : getComputedStyle(bolded).fontWeight)
+      say('markerBadge', document.querySelector('.tx-marker')?.textContent ?? 'NONE')
+      say('rawSyntaxVisible', (document.querySelector('.cm-content')?.textContent ?? '').includes('tephra:mark'))
+      say('asterisksVisible', (document.querySelector('.cm-content')?.textContent ?? '').includes('**'))
+      say('caretNow', view.state.selection.main.head)
+      await settle(3000)
+    }
+
+    if (scene === 'bookmark') {
+      // The gesture, end to end: type, place the caret, invoke the command the
+      // way the menu does, answer the prompt, and check what reached the file.
+      view.dispatch({
+        changes: { from: view.state.doc.length, insert: 'A passage worth marking.\n' },
+        userEvent: 'input.type',
+      })
+      await settle(400)
+
+      const target = view.state.doc.toString().indexOf('worth marking')
+      view.dispatch({ selection: { anchor: target } })
+      await settle(300)
+      say('caretPlaced', target)
+
+      // The menu item itself, not a shortcut to the handler beneath it.
+      say('menuItemFound', await window.tephra.clickMenu('Bookmark\u2026'))
+      await settle(400)
+      const prompt = document.querySelector('.prompt input') as HTMLInputElement | null
+      say('promptOpened', prompt !== null)
+      if (prompt === null) { console.log('VERIFY done'); return }
+
+      // Typed, then Enter — the way a person answers it.
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(prompt, 'the-marked-passage')
+      prompt.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(120)
+      prompt.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(900)
+
+      say('promptClosed', document.querySelector('.prompt') === null)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+
+      // The third way in. A native context menu cannot be asserted from the
+      // renderer — it is an OS menu, not DOM — so what is checked here is that
+      // the editor hands the gesture to main rather than letting Chromium show
+      // its own. The menu's CONTENTS need no separate test: it is built from the
+      // same `RANGE_COMMANDS` the menu bar is, which is the point of the list.
+      const content = document.querySelector('.cm-content') as HTMLElement | null
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+      content?.dispatchEvent(event)
+      say('contextMenuHandled', event.defaultPrevented)
+
+      await window.tephra.doc.flush()
+      const anchors = await window.tephra.doc.spans({ kind: 'anchor' })
+      say('anchors', anchors.map(a => a.name))
+      say('resolves', (await window.tephra.doc.resolveAnchor('the-marked-passage')) !== null)
+    }
+
     if (scene === 'summary') {
       // Compact: a big day's buffer would be a megabyte on one line of stdout.
       const text = view.state.doc.toString()

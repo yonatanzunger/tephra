@@ -13,12 +13,13 @@
 
 import type { Anomaly } from '../shared/anomalies.ts'
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
-import type { DateKey, DocumentPosition, TypedSpan, VersionId } from '../shared/document-api.ts'
+import type { DateKey, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { Notebook } from './w/notebook.ts'
 import { Wal, type WalRecord } from './w/wal.ts'
 import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
-import type { RelPath } from './w/layout.ts'
+import { resolveInsideNotebook, type RelPath } from './w/layout.ts'
+import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
@@ -484,6 +485,65 @@ export class DocumentService {
 
   async spans(request: SpansRequest): Promise<readonly TypedSpan[]> {
     return request.kind === undefined ? this.#doc.spans() : this.#doc.spans(request.kind)
+  }
+
+  /** Bookmark a point (R11's degenerate range). Serial, like every mutation. */
+  async setAnchor(at: DocumentPosition, name: string): Promise<void> {
+    await this.#serial(() => this.#doc.setAnchor(at, name))
+    this.#unsavedWork = true
+    this.#scheduleFlush()
+  }
+
+  /**
+   * Put a subject over a range, or take it off one. Serial, like every mutation.
+   *
+   * Z asks for both through the same door because they are the same operation
+   * with opposite signs — see `StreamDocument.#retag`.
+   */
+  async tag(span: Span, subject: string): Promise<void> {
+    await this.#serial(() => this.#doc.tag(span, subject))
+    this.#unsavedWork = true
+    this.#scheduleFlush()
+  }
+
+  async untag(span: Span, subject: string): Promise<void> {
+    await this.#serial(() => this.#doc.untag(span, subject))
+    this.#unsavedWork = true
+    this.#scheduleFlush()
+  }
+
+  /**
+   * Branch a range into its own file. Serial, and flushed straight away: the
+   * new file is already on disk, so leaving the stream's half of the operation
+   * sitting in memory is the one window where the two disagree (D13).
+   */
+  async branch(span: Span, name: string): Promise<DocumentId> {
+    const id = await this.#serial(() => this.#doc.branch(span, name))
+    this.#unsavedWork = true
+    await this.flush()
+    return id
+  }
+
+  /**
+   * Where a link found in the text points, or null if it will not be followed.
+   *
+   * Containment is `resolveInsideNotebook`'s job and is tested there; a link
+   * that leads out of the notebook, or names a file that is not there, resolves
+   * to nothing.
+   *
+   * **This returns a path rather than opening it**, because opening is
+   * Electron's and this object is deliberately free of Electron — three test
+   * suites drive it under plain node, and an `import { shell }` at the top of
+   * this file broke all three at module load. That is the same fault as reading
+   * `app.isPackaged` at module scope (see `verify-mode.ts`), and it is the
+   * layering telling the truth: what a link means is a question about the
+   * notebook, and opening a file is a question about the desktop.
+   */
+  async linkTarget(target: string): Promise<string | null> {
+    const rel = resolveInsideNotebook(this.#notebook.root, target)
+    if (rel === null) return null
+    if (!(await this.#notebook.has(rel))) return null
+    return join(this.#notebook.root, rel)
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {

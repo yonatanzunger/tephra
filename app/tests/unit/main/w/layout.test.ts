@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   dayFile, dayDir, parseDayFile, noteFile, sectionFile, attachmentFile, isLocal, slug,
+  relativePath, resolveInsideNotebook,
 } from '../../../../src/main/w/layout.ts'
 import type { DateKey } from '../../../../src/shared/document-api.ts'
 
@@ -64,4 +65,60 @@ test('notes, sections and attachments land where the format says', () => {
     attachmentFile(d('2026-03-14'), 'plot', 'a1b2c3d4e5', '.png'),
     'attachments/2026/03/2026-03-14-plot-a1b2c3.png',
   )
+})
+
+// ── following a link (M2.3) ──────────────────────────────────
+//
+// A document's text is data: it can be typed, pasted, or arrive with an
+// imported file. These are the cases where "just open what the link says" would
+// hand the whole filesystem to a line of prose.
+
+test('a link into the notebook resolves', () => {
+  assert.equal(
+    resolveInsideNotebook('/n', '../../../notes/titration-curves.md'),
+    'notes/titration-curves.md',
+  )
+  assert.equal(resolveInsideNotebook('/n', '../../../attachments/2026/03/x.png'), 'attachments/2026/03/x.png')
+})
+
+test('a link that climbs out of the notebook does not resolve', () => {
+  for (const target of [
+    '../../../../etc/passwd',
+    '../../../../../../../../etc/passwd',
+    '../../../notes/../../../../etc/passwd',
+    '/etc/passwd',
+    '../../..', // the notebook root itself is not a file to open
+  ]) {
+    assert.equal(resolveInsideNotebook('/n', target), null, `${target} should not resolve`)
+  }
+})
+
+test('a URI scheme is not a file path', () => {
+  for (const target of [
+    'https://example.com/',
+    'file:///etc/passwd',
+    'tephra:mark/mortgage%20contact', // a real format, handled elsewhere
+    'javascript:alert(1)',
+  ]) {
+    assert.equal(resolveInsideNotebook('/n', target), null, `${target} should not resolve`)
+  }
+})
+
+test('a link resolves the same from any day, since every day is at one depth', () => {
+  // The claim the resolver relies on: `stream/YYYY/MM/` is always three deep.
+  const seen = new Set<string | null>()
+  for (const date of ['2019-01-01', '2026-03-14', '2031-12-31']) {
+    seen.add(resolveInsideNotebook('/n', '../../../notes/x.md'))
+    assert.equal(dayFile(date as DateKey).split('/').length, 4, `${date} is not three deep`)
+  }
+  assert.equal(seen.size, 1)
+})
+
+
+test('a relative link between notebook files', () => {
+  assert.equal(
+    relativePath(dayFile('2026-03-14' as DateKey), noteFile('Titration curves')),
+    '../../../notes/titration-curves.md',
+  )
+  assert.equal(relativePath(noteFile('a'), noteFile('b')), 'b.md')
 })
