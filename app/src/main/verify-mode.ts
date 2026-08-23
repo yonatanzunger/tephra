@@ -18,14 +18,29 @@
 
 import { app } from 'electron'
 
+let cached: boolean | null = null
+
 /**
  * True only in an unpackaged build that explicitly asked for it.
  *
- * Read once at module load: this must not be something that can be turned on
- * halfway through a session by a later `process.env` assignment.
+ * **Computed on first call, not at module load.** The first version was a
+ * module-scope `const` reading `app.isPackaged`, which throws when
+ * `require('electron')` has not produced the real module yet —
+ * `TypeError: Cannot read properties of undefined (reading 'isPackaged')`. In a
+ * packaged build that killed the app before it wrote a single line of output:
+ * a clean exit 0, no window, no crash report, nothing to go on. Touching
+ * Electron's runtime while modules are still being evaluated is not safe, and
+ * this module is imported early precisely because everything else consults it.
+ *
+ * Still evaluated ONCE. The answer is memoised on the first call, so it cannot
+ * be switched on halfway through a session by a later `process.env` assignment.
  */
-export const VERIFY_MODE: boolean =
-  !app.isPackaged && process.env['TEPHRA_VERIFY_MODE'] === '1'
+export function verifyMode(): boolean {
+  if (cached === null) {
+    cached = !app.isPackaged && process.env['TEPHRA_VERIFY_MODE'] === '1'
+  }
+  return cached
+}
 
 /**
  * Read a verification environment variable, or `undefined` when verification is
@@ -36,6 +51,6 @@ export const VERIFY_MODE: boolean =
  * how `run.sh --scratch` works.
  */
 export function verifyEnv(name: string): string | undefined {
-  if (!VERIFY_MODE) return undefined
+  if (!verifyMode()) return undefined
   return process.env[name]
 }

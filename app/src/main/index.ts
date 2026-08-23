@@ -5,7 +5,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { clickMenuItem, installMenu, setMenuVim } from './menu.ts'
-import { VERIFY_MODE, verifyEnv } from './verify-mode.ts'
+import { verifyMode, verifyEnv } from './verify-mode.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
@@ -19,7 +19,7 @@ import { CHANNEL } from '../shared/ipc.ts'
 // belongs in a menu bar.
 app.setName('Tephra')
 
-if (VERIFY_MODE) {
+if (verifyMode()) {
   console.warn(
     'TEPHRA: verification mode is ON. Screenshot capture, menu automation, the ' +
       'oversized-window override and abrupt exit are all reachable. Never for ordinary use.',
@@ -92,7 +92,7 @@ function createWindow(): BrowserWindow {
     // That produced a run reporting three failures that never reproduced.
     // **A test harness that can eat the operator's keystrokes is a bad
     // harness**, however correct the code under it.
-    if (VERIFY_MODE) win.showInactive()
+    if (verifyMode()) win.showInactive()
     else win.show()
     const shot = verifyEnv('TEPHRA_SHOT')
     if (shot !== undefined && shot !== '') void captureAndQuit(win, shot)

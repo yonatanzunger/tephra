@@ -1,0 +1,35 @@
+<style>
+  html, body { margin: 0; background: transparent; }
+  .icon {
+    width: 1024px; height: 1024px;
+    /* macOS icons sit in a rounded square with breathing room around them. */
+    padding: 92px; box-sizing: border-box;
+  }
+  .plate {
+    width: 100%; height: 100%;
+    border-radius: 190px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    background: #e9dfc8;
+    box-shadow: inset 0 0 0 8px rgba(35,32,27,0.18);
+  }
+  /* Strata: ash beds of uneven thickness, the way they actually fall. */
+  .bed { width: 100%; }
+</style>
+<div class="icon"><div class="plate" id="plate"></div></div>
+<script>
+  // A tephra layer is a MARKER HORIZON: the datable band geologists correlate
+  // everything else against. So the composition is quiet earth tones with one
+  // band that reads instantly — which is also what a dated notebook is.
+  const beds = [
+    [ 78, '#f2ead8'], [ 46, '#cfc0a0'], [110, '#e9dfc8'], [ 40, '#b9a983'],
+    [ 88, '#f2ead8'], [ 52, '#c6b596'],
+    [ 96, '#3b332a'],                                   // the marker horizon
+    [ 54, '#e9dfc8'], [ 84, '#c6b596'], [ 44, '#f2ead8'],
+    [ 68, '#b9a983'], [104, '#e9dfc8'], [ 50, '#cfc0a0'], [ 92, '#f2ead8'],
+  ]
+  const total = beds.reduce((a, [h]) => a + h, 0)
+  document.getElementById('plate').innerHTML = beds
+    .map(([h, c]) => `<div class="bed" style="flex:${h / total};background:${c}"></div>`)
+    .join('')
+</script>
