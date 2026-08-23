@@ -500,3 +500,29 @@ survive a crash is exactly the part being written, and the rest would be noise.
 sentence, `TEPHRA_EXIT=abrupt` killed it without running `before-quit`, and the
 day file did not exist at all. Reopening printed *"recovered 1 unsaved edit(s)
 from the log"* and the sentence was in the buffer and on disk.
+
+## What `npm run m1` asserts, and one thing it found
+
+M0 asked whether the app could write a file and find it again. M1 asks the
+harder question — **whether anything can be lost** — so every assertion is made
+against the files and the repository on disk, never against the app's account of
+itself. Four real launches, one of them killed deliberately.
+
+**The crash section is the one that matters.** It checks, in order, that the day
+file did *not* yet exist (so the log is genuinely what is under test), that the
+log held the edit, that reopening printed a recovery, that the text is on disk
+afterwards — and that it appears **exactly once**, because a replay that
+duplicates is the failure mode `baseLen` exists to prevent.
+
+### A finding: an oversized day that arrives from outside is not split
+
+The first version of the split section seeded a 1.05 MB day file and relaunched.
+The app read it back perfectly as one day — and left it as one file.
+
+That is correct, and worth stating rather than fixing. **A day is only written
+when it is dirty**, and we never rewrite a file we did not change
+(format-spec). A file the reader created by hand is not ours to reformat, even
+into a shape the format prefers. The split therefore happens when a day crosses
+the threshold **through use**, which is the path a real day takes; the
+acceptance run now types into the oversized day, which is both the honest
+trigger and the one a person would produce.

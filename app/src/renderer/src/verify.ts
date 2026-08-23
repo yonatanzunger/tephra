@@ -380,6 +380,28 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'summary') {
+      // Compact: a big day's buffer would be a megabyte on one line of stdout.
+      const text = view.state.doc.toString()
+      say('summary', {
+        length: text.length,
+        head: text.slice(0, 48),
+        tail: text.slice(-48),
+        location: pane.location,
+      })
+    }
+
+    if (scene === 'edit-again') {
+      // A second, different edit, so the previous text exists only in history.
+      const at = view.state.doc.length
+      view.dispatch({
+        changes: { from: 0, to: at, insert: 'REPLACED-ENTIRELY: the earlier words are gone from the file.\n' },
+        userEvent: 'input.type',
+      })
+      await settle(400)
+      say('replaced', view.state.doc.toString().includes('REPLACED-ENTIRELY'))
+    }
+
     if (scene === 'crash') {
       // Type, wait past the WAL batch but nowhere near the file tier, and die.
       // TEPHRA_EXIT=abrupt makes app.exit() skip before-quit entirely, which is

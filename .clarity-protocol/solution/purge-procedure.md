@@ -175,6 +175,15 @@ Stated plainly, because a procedure that implies completeness is worse than none
 own history on this machine — which is the thing this design created and is
 therefore the thing it owes a way to undo.
 
+> **This is known to be insufficient, and the gap is recorded rather than
+> papered over.** The procedure is manual, it does not survive the many clones
+> that arrive with the mobile client, and on a hosted remote its final step is a
+> support ticket rather than an operation. **Q10 is about layout; Q12 is about
+> this** — what a purge can honestly promise, and the threat model it serves. It
+> is deferred to a design cycle of its own because incremental improvement to a
+> procedure with these properties yields a longer procedure with the same
+> properties.
+
 ---
 
 ## Verified

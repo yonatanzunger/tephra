@@ -426,3 +426,55 @@ and it is honest — and treat the printing case and the block constructs as the
 two tests any candidate has to pass, since those are what killed the best of the
 five. The frame studies are the precedent for *how*: build the candidates and
 react to them rather than argue.
+
+## Q12: What does a purge actually promise, and what is the threat model it serves?
+
+**Status:** open, and **deliberately deferred to a design cycle of its own.**
+Raised on completing the purge procedure (T10, `purge-procedure.md`), which
+works and is not enough.
+
+### Why the procedure is not the answer
+
+**It is manual.** Eight steps, several of them irreversible, run by hand while
+upset. Step 2 instructs you to make a backup containing exactly the thing you
+are destroying, and then to remember to destroy the backup.
+
+**It does not survive the mobile client.** v2b multiplies clones. A rewrite is
+local to one repository, so every device needs the same procedure run on it, and
+a force-push does not reach into a clone. The current document assumes roughly
+one machine, which stops being true at exactly the milestone that makes the
+notebook genuinely useful.
+
+**On a hosted remote the last step is a support ticket.** GitHub's own guidance
+for fully removing sensitive data ends by asking you to contact support to have
+cached views and references garbage-collected. That is a request, not an
+operation — its execution depends on someone else's willingness and ability, and
+neither is verifiable from here. **A purge whose final step is "file a ticket
+and hope" should not be described as a purge.**
+
+### What the question actually is
+
+Not "how do we make the procedure better" — incremental improvement to a
+procedure with these properties produces a longer procedure with the same
+properties. The question underneath is:
+
+- **What is the threat model?** Who is the adversary, what do they have access
+  to, and what is the notebook actually protecting against? The corpus holds
+  other people's information, which is what makes this more than hygiene.
+- **What can this architecture honestly promise?** Durable history and reliable
+  deletion are in tension by construction (D32 says so plainly). Naming which
+  side wins, and where, is a design decision that has not been made.
+- **Does some content need never to enter the history at all?** A separate class
+  of note, excluded from versioning by design, is one possible answer and has
+  consequences everywhere — sync, search, the format.
+- **Does the choice of remote become a requirement?** Self-hosted storage where
+  `gc` is ours to run is a materially different guarantee from a hosted service.
+
+### Why it is deferred rather than answered now
+
+It needs to be thought about **end to end**, not patched. And the exposure is
+bounded meanwhile: v1 has no remote, so the corpus lives on one machine, and
+D36 already sets the deadline at the first *push* rather than the first commit.
+
+**Recorded so the next design cycle inherits the reasoning rather than
+rediscovering it.**

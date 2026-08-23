@@ -304,3 +304,27 @@ So the operational form of both principles is a review question rather than a
 design rule: **the ordinary way is the null hypothesis, and departing from it
 requires a reason that has been checked, not merely held.** An unfamiliar shape
 in a well-worn operation is a bug report about the code, not evidence of care.
+
+## The harness was eating the operator's keystrokes
+
+One M1 acceptance run reported three failures that never reproduced across eight
+subsequent runs. The explanation was not nondeterminism in the app: **the
+acceptance run opens real, focusable editor windows, they take focus as they
+appear, and notes being typed elsewhere went into the notebook under test** —
+changing the thing being asserted about, mid-assertion.
+
+Fixed by showing verification windows with `showInactive()` rather than
+`show()`. Everything still passes without focus, including the selection scene,
+which was the one that looked most likely to depend on it.
+
+**The general form is worth keeping.** A test rig is a program that runs on a
+machine somebody is using. If it can take focus, grab input, write outside its
+sandbox or pop a dialog, then its results are conditional on the operator
+sitting still — and "it failed once and never again" gets filed as flakiness
+rather than as the rig reaching outside its own boundaries.
+
+This is the same family as the earlier instrument failures, and the fourth
+entry in it: **an instrument that perturbs what it measures is not measuring.**
+Previously the perturbation was the harness giving the page a viewport tag the
+real artifact lacked, or `--silent` hiding a failed build. Here it was the rig
+competing with a human for the keyboard.

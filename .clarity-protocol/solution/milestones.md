@@ -64,7 +64,7 @@ thing gets used at all." The earlier ordering had it near-last.
 **Accepted risk:** the corpus is not yet safe — no split, no WAL, no git. Fine
 while testing against `./run.sh --scratch`, and not fine for real writing.
 
-## M1 — the corpus becomes safe
+## M1 — the corpus becomes safe ✅
 
 Everything that stands between "it writes files" and "it will not lose twenty
 years of them." Nothing above this is worth building first. Safety in three time
@@ -115,9 +115,9 @@ and the WAL have been built on the assumption.
 6. ✅ **The purge procedure.** Documented, not a button (T10, D36) —
    `purge-procedure.md`. Every command in it was run against a scratch notebook
    carrying the target text in both a day file and a version reason.
-7. **`npm run m1`.** The acceptance run, mirroring M0's: kill the app mid-write
-   and lose nothing; recover a deleted paragraph from a commit; force a split and
-   read the parts back as a single day.
+7. ✅ **`npm run m1`.** The acceptance run: four real launches, one deliberate
+   crash, 18 assertions made against the files and the git repository on disk
+   rather than against the app's account of itself.
 
 ### Two choices made up front
 

@@ -84,7 +84,16 @@ function createWindow(): BrowserWindow {
   })
 
   win.once('ready-to-show', () => {
-    win.show()
+    // In verification mode the window appears WITHOUT taking focus.
+    //
+    // Not cosmetic: an acceptance run opens a real, focusable editor, and a
+    // person working while it runs has their keystrokes captured by it — typed
+    // into the notebook under test, changing the thing being asserted about.
+    // That produced a run reporting three failures that never reproduced.
+    // **A test harness that can eat the operator's keystrokes is a bad
+    // harness**, however correct the code under it.
+    if (VERIFY_MODE) win.showInactive()
+    else win.show()
     const shot = verifyEnv('TEPHRA_SHOT')
     if (shot !== undefined && shot !== '') void captureAndQuit(win, shot)
   })
