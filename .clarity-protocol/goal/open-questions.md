@@ -429,9 +429,15 @@ react to them rather than argue.
 
 ## Q12: What does a purge actually promise, and what is the threat model it serves?
 
-**Status:** open, and **deliberately deferred to a design cycle of its own.**
+**Status: ANSWERED — D44**, and the answer is that the primary notebook promises
+*durability*, not deletion, and stops pretending otherwise. Genuine deletion
+moves to a second notebook whose storage is shreddable by construction. The
+threat model that drove the question is recorded below and has substantially
+decayed; what survives is not an adversary but a need — somewhere to think
+without the thinking becoming permanent.
+
 Raised on completing the purge procedure (T10, `purge-procedure.md`), which
-works and is not enough.
+works and is not enough. The material below is kept for its reasoning.
 
 ### Why the procedure is not the answer
 
@@ -478,3 +484,88 @@ D36 already sets the deadline at the first *push* rather than the first commit.
 
 **Recorded so the next design cycle inherits the reasoning rather than
 rediscovering it.**
+
+### The adversary, supplied 2026-08-22 (`notes/02 next steps.md`)
+
+The question above asks "what is the threat model?" and left it blank. It is now
+named: **politically sensitive writing, against an adversary who can compel a
+hosting provider to produce data.** GitHub is the named example. The stated want
+is to write *truly privately*, in a way not easily subject to seizure.
+
+**This retires the deferral's safety argument, and that is the first consequence
+to face.** "v1 has no remote, so exposure is bounded to one machine" was written
+against an adversary who is a *hosting provider*. Against one who can compel, a
+laptop is not a bound — it can be seized, imaged at a border, or copied wholesale
+by a backup the corpus never sees. `purge-procedure.md` already lists Time
+Machine first among the things a purge cannot reach; under this adversary that
+line stops being a caveat and becomes the main exposure. **The premise behind the
+deferral no longer holds, even though the deferral of the full cycle may still be
+right.**
+
+**Two things follow immediately, before the cycle runs.**
+
+- **Step 2 of the purge procedure is now actively dangerous advice.** It
+  instructs the operator to make a complete plaintext copy of exactly the thing
+  they are destroying, and to remember to destroy it later. That is defensible
+  against fat fingers and indefensible against seizure.
+- **One sub-question is format-visible and therefore cannot wait for the rest.**
+  "Does some content need never to enter the history at all?" implies a *class*
+  distinction in the corpus. Classification cannot be backfilled — content
+  written before the class exists is already in the history, and the only way out
+  is a purge. Every day until it is answered is a day of unclassifiable
+  accumulation. See the sequencing note in `notes.md`.
+
+**A structural rhyme worth carrying into the cycle, so it is not re-derived.**
+Encrypt-at-rest versus plain files is the same fork as Q2's CRDT versus plain
+files: encrypted blobs do not diff or merge, search needs decryption, and R26's
+exit weakens to "readable if you still hold the key." Q2 resolved by refusing the
+whole-corpus answer. The likely resolution here has the same shape — separate the
+sensitive class rather than encrypting everything — but it should be *argued*,
+not assumed.
+
+**And encryption does not reach the metadata.** A hosted remote knows the account,
+the commit times, the sizes and the cadence, whatever the blobs contain. That is a
+stronger argument for self-hosting than the `gc`-control one recorded above.
+
+### Refined 2026-08-23 — and most of it retires
+
+The adversary above was stated broadly. Examined properly it separates into two,
+**both of which have substantially decayed**, and the content at issue turns out
+not to be what the first framing assumed.
+
+**What is actually at risk is not operational material.** Nothing that could
+expose a name or an identity was ever going to be written down anywhere; that is
+settled and is not a design input. The category of concern is narrower and more
+particular: **sitting down to work through a complex idea and, in the course of
+it, directly broaching facts that are not normally discussable.** The value is in
+the working-through, which is exactly the activity this project exists to
+support, so the material cannot simply be characterised as regrettable.
+
+**Adversary 1 — civil discovery, and it is gone.** As an officer of a major
+corporation, private views were routinely subpoenable across a range of suits
+against the company, and an officer on record calling a direction harmful or
+merely useless was a serious liability. This was the dominant risk by expected
+value precisely because it was *routine*: broad, automatic, frequent, and
+requiring nobody to have targeted the writer at all. **The officer role has
+ended, and with it this threat.**
+
+**Adversary 2 — political targeting, and the evidence is already public.** The
+writer is publicly and widely known as a political undesirable. Adversaries who
+act on that do not need evidence and are not gathering it; the notebook is not in
+their attack chain, though it was a few years ago. **The trajectory is judged
+decreasing rather than increasing.**
+
+**What follows.** The expensive answers lose their justification. Encryption at
+rest cannot pay for the merge story, the exit and twenty years of key custody
+against a threat at this level, and self-hosting is not load-bearing either. The
+cheap answer — **do not use this system for these subjects** — becomes the
+primary control rather than a counsel of despair.
+
+**Three things survive the retirement, and only the third needs design.** They
+are recorded in the brainstorming pool: confidentiality obligations that run with
+the information rather than with either adversary; the difference between public
+*facts* and private *texture*; and the question that decides whether scoping
+works at all — **scoped to where?** A rule excluding a subject from Tephra is
+viable only if the thinking has somewhere else to happen. If it does not, the
+rule is self-censorship wearing a policy hat, and that is the failure this whole
+question exists to avoid.

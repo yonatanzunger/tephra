@@ -990,3 +990,188 @@ that a measurement dissolved; a hand-rolled hash comparison that
 found by someone asking why the code did not look like the obvious thing.
 **The obvious thing is the null hypothesis, and departing from it needs a
 reason that has been checked.**
+
+## D44: A second notebook whose storage is shreddable, with per-file keys
+
+**Date:** 2026-08-23
+**Status:** decided
+**Answers:** Q12
+**Refines:** D43, D32, D7, D8
+**Deliberately gives up:** cross-device access and hand-editing, for this notebook only
+
+**Decision.** Tephra opens more than one notebook. The primary one is unchanged —
+git-backed, rewindable, plain files, hand-editable. A second **shreddable**
+notebook holds writing that must be genuinely deletable: the same app, the same
+editor, the same typography, and different storage underneath. Its files are
+**encrypted at rest under per-file keys held in the system keychain**, so
+deleting content destroys a key rather than overwriting bytes. It keeps no
+version history and no write-ahead log.
+
+*The name `shreddable` is provisional. "Ephemeral" was rejected because it
+conflates duration with deletability, and nothing here expires on its own —
+content stays exactly as long as it is left alone.*
+
+### Why a second notebook rather than a protected class inside one
+
+A class distinction inside the corpus has to be enforced by every mechanism that
+can cross it — tags over ranges, fileset entries, anchors, search, the index —
+and each of those is a separate place to get it wrong. A second notebook makes
+the boundary **a directory**, which is the coarsest and most verifiable boundary
+available and one the OS, git and the backup software already understand. It
+deletes the entire in-corpus classification design rather than implementing it.
+
+**The zero-routing requirement does not block this, and the reason matters.**
+That requirement was derived from routing *by subject*, which `problem.md` shows
+is intolerable because subject is **retrospective** — the realisation that a
+passage belongs to project X arrives after writing it. **Sensitivity is
+prospective**: it is known before the session starts, there are two destinations
+rather than seven, and the decision is made once on opening rather than per
+passage. The premise does not transfer, and the requirement should not be cited
+against this at its original strength.
+
+### Why crypto-shredding rather than secure deletion
+
+**Overwrite-based erasure does not work on this hardware.** Wear levelling and
+over-provisioning mean a logical overwrite need not touch the physical page;
+APFS is copy-on-write, so a rewrite orphans the old blocks rather than replacing
+them; and local snapshots pin exactly those orphans. Apple withdrew Secure Empty
+Trash and `srm` rather than keep shipping a guarantee they could not make.
+
+Deletion is not an operation on data — it is an operation on **every copy** of
+the data, and the hard part is enumerating the copy set. Locally that set spans
+the file, snapshots, Time Machine, Spotlight, swap and the raw NAND, and the
+application cannot enumerate it. **Crypto-shredding makes the enumeration
+problem irrelevant instead of solving it**: destroy the key and every copy
+becomes noise, wherever it is and however many there are. This is the same
+technique, and the same reasoning, that large-scale storage systems use to make
+deletion a binding commitment.
+
+### Why per-file keys rather than one volume key
+
+An encrypted volume was the cheaper first proposal and was rejected on
+granularity: one key means the only available deletion is *shred everything*.
+The product this needs is deletion of **individual days and individual files**,
+manually or eventually on a schedule.
+
+So each file carries its own data key, wrapped by a master key in the keychain.
+Shredding a file deletes its key entry and unlinks the ciphertext. **The key
+table must never be a plain file that gets rewritten in place**, because that
+recurses the original problem onto a smaller file; keys live in the keychain,
+where destruction is the OS's job and is hardware-backed.
+
+### Finer granularity comes free from an existing mechanism
+
+**Splitting a day is already built** — M1 ships prefix-stable splitting at 1 MB,
+`part:` in frontmatter, and D20's rule that adjacent parts coalesce above the
+storage layer so the split is invisible to the API. Making "split here" an
+**explicit authored action** as well as a length-triggered one therefore adds a
+trigger, not a mechanism, and it buys deletion granularity finer than a day.
+
+The split point becomes a marker in the text rather than a computed boundary,
+which is *more* prefix-stable than the current rule and consistent with D11 —
+it travels with the text instead of being an offset.
+
+### Encryption is a wrapper at the W boundary, not a second wire format
+
+**The format does not fork.** The markdown, the frontmatter, the markers and the
+degradation table are all unchanged; only the bytes at rest are transformed. So
+this is an encrypting variant of `Notebook.read`/`write` at the bottom of W, and
+**nothing above W changes at all** — X and Z cannot tell the difference.
+
+This matters for scope. Treating encryption as a parallel `Document` storage
+implementation would produce a 2×2 matrix against the existing
+segmented/single-file split; a wrapper keeps the two concerns orthogonal. It
+also makes the export path trivial, because decrypting yields exactly the
+ordinary format.
+
+**Two existing rules pay off here.** D43's `Repository` interface means "no
+history" is a null implementation rather than surgery. And architecture.md's
+rule 4 — *search is an X-level component, never a W-level scan* — is what lets
+search work over encrypted files at all: it reads through the Document API,
+which decrypts, rather than grepping the directory, which could not.
+
+### Filenames leak the shape of the corpus, so they change
+
+Encrypting contents while leaving `stream/2026/08/2026-08-21.md` in place
+discloses which days have writing, how much, and — through gaps after a shred —
+that something was deleted and roughly when. **In the shreddable notebook,
+filenames are opaque** and the date moves inside the encrypted frontmatter.
+Enumeration costs an index, which is acceptable because this notebook is small
+by construction.
+
+### What is deliberately given up, and by choice rather than by accident
+
+**Cross-device access.** Remote storage unlocks two independent things —
+rewindable history and multi-device sync — and this notebook wants neither the
+first nor, for now, the second. It is desktop-only and single-machine. **This is
+a real loss, accepted explicitly**, and it is the reason the primary notebook
+remains where most writing happens.
+
+**It is also likely temporary, and this choice makes it cheaper rather than
+dearer.** Per-file encryption is precisely the construction end-to-end sync
+needs: ciphertext can rest on a hub that is not trusted, and only key material
+requires a trusted channel. Choosing this today moves E2E sync closer.
+
+**Hand-editing, and part of the exit.** R26 requires the archive stay readable
+without the tool — but **this notebook is definitionally not the archive**, so
+the requirement it trades away was never load-bearing here. The exit is still
+owed in spirit: a decrypt-and-export command must exist, so that "encrypted"
+never means "hostage".
+
+### Deferred: automatic expiry
+
+TTL deletion is *not* built now. Its failure mode is losing something that
+mattered, silently and by design, and Q3 already decided that review rhythms are
+found by living with them rather than designed up front. File-level granularity
+makes a future rule comprehensible — *"days older than N are shredded"* — so
+nothing is foreclosed. Manual deletion first.
+
+### The risk that most needs managing
+
+**The app is engineered to make the writer stop thinking about saving** — R1.2
+treats any moment of "I should save this carefully" as a defect. A second
+notebook wearing that same interface inherits the trust and removes the
+guarantee. The mitigation is not a dialog, which is read once: the shreddable
+notebook must be **continuously and unmistakably different to look at**, which
+D41's per-notebook parameter sets already make cheap.
+
+### Reconsideration triggers
+
+- **Before sync is designed (v2a).** If E2E sync lands, the cross-device
+  sacrifice above should be revisited — the architecture was chosen to permit it.
+- **If manual deletion proves too frictional in use**, which is the evidence that
+  would promote TTL.
+- **If the shreddable notebook starts holding the majority of real writing.**
+  That would mean the primary notebook is failing at something, and the answer is
+  probably not more shreddable storage.
+- **If keychain-backed key destruction turns out not to be verifiable.** The
+  whole construction rests on it, and per this project's standing rule, it must
+  be **broken on purpose and seen to report the failure** before it is trusted.
+
+### Where it is built
+
+**M6, after M5 — by choice rather than by dependency.** Because encryption sits
+at the bottom of W, nothing above it changes and nothing else in the plan waits
+on it; it could move earlier, later, or past v2 at no cost to anything else.
+The design is `solution/shreddable-notebook.md`.
+
+**It passes the deferral rule** (`goal/scope.md`: *data cannot be backfilled;
+mechanisms can be deferred*). The notebook is a new directory with its own
+storage, so it needs nothing recorded in the primary corpus beforehand, and the
+one format addition — the explicit split marker — applies to files that will not
+exist until it does. **No coverage obligation falls on M0–M5**, which is what
+makes this deferral safe rather than merely convenient.
+
+The interim policy is unchanged: material that must be genuinely deletable goes
+to paper or the typewriter until this exists.
+
+### What this makes stale
+
+Updated already: `goal/scope.md` (the one-directory rule),
+`solution/format-spec.md` (layout and filenames), `solution/milestones.md` (M6),
+and `Q12`, which this answers.
+
+Still owed, and safely deferrable to M6 since nothing before then depends on
+them: `goal/requirements.md` (R26's reach, and the zero-routing framing recorded
+above) and `solution/architecture.md` (the W wrapper, and a trust boundary that
+now has a second shape).

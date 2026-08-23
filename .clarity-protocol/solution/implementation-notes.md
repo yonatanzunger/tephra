@@ -526,3 +526,47 @@ into a shape the format prefers. The split therefore happens when a day crosses
 the threshold **through use**, which is the path a real day takes; the
 acceptance run now types into the oversized day, which is both the honest
 trigger and the one a person would produce.
+
+## The range gesture (M2 bullet 1)
+
+**One command list, three renderings.** `shared/commands.ts` holds
+`RANGE_COMMANDS`; main builds the Range menu and the context menu from it, and
+both get their enable state from the same `isEnabled`. Two menus maintained
+separately disagree the first time either gains an item, and the disagreement is
+invisible until somebody right-clicks and finds a command they used ten minutes
+ago from the menu bar missing.
+
+**A command that is not built yet is never enabled.** Greying it out is the
+"throwing beats pretending" rule pointed at the reader rather than the
+programmer — a menu item that does nothing teaches people to distrust the menu.
+
+**Main owns how a command is reached; the renderer owns what the caret is.** The
+renderer reports only two booleans, deduplicated, because the caret moves on
+every keystroke and sending IPC per keypress to change nothing is traffic on the
+one path R1.1 protects.
+
+**Not `window.prompt`.** It blocks the renderer's event loop, including the
+editor's painting, and cannot be styled. `Prompt.tsx` is the shared answer for
+the four commands that need a word.
+
+### The bug this bullet found: two mirrors of one generation
+
+Writing the first bookmark failed with
+`StalePositionError: position is from generation 1, expected 2`.
+
+`RemoteDocument.generation` was refreshed **only at open and on undo/redo**.
+Ordinary edits travel through `RemoteWindow`, which learns the new generation
+from its own ack and has no reason to report it back — so the renderer held two
+mirrors of one number, and they diverged the moment anyone typed. Every position
+built from the document's copy was born stale.
+
+`generation` now returns the newest across the document and its windows, so the
+two agree **by construction** rather than by a notification that can be
+forgotten. **This is exactly what D33 exists to prevent** — a version axis is
+worth nothing if two objects each keep their own idea of it — and it is the same
+shape as the frame's "two computations of one quantity": the bug is never the
+arithmetic, it is that the quantity had two homes.
+
+It was invisible until now because nothing had yet built a durable position from
+`doc.generation` after a keystroke. M0 restored the cursor at open, when the two
+still agreed.

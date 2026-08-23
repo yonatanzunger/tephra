@@ -305,29 +305,36 @@ design rule: **the ordinary way is the null hypothesis, and departing from it
 requires a reason that has been checked, not merely held.** An unfamiliar shape
 in a well-worn operation is a bug report about the code, not evidence of care.
 
-## Three items raised at M1, and why they are not independent
+## Three items raised at M1, and how the coupling dissolved
 
 From `notes/02 next steps.md`: a comment extension to markdown, an
-import-and-annotate flow, and the inadequacy of purging. They read as three
-parallel design conversations and are not — **the third is upstream of the other
-two, in one specific place.**
+import-and-annotate flow, and the inadequacy of purging. The third looked
+upstream of the other two, because Q12's "does some content need never to enter
+the history at all?" implied a **class** distinction the comment format and the
+import path would both have to carry — and a class cannot be backfilled.
 
-Q12 floats "does some content need never to enter the history at all?" If the
-answer is yes, the corpus acquires a **class** distinction, and both of the other
-two items must be able to carry it: the comment format has to say what class a
-comment is, and the import path has to say what class an imported document is.
-Adding a class to a format later is a backfill problem, and `scope.md`'s own rule
-forbids it.
+**D44 removed the coupling instead of resolving it.** The boundary became a
+separate notebook with different storage rather than a class within one corpus,
+so no format work is owed and M2 was never actually blocked. Recorded because the
+*shape* recurs: when a distinction threatens to propagate into every mechanism
+that can cross it, moving the boundary out to a coarser container may delete the
+propagation entirely. The directory was a boundary the OS, git and the backup
+software already understood; the class would have had to be taught to each of
+them.
 
-**But only that one sub-question is upstream.** The rest of Q12 — remote choice,
-encryption, self-hosting — is v2a and can take its own cycle without blocking M2.
-Resist the pull to serialise the whole thing. `[for: failure-analysis]`
+**Two lessons kept from getting there.**
 
-**The second coupling runs the other way, and raises the stakes rather than
-constraining the design.** Import-and-annotate is a machine for producing the
-most sensitive content the notebook will hold: unguarded first reactions to
-politically charged documents, timestamped, in a history that cannot forget. The
-flow is worth building; it should be scoped knowing that is what it makes.
+**Check which premise a requirement was derived from before citing it.** "Zero
+routing" looked fatal to a second notebook until it turned out to have been
+derived from routing *by subject*, which is intolerable because subject is
+**retrospective**. Sensitivity is prospective — known before the session, two
+destinations, decided once on opening. The requirement did not transfer, and
+would have killed a good design if quoted at its original strength.
+
+**A destination with friction is not a destination.** The paper-and-typewriter
+answer was opsec-perfect and access-poor, which is precisely how eras 1 and 2
+failed in `precedent.md`. Any "just use the other thing" mitigation should be
+checked against that record before it is believed.
 
 ## The harness was eating the operator's keystrokes
 

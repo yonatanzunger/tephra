@@ -136,7 +136,46 @@ with it.
 ## M2 — range operations
 
 Select a range, then do something with it. Requirements 11–14 are one gesture
-wearing four hats, and selection is the core interaction primitive.
+wearing four hats — six, since R27 and R28 joined — and selection is the core
+interaction primitive.
+
+### The order, and what blocks what
+
+**The gesture comes first, and it is not an operation.** Six features each
+inventing their own affordance is six chances to be inconsistent, so the command
+set is defined ONCE and rendered three ways: the menu bar with accelerators
+(primary), the keyboard, and a context menu on the selection. One definition, or
+the two menus disagree the first time either gains an item.
+
+**Items 5 and 6 are blocked on Q8 and Q9** — where a comment's body lives, and
+whether an imported document stays pristine, which largely follows from it. They
+are answered *after* the marker machinery exists, so the question is concrete
+rather than theoretical. The phone study already narrowed them: **"apart" was
+rejected**, so whatever keeps an imported document pristine cannot do it by
+putting the commentary somewhere else to look at.
+
+### The checklist
+
+1. ✅ **The gesture.** One command set, three ways in. Proven end to end by wiring
+   **bookmark** through it — the degenerate range, a point, and the least that
+   can go wrong while exercising the whole marker-writing path.
+2. **Tag a range with a subject; untag.** The same machinery over real ranges.
+   Subjects overlap freely (R12), and `untag` currently throws.
+3. **Branch a range into its own file.** ONE X operation — create → update
+   references → delete, **in that order**, because the ordering is the only
+   safety mechanism available without a cross-object transaction (D13). If Z
+   assembles it from three primitives the guarantee is gone and the failure mode
+   is dangling references. Finding a branched file independently is v2.
+4. **Print a range.** Independent of the rest and mostly proven in Spike B: the
+   web layer renders, the shell supplies the panel.
+5. **Settle Q8 and Q9**, with the machinery built and the question concrete.
+6. **Comment on a range, rendered in the reserved margin** (R27). MV reserved
+   the space; this fills it.
+7. **Import clipboard text to annotate** (R28) — the cheapest inbound path, and
+   enough to answer Q9 by living with it. `.docx` follows; `.pdf` is v2.
+8. **`History.restore`**, deferred here from M1 because spans are M2's native
+   idea. Whole documents only, and it truncates the undo stack (`history-api.ts`).
+   Most likely to slip if M2 runs long.
 
 - Tag a range with a subject; untag
 - Bookmark a point
@@ -172,6 +211,37 @@ v1**: in scope, after the core works.
 - A non-vim keymap, deliberately designed rather than inherited (D15)
 - Typography and the visual system, tunable (R1.3)
 - Rendered editing of inline constructs (◆ in `features.md`)
+
+## M6 — the shreddable notebook
+
+**Design: `shreddable-notebook.md`. Decision: D44.** A second notebook, opened by
+the same app, whose storage makes deletion real: per-file encryption with
+destroyable keys, no history, no WAL, no sync.
+
+- Multi-notebook: read `tephra.json`, choose storage from it
+- The encrypting `Notebook` wrapper at the bottom of W, and a null `Repository`
+- Key hierarchy — Secure Enclave master, per-file data keys, rotate on shred
+- Opaque object names and the encrypted index
+- The shred operation, and `tephra export`
+- **Explicit `<!--tephra:split-->`**, which also serves the primary notebook
+- Its own theme, so the two notebooks are never mistaken for each other
+- The three verification tests, including restore-from-backup
+
+**Placed last by choice, not by dependency.** It touches only the bottom of W
+plus a config file and a theme, so nothing above it changes and nothing else in
+the plan waits on it — it could move earlier or later, or slip past v2, at no
+cost to anything else.
+
+**Checked against the deferral rule** (`goal/scope.md`: *data cannot be
+backfilled; mechanisms can be deferred*): this defers cleanly. The notebook is a
+new directory with its own storage, so it needs nothing recorded in the primary
+corpus beforehand, and the one format addition — the explicit split marker —
+applies to files that will not exist until it does. **No coverage obligation
+falls on M0–M5.**
+
+**The interim policy is unchanged:** material that must be genuinely deletable
+goes to paper or the typewriter until this exists. M6 does not open a gap; it
+closes one that is open today.
 
 ---
 

@@ -40,6 +40,26 @@
         "goal/problem.md": "9f4f713116fe50fc34c384cb2ef89e3fe8f73dbff40e0cff14eb18c91da62c3a",
         "goal/stakeholders.md": "8ce69985d94783ecfad3f2e2e407dc5d14083bb5a3fd153a631ebfb35d599e8e"
       }
+    },
+    "failures/failures.md": {
+      "contentHash": "cfab2d593437d850e7fc4ba66aae22c02e6bc19d013878fe62e674a34cb6a9ec",
+      "dependencyHashes": {
+        "solution/architecture.md": "1e250afdd3db6f447fbcecccae1a59d72875ae15d3ed6c2e23c7a8dd492c56c7"
+      }
+    }
+  },
+  "decisionState": {
+    "D44": {
+      "status": "decided",
+      "relatedDocs": {
+        "goal/scope.md": "a14aa0cabf34883929726b26fb9f783167895b979989d3667ec6a3dd4eae0df7",
+        "goal/requirements.md": "17c852f38a05a502e92533425bf4b549fc950b2813dceda81dfd0755bbb44c53",
+        "solution/format-spec.md": "8705f3906fa2f3721b1a87333978183b59707b1256d20389c4b179d824e32808",
+        "solution/architecture.md": "1e250afdd3db6f447fbcecccae1a59d72875ae15d3ed6c2e23c7a8dd492c56c7",
+        "goal/open-questions.md": "1a34ddbedb9bc55b76f35deb37f86e9eaa2656e454e3d13f0af1858624cbf152"
+      },
+      "decidedDate": "2026-08-23",
+      "reviewBy": null
     }
   }
 }

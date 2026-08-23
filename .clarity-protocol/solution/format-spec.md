@@ -20,6 +20,8 @@ notebook/
 
 Year/month nesting keeps any directory under ~31 entries; twenty years is roughly 5 000 day files. **`.tephra/` is excluded from sync by construction** — it holds the durability journal and any derived index, both machine-local and disposable (D7).
 
+> **This layout describes the *versioned* notebook (D44).** A shreddable notebook holds the same format — same markdown, same frontmatter, same markers, same degradation table — but with the bytes encrypted at rest, opaque object names, and an encrypted index in place of the dated directory tree, because filenames would otherwise disclose which days have writing and when something was deleted. **The format does not fork; only the storage does.** See `shreddable-notebook.md`.
+
 **Type is declared by filename suffix, mirrored in frontmatter** (D3). `.md`, `.todo.md`, `.fileset.md` — everything stays `.md` so external tools see markdown, the name declares the type so nothing is inferred from context, and the mirror in frontmatter survives a rename.
 
 ## Frontmatter

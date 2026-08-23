@@ -4,7 +4,9 @@ The concrete answer to "smaller than a high-powered notebook app." It is a count
 
 ## The rule
 
-**Tephra is a small number of view types over one directory of plain files.** The scope number is the count of *view types*, not the count of features. This falls out of R26 (plain durable formats) rather than being imposed on top of it, and it makes the departer's exit structural: if every artifact is already a file another program can open, "leaving" is not an export feature, it is stopping.
+**Tephra is a small number of view types over one directory of plain files.** The scope number is the count of *view types*, not the count of features.
+
+> **Amended by D44.** The app may open more than one notebook directory, and a second one — the *shreddable* notebook (`solution/shreddable-notebook.md`, M6) — stores its files encrypted so that deletion is real. **The counting rule is unaffected**: still three view types, still plain files inside, and the second notebook is a different *storage* choice rather than a fourth type. What it does relax is the departer's exit, and only for itself: R26 protects the archive, and that notebook is definitionally not the archive. This falls out of R26 (plain durable formats) rather than being imposed on top of it, and it makes the departer's exit structural: if every artifact is already a file another program can open, "leaving" is not an export feature, it is stopping.
 
 ## The types
 
