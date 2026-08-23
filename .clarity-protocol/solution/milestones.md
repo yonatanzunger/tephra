@@ -214,9 +214,22 @@ It rebuilds when anything under `src/` is newer than the built main process, so
 return a path string — the app then dies at startup with an error naming none of
 that, and it has cost an afternoon once already.
 
-**Real packaging is unscheduled**: electron-builder, an icon, a signed `.app`.
-The `.command` shim is the cheapest thing that behaves like an application in
-the meantime, and nothing depends on it.
+**Packaging exists**: `npm run package` builds `dist/Tephra-darwin-arm64/Tephra.app`
+with `@electron/packager` — a `.app` and nothing else, because one person on one
+machine needs no installer, no auto-update and no DMG.
+
+Ad-hoc signed, which on Apple Silicon is required rather than optional: arm64
+macOS refuses to execute a binary whose signature does not match its bundle, and
+packaging invalidates the one Electron ships with. Developer ID and notarization
+are still deliberately not done — they matter only for apps other people
+download.
+
+**The icon is a placeholder.** The wiring is what matters: dropping a different
+`design/icon/Tephra.icns` at that path is the whole of replacing it.
+
+`run.sh` and `Tephra.command` remain for development; the packaged app is for
+use. The `CFBundleName` patch in `run.sh` is now only needed by the dev path,
+since a real bundle carries its own name.
 
 ## How to know what to test
 

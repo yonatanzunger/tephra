@@ -305,6 +305,30 @@ design rule: **the ordinary way is the null hypothesis, and departing from it
 requires a reason that has been checked, not merely held.** An unfamiliar shape
 in a well-worn operation is a bug report about the code, not evidence of care.
 
+## Three items raised at M1, and why they are not independent
+
+From `notes/02 next steps.md`: a comment extension to markdown, an
+import-and-annotate flow, and the inadequacy of purging. They read as three
+parallel design conversations and are not — **the third is upstream of the other
+two, in one specific place.**
+
+Q12 floats "does some content need never to enter the history at all?" If the
+answer is yes, the corpus acquires a **class** distinction, and both of the other
+two items must be able to carry it: the comment format has to say what class a
+comment is, and the import path has to say what class an imported document is.
+Adding a class to a format later is a backfill problem, and `scope.md`'s own rule
+forbids it.
+
+**But only that one sub-question is upstream.** The rest of Q12 — remote choice,
+encryption, self-hosting — is v2a and can take its own cycle without blocking M2.
+Resist the pull to serialise the whole thing. `[for: failure-analysis]`
+
+**The second coupling runs the other way, and raises the stakes rather than
+constraining the design.** Import-and-annotate is a machine for producing the
+most sensitive content the notebook will hold: unguarded first reactions to
+politically charged documents, timestamped, in a history that cannot forget. The
+flow is worth building; it should be scoped knowing that is what it makes.
+
 ## The harness was eating the operator's keystrokes
 
 One M1 acceptance run reported three failures that never reproduced across eight
@@ -328,3 +352,46 @@ entry in it: **an instrument that perturbs what it measures is not measuring.**
 Previously the perturbation was the harness giving the page a viewport tag the
 real artifact lacked, or `--silent` hiding a failed build. Here it was the rig
 competing with a human for the keyboard.
+
+## Packaging: three failures, and only one of them was the app
+
+Packaging is where "works in dev" and "works shipped" come apart, and it took
+three rounds to tell those apart from each other.
+
+**1. A real bug, mine.** `VERIFY_MODE` was a module-scope `const` reading
+`app.isPackaged`. Reading Electron's runtime while modules are still being
+evaluated throws — `Cannot read properties of undefined (reading 'isPackaged')` —
+and in a packaged build that killed the app before it wrote a single line: exit
+0, no window, no crash report. Now computed on first call and memoised, so it is
+still decided once and can still not be switched on mid-session.
+
+**2. Ad-hoc signing is not optional on Apple Silicon.** arm64 macOS will not
+execute a binary with no valid signature. A packaged Electron app inherits
+Electron's own ad-hoc signature and then invalidates it, because packager renames
+the executable and rewrites `Resources`. `spctl -a -vv` says so plainly —
+*"code has no resources but signature indicates they must be present"* — and
+nothing else does. `codesign --force --deep --sign -` fixes it, free and without
+an Apple account. **I had told the author unsigned was fine; on this hardware
+there is no such thing.**
+
+**3. The one that wasted the most time was the environment, again.**
+`ELECTRON_RUN_AS_NODE=1` is set in this shell. My launches of the packaged
+binary inherited it, so Electron ran as plain Node: exit 0, no window, and
+`Cannot find module 'electron'`. Identical symptoms to (1), and entirely a
+property of how I invoked it. `run.sh` has unset this since M0 and every test
+harness deletes it; **the one path that had never been given the same treatment
+was the one I invented that afternoon.**
+
+Also lost and recovered along the way: `package.json`'s entire `scripts` block,
+clobbered by editing the file in the same shell command as `npm install`. Two
+writers, one file. Restored from the committed copy, which is the argument for
+committing early rather than for editing carefully.
+
+### The instrument lesson, one more time
+
+Both of my "the gate holds, no back doors" results were taken from runs where
+**the app had never started**. Empty output read as "nothing leaked" when it
+meant "nothing happened". The check that finally meant something asserted the
+app *had* started — `.tephra/` exists — before asserting what it did not do.
+
+**A negative result is only evidence if the positive control fired.**
