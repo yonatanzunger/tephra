@@ -13,7 +13,7 @@
 import { useEffect, useRef } from 'react'
 import type { BufferPosition, DocumentPosition, DocumentWindow } from '../../../shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
-import type { Selection } from './range-commands.ts'
+import type { MarkInfo, Selection } from './range-commands.ts'
 import type { Typography } from './theme'
 
 export interface EditorProps {
@@ -32,6 +32,8 @@ export interface EditorProps {
    * cursor motion — keeps the typing path clear.
    */
   readonly onSelectionReader?: (read: (() => Selection) | null) => void
+  /** A mark was clicked. What it stands for, and where it is on screen. */
+  readonly onMark?: (mark: MarkInfo) => void
 }
 
 export function Editor({
@@ -43,6 +45,7 @@ export function Editor({
   initialCursor,
   onError,
   onSelectionReader,
+  onMark,
 }: EditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const binding = useRef<Binding | null>(null)
@@ -60,6 +63,7 @@ export function Editor({
       ...(onCursor !== undefined ? { onCursor } : {}),
       ...(initialCursor !== undefined ? { initialCursor } : {}),
       ...(onError !== undefined ? { onError } : {}),
+      ...(onMark !== undefined ? { onMark } : {}),
     })
     binding.current = bound
     onSelectionReader?.(() => bound.selection())

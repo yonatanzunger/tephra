@@ -1236,3 +1236,50 @@ means comments inherit it rather than re-inventing it.
 directions, and every edit crossing a marker has to map through it correctly.
 That is where the bugs will be, so it is built and tested on its own before
 anything is drawn on top of it.
+
+## D45: A window's announcement carries its whole state; edits say how the text moved, not whether anything moved
+
+**Date:** 2026-08-23
+**Status:** decided
+
+**Decision.** Every change touching a window produces **exactly one
+announcement**, carrying the window's complete state — text, generation, spans,
+placement, boundaries. The edit list describes *how the text got from the old
+state to the new one*. It is not a signal about whether the announcement is
+worth sending, and an empty list is a legitimate, meaningful message.
+
+Recipients hold a mirror and are responsible for noticing what changed in it.
+They may not infer "nothing changed" from "no edits".
+
+**Why this needed saying.** Four bugs in one milestone, all the same shape, each
+looking different enough to be fixed on its own terms:
+
+| symptom | what was actually wrong |
+|---|---|
+| tag underlines drawn in the wrong place | the renderer recomputed the mapping instead of sharing it |
+| underline outlived the tag it belonged to | the acknowledgement replaced the spans silently |
+| a day loaded by growth showed raw markers | growth sent bytes where prose was owed |
+| a renamed tag kept its old name in the UI | **no announcement at all**, because the prose was identical |
+
+The last one is the clearest. Renaming a span rewrites marker *names*, which are
+invisible in prose — same handle, same character, identical buffer — so the diff
+came back null and an early return sent nothing. The file was correct and the
+renderer went on reporting the old subject when its mark was clicked.
+
+**The underlying error is treating derived state as a side effect of text.** The
+renderer holds four things that main also holds, and three of them were being
+refreshed only when the fourth happened to change. That is not a bug in any one
+of them; it is a rule that was never stated, so nothing could be checked against
+it.
+
+**What this costs.** Nothing on the typing path: a window is never told about a
+change it originated (echo suppression), so ordinary typing does not reach this
+path at all. Changes that do reach it — an operation, an undo, an external edit
+— happen a few times an hour, and an announcement carrying no edits is a
+no-op for the buffer and a no-op for the span comparison.
+
+**The stronger version of this, not yet taken.** The mirror could be one value
+sent whole rather than five fields updated in step, which would make a partial
+update unrepresentable instead of merely forbidden. That is a larger change than
+this milestone wants, and the rule above is what makes it unnecessary for now —
+but if a fifth instance appears, the answer is the type, not another fix.

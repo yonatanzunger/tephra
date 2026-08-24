@@ -33,6 +33,10 @@ export function registerDocumentIpc(service: DocumentService): void {
     if (at === null) return false
     return (await shell.openPath(at)) === ''
   })
+  ipcMain.handle(CHANNEL.renameTag, (_e, span: Span, from: string, to: string) =>
+    service.renameTag(span, from, to),
+  )
+  ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.undo, () => service.undo())
   ipcMain.handle(CHANNEL.redo, () => service.redo())
   ipcMain.handle(CHANNEL.flush, () => service.flush())

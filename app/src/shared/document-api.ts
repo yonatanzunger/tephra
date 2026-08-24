@@ -289,6 +289,11 @@ export interface Document {
   untag(span: Span, subject: string): Promise<void>
   setAnchor(at: DocumentPosition, name: string): Promise<void>
   removeAnchor(name: string): Promise<void>
+  /**
+   * Change what ONE span is tagged as. Renaming a subject everywhere is a
+   * different and much larger operation, and not this one.
+   */
+  renameTag(span: Span, from: string, to: string): Promise<void>
   /** One operation, never composed by Z: create → update references → delete (D13). */
   branch(span: Span, name: string): Promise<DocumentId>
 

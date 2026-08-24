@@ -78,7 +78,7 @@ test('code regions are reported for the whole fenced block', () => {
 
 test('tags pair into spans over the text between them', () => {
   const body = 'before <!--tephra:tag-start house deal-->middle<!--tephra:tag-end house deal--> after'
-  const tags = resolveTags(scanMarkers(body), body.length)
+  const tags = resolveTags(scanMarkers(body), body)
   assert.equal(tags.length, 1)
   assert.equal(tags[0]!.name, 'house deal')
   assert.equal(body.slice(tags[0]!.from, tags[0]!.to), 'middle')
@@ -90,7 +90,7 @@ test('overlapping tags of different subjects are expressible', () => {
   // a tag over 3–8 crossing one over 6–12. Four independent points can.
   const body =
     '<!--tephra:tag-start alpha-->one <!--tephra:tag-start beta-->two<!--tephra:tag-end alpha--> three<!--tephra:tag-end beta-->'
-  const tags = resolveTags(scanMarkers(body), body.length)
+  const tags = resolveTags(scanMarkers(body), body)
   assert.deepEqual(tags.map(t => t.name).sort(), ['alpha', 'beta'])
   const alpha = tags.find(t => t.name === 'alpha')!
   const beta = tags.find(t => t.name === 'beta')!
@@ -100,7 +100,7 @@ test('overlapping tags of different subjects are expressible', () => {
 test('an unterminated tag stops at the segment end, not the document end', () => {
   // Bounded blast radius, per the degradation table.
   const body = 'x <!--tephra:tag-start orphan-->rest of the day'
-  const tags = resolveTags(scanMarkers(body), body.length)
+  const tags = resolveTags(scanMarkers(body), body)
   assert.equal(tags.length, 1)
   assert.equal(tags[0]!.unterminated, true)
   assert.equal(tags[0]!.to, body.length)
@@ -108,7 +108,7 @@ test('an unterminated tag stops at the segment end, not the document end', () =>
 
 test('a tag-end with no start is ignored', () => {
   const body = 'x <!--tephra:tag-end nobody--> y'
-  assert.deepEqual(resolveTags(scanMarkers(body), body.length), [])
+  assert.deepEqual(resolveTags(scanMarkers(body), body), [])
 })
 
 test('a duplicate anchor name resolves to the first', () => {
@@ -121,7 +121,7 @@ test('a duplicate anchor name resolves to the first', () => {
 test('subjects compare loosely but are stored as typed', () => {
   assert.equal(subjectKey('House  Deal'), subjectKey('house deal'))
   const body = '<!--tephra:tag-start House Deal-->x<!--tephra:tag-end house deal-->'
-  const tags = resolveTags(scanMarkers(body), body.length)
+  const tags = resolveTags(scanMarkers(body), body)
   assert.equal(tags.length, 1, 'paired despite differing case')
   assert.equal(tags[0]!.name, 'House Deal', 'the capitalisation the user typed survives')
 })

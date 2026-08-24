@@ -227,6 +227,9 @@ export class RemoteDocument implements Document {
   untag(_span: Span, _subject: string): Promise<void> {
     return this.#notYet('untag')
   }
+  renameTag(_span: Span, _from: string, _to: string): Promise<void> {
+    return this.#notYet('renameTag')
+  }
   setAnchor(_at: DocumentPosition, _name: string): Promise<void> {
     return this.#notYet('setAnchor')
   }

@@ -207,14 +207,36 @@ const insideCode = (spans: readonly [number, number][], at: number): boolean =>
  * asking for it is what clicking the mark is for.
  */
 class HandleWidget extends WidgetType {
-  override eq(): boolean {
-    return true // every handle is drawn identically; only its position differs
+  readonly #at: number
+
+  constructor(at: number) {
+    super()
+    this.#at = at
+  }
+
+  override eq(other: HandleWidget): boolean {
+    return other.#at === this.#at
   }
 
   toDOM(): HTMLElement {
     const el = document.createElement('span')
     el.className = 'tx-handle'
+    el.setAttribute('role', 'button')
     el.setAttribute('aria-label', 'marker')
+    // Announced as a DOM event rather than through a callback held in module
+    // state: the widget is constructed deep inside a decoration builder that
+    // has no idea what the application wants to do about a click, and an event
+    // travels to whoever is listening without either of them knowing the other.
+    el.addEventListener('mousedown', event => {
+      event.preventDefault()
+      event.stopPropagation()
+      el.dispatchEvent(
+        new CustomEvent('tephra-handle', {
+          bubbles: true,
+          detail: { at: this.#at, box: el.getBoundingClientRect() },
+        }),
+      )
+    })
     return el
   }
 
@@ -357,7 +379,7 @@ function buildInline(view: EditorView): DecorationSet {
         decos.push({
           from: from2,
           to: from2 + 1,
-          deco: Decoration.replace({ widget: new HandleWidget() }),
+          deco: Decoration.replace({ widget: new HandleWidget(from2) }),
         })
       }
 

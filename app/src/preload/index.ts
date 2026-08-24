@@ -72,6 +72,9 @@ const tephra = {
     tag: (span: Span, subject: string): Promise<void> => ipcRenderer.invoke(CHANNEL.tag, span, subject),
     untag: (span: Span, subject: string): Promise<void> => ipcRenderer.invoke(CHANNEL.untag, span, subject),
     branch: (span: Span, name: string): Promise<DocumentId> => ipcRenderer.invoke(CHANNEL.branch, span, name),
+    renameTag: (span: Span, from: string, to: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.renameTag, span, from, to),
+    removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
 

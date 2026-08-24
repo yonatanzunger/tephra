@@ -204,7 +204,7 @@ export class Segment {
       }
     }
 
-    for (const t of resolveTags(markers, this.#body.length)) {
+    for (const t of resolveTags(markers, this.#body)) {
       out.push({ kind: 'tag', name: t.name, level: 0, from: t.from, to: t.to })
     }
 

@@ -320,15 +320,27 @@ export class StreamWindow implements DocumentWindow {
     // consults the document's coordinates at all. Only changes this window did
     // NOT originate reach here — typing returns above — so this is off the
     // typing path.
+    //
+    // **ALWAYS announced, even when the prose is identical.** The edits say how
+    // the text moved; they do not say whether anything moved. A rename changes
+    // a marker's NAME, which is invisible in prose — same handle, same
+    // character — so the diff is null and the early return that used to be here
+    // sent nothing at all. The file was right, the renderer went on showing the
+    // old subject, and clicking the mark reported it. Everything downstream is
+    // built to be told the whole state and to notice for itself what changed:
+    // an empty edit list is a no-op for the buffer, and the span comparison is
+    // a no-op when the spans match.
     const replacement = minimalReplacement(before, this.#text)
-    if (replacement === null) return
-    const edits: BufferEdit[] = [
-      {
-        from: replacement.from as BufferPosition,
-        to: replacement.to as BufferPosition,
-        insert: replacement.insert,
-      },
-    ]
+    const edits: BufferEdit[] =
+      replacement === null
+        ? []
+        : [
+            {
+              from: replacement.from as BufferPosition,
+              to: replacement.to as BufferPosition,
+              insert: replacement.insert,
+            },
+          ]
     for (const handler of this.#changeHandlers) handler(edits, change.origin)
   }
 

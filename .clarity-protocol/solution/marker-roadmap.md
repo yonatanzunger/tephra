@@ -23,7 +23,7 @@ spends it. M2's remaining bullets resume afterwards.
 6. **Tests that would have caught the four bugs D44 lists**, plus cursor restore
    across a marker and a copy that cannot carry one.
 
-## MB — what a tagged range looks like
+## MB — what a tagged range looks like ✅
 
 1. ✅ **Palette.** Six to eight hues per theme, chosen to work on that ground and to
    be told apart from each other; the subject's hash picks a slot, so a subject
@@ -35,10 +35,10 @@ spends it. M2's remaining bullets resume afterwards.
    colour that means nothing, and they need not stay legible behind text, so
    they can be properly saturated. Capped at three deep; the rest live in the
    mark's popover.
-4. **The mark's popover:** the name, rename *this span* (renaming a subject
+4. ✅ **The mark's popover:** the name, rename *this span* (renaming a subject
    across the corpus is a different and much larger operation), and remove.
-5. **`removeAnchor`**, which currently throws.
-6. **The trailing-boundary rule:** typing at the end of a tagged range extends
+5. ✅ **`removeAnchor`**, which currently throws.
+6. ✅ **The trailing-boundary rule:** typing at the end of a tagged range extends
    it. The caret has one visual place there and two document positions, so this
    is decided rather than discovered. The leading boundary needs no rule, because
    the mark is visible and you can see which side of it you are on.

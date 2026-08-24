@@ -184,8 +184,14 @@ export interface ResolvedTag {
  * specified rather than incidental: an unmatched `tag-start` runs to the end of
  * its SEGMENT — a bounded blast radius, not the whole document — and an
  * unmatched `tag-end` is ignored.
+ *
+ * **Resolved spans are trimmed to the text they cover.** A marker may not begin
+ * a line, so a tag over a paragraph has its start parked at the end of the line
+ * above — which would otherwise leave the newline inside the span, and a tag on
+ * the very first paragraph of a body starting on a line break it does not mean.
+ * `normalise` already trims on the way in; this makes the way out agree.
  */
-export function resolveTags(markers: readonly RawMarker[], bodyLength: number): readonly ResolvedTag[] {
+export function resolveTags(markers: readonly RawMarker[], body: string): readonly ResolvedTag[] {
   const open = new Map<string, RawMarker>()
   const out: ResolvedTag[] = []
 
@@ -198,15 +204,29 @@ export function resolveTags(markers: readonly RawMarker[], bodyLength: number): 
       const start = open.get(subjectKey(marker.name))
       if (start === undefined) continue // no start: ignored, per the table
       open.delete(subjectKey(marker.name))
-      out.push({ name: start.name, from: start.to, to: marker.from, unterminated: false })
+      out.push(trimmed(body, start.name, start.to, marker.from, false))
     }
   }
 
   for (const start of open.values()) {
-    out.push({ name: start.name, from: start.to, to: bodyLength, unterminated: true })
+    out.push(trimmed(body, start.name, start.to, body.length, true))
   }
 
   return out.sort((a, b) => a.from - b.from)
+}
+
+function trimmed(
+  body: string,
+  name: string,
+  from: number,
+  to: number,
+  unterminated: boolean,
+): ResolvedTag {
+  let a = from
+  let b = to
+  while (a < b && /\s/.test(body[a] as string)) a++
+  while (b > a && /\s/.test(body[b - 1] as string)) b--
+  return { name, from: a, to: b, unterminated }
 }
 
 /** Anchor names are unique within a file; the first wins (format-spec). */
@@ -269,51 +289,55 @@ export function placeMarker(
 
 // ── writing tags ─────────────────────────────────────────────
 
+/** One subject's worth of change: put it over a range, or take it off one. */
+export interface TagOp {
+  readonly subject: string
+  readonly range: { readonly from: number; readonly to: number }
+  readonly op: 'add' | 'remove'
+}
+
 /**
- * The body with a subject put over a range, or taken off one.
+ * The body with subjects put over ranges, or taken off them.
  *
- * **One algorithm for both, and for every case within each.** Tagging a range
- * that already carries the subject must extend or merge the existing span
- * (format-spec); untagging the middle of a span must split it in two; untagging
- * an edge must trim it. Written as four special cases that is four chances to
- * leave the file in a state where markers no longer alternate — and alternation
- * is the *only* thing that makes pairing work without identifiers (D21).
+ * **One algorithm for both signs, every case within each, and any number of
+ * subjects at once.** Tagging a range that already carries the subject must
+ * extend or merge the existing span (format-spec); untagging the middle of a
+ * span must split it in two; untagging an edge must trim it. Written as
+ * separate cases that is four chances to leave the file with markers that no
+ * longer alternate — and alternation is the *only* thing that makes pairing
+ * work without identifiers (D21).
  *
- * So it is interval arithmetic instead. Strip every marker for this subject,
- * union or subtract the requested range, and write the resulting set back.
+ * So it is interval arithmetic. Strip every marker for every subject involved,
+ * union or subtract each requested range, and write the resulting set back.
  * Merging, splitting, trimming and extending are then the same code path, and
  * alternation is true by construction, because the markers are emitted from a
  * disjoint sorted set.
  *
- * **Returns a body rather than edits, deliberately.** The natural way to write
- * this is as a batch of deletions and insertions — and it does not work, because
- * an insertion's position is decided by text that the deletions are removing.
- * A marker written at the start of a body is given its own line; deleting it
- * takes that line; and the position the replacement was computed against no
- * longer exists. Rewriting the string and letting `minimalReplacement` find the
- * difference has no coordinate system to get wrong. The caller pays one
- * replacement spanning the changed region, on an operation that happens once
- * per menu invocation.
+ * **Several subjects at once is what makes renaming a span possible.** A rename
+ * is one subject losing a range and another gaining it, and doing that as two
+ * calls cannot work: the first rewrites the body, so the range for the second
+ * would have to be carried through a change that deleted the very markers it
+ * was measured against. `minimalReplacement` reports that change as one
+ * replacement spanning the whole tagged passage, which destroys exactly the
+ * positions needed. Done together, both are measured against the same body.
+ *
+ * **Returns a body rather than edits, also deliberately.** The natural way to
+ * write this is a batch of deletions and insertions, and it does not work: an
+ * insertion's position is decided by text the deletions are removing. Rewriting
+ * the string and letting `minimalReplacement` find the difference has no
+ * coordinate system to get wrong. The caller pays one replacement spanning the
+ * changed region, on an operation that happens once per menu invocation.
  */
-export function tagBody(
-  body: string,
-  subject: string,
-  range: { readonly from: number; readonly to: number },
-  op: 'add' | 'remove',
-): string {
-  const key = subjectKey(subject)
-  const mine = scanMarkers(body).filter(
-    m => (m.kind === 'tag-start' || m.kind === 'tag-end') && subjectKey(m.name) === key,
+export function retagBody(body: string, ops: readonly TagOp[]): string {
+  const keys = new Set(ops.map(o => subjectKey(o.subject)))
+  const all = scanMarkers(body)
+  const involved = all.filter(
+    m => (m.kind === 'tag-start' || m.kind === 'tag-end') && keys.has(subjectKey(m.name)),
   )
 
-  // Capitalisation the user already chose is not overwritten by a later typing
-  // of the same subject: subjects compare case-insensitively but are stored as
-  // typed, and the earlier typing is the one already on the page.
-  const name = mine.length > 0 ? (mine[0] as RawMarker).name : subject.trim().replace(/\s+/g, ' ')
-
-  // Everything below happens on the body with this subject's markers gone, so
-  // that no offset depends on a marker that is about to move.
-  const cuts = mine.map(m => markerRemoval(body, m))
+  // Everything below happens on the body with those markers gone, so that no
+  // offset depends on a marker that is about to move.
+  const cuts = involved.map(m => markerRemoval(body, m))
   const clean = applyEdits(body, cuts)
   const project = (offset: number): number => {
     let shed = 0
@@ -324,29 +348,54 @@ export function tagBody(
     return offset - shed
   }
 
-  const existing = resolveTags(mine, body.length).map(t => ({
-    from: project(t.from),
-    to: project(t.to),
-  }))
-  const asked = { from: project(clamp(range.from, body.length)), to: project(clamp(range.to, body.length)) }
-  const wanted = normalise(op === 'add' ? [...existing, asked] : subtract(existing, asked), clean)
-
   const others = scanMarkers(clean)
   const inserts: { at: number; text: string }[] = []
-  for (const interval of wanted) {
-    inserts.push(placed(clean, others, interval.from, `<!--tephra:tag-start ${name}-->`))
-    inserts.push(placed(clean, others, interval.to, `<!--tephra:tag-end ${name}-->`))
+
+  for (const key of keys) {
+    const mine = involved.filter(m => subjectKey(m.name) === key)
+    const op = ops.find(o => subjectKey(o.subject) === key) as TagOp
+
+    // Capitalisation the user already chose is not overwritten by a later
+    // typing of the same subject: subjects compare case-insensitively but are
+    // stored as typed, and the earlier typing is the one already on the page.
+    const name = mine.length > 0 ? (mine[0] as RawMarker).name : op.subject.trim().replace(/\s+/g, ' ')
+
+    const existing = resolveTags(mine, body).map(t => ({
+      from: project(t.from),
+      to: project(t.to),
+    }))
+    const asked = {
+      from: project(clamp(op.range.from, body.length)),
+      to: project(clamp(op.range.to, body.length)),
+    }
+    const wanted = normalise(op.op === 'add' ? [...existing, asked] : subtract(existing, asked), clean)
+
+    for (const interval of wanted) {
+      inserts.push(placed(clean, others, interval.from, `<!--tephra:tag-start ${name}-->`))
+      inserts.push(placed(clean, others, interval.to, `<!--tephra:tag-end ${name}-->`))
+    }
   }
 
   // Right to left, so each splice leaves the offsets of the ones still to come
-  // untouched. Equal offsets keep document order, since the later insert is
-  // spliced first and ends up to the right.
+  // untouched. Ties keep the order they were generated in, which for one
+  // subject is document order.
+  inserts.sort((a, b) => a.at - b.at)
   let out = clean
   for (let i = inserts.length - 1; i >= 0; i--) {
     const insert = inserts[i] as { at: number; text: string }
     out = out.slice(0, insert.at) + insert.text + out.slice(insert.at)
   }
   return out
+}
+
+/** The single-subject case, which is what tagging and untagging are. */
+export function tagBody(
+  body: string,
+  subject: string,
+  range: { readonly from: number; readonly to: number },
+  op: 'add' | 'remove',
+): string {
+  return retagBody(body, [{ subject, range, op }])
 }
 
 const clamp = (offset: number, length: number): number => Math.max(0, Math.min(offset, length))

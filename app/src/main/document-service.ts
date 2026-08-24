@@ -546,6 +546,19 @@ export class DocumentService {
     return join(this.#notebook.root, rel)
   }
 
+  /** Change what one span is tagged as. Not a corpus-wide rename (D44). */
+  async renameTag(span: Span, from: string, to: string): Promise<void> {
+    await this.#serial(() => this.#doc.renameTag(span, from, to))
+    this.#unsavedWork = true
+    this.#scheduleFlush()
+  }
+
+  async removeAnchor(name: string): Promise<void> {
+    await this.#serial(() => this.#doc.removeAnchor(name))
+    this.#unsavedWork = true
+    this.#scheduleFlush()
+  }
+
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
     return this.#doc.resolveAnchor(name)
   }

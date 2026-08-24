@@ -30,6 +30,8 @@ export const CHANNEL = {
   tag: 'tephra:doc:tag',
   untag: 'tephra:doc:untag',
   branch: 'tephra:doc:branch',
+  renameTag: 'tephra:doc:renameTag',
+  removeAnchor: 'tephra:doc:removeAnchor',
   openLink: 'tephra:doc:openLink',
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',

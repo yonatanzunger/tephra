@@ -380,6 +380,72 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'markpanel') {
+      const click = (index: number): boolean => {
+        const marks = document.querySelectorAll('.tx-handle')
+        const el = marks[index] as HTMLElement | undefined
+        if (el === undefined) return false
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        return true
+      }
+      const rows = (): unknown =>
+        [...document.querySelectorAll('.mark-panel .mark-row')].map(r => ({
+          name: r.querySelector('.mark-name')?.textContent ?? '',
+          kind: r.querySelector('.mark-kind')?.textContent ?? '',
+          actions: [...r.querySelectorAll('button')].map(b => b.textContent),
+        }))
+
+      // The overlapping mark: two subjects at one point, plus a bookmark.
+      say('clickedOverlap', click(2))
+      await settle(400)
+      say('panelOpen', document.querySelector('.mark-panel') !== null)
+      say('rowsForOverlap', rows())
+      await settle(2200) // long enough to be looked at, not only measured
+
+      // Rename the span this mark opens.
+      const rename = [...document.querySelectorAll('.mark-panel button')].find(
+        b => b.textContent === 'Rename',
+      ) as HTMLButtonElement | undefined
+      say('renameOffered', rename !== undefined)
+      rename?.click()
+      await settle(400)
+      const input = document.querySelector('.prompt input') as HTMLInputElement | null
+      say('prefilled', input?.value ?? '(no prompt)')
+      if (input !== null) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, 'Mortgage')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1000)
+      }
+      await window.tephra.doc.flush()
+      say('tagsAfterRename', (await window.tephra.doc.spans({ kind: 'tag' })).map(t => t.name).sort())
+
+      // THE BUG: the file was right and the panel still said the old name.
+      // Re-open the same mark and read what it reports now.
+      const again = document.querySelectorAll('.tx-handle')[2] as HTMLElement | undefined
+      again?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+      await settle(400)
+      say('panelAfterRename', [...document.querySelectorAll('.mark-panel .mark-name')].map(e => e.textContent))
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await settle(300)
+
+      // And the bookmark's mark offers to remove it.
+      say('clickedBookmark', click(0))
+      await settle(400)
+      say('rowsForBookmark', rows())
+      const remove = [...document.querySelectorAll('.mark-panel button')].find(
+        b => b.textContent === 'Remove',
+      ) as HTMLButtonElement | undefined
+      remove?.click()
+      await settle(900)
+      await window.tephra.doc.flush()
+      say('anchorsAfter', (await window.tephra.doc.spans({ kind: 'anchor' })).map(a => a.name))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(1200)
+    }
+
     if (scene === 'unmark') {
       // Delete the handle the way any keymap would, and check that what was
       // drawn from the tag goes away with it.

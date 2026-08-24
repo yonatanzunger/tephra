@@ -15,7 +15,7 @@ import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
 import { dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
-import { markerRemoval, placeMarker, subjectKey, tagBody } from './markers.ts'
+import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { Segment } from './segment.ts'
 import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
@@ -584,8 +584,81 @@ export class StreamDocument implements Document {
     await this.replace([{ span: { begin: where, end: where }, payload: placed.text }], 'operation')
   }
 
-  async removeAnchor(_name: string): Promise<void> {
-    throw new Error('removeAnchor is not implemented in M0')
+  /**
+   * Take a bookmark off, wherever in the loaded stream it is.
+   *
+   * Names are unique within a file but may collide across the corpus (D11), so
+   * this removes the FIRST one found in date order — the same one
+   * `resolveAnchor` would take you to. Removing something other than the mark
+   * the reader is looking at would be worse than doing nothing.
+   */
+  async removeAnchor(name: string): Promise<void> {
+    for (const date of await this.dates()) {
+      const segment = await this.segment(date)
+      const found = segment.markers().find(m => m.kind === 'anchor' && m.name === name)
+      if (found === undefined) continue
+      const cut = markerRemoval(segment.body, found)
+      await this.replace(
+        [
+          {
+            span: {
+              begin: this.#positionAt(date, cut.from),
+              end: this.#positionAt(date, cut.to),
+            },
+            payload: '',
+          },
+        ],
+        'operation',
+      )
+      return
+    }
+  }
+
+  /**
+   * Change what ONE span is tagged as — not what the subject is called
+   * everywhere.
+   *
+   * Renaming a subject across the corpus is a different and much larger
+   * operation: it has to find every file that mentions it, and it changes text
+   * the reader is not looking at. This changes the passage in front of them,
+   * which is what "rename" means when you have just clicked on its mark.
+   *
+   * One edit, so one undo step. The second `tagBody` runs against the body the
+   * first produced, so the range has to be carried through the change between
+   * them — the removal takes markers out and everything after them moves.
+   */
+  async renameTag(span: Span, from: string, to: string): Promise<void> {
+    if (subjectKey(from) === subjectKey(to)) return
+    const date = span.begin.segment as DateKey
+    if ((span.end.segment as DateKey) !== date) {
+      throw new Error('a tag rename covers one day at a time')
+    }
+    const segment = await this.segment(date)
+    const range = { from: span.begin.offset as number, to: span.end.offset as number }
+
+    // Both subjects in ONE pass, measured against one body. As two calls this
+    // cannot be made correct: the first rewrites the body, and the range for
+    // the second would have to be carried through a change that deleted the
+    // markers it was measured against.
+    const renamed = retagBody(segment.body, [
+      { subject: from, range, op: 'remove' },
+      { subject: to, range, op: 'add' },
+    ])
+
+    const replacement = minimalReplacement(segment.body, renamed)
+    if (replacement === null) return
+    await this.replace(
+      [
+        {
+          span: {
+            begin: this.#positionAt(date, replacement.from),
+            end: this.#positionAt(date, replacement.to),
+          },
+          payload: replacement.insert,
+        },
+      ],
+      'operation',
+    )
   }
 
   /**

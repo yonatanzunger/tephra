@@ -91,3 +91,46 @@ export function readSelection(view: EditorView, docWindow: DocumentWindow): Sele
   }
   return { span: selectedSpan(view, docWindow), empty: main.empty, subjects }
 }
+
+/** What a mark stands for, once someone clicks it. */
+export interface MarkInfo {
+  /** Where on screen it is, so the panel can sit beside it. */
+  readonly box: DOMRect
+  /** The bookmark this mark IS, if it is one. */
+  readonly anchor: string | null
+  /**
+   * The subject this mark opens, first, followed by any others covering the
+   * same point.
+   *
+   * The mark belongs to exactly one span — a tag's start marker — but a passage
+   * may carry several subjects at once, and the ones past the third are not
+   * drawn at all (the extent stacks only three deep). So this is where they
+   * become visible: the list is the answer to "what is this passage".
+   */
+  readonly tags: readonly { readonly name: string; readonly span: Span }[]
+}
+
+/**
+ * What the mark at this buffer position stands for.
+ *
+ * The identification is a coordinate question, and so it is asked in
+ * coordinates: a bookmark's span is zero-length AT the marker, and a tag's span
+ * begins one prose character after it — the character the mark itself occupies
+ * (D44). Nothing here re-derives anything from the text.
+ */
+export function markAt(docWindow: DocumentWindow, at: number, box: DOMRect): MarkInfo {
+  const anchor =
+    docWindow.spans('anchor').find(s => (docWindow.toBuffer(s.span.begin) as number | null) === at) ?? null
+
+  const opens: { name: string; span: Span }[] = []
+  const covers: { name: string; span: Span }[] = []
+  for (const span of docWindow.spans('tag')) {
+    const from = docWindow.toBuffer(span.span.begin) as number | null
+    const to = docWindow.toBuffer(span.span.end) as number | null
+    if (from === null || to === null) continue
+    if (from === at + 1) opens.push({ name: span.name, span: span.span })
+    else if (from <= at && to >= at) covers.push({ name: span.name, span: span.span })
+  }
+
+  return { box, anchor: anchor === null ? null : anchor.name, tags: [...opens, ...covers] }
+}

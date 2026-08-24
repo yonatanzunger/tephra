@@ -23,7 +23,7 @@ const apply = (body: string, subject: string, from: number, to: number, op: 'add
 
 /** The subject's spans, as the text they actually cover. */
 const covered = (body: string, subject: string): string[] =>
-  resolveTags(scanMarkers(body), body.length)
+  resolveTags(scanMarkers(body), body)
     .filter(t => subjectKey(t.name) === subjectKey(subject))
     .map(t => body.slice(t.from, t.to).replace(/<!--tephra:[^>]*-->/g, '').trim())
 

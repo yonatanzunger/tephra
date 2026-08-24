@@ -453,3 +453,26 @@ body {
   background-size: 100% 0.075em;
   background-position: 0 calc(100% - 0.28em + var(--tag-depth) * 0.12em);
 }
+
+/* What a mark says when asked. Small, beside the mark, and gone on Escape or
+   on a click anywhere else. */
+.mark-panel {
+  position: fixed; z-index: 40; min-width: 12rem; max-width: 22rem;
+  padding: .5rem .6rem; border-radius: 8px;
+  background: rgb(var(--surface)); border: 1px solid rgb(var(--border));
+  box-shadow: 0 6px 24px rgb(var(--text) / .12);
+  font-family: var(--font-ui); font-size: .8rem; color: rgb(var(--text));
+  display: flex; flex-direction: column; gap: .3rem;
+}
+.mark-row { display: flex; align-items: center; gap: .5rem; }
+.mark-row .mark-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mark-kind { color: rgb(var(--text-muted)); font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
+.mark-swatch {
+  flex: 0 0 auto; width: .75rem; height: .2rem; border-radius: 1px;
+  background: rgb(var(--tag));
+}
+.mark-panel .link {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  color: rgb(var(--text-muted)); font: inherit; text-decoration: underline;
+}
+.mark-panel .link:hover { color: rgb(var(--accent)); }

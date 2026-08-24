@@ -21,7 +21,7 @@ import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
 import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
 import { widgetExtensions } from './widgets.ts'
-import { contextMenu, readSelection, reportSelection, type Selection } from './range-commands.ts'
+import { contextMenu, markAt, readSelection, reportSelection, type MarkInfo, type Selection } from './range-commands.ts'
 import { retag, tagExtents } from './tags.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
@@ -43,6 +43,8 @@ export interface BindOptions {
   /** Restored position from a previous session. Absent means "end of today". */
   readonly initialCursor?: DocumentPosition | null
   readonly onError?: (err: Error) => void
+  /** A mark was clicked: here is what it stands for and where it sits. */
+  readonly onMark?: (mark: MarkInfo) => void
 }
 
 export interface Binding {
@@ -112,6 +114,14 @@ export function bindEditor(options: BindOptions): Binding {
   // as on edits from elsewhere. Deleting a tag's mark is exactly that case: the
   // buffer loses one character locally, and the tag it stood for goes away in
   // the answer that comes back a moment later.
+  // A mark was clicked. The widget knows where it is; only the window knows
+  // what it stands for.
+  const onHandle = (event: Event): void => {
+    const detail = (event as CustomEvent<{ at: number; box: DOMRect }>).detail
+    options.onMark?.(markAt(docWindow, detail.at, detail.box))
+  }
+  view.dom.addEventListener('tephra-handle', onHandle)
+
   const unsubscribeSpans = docWindow.onSpansChanged(() => {
     view.dispatch({ effects: retag.of(null) })
   })
@@ -135,6 +145,7 @@ export function bindEditor(options: BindOptions): Binding {
       view.dispatch({ effects: typographyCompartment.reconfigure(tephraTheme(t)) })
     },
     destroy(): void {
+      view.dom.removeEventListener('tephra-handle', onHandle)
       unsubscribeChanged()
       unsubscribeSpans()
       unsubscribeReset()

@@ -13,6 +13,8 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
+import { MarkPanel } from './frame/MarkPanel'
+import type { MarkInfo } from './editor/range-commands.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -262,6 +264,18 @@ export function App(): React.JSX.Element {
   // Where the caret is, remembered. Debounced because it moves on every
   // keystroke and this is a file write; the last position is the one that
   // matters, not every position on the way there.
+  // The mark someone clicked, and what it stands for. Null when nothing is open.
+  const [mark, setMark] = useState<MarkInfo | null>(null)
+
+  /**
+   * A failed range operation must not vanish. Every one of these can legitimately
+   * fail — a stale position if the document moved while a panel was open — and
+   * swallowing that leaves the reader believing the thing happened.
+   */
+  const fail = useCallback((err: unknown): void => {
+    setError(err instanceof Error ? err.message : String(err))
+  }, [])
+
   // How to ask the editor what is selected, for as long as one is mounted.
   const selectionRef = useRef<(() => Selection) | null>(null)
 
@@ -414,6 +428,7 @@ export function App(): React.JSX.Element {
             initialCursor={restored}
             onError={err => setError(err.message)}
             onSelectionReader={read => (selectionRef.current = read)}
+            onMark={setMark}
           />
         )}
         {anomaliesOpen && (
@@ -427,6 +442,36 @@ export function App(): React.JSX.Element {
           />
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
+        {mark !== null && (
+          <MarkPanel
+            mark={mark}
+            onClose={() => setMark(null)}
+            actions={{
+              onRemoveAnchor: name => {
+                setMark(null)
+                void window.tephra.doc.removeAnchor(name).catch(fail)
+              },
+              onRemoveTag: (name, span) => {
+                setMark(null)
+                void window.tephra.doc.untag(span, name).catch(fail)
+              },
+              onRenameTag: (name, span) => {
+                setMark(null)
+                setPrompt({
+                  title: 'Call this passage',
+                  placeholder: 'a subject you will gather later',
+                  initial: name,
+                  submitLabel: 'Rename',
+                  // This span, not the subject everywhere: renaming a subject
+                  // across the corpus changes text nobody is looking at, and is
+                  // a different operation entirely.
+                  onSubmit: next => void window.tephra.doc.renameTag(span, name, next).catch(fail),
+                })
+              },
+            }}
+          />
+        )}
+
         {panelOpen && (
           <ThemePanel
             control={theme}

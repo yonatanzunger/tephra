@@ -848,3 +848,65 @@ times an hour.
 The general shape, for the third time in this milestone: **two objects held one
 fact and only one of them was maintained.** Here the fact was "which spans
 exist"; earlier it was the coordinate mapping, and before that the generation.
+
+## The mark speaks (MB.4, MB.5)
+
+Clicking a mark opens a small panel: the subject, with its colour, and Rename
+and Remove. A bookmark's mark says so and offers Remove. **It is also the only
+place the subjects past the third are visible** — the extent stacks three rules
+deep and no further, so "what is this passage" is a question the list answers
+and the underlines cannot.
+
+Identification is a coordinate question and is asked in coordinates, not
+re-derived from the text: a bookmark's span is zero-length AT its marker, and a
+tag's span begins one prose character after it — the character the mark itself
+occupies (D44). So the mark at prose position *p* opens the tag whose buffer
+begin is *p+1*, and the panel then lists every other tag covering *p*.
+
+### Renaming forced the algebra to generalise
+
+"Rename this span" is one subject losing a range and another gaining it, and as
+**two** calls it cannot be made correct. The first rewrites the body, so the
+range for the second has to be carried through a change that deleted the very
+markers it was measured against — and `minimalReplacement` reports that change
+as one replacement spanning the whole tagged passage, which destroys exactly the
+positions needed. The first attempt did this, and produced a renamed span
+covering nothing at all.
+
+So `tagBody` became `retagBody(body, ops[])`: any number of subjects, all
+measured against one body, all emitted from one disjoint set. `tagBody` is now
+the single-subject case of it. Renaming is one call, one edit, one undo step.
+
+**Rename means this span, never the subject everywhere.** Renaming a subject
+across the corpus has to find every file that mentions it and changes text the
+reader is not looking at; that is a different operation and it is not this one.
+
+### And resolved spans became tight
+
+A marker may not begin a line, so a tag over a paragraph has its start parked at
+the end of the line above — which left the newline inside the span, and a tag on
+a body's first paragraph appeared to start on a line break it did not mean.
+`normalise` already trimmed on the way in; `resolveTags` now trims on the way
+out, so the two agree. One existing test expected `'three '` and now correctly
+gets `'three'`.
+
+## The pattern behind four bugs (D45)
+
+The renamed-tag bug is worth stating precisely because it is the least
+disguised: **the announcement was skipped when the prose diff was null.** A
+rename changes marker names, which prose cannot see, so the buffer was
+byte-identical and an early return sent the renderer nothing. The file was
+right; the UI was a version behind; clicking the mark reported the old subject.
+
+Fixing it alone would have been a one-line change and a missed lesson. The real
+finding is that this was the fourth bug of one kind in a single milestone —
+the mapping, the spans-after-ack, the growth path, and now this — and that all
+four came from **derived state being refreshed as a side effect of text
+changing**. D45 states the rule that was always being relied on and never
+written down: one announcement per change, carrying everything, with edits as a
+description of the text's movement rather than a test of whether to speak.
+
+Worth noting what did NOT go wrong, because it says where to look next time: the
+document was correct every single time. Every one of the four lived in the gap
+between two objects holding one fact — and in three of the four, the object
+holding the stale copy was the renderer's half of a split pair.

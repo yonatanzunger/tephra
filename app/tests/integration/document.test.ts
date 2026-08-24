@@ -585,7 +585,9 @@ test('deleting across the end of a range shrinks it instead of orphaning it', as
   assert.equal((written.match(/tag-end/g) ?? []).length, 1, 'the pair survived the deletion')
   const tags = await doc.spans('tag')
   assert.equal(tags.length, 1)
-  assert.equal(await tagged(doc, w), 'three ', 'the range simply got shorter')
+  // 'three', not 'three ': resolved spans are trimmed to the text they cover,
+  // so a range never ends on the whitespace a deletion happened to leave.
+  assert.equal(await tagged(doc, w), 'three', 'the range simply got shorter')
 })
 
 test('deleting the handle removes the whole tag, in one undo step', async t => {
@@ -669,4 +671,101 @@ test('a day arriving through growth arrives as prose, not as bytes', async t => 
   const from = w.toBuffer(tag!.span.begin) as number
   const to = w.toBuffer(tag!.span.end) as number
   assert.equal(w.text.slice(from, to), 'already tagged')
+})
+
+// ── what the mark's popover does (MB.4, MB.5) ────────────────
+
+test('removing a bookmark takes its marker and nothing else', async t => {
+  const original = dayText('2026-03-14', 'A passage <!--tephra:mark keep-this-->worth marking.\n')
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
+  await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
+  assert.equal((await doc.spans('anchor')).length, 1)
+
+  await doc.removeAnchor('keep-this')
+  await doc.flush()
+
+  assert.deepEqual(await doc.spans('anchor'), [])
+  assert.equal(
+    await readFile(join(root, dayFile(DAY)), 'utf8'),
+    dayText('2026-03-14', 'A passage worth marking.\n'),
+  )
+})
+
+test('removing a bookmark that is not there does nothing, loudly or otherwise', async t => {
+  const original = dayText('2026-03-14', 'Nothing marked.\n')
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
+  await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
+  await doc.removeAnchor('absent')
+  await doc.flush()
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), original)
+})
+
+test('renaming a span changes that passage and leaves the others alone', async t => {
+  const { doc } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The house closed. A separate mention of the house.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const reach = (text: string) => {
+    const from = w.text.indexOf(text)
+    assert.notEqual(from, -1, `"${text}" is not in the window`)
+    return { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) }
+  }
+  await doc.tag(reach('The house closed'), 'House Deal')
+  await doc.tag(reach('separate mention of the house'), 'House Deal')
+  assert.equal((await doc.spans('tag')).length, 2)
+
+  // Rename only the first of them.
+  const first = (await doc.spans('tag'))[0]!
+  const before = doc.currentGeneration()
+  await doc.renameTag(first.span, 'House Deal', 'Mortgage')
+
+  const after = (await doc.spans('tag')).map(s => s.name).sort()
+  assert.deepEqual(after, ['House Deal', 'Mortgage'], 'one span moved, one did not')
+  assert.equal(doc.currentGeneration(), before + 1, 'one operation, one undo step')
+
+  // And what each covers is unchanged.
+  const spans = await doc.spans('tag')
+  const covered = (name: string) => {
+    const span = spans.find(s => s.name === name)!
+    return w.text.slice(w.toBuffer(span.span.begin) as number, w.toBuffer(span.span.end) as number)
+  }
+  assert.equal(covered('Mortgage'), 'The house closed')
+  assert.equal(covered('House Deal'), 'separate mention of the house')
+})
+
+test('renaming a span to what it is already called is not a change', async t => {
+  const { doc } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The house closed.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const from = w.text.indexOf('house')
+  await doc.tag({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 5)) }, 'House Deal')
+  const settled = doc.currentGeneration()
+  const span = (await doc.spans('tag'))[0]!
+  await doc.renameTag(span.span, 'House Deal', 'house  deal')
+  assert.equal(doc.currentGeneration(), settled, 'the same subject, differently typed, is the same subject')
+})
+
+test('a change that alters no prose is still announced', async t => {
+  // Renaming a span rewrites marker NAMES, which are invisible in prose: same
+  // handle, same character, identical buffer. The announcement used to be
+  // skipped when the prose diff came back null, so the file was right and the
+  // renderer went on showing the old subject — visible by clicking its mark.
+  const { doc } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The house closed on Tuesday.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const from = w.text.indexOf('house')
+  await doc.tag({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 5)) }, 'House Deal')
+
+  const announcements: number[] = []
+  w.onChanged(edits => announcements.push(edits.length))
+  const before = w.text
+
+  const span = (await doc.spans('tag'))[0]!
+  await doc.renameTag(span.span, 'House Deal', 'Mortgage')
+
+  assert.equal(w.text, before, 'the prose is untouched — that is the point')
+  assert.deepEqual(announcements, [0], 'announced once, carrying no edits')
+  assert.deepEqual((await doc.spans('tag')).map(s => s.name), ['Mortgage'])
 })
