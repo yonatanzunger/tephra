@@ -310,6 +310,18 @@ export interface Document {
   /** One operation, never composed by Z: create → update references → delete (D13). */
   branch(span: Span, name: string): Promise<DocumentId>
 
+  /**
+   * Bring outside text in, keeping the original untouched (R28, D47).
+   *
+   * Returns where the original was stored. The clipboard is read by the layer
+   * that has one; this is given what it found.
+   */
+  importText(
+    at: DocumentPosition,
+    text: string,
+    original: { readonly content: string; readonly ext: string },
+  ): Promise<string>
+
   // ── comments: a thread anchored to a range (D47) ───────────
   //
   // Thread-aware, and it includes editing, because a comment's body is not in

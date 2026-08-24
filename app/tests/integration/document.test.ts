@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
-import { dayFile } from '../../src/main/w/layout.ts'
+import { dayFile, resolveInsideNotebook } from '../../src/main/w/layout.ts'
 import type { BufferPosition, DateKey, DocumentWindow } from '../../src/shared/document-api.ts'
 
 const d = (s: string): DateKey => s as DateKey
@@ -937,4 +937,64 @@ test('a window built during a concurrent load still sees later edits', async t =
 
   assert.notEqual(w.text, before, 'the window is rebuilding from an orphan')
   assert.equal([...w.text].filter(ch => ch === '￼').length, 1, 'the handle should have arrived')
+})
+
+// ── import (M2.7, R28) ───────────────────────────────────────
+
+test('importing keeps the original untouched and gives you a copy to write on', async t => {
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'Before.\n\nAfter.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const html = '<p>The <b>hold-up problem</b> of Klein, Crawford and Alchian.</p>'
+  const text = 'The hold-up problem of Klein, Crawford and Alchian.'
+
+  const at = doc.positionAt(DAY, w.text.indexOf('After.'))
+  const rel = await doc.importText(at, text, { content: html, ext: 'html' })
+  await doc.flush()
+
+  // The artifact worth citing is the bytes that arrived, byte for byte.
+  assert.match(rel, /^attachments\/2026\/03\/2026-03-14-clipboard-[0-9a-f]{6}\.html$/)
+  assert.equal(await readFile(join(root, rel), 'utf8'), html)
+
+  // And what landed in the day is ordinary prose with a provenance line.
+  const file = await readFile(join(root, dayFile(DAY)), 'utf8')
+  assert.match(file, /\*Imported 2026-03-14 from \[the clipboard\]\(\.\.\/\.\.\/\.\.\/attachments\//)
+  assert.match(file, /The hold-up problem of Klein, Crawford and Alchian\./)
+  assert.match(file, /Before\./)
+  assert.match(file, /After\./)
+})
+
+test('the imported copy is annotatable like anything else', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'A day.\n') })
+  const w = await windowOver(doc, DAY)
+  await doc.importText(doc.positionAt(DAY, 0), 'An imported passage worth tagging.', {
+    content: 'An imported passage worth tagging.',
+    ext: 'txt',
+  })
+
+  // No special case: the same gesture that tags anything tags this.
+  const from = w.text.indexOf('imported passage')
+  await doc.tag({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 16)) }, 'sources')
+  assert.deepEqual((await doc.spans('tag')).map(s => s.name), ['sources'])
+})
+
+test('the link in the provenance line resolves inside the notebook', async t => {
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'A day.\n') })
+  const rel = await doc.importText(doc.positionAt(DAY, 0), 'Some text.', {
+    content: 'Some text.',
+    ext: 'txt',
+  })
+  await doc.flush()
+  const file = await readFile(join(root, dayFile(DAY)), 'utf8')
+  const target = /\]\(([^)]+)\)/.exec(file)?.[1] as string
+  assert.equal(resolveInsideNotebook(root, target), rel, 'the link does not lead where it says')
+})
+
+test('importing nothing is refused rather than writing an empty attachment', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'A day.\n') })
+  await assert.rejects(
+    () => doc.importText(doc.positionAt(DAY, 0), '   ', { content: '', ext: 'txt' }),
+    /nothing to import/,
+  )
 })

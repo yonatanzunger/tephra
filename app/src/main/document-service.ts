@@ -640,6 +640,21 @@ export class DocumentService {
     this.#scheduleVersion()
   }
 
+  /**
+   * Import text at a point. **The clipboard is read by `ipc.ts`**, not here —
+   * reading it means importing Electron, and this object stays free of it
+   * (`tests/unit/main/no-electron.test.ts`).
+   */
+  async importText(
+    at: DocumentPosition,
+    text: string,
+    original: { readonly content: string; readonly ext: string },
+  ): Promise<string> {
+    const rel = await this.#serial(() => this.#doc.importText(at, text, original))
+    this.#touched()
+    return rel
+  }
+
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
     return this.#doc.resolveAnchor(name)
   }

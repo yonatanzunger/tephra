@@ -380,6 +380,25 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'import') {
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+      await settle(400)
+      const before = view.state.doc.toString()
+      say('menuItemFound', await window.tephra.clickMenu('Import Clipboard'))
+
+      let waited = 0
+      while (waited < 5000 && view.state.doc.toString() === before) {
+        await settle(200)
+        waited += 200
+      }
+      say('arrivedAfterMs', waited)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      say('inBuffer', view.state.doc.toString().slice(before.length).trim().slice(0, 120))
+      say('linkRendered', document.querySelectorAll('.tx-link').length)
+      await window.tephra.doc.flush()
+      await settle(600)
+    }
+
     if (scene === 'comment') {
       const type = async (text: string): Promise<boolean> => {
         const area = document.querySelector('.rail textarea') as HTMLTextAreaElement | null

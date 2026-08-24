@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
-import type { PrintJob } from '../shared/ipc.ts'
+import type { ImportResult, PrintJob } from '../shared/ipc.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
@@ -84,6 +84,9 @@ const tephra = {
     removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
     print: (request: PrintJob): Promise<boolean> => ipcRenderer.invoke(CHANNEL.print, request),
 
+    /** Import the clipboard at a point. Null when there is nothing on it. */
+    importClipboard: (at: DocumentPosition): Promise<ImportResult> =>
+      ipcRenderer.invoke(CHANNEL.importClipboard, at),
     comments: (): Promise<readonly CommentThread[]> => ipcRenderer.invoke(CHANNEL.comments),
     startComment: (span: Span, body: string): Promise<CommentId> =>
       ipcRenderer.invoke(CHANNEL.startComment, span, body),

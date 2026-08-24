@@ -258,6 +258,13 @@ export class RemoteDocument implements Document {
     return this.#notYet('reactToComment')
   }
 
+  importText(
+    _at: DocumentPosition,
+    _text: string,
+    _original: { readonly content: string; readonly ext: string },
+  ): Promise<string> {
+    return this.#notYet('importText')
+  }
   renameTag(_span: Span, _from: string, _to: string): Promise<void> {
     return this.#notYet('renameTag')
   }

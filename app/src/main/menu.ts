@@ -104,6 +104,15 @@ export function installMenu(): void {
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
+        // Paste puts text in; **import keeps what arrived**. The original goes
+        // to `attachments/` untouched and what lands in the day is a copy you
+        // can write on (R28, D47) — which is the difference between having a
+        // passage and being able to cite it.
+        {
+          label: 'Import Clipboard',
+          accelerator: 'Shift+CmdOrCtrl+V',
+          click: () => send(CHANNEL.menuCommand, 'import'),
+        },
         { role: 'selectAll' },
       ],
     },

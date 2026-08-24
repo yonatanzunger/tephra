@@ -1,11 +1,11 @@
 // Wiring the document service to Electron IPC. Nothing here does work.
 
-import { app, ipcMain, shell, type BrowserWindow } from 'electron'
+import { app, clipboard, ipcMain, shell, type BrowserWindow } from 'electron'
 import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
-import type { PrintJob } from '../shared/ipc.ts'
+import type { ImportResult, PrintJob } from '../shared/ipc.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DocumentPosition, Span } from '../shared/document-api.ts'
@@ -42,6 +42,37 @@ export function registerDocumentIpc(service: DocumentService): void {
   )
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
+  /**
+   * Import whatever is on the clipboard.
+   *
+   * **The richest flavour is kept and the plainest is annotated.** A copy from
+   * a browser or a word processor carries HTML as well as text; the HTML is
+   * what a citation should point at, and the text is what a person wants to
+   * write on. Converting HTML to markdown well is its own project, and doing it
+   * badly would put a mangled approximation in the corpus while throwing the
+   * good copy away.
+   */
+  ipcMain.handle(CHANNEL.importClipboard, async (_e, at: DocumentPosition): Promise<ImportResult> => {
+    const text = clipboard.readText()
+    const html = clipboard.readHTML()
+    // macOS synthesises an HTML flavour for a plain-text copy, and it is the
+    // same characters with no markup in them. Storing THAT as `.html` puts a
+    // text file behind a name that lies about it — the sort of small untruth
+    // that costs somebody an hour in fifteen years. Only real markup counts.
+    const rich = /<[a-z!/][^>]*>/i.test(html)
+
+    if (text.trim() === '') {
+      // Formatted content with no plain-text flavour. Refused rather than
+      // stripped: a crude tag-strip of real-world HTML puts approximated junk
+      // in the corpus, and this is a notebook meant to be trusted in twenty
+      // years. Converting properly is the same job `.docx` needs.
+      return { refused: rich ? 'formatted-only' : 'nothing' }
+    }
+
+    const original = rich ? { content: html, ext: 'html' } : { content: text, ext: 'txt' }
+    return { stored: await service.importText(at, text, original) }
+  })
+
   ipcMain.handle(CHANNEL.comments, () => service.comments())
   if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())
   // The system's own picker, which knows every emoji and how to search them.

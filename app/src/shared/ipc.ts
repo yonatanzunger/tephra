@@ -35,6 +35,7 @@ export const CHANNEL = {
   print: 'tephra:doc:print',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
+  importClipboard: 'tephra:doc:importClipboard',
   startComment: 'tephra:doc:startComment',
   addComment: 'tephra:doc:addComment',
   editComment: 'tephra:doc:editComment',
@@ -181,3 +182,14 @@ export interface PrintJob {
   readonly title: string
   readonly segment: DateKey
 }
+
+/**
+ * What came of an import.
+ *
+ * A reason rather than a bare null, because the two refusals are different
+ * things to be told: an empty clipboard is your mistake to fix, and formatted
+ * content Tephra cannot yet convert is Tephra's.
+ */
+export type ImportResult =
+  | { readonly stored: string }
+  | { readonly refused: 'nothing' | 'formatted-only' }

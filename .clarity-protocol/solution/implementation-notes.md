@@ -1127,3 +1127,29 @@ something else started calling it concurrently. And the fix is testable in three
 lines, which is what makes it a regression rather than a memory:
 `Promise.all([doc.segment(d), doc.segment(d)])` must return the same object. Both
 new tests were run against the old code and watched to fail.
+
+## Import (M2.7)
+
+D47's rule made this small: **the original is kept untouched and the copy is
+what you write on.** The clipboard's bytes go to `attachments/`, content-hashed;
+what lands in the day is ordinary prose with a provenance line — an italic
+sentence and a markdown link, both of which a plain reader can see and anyone can
+delete like any other sentence.
+
+The payoff is that there is **no import-shaped object in the system**. Imported
+text is text: tag it, comment on it, branch it, print it, with no special case
+anywhere. The test for that is one line — tag an imported passage — and it needed
+no new machinery to pass.
+
+Two refusals, both saying the true thing:
+
+- **A plain-text copy is stored as `.txt`, not `.html`.** macOS synthesises an
+  HTML flavour for plain text, and it is the same characters with no markup in
+  them; the first version stored that as `.html`, putting a text file behind a
+  name that lies about it. Only actual markup counts as rich now.
+- **Formatted content with no plain-text flavour is refused, and says so.** The
+  first message read "There is no text on the clipboard" when there plainly was
+  content — the same class of untruth as the `.html` extension, and the same
+  class as the m1 harness's note. Stripping tags crudely would put an
+  approximation in a corpus meant to be trusted in twenty years; converting
+  properly is the job `.docx` needs, and it is not this one.

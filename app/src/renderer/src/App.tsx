@@ -158,7 +158,26 @@ export function App(): React.JSX.Element {
     }
 
     return window.tephra.doc.onMenuCommand(command => {
-      if (command === 'undo') void revealing(doc.undo())
+      if (command === 'import') {
+        const stored = cursorRef.current
+        if (stored === null) return
+        void window.tephra.doc
+          .importClipboard({
+            segment: stored.segment as SegmentKey,
+            offset: stored.offset as never,
+            generation: doc.generation,
+          })
+          .then(result => {
+            if ('refused' in result) {
+              setError(
+                result.refused === 'nothing'
+                  ? 'There is nothing on the clipboard to import.'
+                  : 'The clipboard holds formatted content with no plain text, which Tephra cannot convert yet.',
+              )
+            }
+          })
+          .catch(fail)
+      } else if (command === 'undo') void revealing(doc.undo())
       else if (command === 'redo') void revealing(doc.redo())
       else if (command === 'typography') setPanelOpen(open => !open)
     })

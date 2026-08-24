@@ -13,7 +13,8 @@ import type {
 import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
-import { dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
+import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
+import { createHash } from 'node:crypto'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
 import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
@@ -885,6 +886,41 @@ export class StreamDocument implements Document {
       ],
       'operation',
     )
+  }
+
+  /**
+   * Bring outside text in, so it can be annotated (R28).
+   *
+   * **The original is kept untouched and the copy is what you write on** — the
+   * uniform rule for every inbound path (D47, dissolving Q9). Freezing the
+   * CONVERSION would protect nothing: a `.docx` or a pasted fragment rendered
+   * to markdown is already derived, and the artifact worth citing is the bytes
+   * that arrived. So those go to `attachments/`, content-hashed, and what lands
+   * in the day is ordinary prose that every existing gesture already works on —
+   * tag it, comment on it, branch it, print it.
+   *
+   * The provenance line is prose too, not a marker. A reader outside Tephra
+   * should be able to see where a passage came from, and someone who no longer
+   * wants the note should be able to delete it like any other sentence.
+   */
+  async importText(
+    at: DocumentPosition,
+    text: string,
+    original: { readonly content: string; readonly ext: string },
+  ): Promise<RelPath> {
+    if (text.trim() === '') throw new Error('there is nothing to import')
+    const date = at.segment as DateKey
+    const segment = await this.segment(date)
+
+    const digest = createHash('sha256').update(original.content).digest('hex')
+    const rel = attachmentFile(date, 'clipboard', digest, original.ext)
+    await this.#notebook.write(rel, original.content)
+
+    const link = relativePath(dayFile(date), rel)
+    const block = `*Imported ${date} from [the clipboard](${link}).*\n\n${text.trim()}`
+    const placed = insertBlockAt(segment.body, at.offset as number, block)
+    await this.#writeBody(date, segment.body, placed)
+    return rel
   }
 
   async branch(span: Span, name: string): Promise<DocumentId> {
