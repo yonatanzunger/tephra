@@ -991,7 +991,115 @@ found by someone asking why the code did not look like the obvious thing.
 **The obvious thing is the null hypothesis, and departing from it needs a
 reason that has been checked.**
 
-## D44: A second notebook whose storage is shreddable, with per-file keys
+## D44: Tephra's markers are annotations, not text — the buffer carries prose only
+
+**Date:** 2026-08-23
+**Status:** decided
+
+**Decision.** A marker's bytes never reach the editor's buffer. The window hands
+Z **prose**, plus the typed spans it already reports; the marks and the extent
+of a tagged range are drawn from those spans. The file is unchanged — markers
+are still HTML comments in the text, exactly as format-spec describes.
+
+**Why, having tried the other thing first.** Markers were widgets over their own
+raw bytes, revealed when the caret came near. That produced, in order of
+discovery: a line that reflowed by twenty-five characters every time the caret
+passed a tag, which is D42's guarantee broken inside the line; raw comment
+syntax on screen at exactly the moment a tag was applied, since the selection is
+by definition touching it; markers carried into the clipboard by an ordinary
+copy, where pasting one produced an unmatched `tag-start` that swallows the rest
+of a day; and an ordinary deletion able to orphan a marker, with the same
+consequence. Each has a patch. None of the patches is *reasons*, and they
+compound.
+
+**And one that has no patch.** Inline widgets are marked atomic, but
+`@replit/codemirror-vim` does its own offset arithmetic and never consults
+`atomicRanges` — measured in the M0 spike and recorded at the top of
+`widgets.ts`. With vim on, the caret walks *inside* a hidden comment and `x`
+cuts a character out of it. Unrendering under the cursor exists partly to make
+that survivable. Markers that are not in the buffer cannot be walked into.
+
+**The line this draws.** Tephra's syntax is not text; markdown is. Asterisks are
+something a person types and may want to edit, so they stay, and Q11 remains
+open about them. `<!--tephra:tag-start …-->` is machine syntax nobody should
+ever edit by hand — the operation to remove a tag is a command, not a text edit
+— so it leaves. Raw mode still shows the bytes, because that is a view of the
+file rather than a place to write.
+
+**A marker has a prose width, and this is what makes the gesture work.** A
+marker that is a *handle* — a bookmark, the start of a tagged range — occupies
+**one** character of prose, drawn as a small mark. A marker that is only a
+*boundary* — the end of a tagged range — occupies **none** and cannot be
+addressed at all: the caret never lands on it and no keystroke can reach it,
+because the underline already shows where the range ends and a second glyph
+would be redundant twice over.
+
+So the handle **is a character**, in the buffer, for motion, selection and
+deletion — not a widget pretending to be one. Which means the removal gesture
+lives in the WINDOW, not in a keymap: an edit that removes a handle is turned
+into `untag` or `removeAnchor` rather than applied as text. Backspace, `x`,
+`dd`, a selection dragged over it and overtyped, and any keymap that arrives
+later all get the gesture for free, and vim gets it identically because vim sees
+exactly one character where the mark is.
+
+**Generalisable, which is the reason to build it as its own layer.** Comments
+(R27) want the same treatment: an anchor in the prose that is a handle, a body
+that is not text. Building the prose/raw mapping as a tested object of its own
+means comments inherit it rather than re-inventing it.
+
+**Cost, stated plainly.** `StreamWindow` gains a coordinate mapping in both
+directions, and every edit crossing a marker has to map through it correctly.
+That is where the bugs will be, so it is built and tested on its own before
+anything is drawn on top of it.
+
+## D45: A window's announcement carries its whole state; edits say how the text moved, not whether anything moved
+
+**Date:** 2026-08-23
+**Status:** decided
+
+**Decision.** Every change touching a window produces **exactly one
+announcement**, carrying the window's complete state — text, generation, spans,
+placement, boundaries. The edit list describes *how the text got from the old
+state to the new one*. It is not a signal about whether the announcement is
+worth sending, and an empty list is a legitimate, meaningful message.
+
+Recipients hold a mirror and are responsible for noticing what changed in it.
+They may not infer "nothing changed" from "no edits".
+
+**Why this needed saying.** Four bugs in one milestone, all the same shape, each
+looking different enough to be fixed on its own terms:
+
+| symptom | what was actually wrong |
+|---|---|
+| tag underlines drawn in the wrong place | the renderer recomputed the mapping instead of sharing it |
+| underline outlived the tag it belonged to | the acknowledgement replaced the spans silently |
+| a day loaded by growth showed raw markers | growth sent bytes where prose was owed |
+| a renamed tag kept its old name in the UI | **no announcement at all**, because the prose was identical |
+
+The last one is the clearest. Renaming a span rewrites marker *names*, which are
+invisible in prose — same handle, same character, identical buffer — so the diff
+came back null and an early return sent nothing. The file was correct and the
+renderer went on reporting the old subject when its mark was clicked.
+
+**The underlying error is treating derived state as a side effect of text.** The
+renderer holds four things that main also holds, and three of them were being
+refreshed only when the fourth happened to change. That is not a bug in any one
+of them; it is a rule that was never stated, so nothing could be checked against
+it.
+
+**What this costs.** Nothing on the typing path: a window is never told about a
+change it originated (echo suppression), so ordinary typing does not reach this
+path at all. Changes that do reach it — an operation, an undo, an external edit
+— happen a few times an hour, and an announcement carrying no edits is a
+no-op for the buffer and a no-op for the span comparison.
+
+**The stronger version of this, not yet taken.** The mirror could be one value
+sent whole rather than five fields updated in step, which would make a partial
+update unrepresentable instead of merely forbidden. That is a larger change than
+this milestone wants, and the rule above is what makes it unnecessary for now —
+but if a fifth instance appears, the answer is the type, not another fix.
+
+## D46: A second notebook whose storage is shreddable, with per-file keys
 
 **Date:** 2026-08-23
 **Status:** decided
@@ -1176,110 +1284,112 @@ them: `goal/requirements.md` (R26's reach, and the zero-routing framing recorded
 above) and `solution/architecture.md` (the W wrapper, and a trust boundary that
 now has a second shape).
 
-## D44: Tephra's markers are annotations, not text — the buffer carries prose only
+## D47: Comments are a range-anchored thread with a visible markdown body
 
 **Date:** 2026-08-23
 **Status:** decided
+**Answers:** Q8; dissolves Q9
+**Extends:** the locked `document-api.md` and `format-spec.md` drafts
+**Detail:** `solution/comments.md`
 
-**Decision.** A marker's bytes never reach the editor's buffer. The window hands
-Z **prose**, plus the typed spans it already reports; the marks and the extent
-of a tagged range are drawn from those spans. The file is unchanged — markers
-are still HTML comments in the text, exactly as format-spec describes.
+**Decision.** A comment is a **thread anchored to a range** by a marker pair
+carrying a short file-local id, whose **body is ordinary markdown in the same
+file** — a callout block, visible to any reader — placed immediately after the
+block containing the closing marker. `SpanKind` gains `'comment'`.
 
-**Why, having tried the other thing first.** Markers were widgets over their own
-raw bytes, revealed when the caret came near. That produced, in order of
-discovery: a line that reflowed by twenty-five characters every time the caret
-passed a tag, which is D42's guarantee broken inside the line; raw comment
-syntax on screen at exactly the moment a tag was applied, since the selection is
-by definition touching it; markers carried into the clipboard by an ordinary
-copy, where pasting one produced an unmatched `tag-start` that swallows the rest
-of a day; and an ordinary deletion able to orphan a marker, with the same
-consequence. Each has a patch. None of the patches is *reasons*, and they
-compound.
+### The line that decides the encoding
 
-**And one that has no patch.** Inline widgets are marked atomic, but
-`@replit/codemirror-vim` does its own offset arithmetic and never consults
-`atomicRanges` — measured in the M0 spike and recorded at the top of
-`widgets.ts`. With vim on, the caret walks *inside* a hidden comment and `x`
-cuts a character out of it. Unrendering under the cursor exists partly to make
-that survivable. Markers that are not in the buffer cannot be walked into.
+**The anchor is metadata and stays hidden; the body is content and stays
+visible.** HTML-comment markers are right for anchors because an anchor is
+machine bookkeeping and a plain reader loses nothing. R27 argues the opposite
+about commentary — *commentary is durable content, and R26 applies to it exactly
+as it does to the base text* — so encoding a thread in an HTML comment would make
+the one part of the document invisible to every markdown renderer be precisely
+the part just argued to be as much the document as the text. That is a
+contradiction rather than a tradeoff.
 
-**The line this draws.** Tephra's syntax is not text; markdown is. Asterisks are
-something a person types and may want to edit, so they stay, and Q11 remains
-open about them. `<!--tephra:tag-start …-->` is machine syntax nobody should
-ever edit by hand — the operation to remove a tag is a command, not a text edit
-— so it leaves. Raw mode still shows the bytes, because that is a view of the
-file rather than a place to write.
+A callout (`> [!comment id] date`) degrades to an ordinary blockquote in every
+renderer, is hand-typable, follows the de facto convention for markdown
+extensions, and **prints for free** because it is simply text (R11).
 
-**A marker has a prose width, and this is what makes the gesture work.** A
-marker that is a *handle* — a bookmark, the start of a tagged range — occupies
-**one** character of prose, drawn as a small mark. A marker that is only a
-*boundary* — the end of a tagged range — occupies **none** and cannot be
-addressed at all: the caret never lands on it and no keystroke can reach it,
-because the underline already shows where the range ends and a second glyph
-would be redundant twice over.
+### Why identifiers, having previously resisted them
 
-So the handle **is a character**, in the buffer, for motion, selection and
-deletion — not a widget pretending to be one. Which means the removal gesture
-lives in the WINDOW, not in a keymap: an edit that removes a handle is turned
-into `untag` or `removeAnchor` rather than applied as text. Backspace, `x`,
-`dd`, a selection dragged over it and overtyped, and any keymap that arrives
-later all get the gesture for free, and vim gets it identically because vim sees
-exactly one character where the mark is.
+Comments need identity in a way tags do not. The no-id property was earned by an
+argument that does not transfer: *same-subject spans may not overlap … tagging a
+range that already carries the subject merges the existing span, **which is what
+the user means anyway***. Two tags of one subject on a passage are one tag; two
+comments are not, and R27 says several may bear on one passage.
 
-**Generalisable, which is the reason to build it as its own layer.** Comments
-(R27) want the same treatment: an anchor in the prose that is a handle, a body
-that is not text. Building the prose/raw mapping as a tested object of its own
-means comments inherit it rather than re-inventing it.
+**But the property was narrower than it looked.** D21's "no id" means spans
+inferred from text need no synthetic key *to pair them*. **Anchors already carry
+file-local names**, with `duplicate-anchor → first wins` already in the
+degradation table — so a comment id is an existing concept, not a new one.
 
-**Cost, stated plainly.** `StreamWindow` gains a coordinate mapping in both
-directions, and every edit crossing a marker has to map through it correctly.
-That is where the bugs will be, so it is built and tested on its own before
-anything is drawn on top of it.
+The alternative considered was a rule that comment ranges may nest but not
+partially overlap, which would preserve no-ids by bracket-matching. **Rejected**:
+it buys a property that turns out not to be load-bearing, at the price of a
+constraint the format needs nowhere else, a new degradation case, and a real
+restriction on annotating.
 
-## D45: A window's announcement carries its whole state; edits say how the text moved, not whether anything moved
+**The marker grammar does not change.** The existing regex takes everything after
+the verb as a free-text name; for comment markers that slot is read as
+whitespace-separated tokens — first the id, then flags. Only the verb alternation
+grows. **Ids are short random tokens rather than counters**, because a counter
+collides the first time a commented range is pasted between files.
 
-**Date:** 2026-08-23
-**Status:** decided
+### Built versus reserved
 
-**Decision.** Every change touching a window produces **exactly one
-announcement**, carrying the window's complete state — text, generation, spans,
-placement, boundaries. The edit list describes *how the text got from the old
-state to the new one*. It is not a signal about whether the announcement is
-worth sending, and an empty list is a legitimate, meaningful message.
+Built: the range anchor, the markdown body, threading by shared id, `resolved`,
+and a visible timestamp. **Reserved in the format and not built:** author,
+assignee, emoji reactions. Single user, two trusted devices, no sharing model —
+those fields serve the standardisation ambition rather than any Tephra
+requirement, and reserving them is free while building them is not.
 
-Recipients hold a mirror and are responsible for noticing what changed in it.
-They may not infer "nothing changed" from "no edits".
+### What this reuses rather than adds
 
-**Why this needed saying.** Four bugs in one milestone, all the same shape, each
-looking different enough to be fixed on its own terms:
+Comment markers mirror tag markers in prose width — `comment-start` is a handle
+(1), `comment-end` a boundary (0) — so `partnerRemovals()` supplies the removal
+gesture with no keymap, `ProseMap.carve()` protects the boundary from deletion,
+`HandleWidget` is the template for the numbered circle, and `tagExtents` is the
+template for both the rail and the range underline. The desktop rail
+absolutely-positions over the **already reserved** gutter band, so D42's
+invariant holds by construction; `gutterFits` already computes the narrow fold;
+and Q10 already settled the mobile arrangement.
 
-| symptom | what was actually wrong |
-|---|---|
-| tag underlines drawn in the wrong place | the renderer recomputed the mapping instead of sharing it |
-| underline outlived the tag it belonged to | the acknowledgement replaced the spans silently |
-| a day loaded by growth showed raw markers | growth sent bytes where prose was owed |
-| a renamed tag kept its old name in the UI | **no announcement at all**, because the prose was identical |
+### Q9 is dissolved rather than answered
 
-The last one is the clearest. Renaming a span rewrites marker *names*, which are
-invisible in prose — same handle, same character, identical buffer — so the diff
-came back null and an early return sent nothing. The file was correct and the
-renderer went on reporting the old subject when its mark was clicked.
+Q9 asked whether an imported base text stays pristine, and was recorded as
+deciding Q8 in favour of a sidecar. **The premise is wrong: for an imported
+document the pristine artifact is the original file, not the conversion.** A
+`.docx` or `.pdf` rendered to markdown is already lossy and derived, so freezing
+it protects nothing.
 
-**The underlying error is treating derived state as a side effect of text.** The
-renderer holds four things that main also holds, and three of them were being
-refreshed only when the fourth happened to change. That is not a bug in any one
-of them; it is a rule that was never stated, so nothing could be checked against
-it.
+**Uniform rule:** import stores the original untouched in `attachments/` and
+creates an annotatable markdown copy. This removes the sidecar's only real
+argument, and Q8 resolves to inline.
 
-**What this costs.** Nothing on the typing path: a window is never told about a
-change it originated (echo suppression), so ordinary typing does not reach this
-path at all. Changes that do reach it — an operation, an undo, an external edit
-— happen a few times an hour, and an announcement carrying no edits is a
-no-op for the buffer and a no-op for the span comparison.
+### Deliberately left open
 
-**The stronger version of this, not yet taken.** The mirror could be one value
-sent whole rather than five fields updated in step, which would make a partial
-update unrepresentable instead of merely forbidden. That is a larger change than
-this milestone wants, and the rule above is what makes it unnecessary for now —
-but if a fifth instance appears, the answer is the type, not another fix.
+**How a comment body is edited** — revealed in the main column (one editing
+surface, consistent with tables and equations, but it reflows the text the note
+is anchored beside) or edited in the rail (no reflow, but a second surface over
+the same buffer). **This is Q11 arriving where Q11 predicted**: it names printing
+and block constructs as the two tests any candidate must pass, and a comment body
+is a block construct that must print. Settled by building both and reacting, as
+the frame studies were. Nothing else in this decision depends on the answer.
+
+### Reconsideration triggers
+
+- **If partial overlap turns out never to occur in a year's use**, the ids are
+  buying nothing and the nesting rule becomes the cheaper design.
+- **If bodies routinely grow long enough to dominate the file**, the sidecar
+  argument returns on different grounds — readability of the raw text rather than
+  pristineness.
+- **When Q11 is settled**, since that decides the editing surface above.
+
+### What this makes stale
+
+`solution/format-spec.md` (marker verbs, the degradation table, the callout
+form), `solution/document-api.md` (`SpanKind`, `TypedSpan`, three methods),
+`goal/open-questions.md` (Q8 answered, Q9 dissolved), `solution/milestones.md`
+(M2 items 5–7).

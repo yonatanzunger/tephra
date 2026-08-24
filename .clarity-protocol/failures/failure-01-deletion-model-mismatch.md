@@ -43,7 +43,7 @@ written about, since surviving residue is what a later disclosure contains.
 3a. BRANCH A — underdeletion. The writer deletes, believing it gone.
     Residue survives in at least one place the application did not reach.
     - Intervention (prevention): crypto-shredding, which makes the residue
-      unreadable without needing to enumerate where it is (D44).
+      unreadable without needing to enumerate where it is (D46).
     - Intervention (detection): a verification pass that scans for the content
       rather than asking the mechanism whether it succeeded.
 
@@ -56,7 +56,7 @@ written about, since surviving residue is what a later disclosure contains.
 3b. BRANCH B — overdeletion. The writer deletes, or a timer deletes, believing
     the loss recoverable or narrower than it is.
     - Intervention (prevention): no automatic expiry until manual deletion has
-      been lived with (D44 defers TTL for exactly this reason).
+      been lived with (D46 defers TTL for exactly this reason).
     - Intervention (mitigation): a promote path that makes moving a conclusion
       out cheap, so less unpromoted work is at risk.
 
@@ -80,8 +80,8 @@ written about, since surviving residue is what a later disclosure contains.
   catastrophic alone, but the trust damage in step 6 cascades.
 - **Related failures:** feeds **F03** (the writer stops writing) through step 6.
   Underdeletion supplies the material that **F02** discloses.
-- **Largely designed against by D44**, which is why this is a management problem
-  rather than an open design problem — but D44 *created* branch B, which did not
+- **Largely designed against by D46**, which is why this is a management problem
+  rather than an open design problem — but D46 *created* branch B, which did not
   exist before there was anything that could really be deleted.
 - **Variants:** deleted text survives in history; version reasons duplicate
   content; classification cannot be backfilled; OS-level plaintext (Spotlight,
@@ -100,7 +100,7 @@ written about, since surviving residue is what a later disclosure contains.
 - **A legible delete affordance**, whose *absence* in the durable notebook is as
   clearly stated as its presence in the shreddable one.
 - **Crypto-shredding** rather than overwriting, so deletion does not depend on
-  enumerating the copy set (D44).
+  enumerating the copy set (D46).
 - **No automatic expiry** until manual deletion has been lived with.
 
 ### Detection

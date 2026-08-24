@@ -313,7 +313,7 @@ upstream of the other two, because Q12's "does some content need never to enter
 the history at all?" implied a **class** distinction the comment format and the
 import path would both have to carry — and a class cannot be backfilled.
 
-**D44 removed the coupling instead of resolving it.** The boundary became a
+**D46 removed the coupling instead of resolving it.** The boundary became a
 separate notebook with different storage rather than a class within one corpus,
 so no format work is owed and M2 was never actually blocked. Recorded because the
 *shape* recurs: when a distinction threatens to propagate into every mechanism

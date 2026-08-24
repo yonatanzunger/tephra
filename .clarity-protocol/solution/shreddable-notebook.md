@@ -1,7 +1,7 @@
 # The shreddable notebook
 
-**The design for D44.** A second notebook, opened by the same app, whose storage
-makes deletion real. `decisions/decisions.md` D44 holds the *why*; this holds the
+**The design for D46.** A second notebook, opened by the same app, whose storage
+makes deletion real. `decisions/decisions.md` D46 holds the *why*; this holds the
 *what*, in enough detail to build from.
 
 **In one sentence:** same editor, same typography, same everything above the
@@ -138,7 +138,7 @@ records the open document and cursor, so a shared one would name which
 shreddable file was last edited.
 
 **No sync, and this is a real loss.** Desktop-only, single-machine. Accepted
-explicitly in D44 rather than by omission. Per-file encryption is, however,
+explicitly in D46 rather than by omission. Per-file encryption is, however,
 exactly what end-to-end sync needs later — ciphertext can rest on a hub that is
 not trusted — so the sacrifice is deferral rather than foreclosure.
 

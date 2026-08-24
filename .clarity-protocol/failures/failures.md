@@ -5,7 +5,7 @@ Three failure modes plus a baseline group, reduced from 38 raw failures.
 the set tractable: one is a design-and-UX problem, two are questions about how
 the tool is used.
 
-Context: most of this pool was generated before **D44** (the shreddable
+Context: most of this pool was generated before **D46** (the shreddable
 notebook) and before the threat model was refined in **Q12**. Both landed during
 analysis, and the severities below already reflect them.
 
@@ -16,7 +16,7 @@ analysis, and the severities below already reflect them.
    safe is destroyed (by a shred, a timer, a bad purge pattern, or writing in the
    wrong notebook). Both are failures of correspondence, and one surprise in
    either direction poisons trust in every persistence claim the app makes.
-   **Mitigation:** largely designed against by D44; managed by making the
+   **Mitigation:** largely designed against by D46; managed by making the
    mechanism legible — *we know where data is stored, we know where we are
    writing, the presence or absence of a delete affordance is clear, and when
    present it does what it says.* **The only group with technical work attached.**
@@ -29,14 +29,14 @@ analysis, and the severities below already reflect them.
    and under a gag order cannot be warned. **Critical on harm, not on
    likelihood** — both originally-named adversaries have decayed (Q12).
    **Mitigation:** content scoping, FileVault, no hosted remote, verified backup
-   targets; D44 bounds what exists to be taken. Managed at the level of use.
+   targets; D46 bounds what exists to be taken. Managed at the level of use.
 
 3. **[The writer stops writing](failure-03-the-writer-stops-writing.md)**
    (Critical) — Judging that something cannot safely be recorded, the writer does
    not write it. The notebook stays perfect and stops being where the hard
    thinking happens, which defeats the project's premise. Silent, invisible to
    every instrument, and requiring no adversary — only friction. **This is the
-   live one:** nothing built yet addresses it, and D44's mitigation is unproven
+   live one:** nothing built yet addresses it, and D46's mitigation is unproven
    until the shreddable notebook is actually opened. **Mitigation:** a
    low-friction second destination, one-gesture switching, and an explicit
    periodic check, since nothing surfaces this on its own.
@@ -53,7 +53,7 @@ and acquisition risk falls while the writer's silence grows. Tuning the scope is
 therefore not an optimisation; it is a trade with no good setting.
 
 **The only move that improves both at once is lowering the friction of the safe
-destination.** That is the deeper argument for D44, and it is a *product*
+destination.** That is the deeper argument for D46, and it is a *product*
 argument rather than a security one: the shreddable notebook exists less to
 protect writing than to make writing happen at all. It should be judged on
 whether it gets opened.

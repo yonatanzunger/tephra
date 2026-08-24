@@ -9,7 +9,7 @@ No chain analysis is owed.
 Today's notes live in Google Docs and M365: hosted, compellable, retained under
 someone else's policy, with no purge mechanism available at any price. Tephra
 with a local repository is **better than this baseline in most respects** and
-worse in exactly one — a permanent local history, which D44 addresses.
+worse in exactly one — a permanent local history, which D46 addresses.
 
 **Why it is recorded rather than dropped.** It is the comparison point. Every
 control considered in F01–F03 should be priced against *"is this better than

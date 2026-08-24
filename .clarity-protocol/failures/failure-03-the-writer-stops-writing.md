@@ -24,7 +24,7 @@ safer. It is managed at the level of how the tool is used.
 2. They assess the available destinations:
    - the durable notebook: zero friction, permanent, wrong for this;
    - the shreddable notebook: right for this, but must be opened, and is
-     desktop-only and single-machine by decision (D44);
+     desktop-only and single-machine by decision (D46);
    - paper or the typewriter: safest, highest friction.
    - Observation: this assessment happens mid-thought, in the seconds before
      writing, competing with the thought itself.
@@ -59,12 +59,12 @@ safer. It is managed at the level of how the tool is used.
   requires no adversary and no bug — only friction.
 - **This is the live one.** F01 is largely designed against and F02 has decayed
   with its adversaries. Nothing has yet been *built* that addresses this, and
-  D44's mitigation is unproven until it is used.
+  D46's mitigation is unproven until it is used.
 - **Directly antagonistic to F02.** Content scoping is the top-of-chain
   intervention for both, pulling opposite ways: scoping tighter reduces
   acquisition risk and increases this. See the cross-cutting note in
   `failures.md` — the only move that improves both at once is lowering the
-  friction of the safe destination, which is the deeper argument for D44.
+  friction of the safe destination, which is the deeper argument for D46.
 - **Fed by F01.** A persistence surprise in either direction erodes trust in
   every claim the app makes, and a writer who does not trust the notebook writes
   less in it.
@@ -76,7 +76,7 @@ safer. It is managed at the level of how the tool is used.
 ## Intervention Points
 
 ### Prevention
-- **A low-friction second destination.** This is the whole of D44's product
+- **A low-friction second destination.** This is the whole of D46's product
   case, as distinct from its security case.
 - **One-gesture switching**, so the routing decision costs a keystroke and not a
   context switch.
@@ -106,5 +106,5 @@ safer. It is managed at the level of how the tool is used.
 
 Directed approach: **managed at the level of how the tool is used.** Note that
 the evidence for whether this is managed at all can only come from living with
-D44 — which is an argument for noticing, early and deliberately, whether the
+D46 — which is an argument for noticing, early and deliberately, whether the
 shreddable notebook is actually being opened.

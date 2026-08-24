@@ -179,11 +179,20 @@ putting the commentary somewhere else to look at.
    because a print document has to be self-contained and KaTeX's output needs a
    stylesheet and sixty font files. Shown as a PDF in Chromium's viewer, which
    restores the preview the spike found missing beside the native panel.
-5. **Settle Q8 and Q9**, with the machinery built and the question concrete.
+5. ✅ **Settle Q8 and Q9.** Both closed by **D47** — Q8 answered (inline, visible
+   markdown body), Q9 dissolved (the pristine artifact is the original file, not
+   the conversion). **They no longer block 6 and 7.**
 6. **Comment on a range, rendered in the reserved margin** (R27). MV reserved
-   the space; this fills it.
-7. **Import clipboard text to annotate** (R28) — the cheapest inbound path, and
-   enough to answer Q9 by living with it. `.docx` follows; `.pdf` is v2.
+   the space; this fills it. **Design: `comments.md`.** Mostly reuse — comment
+   markers mirror tag markers in prose width, so `partnerRemovals()`,
+   `ProseMap.carve()`, `HandleWidget` and `tagExtents` all apply unchanged, and
+   the rail positions over a gutter band that is already spent.
+   **One question is open inside this item** — whether a body is edited by
+   revealing it in the main column or in the rail. It is Q11 arriving where Q11
+   said it would, and it is settled by building both and reacting.
+7. **Import clipboard text to annotate** (R28) — the cheapest inbound path.
+   Per D47, import stores the original untouched and annotates a copy.
+   `.docx` follows; `.pdf` is v2.
 8. **`History.restore`**, deferred here from M1 because spans are M2's native
    idea. Whole documents only, and it truncates the undo stack (`history-api.ts`).
    Most likely to slip if M2 runs long.
@@ -233,7 +242,7 @@ v1**: in scope, after the core works.
 
 ## M6 — the shreddable notebook
 
-**Design: `shreddable-notebook.md`. Decision: D44.** A second notebook, opened by
+**Design: `shreddable-notebook.md`. Decision: D46.** A second notebook, opened by
 the same app, whose storage makes deletion real: per-file encryption with
 destroyable keys, no history, no WAL, no sync.
 

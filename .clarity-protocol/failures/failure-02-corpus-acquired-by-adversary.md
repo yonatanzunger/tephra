@@ -30,7 +30,7 @@ how the tool is used, not in the architecture.
 
 2. It persists — in the corpus, the version history, a backup, a hub, a device.
    - Intervention (mitigation): the shreddable notebook bounds what is available
-     to be acquired, because content that was destroyed is genuinely gone (D44).
+     to be acquired, because content that was destroyed is genuinely gone (D46).
 
 3. An acquiring event occurs.
    - Observation: both originally-named adversaries have decayed. Civil
@@ -50,7 +50,7 @@ how the tool is used, not in the architecture.
      over one stream, so no artifact corresponds to a narrow demand, and the
      defensible answer and the cheap answer are both "hand over everything."
    - Intervention (mitigation): separate notebooks are the only boundary that
-     bounds the set, which is a second reason D44 matters.
+     bounds the set, which is a second reason D46 matters.
 
 5. Third parties are exposed, along with the association graph — who was met,
    when, and roughly about what — which survives redaction because automatic
@@ -115,6 +115,6 @@ how the tool is used, not in the architecture.
 *Not yet developed — run failure management.*
 
 Directed approach: **this is managed at the level of how the tool is used**, not
-by architecture. The technical half has already been taken out by D44; what
+by architecture. The technical half has already been taken out by D46; what
 remains is a practice about what gets written where, and it should be written
 down somewhere rather than held in memory, because an unwritten policy drifts.

@@ -10,7 +10,7 @@ A log, not a summary. `failures/failures.md` is the quick picture.
 **Specialist perspectives recommended but NOT run**, and worth knowing are
 missing: `adversarial-analysis-thinker`, `human-factors-thinker`,
 `security-thinker`. They were recommended when the compelled-disclosure adversary
-still looked live; the adversary decayed and D44 landed before they were
+still looked live; the adversary decayed and D46 landed before they were
 applied. **Human factors is the one whose absence still matters** — F03 is the
 live failure mode, it is entirely a human-factors problem, and it was analysed
 without that lens.
@@ -50,7 +50,7 @@ into civil discovery (ended with the officer role) and political targeting
 severity level as a result. The reasoning is in Q12 rather than deleted, so it
 can be re-examined if circumstances change.
 
-**And a decision landed mid-analysis.** D44 designed against most of what
+**And a decision landed mid-analysis.** D46 designed against most of what
 remained — but it also *created* two new failure variants that did not exist
 before: overdeletion is only possible once something can really be deleted, and
 two notebooks can only be confused once there are two.
@@ -66,7 +66,7 @@ intervention — content scoping — and it pulls opposite ways. There is no set
 of "how much do I withhold" that is good for both.
 
 **The only move that improves both simultaneously is lowering the friction of
-the safe destination.** This reframes D44: its case is a *product* case, not a
+the safe destination.** This reframes D46: its case is a *product* case, not a
 security case. The shreddable notebook exists less to protect writing than to
 make writing happen at all, and it should be judged on whether it gets opened
 rather than on whether its cryptography is elegant.

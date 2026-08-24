@@ -157,6 +157,22 @@ A large window is slow to open and rarely needs extending; a small one opens ins
 
 ## Q8: Where does a comment's body live?
 
+**Status: ANSWERED — D47, option (a), fully inline.** The body is ordinary
+markdown in the same file — a callout block placed immediately after the block
+containing the closing marker — and the anchor is a marker pair carrying a short
+file-local id. Design in `solution/comments.md`.
+
+**The deciding argument was not the one this question anticipated.** It expected
+to turn on whether a comment ever wants to be long. It turned instead on a line
+between *metadata* and *content*: markers work as HTML comments because an anchor
+is machine bookkeeping and a plain reader loses nothing, whereas R27 argues
+commentary **is** content — so hiding a thread inside an HTML comment would make
+the one part of the document invisible to every markdown renderer be exactly the
+part just argued to be as much the document as the text. A contradiction, not a
+tradeoff. The sidecar's remaining argument was Q9's, and Q9 dissolved.
+
+*Original analysis, kept for its reasoning:*
+
 **Raised by R27.** D11 already settles the *anchoring*: references are by identity,
 never by stored offsets, because offsets rot the moment the text is edited by
 hand. What it does not settle is where the comment's **text** goes.
@@ -180,6 +196,25 @@ outgrows the text — argues for (b). **Not urgent:** MV only needs the gutter
 *reserved*, which neither option affects.
 
 ## Q9: Does an imported base text stay pristine?
+
+**Status: DISSOLVED — D47.** The question's own text contains its answer, in the
+clause that was written as an aside: *"for a `.docx` or `.pdf` that has been
+converted, the pristine thing worth keeping may be the original file rather than
+the markdown anyway."* That is not a special case — it is the general rule.
+
+**For an imported document the pristine artifact is the original file, not the
+conversion.** A rendering to markdown is already lossy and derived, so freezing
+*it* protects nothing that matters; a citation points at the original.
+
+**The uniform rule, across every inbound path:** import stores the original
+untouched in `attachments/` and creates an annotatable markdown copy. Annotate
+the copy freely.
+
+This removes the sidecar's only remaining argument, so the coupling below runs
+the other way from how it was written: **Q9 did not decide Q8; it stopped being
+a question, and Q8 was decided on its own merits.**
+
+*Original analysis, kept for its reasoning:*
 
 **Raised by R28.** Annotating an imported document is different in kind from
 annotating one's own writing: the base text is *someone else's*, it will not be
@@ -429,7 +464,7 @@ react to them rather than argue.
 
 ## Q12: What does a purge actually promise, and what is the threat model it serves?
 
-**Status: ANSWERED — D44**, and the answer is that the primary notebook promises
+**Status: ANSWERED — D46**, and the answer is that the primary notebook promises
 *durability*, not deletion, and stops pretending otherwise. Genuine deletion
 moves to a second notebook whose storage is shreddable by construction. The
 threat model that drove the question is recorded below and has substantially
