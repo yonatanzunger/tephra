@@ -436,6 +436,25 @@ export class StreamWindow implements DocumentWindow {
    * what makes those methods cheap, and it is small enough to send on every
    * change.
    */
+  /**
+   * What this window is actually holding, for a self-check to compare against
+   * the document's own view of the same days.
+   *
+   * Asked AFTER a failure rather than logged during one: the fault it exists to
+   * find is a race, and a `console.log` on the path was enough to make it stop
+   * happening.
+   */
+  diagnose(): readonly { date: string; raw: number; prose: number; same: boolean }[] {
+    return this.#placed.map(p => ({
+      date: p.segment.date as string,
+      raw: p.segment.length,
+      prose: p.segment.prose.text.length,
+      // The identity that matters: is the object this window rebuilds from the
+      // same one the document mutates?
+      same: this.#doc.heldSegment(p.segment.date) === p.segment,
+    }))
+  }
+
   placement(): WindowSnapshot['placement'] {
     return this.#placed.map(p => ({
       date: p.segment.date,

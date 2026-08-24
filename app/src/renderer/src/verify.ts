@@ -412,6 +412,7 @@ export async function runVerify(scene: string): Promise<void> {
         waited += 200
       }
       say('composerAppearedAfterMs', waited)
+      if (waited >= 6000) say('diagnose', await window.tephra.diagnose())
       say('bufferAfter', w0?.text.length ?? -1)
       const w3 = (pane as unknown as { window?: { spans(k?: string): unknown[] } }).window
       say('spansSeenByRenderer', w3?.spans('comment')?.length ?? -1)

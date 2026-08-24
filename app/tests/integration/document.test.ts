@@ -902,3 +902,39 @@ test('deleting the first message carries the thread state to the next', async t 
   assert.deepEqual(thread.messages.map(m => m.body), ['Second.'])
   assert.equal(thread.resolved, true, 'state lived on the block that just left')
 })
+
+test('two callers asking for the same day get the same object', async t => {
+  // The bug this exists for, which cost an evening: `segment()` checked the
+  // cache and filled it on either side of an `await`, so two callers arriving
+  // in that window each built a Segment and the second overwrote the first.
+  // Whoever held the first then had an orphan — a window rebuilding from an
+  // object the document had stopped mutating. About one run in five, a comment
+  // reached the file, the announcement fired, and the editor never changed.
+  const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'A day.\n') })
+  const [a, b, c] = await Promise.all([doc.segment(DAY), doc.segment(DAY), doc.segment(DAY)])
+  assert.equal(a, b, 'two concurrent loads produced two objects')
+  assert.equal(b, c)
+  assert.equal(await doc.segment(DAY), a, 'and the cache holds that same one')
+})
+
+test('a window built during a concurrent load still sees later edits', async t => {
+  // The symptom, rather than the mechanism: whatever the window is holding has
+  // to be the thing the document edits.
+  const { doc } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The premise is stated here.\n'),
+  })
+  // Open the window while other work asks for the same day, which is what
+  // startup does: growth, the anomaly scan and the margin all arrive at once.
+  const [w] = await Promise.all([
+    windowOver(doc, DAY),
+    doc.comments(),
+    doc.spans('tag'),
+    doc.segment(DAY),
+  ])
+  const before = w.text
+  const from = w.text.indexOf('premise')
+  await doc.startComment({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 7)) }, 'A note.')
+
+  assert.notEqual(w.text, before, 'the window is rebuilding from an orphan')
+  assert.equal([...w.text].filter(ch => ch === '￼').length, 1, 'the handle should have arrived')
+})

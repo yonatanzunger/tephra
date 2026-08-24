@@ -290,6 +290,15 @@ export class DocumentService {
     return this.#notebook.root
   }
 
+  /** Self-check only. What every open window is holding, and whether it agrees. */
+  diagnose(): unknown {
+    return [...this.#windows.entries()].map(([id, window]) => ({
+      id,
+      text: window.text.length,
+      segments: window.diagnose(),
+    }))
+  }
+
   anomalies(): readonly Anomaly[] {
     return this.#doc.anomalies()
   }

@@ -402,3 +402,24 @@ meant "nothing happened". The check that finally meant something asserted the
 app *had* started — `.tephra/` exists — before asserting what it did not do.
 
 **A negative result is only evidence if the positive control fired.**
+
+## A post-mortem beats a log when the fault is a race
+
+The comment-in-the-margin intermittent could not be watched: every `console.log`
+placed on the path changed the timing enough to make it stop happening, twice in
+a row, which cost two rounds of investigation to a heisenbug.
+
+What worked was asking **after** the failure instead of during it. A verify-only
+`diagnose()` returns what each window is holding — lengths, and whether its
+segment is the same object the document has cached — and the scene calls it only
+when the note fails to appear. One line of output named the fault:
+
+```
+diagnose: [{ id: 1, text: 258, segments: [{ date: '2026-08-24', raw: 258, prose: 258, same: false }] }]
+```
+
+The general form, worth reaching for next time: **when observing changes the
+outcome, stop observing the event and interrogate the wreckage.**
+
+This is also the sixth entry in the instruments list, and the second where the
+instrument's own presence was the problem rather than its honesty.

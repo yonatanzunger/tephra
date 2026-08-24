@@ -78,6 +78,8 @@ export class StreamDocument implements Document {
 
   readonly #notebook: Notebook
   readonly #segments = new Map<DateKey, Segment>()
+  /** Loads in flight, so concurrent callers share one object rather than racing. */
+  readonly #loading = new Map<DateKey, Promise<Segment>>()
   #generation = 1 as SessionGeneration
 
   readonly #undo: HistoryEntry[] = []
@@ -122,21 +124,52 @@ export class StreamDocument implements Document {
     return [...this.#segments.values()].flatMap(segment => segment.anomalies())
   }
 
+  /**
+   * The one Segment object for a date.
+   *
+   * **The in-flight LOAD is cached, not just the result.** Checking the map and
+   * filling it straddle an `await` on the file, so two callers that arrive
+   * during that window both miss, both read, and both construct a Segment — and
+   * the second `set` wins. Whoever was handed the first object then holds one
+   * that is no longer in the map: a window rebuilt from a Segment the document
+   * has stopped mutating.
+   *
+   * That is exactly what happened. Opening a window calls this for each day
+   * while background growth, the anomaly scan and the margin's first thread
+   * query call it for the same day; about one run in five, the window ended up
+   * with an orphan. Commenting then wrote the file correctly, the announcement
+   * fired correctly, and the editor's text never changed, because the window
+   * was rebuilding from a Segment nobody was editing. The symptom looked like a
+   * missing IPC message and was a duplicated object.
+   *
+   * Parts coalesce into one date span above storage (D20), so this is also the
+   * only place that knows a day can be more than one file. Part 1 carries the
+   * frontmatter and the original bytes; the rest contribute body only.
+   */
   async segment(date: DateKey): Promise<Segment> {
     const held = this.#segments.get(date)
     if (held !== undefined) return held
 
-    // Parts coalesce into one date span above storage (D20), so this is the
-    // only place that knows a day can be more than one file. Part 1 carries the
-    // frontmatter and the original bytes; the rest contribute body only.
-    const rel = dayFile(date)
-    const text = await this.#notebook.read(rel)
-    const segment =
-      text === null
-        ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'stream')))
-        : Segment.load(date, rel, text + (await this.#laterParts(date)))
-    this.#segments.set(date, segment)
-    return segment
+    const loading = this.#loading.get(date)
+    if (loading !== undefined) return loading
+
+    const load = (async (): Promise<Segment> => {
+      const rel = dayFile(date)
+      const text = await this.#notebook.read(rel)
+      const segment =
+        text === null
+          ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'stream')))
+          : Segment.load(date, rel, text + (await this.#laterParts(date)))
+      this.#segments.set(date, segment)
+      return segment
+    })()
+
+    this.#loading.set(date, load)
+    try {
+      return await load
+    } finally {
+      this.#loading.delete(date)
+    }
   }
 
   /** Every date with a file on disk, ascending. A scan; never on the hot path. */
@@ -1026,6 +1059,11 @@ export class StreamDocument implements Document {
 
   #positionAt(segment: SegmentKey, offset: number): DocumentPosition {
     return { segment, offset: offset as Offset, generation: this.#generation }
+  }
+
+  /** The segment object this document is holding for a date, if any. */
+  heldSegment(date: DateKey): Segment | undefined {
+    return this.#segments.get(date)
   }
 
   positionAt(segment: SegmentKey, offset: number): DocumentPosition {

@@ -1084,23 +1084,46 @@ the reader already knows.
 and still comfortably readable; the smaller size bought the first at the cost of
 the second.
 
-### The intermittent, characterised and not yet explained
+### The intermittent: a cache check and a cache fill on either side of an await
 
-Roughly one run in five, the note does not appear: the file is written correctly
-and `comments()` returns the thread, but the editor's buffer never changes. One
-failing run was traced far enough to be precise about it — **main's own prose
-length was unchanged**, 258 before and 258 after, while the raw body had grown.
-The announcement fired (`origin=operation`, one handler), so this is not the
-IPC push; the prose the window rebuilt from simply did not reflect the edit.
+Roughly one run in five, the note did not appear: the file was written
+correctly, `comments()` returned the thread, the announcement fired with its
+handler attached — and the editor's buffer never changed. One traced run showed
+main's OWN prose length unchanged, 258 before and 258 after, while the raw body
+had grown.
 
-What has been ruled out: the elision itself (`proseMarkers` on that exact body,
-in isolation, produces the right handle and elides the block); the cached prose
-being stale on `setBody`; and `Segment.adopt()`, the watcher's take-the-file-as-
-truth path, which never fired in any observed run. Adding a `console.log` to the
-announcement flipped it from failing consistently to passing consistently, which
-says it is a timing race and not a logic error in the synchronous path.
+The measurement that found it was a **post-mortem, not a log**. Every attempt to
+watch the failure with a `console.log` on the path made it stop happening — the
+race is that tight. So the self-check asks, only after a failure, what each open
+window is holding and whether it agrees with the document:
 
-**It is not in the tests** — the X-level assertions for exactly this ("the body
-is NOT in the buffer", handle count of one) pass every time — so whatever it is,
-it needs the running app. Next step is a trace of `Segment.prose`'s cache
-identity across the operation, which is the one thing not yet instrumented.
+```
+diagnose: [{ id: 1, text: 258, segments: [{ date: '2026-08-24', raw: 258, prose: 258, same: false }] }]
+```
+
+`same: false`. **Two Segment objects for one day.** The window was rebuilding
+from one the document had stopped mutating.
+
+`StreamDocument.segment()` checked its cache and filled it on either side of the
+`await` that reads the file:
+
+```ts
+const held = this.#segments.get(date)
+if (held !== undefined) return held
+const text = await this.#notebook.read(rel)   // ← two callers both get here
+this.#segments.set(date, segment)             // ← the second one wins
+```
+
+Opening a window calls this for every day it covers, while background growth,
+the anomaly scan and the margin's first thread query call it for the same day.
+Both miss, both read, both construct — and whoever was handed the loser holds an
+orphan. **The in-flight load is now cached, not just its result**, so concurrent
+callers await one promise and share one object.
+
+Two things worth taking from it. The symptom pointed at the newest code — a
+missing IPC message for a feature written that afternoon — and the fault was a
+five-line function that had been correct-looking since M0, exposed only when
+something else started calling it concurrently. And the fix is testable in three
+lines, which is what makes it a regression rather than a memory:
+`Promise.all([doc.segment(d), doc.segment(d)])` must return the same object. Both
+new tests were run against the old code and watched to fail.

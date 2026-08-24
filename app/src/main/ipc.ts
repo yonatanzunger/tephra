@@ -4,6 +4,7 @@ import { app, ipcMain, shell, type BrowserWindow } from 'electron'
 import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
+import { verifyMode } from './verify-mode.ts'
 import type { PrintJob } from '../shared/ipc.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
@@ -42,6 +43,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
   ipcMain.handle(CHANNEL.comments, () => service.comments())
+  if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())
   // The system's own picker, which knows every emoji and how to search them.
   // It types into whatever has focus, so the renderer focuses a field first.
   ipcMain.handle(CHANNEL.emojiPanel, () => {

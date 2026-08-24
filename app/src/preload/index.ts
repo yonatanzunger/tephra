@@ -55,6 +55,8 @@ const tephra = {
   emojiPanel: (): Promise<boolean> => ipcRenderer.invoke(CHANNEL.emojiPanel),
   /** Follow a link found in the text. Main decides whether it may be followed. */
   openLink: (target: string): Promise<boolean> => ipcRenderer.invoke(CHANNEL.openLink, target),
+  /** Self-check only. What each window holds, for comparing against main. */
+  diagnose: (): Promise<unknown> => ipcRenderer.invoke('tephra:verify:diagnose'),
   /** Self-check only; the handler exists only when TEPHRA_VERIFY is set. */
   clickMenu: (label: string): Promise<boolean> => ipcRenderer.invoke('tephra:verify:menu', label),
 
