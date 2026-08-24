@@ -8,7 +8,7 @@
 // It is a panel and not a modal on purpose: you are choosing a measure by
 // reading, so the reading must stay visible while you choose.
 
-import type { Theme } from '@shared/theme.ts'
+import type { Theme } from '../../../shared/theme.ts'
 import type { ThemeControl } from './useTheme'
 
 /** What the stream would cover at this measure, for the note at the foot. */

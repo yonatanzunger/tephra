@@ -9,9 +9,9 @@
 // reports facts upward rather than being observed — which is what keeps the
 // dependency pointing the right way.
 
-import type { BufferPosition, DateKey, DocumentWindow, SegmentKey, Unsubscribe } from '@shared/document-api.ts'
-import type { BoundaryState, NavTarget } from '@shared/pane-api.ts'
-import { ScreenMetric, V1_EXTENT_POLICY, charsFor, type ExtentPolicy } from '@shared/extent.ts'
+import type { BufferPosition, DateKey, DocumentWindow, SegmentKey, Unsubscribe } from '../../../shared/document-api.ts'
+import type { BoundaryState, NavTarget } from '../../../shared/pane-api.ts'
+import { ScreenMetric, V1_EXTENT_POLICY, charsFor, type ExtentPolicy } from '../../../shared/extent.ts'
 import type { RemoteDocument } from '../x/remote-document'
 import type { RemoteWindow } from '../x/remote-window'
 

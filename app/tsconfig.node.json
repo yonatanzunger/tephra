@@ -4,8 +4,10 @@
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
-    "src/renderer/src/frame/metrics.ts",
     "tests/**/*"
+  ],
+  "exclude": [
+    "tests/renderer/**/*"
   ],
   "compilerOptions": {
     "composite": true,
@@ -21,6 +23,6 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "paths": { "@shared/*": ["./src/shared/*"] }
+    "paths": {}
   }
 }

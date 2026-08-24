@@ -7,8 +7,8 @@
 
 import { useSyncExternalStore } from 'react'
 import type { Pane } from './pane'
-import type { BoundaryState, NavTarget } from '@shared/pane-api.ts'
-import type { DocumentWindow } from '@shared/document-api.ts'
+import type { BoundaryState, NavTarget } from '../../../shared/pane-api.ts'
+import type { DocumentWindow } from '../../../shared/document-api.ts'
 
 export function usePaneWindow(pane: Pane | null): DocumentWindow | null {
   return useSyncExternalStore(

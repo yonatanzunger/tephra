@@ -22,7 +22,7 @@ import type { Range } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import katex from 'katex'
-import { HANDLE } from '@shared/document-api.ts'
+import { HANDLE } from '../../../shared/document-api.ts'
 
 export const rebuildWidgets = StateEffect.define<null>()
 

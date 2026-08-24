@@ -3,7 +3,7 @@
 Two phases. The first introduces the mechanism and tests it alone; the second
 spends it. M2's remaining bullets resume afterwards.
 
-## MA — markers leave the buffer
+## MA — markers leave the buffer ✅
 
 1. **`x/prose.ts`, pure and tested on its own.** Given a body and its markers
    with their prose widths, produce the prose text and map offsets both ways.
@@ -25,12 +25,12 @@ spends it. M2's remaining bullets resume afterwards.
 
 ## MB — what a tagged range looks like
 
-1. **Palette.** Six to eight hues per theme, chosen to work on that ground and to
+1. ✅ **Palette.** Six to eight hues per theme, chosen to work on that ground and to
    be told apart from each other; the subject's hash picks a slot, so a subject
    keeps its colour forever and every colour was chosen by a person.
-2. **The mark.** Drawn in CSS, not a dingbat: a symbol font in the middle of a
+2. ✅ **The mark.** Drawn in CSS, not a dingbat: a symbol font in the middle of a
    serif face brings foreign metrics and too much ink.
-3. **The extent.** Stacked thin underlines rather than a tint — they compose
+3. ✅ **The extent.** Stacked thin underlines rather than a tint — they compose
    honestly for overlapping subjects, where two tints multiply into a third
    colour that means nothing, and they need not stay legible behind text, so
    they can be properly saturated. Capped at three deep; the rest live in the

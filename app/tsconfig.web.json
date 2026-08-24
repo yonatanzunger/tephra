@@ -1,5 +1,5 @@
 {
-  "include": ["src/renderer/src/**/*", "src/shared/**/*", "src/preload/*.d.ts"],
+  "include": ["src/renderer/src/**/*", "src/shared/**/*", "src/preload/*.d.ts", "tests/renderer/**/*"],
   "compilerOptions": {
     "composite": true,
     "target": "ES2022",
@@ -14,6 +14,7 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "paths": { "@shared/*": ["./src/shared/*"], "@/*": ["./src/renderer/src/*"] }
+    "paths": {},
+    "types": ["node"]
   }
 }

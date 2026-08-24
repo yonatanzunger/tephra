@@ -15,6 +15,8 @@
 // definitions are durable, selection is soft state (D41).
 
 /** Colours, as hex. Hex because a person edits these files by hand (R26). */
+import { hslTriple, TAG_HUES } from './tags.ts'
+
 export interface ThemePalette {
   readonly paper: string
   readonly ink: string
@@ -54,6 +56,15 @@ export interface Theme {
   /** Percentage applied via `size-adjust`. 100 leaves Hebrew alone. */
   readonly hebrewScale: number
 
+  /**
+   * How a tag's underline is coloured on this ground (D44, MB.1). The HUE comes
+   * from the subject and never changes; these two decide whether it reads as a
+   * quiet mark on cream or as a legible line on black — which is a property of
+   * the page, not of the subject.
+   */
+  readonly tagSaturation: number
+  readonly tagLightness: number
+
   readonly palette: ThemePalette
 }
 
@@ -84,6 +95,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     blankLine: 0.55,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
+    tagSaturation: 46,
+    tagLightness: 40,
     palette: {
       paper: '#faf7f0',
       ink: '#23201b',
@@ -108,6 +121,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     blankLine: 0.55,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
+    tagSaturation: 42,
+    tagLightness: 38,
     palette: {
       paper: '#faf9f8',
       ink: '#292524',
@@ -132,6 +147,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     blankLine: 0.55,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
+    tagSaturation: 52,
+    tagLightness: 62,
     palette: {
       paper: '#14161a',
       ink: '#d5d2cc',
@@ -156,6 +173,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     blankLine: 0.55,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
+    tagSaturation: 46,
+    tagLightness: 40,
     palette: {
       paper: '#fbfbfa',
       ink: '#1f2124',
@@ -209,6 +228,8 @@ export function parseTheme(text: string, name: string): Theme | null {
     label: str(raw.label, name),
     note: str(raw.note, ''),
     face: str(raw.face, base.face),
+    tagSaturation: num(raw.tagSaturation, base.tagSaturation, 0, 100),
+    tagLightness: num(raw.tagLightness, base.tagLightness, 0, 100),
     // Bounds are sanity rails, not taste: they keep a typo from producing a
     // layout with no visible text and no way back to the controls.
     size: num(raw.size, base.size, 9, 48),
@@ -273,6 +294,9 @@ export function themeTokens(theme: Theme): Readonly<Record<string, string>> {
     const triple = rgbTriple(hex)
     if (triple !== null) out[name] = triple
   }
+  TAG_HUES.forEach((hue, i) => {
+    out[`--tag-${i}`] = hslTriple(hue, theme.tagSaturation, theme.tagLightness)
+  })
   return out
 }
 

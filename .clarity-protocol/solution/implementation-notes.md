@@ -675,3 +675,176 @@ fix was not a lazy import but the layering telling the truth: **what a link mean
 is a question about the notebook and answerable under node; opening a file is a
 question about the desktop.** So the service returns a path and `ipc.ts` opens
 it. The test failure was the design being pointed out, not an obstacle to it.
+
+## What MA and MB cost, and the two things that only a screenshot found
+
+Markers left the buffer (D44) and both faults that followed were invisible to
+the test suite. Both were caught by looking at the screen.
+
+**The renderer had a second copy of the mapping.** `StreamWindow.toBuffer`
+learned the prose↔raw arithmetic; `RemoteWindow.toBuffer` — the renderer's half
+of the same object (D37) — went on adding a raw offset to a prose start. Every
+test passed, because the tests exercise main. On screen, tag underlines simply
+never appeared.
+
+This is the **third** time this codebase has been bitten by two computations of
+one quantity: the frame computed its measure twice, `generation` had two homes,
+and now a coordinate mapping had two implementations. The fix is the same one
+each time — one implementation, in `shared/prose.ts`, used by both sides, with
+the snapshot carrying the markers so the renderer can build the identical map.
+
+**The rules were drawn and then thrown away.** An inline element's background is
+clipped to its border box, so an underline positioned *below* the em box is
+rendered and discarded. It took instrumenting the running app — element count,
+computed colour, computed background-position — to see that everything was
+correct and the pixels still were not there. `padding-bottom` on the inline box
+is what gives the rules somewhere to exist.
+
+### And one the tests found, which is the interesting direction
+
+`tagSlot` took `hash % 8` straight from FNV-1a, whose low bits barely avalanche
+for short strings: sixteen plausible subject names reached five of the eight
+hues and put four of themselves on one colour. **A palette of eight that behaves
+like a palette of five is worse than none, because it looks like it is telling
+you something.** Murmur3's finaliser fixed it — and then the first version of
+that returned NEGATIVE slots, because `^` yields a signed 32-bit integer in
+JavaScript and a negative left operand makes `%` negative.
+
+The test that caught both was almost written badly. Checking two dozen real
+subject names for an unused hue fails by luck about a quarter of the time and
+passes by luck the rest, so it would have measured a coin flip and been deleted
+the first time it went red for no reason. Four hundred generated names measure
+the hash.
+
+### An intermittent, recorded rather than explained
+
+`npm run m1` reported 15/3 twice during this stretch and 18/18 on nine other
+runs, including four consecutive attempts to reproduce it. Both failures came
+straight after other Electron launches in the same shell, which points at a
+leftover process or a notebook lock rather than at logic — but that is a guess,
+and it is written here as one. The next occurrence gets its failing check names
+captured before anything is theorised.
+
+## Three coordinate spaces, and the cast that hid the third
+
+The reported bug: tag "participant has a finite" as *Foo*, then tag the
+overlapping "finite shock limit" as *Bar*, and the file came back as
+
+```
+Every market <!--tag-start Foo--><!--tag-start Bar-->participant has a finite sho<!--tag-end Bar-->ck limit<!--tag-end Foo-->
+```
+
+Both markers of the second tag were about twenty-seven bytes early — one
+marker's width — because the second selection was made against a buffer that now
+carried a handle, and `RemoteWindow.toDocument` was still returning
+
+```ts
+offset: (offset - p.start) as Offset
+```
+
+`offset - p.start` is a prose offset within the segment. `Offset` counts bytes.
+**They are equal for every body with no markers in it**, which is why the whole
+suite passed and why the fault appeared only on the second tag.
+
+### What the fix actually is
+
+There are THREE coordinate spaces here, not two, and only two had names:
+
+| | counts | named |
+|---|---|---|
+| `Offset` | bytes within one segment's body | was |
+| `BufferPosition` | prose characters across the window | was |
+| `ProseOffset` | prose characters within one segment | **was not** |
+
+The unnamed one is where the bug lived. It now has a brand, `ProseMap.toRaw`
+will not accept an `Offset`, and the two additions that cross between window and
+segment are named functions — `inWindow`, `inSegment` — rather than a `+` that
+looks innocent. The cast that produced the bug no longer compiles.
+
+### Why the renderer had no tests, and that being the real fault
+
+`RemoteWindow` is the renderer's half of `DocumentWindow` (D37) and had no unit
+tests at all — not from neglect, but because **it could not be imported by
+one**: it used the `@shared/*` path alias, which vite resolves and the test
+runner does not. An entire layer was untestable by construction, and that layer
+is where both of this stretch's coordinate bugs lived.
+
+So the alias is gone. Renderer files use relative imports like everything else,
+`tests/renderer/` typechecks under the web project because that code needs the
+DOM lib, and the first thing written in it is the reproduction of this bug.
+Brevity in an import line is not worth a layer nobody can test.
+
+## Growth handed the editor bytes, and why that was the third of a kind
+
+Opening a notebook that already had history showed raw `<!--tephra:tag-start …-->`
+in the text. Nothing was wrong with loading: the snapshot was prose, the spans
+were right, the mapping was right. **`extend` was wrong** — the path that grows
+the loaded region backwards, which is how every day but the one being written
+gets into the window:
+
+```ts
+const insert = ordered.map(s => s.body).join('')   // bytes, into a prose buffer
+```
+
+Reproducing it needed a notebook whose history is in an EARLIER day than today,
+which is every real notebook and none of the fixtures, because every `extend`
+test used days with no markers in them.
+
+### The class, not the instance
+
+This is the third time raw bytes reached a prose buffer since markers left it
+(D44): `documentChanged` handed over the document's raw payloads, `RemoteWindow`
+recomputed the mapping without eliding, and now `extend` inserted bodies. Each
+looked like a different bug. They are one: **anything that puts text into the
+buffer must put prose there, and `string` does not say which kind of string it
+is.**
+
+So all four paths that can supply buffer text were audited rather than waiting
+for a fourth:
+
+| path | supplies | now |
+|---|---|---|
+| `#rebuild` | the whole buffer | `segment.prose.text` ✓ |
+| `documentChanged` | edits from elsewhere | a prose-to-prose diff ✓ |
+| `extend` | a prepended day | `segment.prose.text` ✓ |
+| `window.text` | snapshot and reset | prose by construction ✓ |
+
+Each now has a test. A `ProseText` brand on the strings themselves would make
+the class impossible rather than merely covered, the way `ProseOffset` did for
+the coordinates — worth doing if a fourth appears.
+
+### The test earned its keep by failing first
+
+The regression test was run against the BROKEN code before the fix went in, and
+watched to fail. `notes.md` records four occasions where a passing check proved
+nothing because its positive control had never fired; this one fired.
+
+## An underline outliving its tag: the one event nobody was announcing
+
+Deleting a tag's mark removed both markers from the file correctly and left the
+underline on screen. Nothing was stale in main; the renderer simply was never
+told.
+
+Two mechanisms have to miss for this to happen, and both did:
+
+- **Echo suppression.** A window is never told about a change it originated, so
+  the deletion — which the editor made — produced no `onChanged`. That rule is
+  right and is what stops text duplicating.
+- **The acknowledgement is silent.** `RemoteWindow` replaces its span list from
+  every ack, and did so with a bare assignment. The tag was gone from the list a
+  moment after the keystroke, and nothing asked for a redraw.
+
+So the decorations were rebuilt once, on `docChanged`, from spans that still
+listed a tag the document no longer had — mapped through the deletion, which is
+why the rule survived it looking plausible.
+
+**`onSpansChanged` is now part of the window's surface**, separate from
+`onChanged` because the two genuinely do not coincide: a tag can appear or
+disappear on an edit the editor itself made. It is announced only when the spans
+actually differ, since an ack arrives for every keystroke and a redraw per
+keystroke would put work on the typing path for something that changes a few
+times an hour.
+
+The general shape, for the third time in this milestone: **two objects held one
+fact and only one of them was maintained.** Here the fact was "which spans
+exist"; earlier it was the coordinate mapping, and before that the generation.

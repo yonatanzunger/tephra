@@ -435,3 +435,21 @@ body {
     radial-gradient(circle at 50% 50%, rgb(var(--accent) / .9) 0 28%, transparent 30%);
 }
 .tx-handle:hover { border-color: rgb(var(--accent)); background-color: rgb(var(--accent) / .12); }
+
+/* A tagged range: a thin rule under the text, one per subject, stacked when
+   subjects overlap. Colour comes from the subject (a fixed hue per slot); how
+   saturated and how light it is comes from the theme, so the same subject is
+   recognisably itself on cream and on black. */
+.tx-tag {
+  /* The padding is load-bearing, not spacing: an inline element's background is
+     clipped to its border box, so a rule positioned BELOW the em box is drawn
+     and then thrown away. This makes room under the text for it to live in.
+     On an inline box padding does not move anything, so the line is unchanged.
+     0.36em is what fits: at 1.72 leading there is 0.36em of half-leading below
+     the em box, and the third rule has to stay inside it. */
+  padding-bottom: 0.36em;
+  background-image: linear-gradient(to bottom, rgb(var(--tag)) 0 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 0.075em;
+  background-position: 0 calc(100% - 0.28em + var(--tag-depth) * 0.12em);
+}

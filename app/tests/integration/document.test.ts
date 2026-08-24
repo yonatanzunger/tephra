@@ -634,3 +634,39 @@ async function tagged(doc: StreamDocument, w: DocumentWindow): Promise<string> {
   const to = w.toBuffer(span.span.end)
   return w.text.slice(from as number, to as number).replace(/￼/g, '')
 }
+
+test('a day arriving through growth arrives as prose, not as bytes', async t => {
+  // The bug this exists for: `extend` inserted the segment's BODY into a buffer
+  // that holds prose, so every day loaded by growth showed raw
+  // `<!--tephra:tag-start …-->` on screen. Growth is how a notebook with any
+  // history at all gets loaded, so it appeared on opening and nowhere else —
+  // and no test caught it because every extend test used days with no markers
+  // in them.
+  const { doc } = await fixture(t, {
+    [dayFile(d('2026-03-12'))]: dayText(
+      '2026-03-12',
+      'Older day, <!--tephra:tag-start subject-->already tagged<!--tephra:tag-end subject--> before.\n',
+    ),
+    [dayFile(DAY)]: dayText('2026-03-14', 'Today.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const arrived: string[] = []
+  w.onChanged(edits => arrived.push(...edits.map(e => e.insert)))
+
+  await w.extend('earlier')
+
+  assert.equal(w.text.includes('tephra:'), false, `raw syntax in the buffer: ${w.text}`)
+  assert.equal(
+    arrived.some(insert => insert.includes('tephra:')),
+    false,
+    'the editor was handed marker syntax to insert',
+  )
+  assert.match(w.text, /Older day, ￼already tagged before\./)
+
+  // And the spans that came with it still land on the right words.
+  const tag = (await doc.spans('tag'))[0]
+  assert.notEqual(tag, undefined)
+  const from = w.toBuffer(tag!.span.begin) as number
+  const to = w.toBuffer(tag!.span.end) as number
+  assert.equal(w.text.slice(from, to), 'already tagged')
+})

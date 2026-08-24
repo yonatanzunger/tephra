@@ -7,8 +7,8 @@
 // milestone, but silent absence is confusing.
 
 import { useState } from 'react'
-import type { DateKey } from '@shared/document-api.ts'
-import { addDays, compareDateKeys } from '@shared/dates.ts'
+import type { DateKey } from '../../../shared/document-api.ts'
+import { addDays, compareDateKeys } from '../../../shared/dates.ts'
 
 export interface NavProps {
   readonly today: DateKey | null

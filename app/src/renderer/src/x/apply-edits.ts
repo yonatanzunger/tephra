@@ -5,7 +5,7 @@
 // not import Node. If the two ever disagree, the length check in RemoteWindow
 // catches it on the very next edit rather than letting the buffers drift.
 
-import type { BufferEdit } from '@shared/document-api.ts'
+import type { BufferEdit } from '../../../shared/document-api.ts'
 
 export function applyEdits(text: string, edits: readonly BufferEdit[]): string {
   if (edits.length === 0) return text

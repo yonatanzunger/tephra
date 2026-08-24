@@ -87,6 +87,29 @@ export interface DocumentPosition {
   readonly generation: SessionGeneration
 }
 
+declare const ProseOffsetBrand: unique symbol
+
+/**
+ * An offset into ONE segment's prose — the text with marker syntax taken out
+ * and handles standing in for it (D44).
+ *
+ * **A third coordinate space, and it needed a name.** `Offset` counts bytes in a
+ * segment's body; `BufferPosition` counts prose characters across the whole
+ * window; this counts prose characters within one segment. All three are
+ * numbers, and for a body with no markers all three agree, which is exactly why
+ * confusing them survives every test written against ordinary text.
+ *
+ * It went wrong the moment there was a marker: `RemoteWindow.toDocument`
+ * subtracted a segment start from a buffer position and returned the result as
+ * an `Offset`, so tagging a phrase wrote its markers twenty-seven bytes early —
+ * one marker's width — and the second tag of a paragraph landed inside the
+ * first. The cast is what let it compile.
+ *
+ * So the conversions are the only way across: `ProseMap.toRaw` will not accept
+ * an `Offset`, and `inWindow` will not accept one either.
+ */
+export type ProseOffset = number & { readonly [ProseOffsetBrand]: void }
+
 declare const BufferPositionBrand: unique symbol
 
 /** A rendering convenience: an offset inside one loaded window. NEVER PERSISTED. */
@@ -341,6 +364,18 @@ export interface DocumentWindow {
   distance(a: BufferPosition, b: BufferPosition): number
 
   // ── changes originating elsewhere ──────────────────────────
+  /**
+   * The typed spans changed — a tag applied or removed, a heading edited.
+   *
+   * Separate from `onChanged` because the two do not coincide. An edit the
+   * EDITOR made is echo-suppressed, so `onChanged` stays silent, and yet the
+   * spans that come back with its acknowledgement may be completely different:
+   * deleting a tag's handle removes the whole tag (D44). Without this, the
+   * underline for a tag that no longer exists stays on screen until something
+   * unrelated forces a redraw.
+   */
+  onSpansChanged(handler: () => void): Unsubscribe
+
   /** Fires for external edits, sync pulls and undos that land inside this window. */
   onChanged(handler: (edits: readonly BufferEdit[], origin: EditOrigin) => void): Unsubscribe
   /** The window's region moved or reloaded wholesale; rebind. */

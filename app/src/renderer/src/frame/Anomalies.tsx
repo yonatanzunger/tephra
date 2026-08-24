@@ -19,7 +19,7 @@
 // from the current text, so repairing a file by hand makes the entry disappear
 // on the next read with nothing to invalidate.
 
-import { describeAnomaly, labelAnomaly, type Anomaly } from '@shared/anomalies.ts'
+import { describeAnomaly, labelAnomaly, type Anomaly } from '../../../shared/anomalies.ts'
 
 export function AnomalyBadge({
   anomalies,

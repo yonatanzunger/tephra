@@ -8,12 +8,17 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { HANDLE, Prose, stripHandles } from '../../../../src/main/x/prose.ts'
 import { proseMarkers } from '../../../../src/main/x/markers.ts'
+import type { Offset, ProseOffset } from '../../../../src/shared/document-api.ts'
 
 const START = (s: string): string => `<!--tephra:tag-start ${s}-->`
 const END = (s: string): string => `<!--tephra:tag-end ${s}-->`
 const MARK = (s: string): string => `<!--tephra:mark ${s}-->`
 
 const of = (raw: string): Prose => Prose.of(raw, proseMarkers(raw))
+
+/** The two coordinate spaces are different types on purpose; these say which. */
+const rawAt = (n: number): Offset => n as Offset
+const proseAt = (n: number): ProseOffset => n as ProseOffset
 
 test('prose is the body with the syntax taken out and handles standing in', () => {
   const p = of(`One ${START('s')}two three${END('s')} four.\n`)
@@ -37,7 +42,7 @@ test('every prose offset survives a round trip', () => {
   ]) {
     const p = of(raw)
     for (let i = 0; i <= p.text.length; i++) {
-      assert.equal(p.toProse(p.toRaw(i)), i, `prose ${i} of ${JSON.stringify(raw)}`)
+      assert.equal(p.toProse(rawAt(p.toRaw(proseAt(i)))), i, `prose ${i} of ${JSON.stringify(raw)}`)
     }
   }
 })
@@ -46,28 +51,28 @@ test('a raw offset inside a marker collapses to where the marker sits', () => {
   const raw = `One ${START('s')}two${END('s')}\n`
   const p = of(raw)
   const inside = raw.indexOf(START('s')) + 5
-  assert.equal(p.toProse(inside), 4, 'there is nothing inside a marker to point at')
+  assert.equal(p.toProse(rawAt(inside)), 4, 'there is nothing inside a marker to point at')
   // And every offset within the marker gives the same answer.
   const first = raw.indexOf(START('s'))
-  for (let i = first; i < first + START('s').length; i++) assert.equal(p.toProse(i), 4)
+  for (let i = first; i < first + START('s').length; i++) assert.equal(p.toProse(rawAt(i)), 4)
 })
 
 test('the trailing boundary: leftmost, so typing at the end extends the range', () => {
   const raw = `One two${END('s')} three.\n`
   const p = of(raw)
   const atEnd = p.text.indexOf(' three')
-  assert.equal(p.toRaw(atEnd), raw.indexOf(END('s')), 'inside the range, before the marker')
-  assert.equal(p.toRawAfter(atEnd), raw.indexOf(END('s')) + END('s').length, 'and the other side is reachable')
+  assert.equal(p.toRaw(proseAt(atEnd)), raw.indexOf(END('s')), 'inside the range, before the marker')
+  assert.equal(p.toRawAfter(proseAt(atEnd)), raw.indexOf(END('s')) + END('s').length, 'and the other side is reachable')
 })
 
 test('a handle is one character, and the offset after it is past its bytes', () => {
   const raw = `a${MARK('x')}b`
   const p = of(raw)
   assert.equal(p.text, `a${HANDLE}b`)
-  assert.equal(p.handleAt(1)?.from, 1)
-  assert.equal(p.handleAt(0), null)
-  assert.equal(p.handleAt(2), null)
-  assert.equal(p.toRaw(2), raw.length - 1, 'after the handle is after the whole comment')
+  assert.equal(p.handleAt(proseAt(1))?.from, 1)
+  assert.equal(p.handleAt(proseAt(0)), null)
+  assert.equal(p.handleAt(proseAt(2)), null)
+  assert.equal(p.toRaw(proseAt(2)), raw.length - 1, 'after the handle is after the whole comment')
 })
 
 test('prose length is the body less what the markers took', () => {
@@ -84,7 +89,7 @@ test('a deletion sweeping across a range end is carved around it', () => {
   const p = of(raw)
   const from = raw.indexOf('two')
   const to = raw.indexOf('four')
-  const pieces = p.carve(from, to)
+  const pieces = p.carve(rawAt(from), rawAt(to))
   assert.equal(pieces.length, 2, 'one deletion becomes two, with the marker between them')
   const kept = raw.slice(pieces[0]!.to, pieces[1]!.from)
   assert.equal(kept, END('s'))
@@ -93,15 +98,15 @@ test('a deletion sweeping across a range end is carved around it', () => {
 test('a handle is NOT carved out — deleting one is a gesture with its own meaning', () => {
   const raw = `One ${MARK('x')}two three.\n`
   const p = of(raw)
-  assert.deepEqual(p.carve(0, raw.length), [{ from: 0, to: raw.length }])
+  assert.deepEqual(p.carve(rawAt(0), rawAt(raw.length)), [{ from: 0, to: raw.length }])
 })
 
 test('markers wholly inside a range are found, partial ones are not', () => {
   const raw = `One ${START('s')}two${END('s')} three.\n`
   const p = of(raw)
-  assert.equal(p.within(0, raw.length).length, 2)
-  assert.equal(p.within(0, raw.indexOf('two')).length, 1)
-  assert.equal(p.within(raw.indexOf(START('s')) + 3, raw.length).length, 1, 'a half-covered marker is not covered')
+  assert.equal(p.within(rawAt(0), rawAt(raw.length)).length, 2)
+  assert.equal(p.within(rawAt(0), rawAt(raw.indexOf('two'))).length, 1)
+  assert.equal(p.within(rawAt(raw.indexOf(START('s')) + 3), rawAt(raw.length)).length, 1, 'a half-covered marker is not covered')
 })
 
 test('handles cannot arrive from outside', () => {

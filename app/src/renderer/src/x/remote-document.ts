@@ -8,8 +8,8 @@ import type {
   DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
   DocumentWindow, Edit, EditOrigin, SegmentKey, SessionGeneration, Span, SpanKind,
   TypedSpan, Unsubscribe, Divergence,
-} from '@shared/document-api.ts'
-import type { DocumentInfo } from '@shared/ipc.ts'
+} from '../../../shared/document-api.ts'
+import type { DocumentInfo } from '../../../shared/ipc.ts'
 import { RemoteWindow } from './remote-window.ts'
 
 export class RemoteDocument implements Document {

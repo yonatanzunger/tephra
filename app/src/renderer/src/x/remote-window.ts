@@ -12,9 +12,10 @@
 import type {
   BufferEdit, BufferPosition, DateKey, Document, DocumentPosition, DocumentWindow,
   EditOrigin, Offset, SegmentKey, SessionGeneration, Span, SpanKind, TypedSpan, Unsubscribe,
-} from '@shared/document-api.ts'
-import type { WindowSnapshot } from '@shared/ipc.ts'
+} from '../../../shared/document-api.ts'
+import type { WindowSnapshot } from '../../../shared/ipc.ts'
 import { applyEdits } from './apply-edits.ts'
+import { inSegment, inWindow, ProseMap } from '../../../shared/prose.ts'
 
 type Placement = WindowSnapshot['placement']
 
@@ -33,10 +34,12 @@ export class RemoteWindow implements DocumentWindow {
   #generation: SessionGeneration
   #spans: readonly TypedSpan[]
   #placement: Placement
+  readonly #maps = new WeakMap<Placement[number], ProseMap>()
   #boundaries: { earlier: boolean; later: boolean }
 
   readonly #changeHandlers = new Set<(edits: readonly BufferEdit[], origin: EditOrigin) => void>()
   readonly #resetHandlers = new Set<() => void>()
+  readonly #spansHandlers = new Set<() => void>()
 
   /**
    * Which edit this is, locally. An editor fires without awaiting, so several
@@ -79,11 +82,21 @@ export class RemoteWindow implements DocumentWindow {
    * the window belongs to the last segment, which is what makes appending work.
    */
   toDocument(at: BufferPosition): DocumentPosition {
-    const offset = clamp(at as number, 0, this.#text.length)
+    const offset = clamp(at as number, 0, this.#text.length) as BufferPosition
     for (let i = this.#placement.length - 1; i >= 0; i--) {
       const p = this.#placement[i] as Placement[number]
       if (offset >= p.start) {
-        return { segment: p.date as SegmentKey, offset: (offset - p.start) as Offset, generation: this.#generation }
+        // Through the map, NOT by subtraction. `offset - p.start` is a prose
+        // offset within the segment, and returning it as an `Offset` claims it
+        // counts bytes — which it only does when the segment has no markers.
+        // With one marker present it is short by that marker's width, so
+        // tagging a phrase wrote its markers twenty-seven bytes early and the
+        // second tag of a paragraph landed inside the first.
+        return {
+          segment: p.date as SegmentKey,
+          offset: this.#map(p).toRaw(inSegment(offset, p.start)),
+          generation: this.#generation,
+        }
       }
     }
     const first = this.#placement[0]
@@ -96,9 +109,24 @@ export class RemoteWindow implements DocumentWindow {
 
   toBuffer(at: DocumentPosition): BufferPosition | null {
     for (const p of this.#placement) {
-      if (p.date === at.segment) return (p.start + (at.offset as number)) as BufferPosition
+      if (p.date === at.segment) {
+        // Through the SAME map main uses (D44). Adding a raw offset to a prose
+        // start is how tag underlines ended up drawn where no marker had ever
+        // been accounted for.
+        return inWindow(p.start, this.#map(p).toProse(at.offset))
+      }
     }
     return null
+  }
+
+  /** Cached per placement entry: rebuilt only when a snapshot replaces it. */
+  #map(p: Placement[number]): ProseMap {
+    let map = this.#maps.get(p)
+    if (map === undefined) {
+      map = ProseMap.of(p.length, p.markers)
+      this.#maps.set(p, map)
+    }
+    return map
   }
 
   // ── editing ────────────────────────────────────────────────
@@ -128,8 +156,33 @@ export class RemoteWindow implements DocumentWindow {
     }
 
     this.#generation = ack.generation
-    this.#spans = ack.spans
     this.#placement = ack.placement
+    this.#setSpans(ack.spans)
+  }
+
+  /**
+   * Replace the spans, telling anyone drawing from them if they actually moved.
+   *
+   * Compared rather than announced unconditionally: an acknowledgement arrives
+   * for every keystroke, and dispatching a redraw per keystroke would put work
+   * on the typing path for something that changes a few times an hour.
+   */
+  #setSpans(next: readonly TypedSpan[]): void {
+    const same =
+      next.length === this.#spans.length &&
+      next.every((span, i) => {
+        const old = this.#spans[i] as TypedSpan
+        return (
+          span.kind === old.kind &&
+          span.name === old.name &&
+          span.span.begin.segment === old.span.begin.segment &&
+          (span.span.begin.offset as number) === (old.span.begin.offset as number) &&
+          (span.span.end.offset as number) === (old.span.end.offset as number)
+        )
+      })
+    this.#spans = next
+    if (same) return
+    for (const handler of this.#spansHandlers) handler()
   }
 
   // ── queries ────────────────────────────────────────────────
@@ -174,6 +227,11 @@ export class RemoteWindow implements DocumentWindow {
     return () => this.#changeHandlers.delete(handler)
   }
 
+  onSpansChanged(handler: () => void): Unsubscribe {
+    this.#spansHandlers.add(handler)
+    return () => this.#spansHandlers.delete(handler)
+  }
+
   onReset(handler: () => void): Unsubscribe {
     this.#resetHandlers.add(handler)
     return () => this.#resetHandlers.delete(handler)
@@ -191,9 +249,9 @@ export class RemoteWindow implements DocumentWindow {
   ): void {
     this.#text = text
     this.#generation = generation
-    this.#spans = spans
     this.#placement = placement
     this.#boundaries = boundaries
+    this.#setSpans(spans)
     for (const handler of this.#changeHandlers) handler(edits, origin)
   }
 

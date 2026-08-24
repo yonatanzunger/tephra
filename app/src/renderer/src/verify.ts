@@ -380,6 +380,105 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'unmark') {
+      // Delete the handle the way any keymap would, and check that what was
+      // drawn from the tag goes away with it.
+      const handle = view.state.doc.toString().indexOf('￼')
+      say('handleFound', handle)
+      say('extentsBefore', document.querySelectorAll('.tx-tag').length)
+      say('handlesBefore', document.querySelectorAll('.tx-handle').length)
+
+      view.dispatch({ selection: { anchor: handle, head: handle + 1 } })
+      await settle(200)
+      view.dispatch({ changes: { from: handle, to: handle + 1, insert: '' }, userEvent: 'delete' })
+      await settle(1200)
+
+      say('extentsAfter', document.querySelectorAll('.tx-tag').length)
+      say('handlesAfter', document.querySelectorAll('.tx-handle').length)
+      say('tagSpansAfter', (await window.tephra.doc.spans({ kind: 'tag' })).length)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await window.tephra.doc.flush()
+      await settle(1200)
+    }
+
+    if (scene === 'dump') {
+      const w = (pane as unknown as { window?: { text: string; spans(k?: string): unknown[] } }).window
+      say('bufferHead', view.state.doc.toString().slice(0, 120))
+      say('windowTextHead', (w?.text ?? '(none)').slice(0, 120))
+      say('rawInBuffer', view.state.doc.toString().includes('tephra:'))
+      say('tagSpans', w?.spans('tag')?.length ?? -1)
+      say('anchorSpans', w?.spans('anchor')?.length ?? -1)
+      await settle(800)
+    }
+
+    if (scene === 'twotags') {
+      // The reported bug, exactly: tag one phrase, then tag an OVERLAPPING one.
+      // The second selection is made against a buffer that now carries a handle,
+      // so its prose offsets no longer equal the file's byte offsets.
+      const answer = async (item: string, text: string): Promise<boolean> => {
+        if (!(await window.tephra.clickMenu(item))) return false
+        await settle(400)
+        const input = document.querySelector('.prompt input') as HTMLInputElement | null
+        if (input === null) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, text)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(900)
+        return true
+      }
+      const select = (text: string): boolean => {
+        const from = view.state.doc.toString().indexOf(text)
+        if (from === -1) return false
+        view.dispatch({ selection: { anchor: from, head: from + text.length } })
+        return true
+      }
+
+      say('firstSelected', select('participant has a finite'))
+      await settle(300)
+      say('firstTagged', await answer('Tag…', 'Foo'))
+
+      say('secondSelected', select('finite shock limit'))
+      await settle(300)
+      say('secondTagged', await answer('Tag…', 'Bar'))
+      await window.tephra.doc.flush()
+
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(400)
+      say('onScreen', document.querySelector('.cm-content')?.textContent ?? '')
+      await settle(1500)
+    }
+
+    if (scene === 'tagview') {
+      const w = (pane as unknown as { window?: { spans(k?: string): unknown[] } }).window
+      say('spansFromWindow', w?.spans('tag')?.length ?? 'no window')
+      say('tagElements', document.querySelectorAll('.tx-tag').length)
+      say('handleElements', document.querySelectorAll('.tx-handle').length)
+      const frame = document.querySelector('.frame') as HTMLElement | null
+      say('tagToken0', frame === null ? 'no frame' : getComputedStyle(frame).getPropertyValue('--tag-0'))
+      say(
+        'eachTag',
+        [...document.querySelectorAll('.tx-tag')].map(e => ({
+          text: (e.textContent ?? '').slice(0, 22),
+          style: e.getAttribute('style'),
+          colour: getComputedStyle(e).backgroundImage.match(/rgb\([^)]*\)/)?.[0] ?? '?',
+        })),
+      )
+      const el = document.querySelector('.tx-tag') as HTMLElement | null
+      if (el !== null) {
+        const style = getComputedStyle(el)
+        say('drawn', {
+          style: el.getAttribute('style'),
+          image: style.backgroundImage,
+          size: style.backgroundSize,
+          position: style.backgroundPosition,
+        })
+      }
+      await settle(1500)
+    }
+
     if (scene === 'branch') {
       const select = (text: string): boolean => {
         const from = view.state.doc.toString().indexOf(text)

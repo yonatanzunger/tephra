@@ -14,8 +14,9 @@ import type {
 } from '../../shared/document-api.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
 import type { Segment } from './segment.ts'
-import { stripHandles } from './prose.ts'
+import { inSegment, inWindow, stripHandles } from '../../shared/prose.ts'
 import { minimalReplacement } from './text-edits.ts'
+import type { WindowSnapshot } from '../../shared/ipc.ts'
 import type { StreamDocument } from './stream-document.ts'
 
 interface Placed {
@@ -25,7 +26,7 @@ interface Placed {
    * holds prose; the segment's body holds bytes; `segment.prose` crosses
    * between them, and this is the only place the two are added together.
    */
-  readonly start: number
+  readonly start: BufferPosition
 }
 
 export class StreamWindow implements DocumentWindow {
@@ -37,6 +38,7 @@ export class StreamWindow implements DocumentWindow {
 
   readonly #changeHandlers = new Set<(edits: readonly BufferEdit[], origin: EditOrigin) => void>()
   readonly #resetHandlers = new Set<() => void>()
+  readonly #spansHandlers = new Set<() => void>()
 
   /** Set while this window is the origin of a change, to suppress its own echo. */
   #originating = false
@@ -97,13 +99,16 @@ export class StreamWindow implements DocumentWindow {
     const offset = Math.min(Math.max(0, at as number), this.#text.length)
     const placed = this.#placed[0] === undefined ? null : this.#segmentAt(offset)
     if (placed === null) return this.#doc.positionAt('' as DateKey, 0)
-    return this.#doc.positionAt(placed.segment.date, placed.segment.prose.toRaw(offset - placed.start))
+    return this.#doc.positionAt(
+      placed.segment.date,
+      placed.segment.prose.toRaw(inSegment(offset as BufferPosition, placed.start)),
+    )
   }
 
   toBuffer(at: DocumentPosition): BufferPosition | null {
     for (const placed of this.#placed) {
       if (placed.segment.date === at.segment) {
-        return (placed.start + placed.segment.prose.toProse(at.offset as number)) as BufferPosition
+        return inWindow(placed.start, placed.segment.prose.toProse(at.offset))
       }
     }
     return null
@@ -151,7 +156,7 @@ export class StreamWindow implements DocumentWindow {
         // Leftmost, which is the trailing-boundary rule: text typed at the end
         // of a tagged range lands INSIDE it, so continuing a tagged sentence
         // keeps the subject (D44).
-        const local = placed.segment.prose.toRaw(from - placed.start)
+        const local = placed.segment.prose.toRaw(inSegment(from as BufferPosition, placed.start))
         out.push({
           span: {
             begin: this.#doc.positionAt(placed.segment.date, local),
@@ -168,8 +173,8 @@ export class StreamWindow implements DocumentWindow {
       let payloadPlaced = false
       for (const placed of spans) {
         const segmentEnd = placed.start + placed.segment.prose.text.length
-        const localFrom = Math.max(from, placed.start) - placed.start
-        const localTo = Math.min(to, segmentEnd) - placed.start
+        const localFrom = inSegment(Math.max(from, placed.start) as BufferPosition, placed.start)
+        const localTo = inSegment(Math.min(to, segmentEnd) as BufferPosition, placed.start)
         if (localFrom > localTo) continue
 
         // In raw bytes, then carved around any range-end marker inside it. An
@@ -274,6 +279,16 @@ export class StreamWindow implements DocumentWindow {
     return () => this.#changeHandlers.delete(handler)
   }
 
+  /**
+   * Here the spans are derived from the segments on every call, so they change
+   * exactly when the text does — including for changes this window originated,
+   * which is the case the renderer's half has to work harder for.
+   */
+  onSpansChanged(handler: () => void): Unsubscribe {
+    this.#spansHandlers.add(handler)
+    return () => this.#spansHandlers.delete(handler)
+  }
+
   onReset(handler: () => void): Unsubscribe {
     this.#resetHandlers.add(handler)
     return () => this.#resetHandlers.delete(handler)
@@ -288,6 +303,7 @@ export class StreamWindow implements DocumentWindow {
     const before = this.#text
     this.#rebuild()
     this.#generation = change.to
+    for (const handler of this.#spansHandlers) handler()
     if (this.#originating) return
 
     // **The buffer is told what its PROSE did, not what the document did.**
@@ -358,7 +374,13 @@ export class StreamWindow implements DocumentWindow {
     if (added.length === 0) return
 
     const ordered = direction === 'earlier' ? [...added].reverse() : added
-    const insert = ordered.map(s => s.body).join('')
+    // PROSE, not bodies. The buffer holds prose (D44), and a day arriving from
+    // the corpus is the same as any other text reaching the editor: its marker
+    // syntax is not text. Inserting `s.body` here put raw `<!--tephra:…-->` on
+    // screen for every day loaded by growth — which is every day but the one
+    // being written, so it appeared on opening a notebook that already had
+    // history and nowhere else.
+    const insert = ordered.map(s => s.prose.text).join('')
     const at = direction === 'earlier' ? 0 : this.#text.length
 
     this.#segments = direction === 'earlier' ? [...ordered, ...this.#segments] : [...this.#segments, ...ordered]
@@ -411,8 +433,13 @@ export class StreamWindow implements DocumentWindow {
    * what makes those methods cheap, and it is small enough to send on every
    * change.
    */
-  placement(): readonly { date: DateKey; start: number; length: number }[] {
-    return this.#placed.map(p => ({ date: p.segment.date, start: p.start, length: p.segment.length }))
+  placement(): WindowSnapshot['placement'] {
+    return this.#placed.map(p => ({
+      date: p.segment.date,
+      start: p.start,
+      length: p.segment.length,
+      markers: p.segment.prose.markers,
+    }))
   }
 
   // ── internals ──────────────────────────────────────────────
@@ -422,7 +449,7 @@ export class StreamWindow implements DocumentWindow {
     const parts: string[] = []
     let start = 0
     for (const segment of this.#segments) {
-      placed.push({ segment, start })
+      placed.push({ segment, start: start as BufferPosition })
       parts.push(segment.prose.text)
       start += segment.prose.text.length
     }

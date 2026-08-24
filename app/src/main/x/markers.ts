@@ -1,5 +1,6 @@
 import { applyEdits, type TextEdit } from './text-edits.ts'
 import type { Marker } from './prose.ts'
+import type { Offset } from '../../shared/document-api.ts'
 
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
@@ -473,7 +474,9 @@ export function proseMarkers(body: string): readonly Marker[] {
   const out: Marker[] = []
   for (const m of scanMarkers(body)) {
     if (m.kind === 'heading') continue
-    out.push({ from: m.from, to: m.to, width: m.kind === 'tag-end' ? 0 : 1 })
+    // `RawMarker` offsets are byte offsets into the body, which is what an
+    // `Offset` is; the scan simply predates the brand.
+    out.push({ from: m.from as Offset, to: m.to as Offset, width: m.kind === 'tag-end' ? 0 : 1 })
   }
   return out
 }

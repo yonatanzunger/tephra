@@ -10,8 +10,8 @@
 
 import { EditorView } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
-import { NO_SELECTION, type SelectionState } from '@shared/commands.ts'
-import type { BufferPosition, DocumentWindow, Span } from '@shared/document-api.ts'
+import { NO_SELECTION, type SelectionState } from '../../../shared/commands.ts'
+import type { BufferPosition, DocumentWindow, Span } from '../../../shared/document-api.ts'
 
 /**
  * Report the caret to main whenever it changes, so menu items enable and grey

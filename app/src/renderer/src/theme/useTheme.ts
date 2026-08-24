@@ -13,7 +13,7 @@ import {
   defaultTheme,
   themeTokens,
   type Theme,
-} from '@shared/theme.ts'
+} from '../../../shared/theme.ts'
 import type { Typography } from '../editor/theme'
 
 /**

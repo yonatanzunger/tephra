@@ -19,9 +19,10 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
-import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, EditOrigin } from '@shared/document-api.ts'
+import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
 import { widgetExtensions } from './widgets.ts'
 import { contextMenu, readSelection, reportSelection, type Selection } from './range-commands.ts'
+import { retag, tagExtents } from './tags.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
 
@@ -77,6 +78,7 @@ export function bindEditor(options: BindOptions): Binding {
         highlightSelectionMatches(),
         EditorView.lineWrapping,
         widgetExtensions(),
+        tagExtents(docWindow),
         keymap.of([...defaultKeymap, ...searchKeymap]),
         typographyCompartment.of(tephraTheme(typography)),
         editorToWindow(docWindow, options.onError),
@@ -105,6 +107,14 @@ export function bindEditor(options: BindOptions): Binding {
   const unsubscribeChanged = docWindow.onChanged((edits, origin) => {
     applyFromDocument(view, edits, origin)
   })
+  // Redrawing the extents is its own subscription, because spans change on
+  // edits this editor MADE — where `onChanged` is deliberately silent — as well
+  // as on edits from elsewhere. Deleting a tag's mark is exactly that case: the
+  // buffer loses one character locally, and the tag it stood for goes away in
+  // the answer that comes back a moment later.
+  const unsubscribeSpans = docWindow.onSpansChanged(() => {
+    view.dispatch({ effects: retag.of(null) })
+  })
   const unsubscribeReset = docWindow.onReset(() => {
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: docWindow.text },
@@ -126,6 +136,7 @@ export function bindEditor(options: BindOptions): Binding {
     },
     destroy(): void {
       unsubscribeChanged()
+      unsubscribeSpans()
       unsubscribeReset()
       view.destroy()
     },

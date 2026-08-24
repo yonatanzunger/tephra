@@ -11,7 +11,7 @@
 // created by the caller and handed in; this component only binds a view to it.
 
 import { useEffect, useRef } from 'react'
-import type { BufferPosition, DocumentPosition, DocumentWindow } from '@shared/document-api.ts'
+import type { BufferPosition, DocumentPosition, DocumentWindow } from '../../../shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
 import type { Selection } from './range-commands.ts'
 import type { Typography } from './theme'
