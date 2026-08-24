@@ -1272,3 +1272,30 @@ window produce a batch that overlaps itself, and undo threw rather than undoing
 — reachable by select-all-and-retype twice in a second and out of reach of every
 test written so far. The regression test is three lines and was run against the
 old code first.
+
+## `npm run m2`
+
+M0 and M1 each ended with an acceptance run, and M2's eight feature bullets were
+finished without one. That was not bookkeeping: **the three worst faults of this
+milestone were all invisible to `npm test`** — the segment cache race, `extend`
+handing the editor raw bytes, and comment spans arriving labelled as tags. Each
+needed a real window to appear, and each was found by hand.
+
+Six launches, each against its own fresh notebook so scenes cannot contaminate
+one another, with every assertion made against the files on disk or against what
+the running renderer reported seeing:
+
+| section | what it proves |
+|---|---|
+| tagging | reversible to the byte; overlapping subjects land exactly where selected |
+| comments | the thread reaches the file and the body never reaches the buffer |
+| branching | the text moved rather than copied, and the link resolves |
+| importing | the original is kept and a copy is annotated |
+| printing | a real PDF, from a selection that starts after concealed hashes |
+| removing | deleting a mark removes the tag, its rule, and nothing else |
+
+Its first run failed one check, and the check was wrong rather than the app: it
+looked for `.tx-marker`, the badge class MB replaced with a drawn mark. **An
+assertion about a rendering that no longer exists** — the eighth instrument in
+the list, and a reminder that acceptance scripts rot exactly like the code they
+watch.

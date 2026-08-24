@@ -754,7 +754,10 @@ export async function runVerify(scene: string): Promise<void> {
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       say('boldSurvives', document.querySelector('.cm-content')?.textContent?.includes('Intrinsic S') === true)
       say('rawSyntaxVisible', (document.querySelector('.cm-content')?.textContent ?? '').includes('tephra:tag'))
-      say('badges', [...document.querySelectorAll('.tx-marker')].map(e => e.textContent))
+      // `.tx-marker` was the badge MB replaced with a drawn mark; asking for it
+      // is asking about a rendering that no longer exists.
+      say('marks', document.querySelectorAll('.tx-handle').length)
+      say('rules', document.querySelectorAll('.tx-tag').length)
 
       // And off again. The prompt arrives prefilled with the subject already
       // there, so answering it means pressing Enter.

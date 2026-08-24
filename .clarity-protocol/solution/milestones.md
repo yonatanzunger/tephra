@@ -182,23 +182,33 @@ putting the commentary somewhere else to look at.
 5. ✅ **Settle Q8 and Q9.** Both closed by **D47** — Q8 answered (inline, visible
    markdown body), Q9 dissolved (the pristine artifact is the original file, not
    the conversion). **They no longer block 6 and 7.**
-6. **Comment on a range, rendered in the reserved margin** (R27). MV reserved
-   the space; this fills it. **Design: `comments.md`.** Mostly reuse — comment
-   markers mirror tag markers in prose width, so `partnerRemovals()`,
-   `ProseMap.carve()`, `HandleWidget` and `tagExtents` all apply unchanged, and
-   the rail positions over a gutter band that is already spent.
-   **One question is open inside this item** — whether a body is edited by
-   revealing it in the main column or in the rail. It is Q11 arriving where Q11
-   said it would, and it is settled by building both and reacting.
-7. **Import clipboard text to annotate** (R28) — the cheapest inbound path.
-   Per D47, import stores the original untouched and annotates a copy.
-   `.docx` follows; `.pdf` is v2.
+6. ✅ **Comment on a range, rendered in the reserved margin** (R27). MV reserved
+   the space; this fills it, and because the gutter is padding rather than a
+   track, notes arrive without moving a line. Mostly reuse, as predicted:
+   `partnerRemovals()`, `ProseMap.carve()` and the mark all applied unchanged.
+   **The open question inside this item closed rather than being settled by
+   experiment** — the body is not in the buffer at all (D47), so there is no
+   revealing to choose between, and it is edited where it is rendered.
+7. ✅ **Import clipboard text to annotate** (R28). Per D47 the original is stored
+   untouched and a copy is annotated — so there is no import-shaped object in
+   the system and every gesture works on it unchanged. **Rich content is
+   converted to markdown** rather than flattened, in the renderer, where
+   Chromium's parser already is; ⌘V converts too, since a pasted article whose
+   structure has been discarded is not the same words. `.docx` follows;
+   `.pdf` is v2.
 8. ✅ **`History.restore`**, deferred here from M1. Whole documents only, and it
    truncates the undo stack (`history-api.ts`). A restore is written as the
    present and committed at once, so it is itself a version and **nothing is
    rewritten** — which is what makes the way back from a bad restore another
    restore. A day that did not exist at that version is removed rather than
    emptied.
+9. ✅ **`npm run m2`.** The acceptance run: six real launches, every assertion
+   made against the files on disk or against what the running renderer reported
+   seeing. It exists because `npm test` could not have caught this milestone's
+   worst three faults — a segment cache race, growth handing the editor raw
+   bytes, and a span mislabelled by a fallthrough default were all invisible to
+   the unit and integration suites and all obvious the moment a window was open.
+
 
 - Tag a range with a subject; untag
 - Bookmark a point
