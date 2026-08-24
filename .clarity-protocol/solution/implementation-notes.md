@@ -1228,3 +1228,47 @@ paste: when conversion throws, because this is the most ordinary gesture there i
 and words-without-structure beats a refusal; and when the conversion equals the
 plain-text flavour, since macOS synthesises HTML for a plain-text copy and
 converting it back only adds escapes nobody asked for.
+
+## History.restore (M2.8)
+
+Whole documents, as `history-api.ts` specified: restoring part of an old version
+would need a span addressing text inside a version that was never loaded, which
+carries no live `SessionGeneration` and cannot be a `DocumentPosition` at all.
+
+Three decisions the spec implied but did not spell out:
+
+**It is written as the present, not as a rewrite.** The restore computes what
+the days held then and applies it now, and the service commits it straight away.
+So the restore is itself a version, the mistake it undid is still readable, and
+"the way back from a bad restore is another restore" is literally true. It is
+also flushed immediately: the one thing somebody doing a restore cannot afford is
+for it not to have happened.
+
+**A day that did not exist then is removed, not emptied.** Leaving a file with
+nothing but frontmatter would make "restored to the 14th" mean "restored, plus
+some blank days", and a reader could not tell which happened. Every part is
+removed, not just the first — a day that had been split would otherwise leave its
+tail behind to be read back as a day.
+
+**It resets the windows rather than emitting edits.** A restore can touch every
+day at once, so expressing it as a batch would build a change record the size of
+the corpus for nobody to read. Reset is the path the design already calls
+"expensive, rare, and correct", and a restore is exactly the large external
+change that phrase was written for.
+
+### And it found a bug that had been there since M0
+
+Writing the undo-truncation test turned up `OverlappingEditsError` from the undo
+path, in code untouched by any of this. Adjacent user edits are grouped into one
+undo step, and the merge **concatenated** the two inverses into a single batch —
+but they are expressed against different texts: the newer against the state after
+the newer edit, the older against the state before it. Undoing A-then-B means
+applying B⁻¹ and then A⁻¹ *in sequence*, which `composeEdits` already folds into
+one replacement.
+
+**Typing never noticed**, because appending characters produces inverses that do
+not overlap. Two edits that each replace a whole paragraph within the grouping
+window produce a batch that overlaps itself, and undo threw rather than undoing
+— reachable by select-all-and-retype twice in a second and out of reach of every
+test written so far. The regression test is three lines and was run against the
+old code first.

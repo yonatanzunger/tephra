@@ -16,7 +16,10 @@
 // object ids, and **the mapping between them stops here** — nothing above this
 // layer learns that a day is a file (`architecture.md`).
 
-import { dayFile } from '../w/layout.ts'
+import { dayFile, parseDayFile, STREAM_DIR, type RelPath } from '../w/layout.ts'
+import { compareDateKeys } from '../../shared/dates.ts'
+import type { StreamDocument } from './stream-document.ts'
+import type { RestoreReport } from '../../shared/history-api.ts'
 import { parseFile } from './frontmatter.ts'
 import type { Repository } from '../w/repository.ts'
 import type { DateKey, VersionId } from '../../shared/document-api.ts'
@@ -65,8 +68,48 @@ export class StreamHistory {
     return { dirty: false, lastCommit: await this.#repo.latest() }
   }
 
-  /** M2. Throwing beats pretending — the same rule M0 applied to `branch`. */
-  async restore(): Promise<never> {
-    throw new Error('History.restore arrives in M2; read the version and copy what you need')
+  /** Which days existed at a version, in order. */
+  async daysAt(version: VersionId): Promise<readonly DateKey[]> {
+    const dates = new Set<DateKey>()
+    for (const rel of await this.#repo.filesAt(version, STREAM_DIR as RelPath)) {
+      const ref = parseDayFile(rel)
+      if (ref !== null) dates.add(ref.date)
+    }
+    return [...dates].sort(compareDateKeys)
+  }
+
+  /**
+   * Put the stream back the way it was at a version.
+   *
+   * **Whole documents, not spans.** Restoring part of an old version would need
+   * a span addressing text inside a version that was never loaded, so it
+   * carries no live `SessionGeneration` and cannot be a `DocumentPosition` at
+   * all; making it work means aligning two versions of a document, which is a
+   * real feature and a hard one. The v1 answer to "put that paragraph back" is
+   * `readDay` and paste — what a person does anyway.
+   *
+   * **This does not rewrite history.** It computes what the days held then and
+   * writes that as the present, so the restore is itself a new version and the
+   * one before it is still there. Undoing a restore is another restore, which
+   * is the same shape as the purge procedure's promise and for the same reason:
+   * the repository is append-only until somebody deliberately rewrites it.
+   *
+   * **A day that did not exist then is removed**, not emptied. Leaving a file
+   * behind with nothing but frontmatter would make "restored to the 14th" mean
+   * "restored, plus some blank days", and a reader could not tell which of the
+   * two happened.
+   *
+   * Takes the document rather than a `DocumentId`: resolving an id would need a
+   * registry that does not exist, for a v1 that has one document.
+   */
+  async restore(version: VersionId, doc: StreamDocument): Promise<RestoreReport> {
+    const then = await this.daysAt(version)
+    const now = await doc.dates()
+
+    const target = new Map<DateKey, string | null>()
+    for (const date of then) target.set(date, (await this.readDay(version, date)) ?? '')
+    for (const date of now) if (!target.has(date)) target.set(date, null)
+
+    return { ...(await doc.restoreTo(target)), version }
   }
 }

@@ -998,3 +998,32 @@ test('importing nothing is refused rather than writing an empty attachment', asy
     /nothing to import/,
   )
 })
+
+test('two whole-paragraph edits in quick succession still undo', async t => {
+  // Found by the restore tests, latent since M0. Adjacent user edits are
+  // grouped into one undo step, and the merge CONCATENATED the two inverses
+  // into a single batch — but they are expressed against different texts, so
+  // the batch overlapped itself and undo threw instead of undoing. Typing never
+  // hit it, because appending characters produces inverses that do not overlap.
+  const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'First.\n') })
+  const whole = async (body: string): Promise<void> => {
+    const segment = await doc.segment(DAY)
+    await doc.replace(
+      [
+        {
+          span: { begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, segment.length) },
+          payload: body,
+        },
+      ],
+      'user',
+    )
+  }
+
+  await whole('Second.\n')
+  await whole('Third.\n')
+  assert.equal((await doc.segment(DAY)).body, 'Third.\n')
+
+  // One step, because the two were grouped — and it goes all the way back.
+  assert.notEqual(await doc.undo(), null)
+  assert.equal((await doc.segment(DAY)).body, 'First.\n')
+})

@@ -193,9 +193,12 @@ putting the commentary somewhere else to look at.
 7. **Import clipboard text to annotate** (R28) — the cheapest inbound path.
    Per D47, import stores the original untouched and annotates a copy.
    `.docx` follows; `.pdf` is v2.
-8. **`History.restore`**, deferred here from M1 because spans are M2's native
-   idea. Whole documents only, and it truncates the undo stack (`history-api.ts`).
-   Most likely to slip if M2 runs long.
+8. ✅ **`History.restore`**, deferred here from M1. Whole documents only, and it
+   truncates the undo stack (`history-api.ts`). A restore is written as the
+   present and committed at once, so it is itself a version and **nothing is
+   rewritten** — which is what makes the way back from a bad restore another
+   restore. A day that did not exist at that version is removed rather than
+   emptied.
 
 - Tag a range with a subject; untag
 - Bookmark a point

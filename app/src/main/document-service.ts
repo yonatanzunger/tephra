@@ -19,6 +19,8 @@ import type { Notebook } from './w/notebook.ts'
 import { Wal, type WalRecord } from './w/wal.ts'
 import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
+import { StreamHistory } from './x/history.ts'
+import type { RestoreReport, Version } from '../shared/history-api.ts'
 import { resolveInsideNotebook, type RelPath } from './w/layout.ts'
 import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
@@ -459,6 +461,38 @@ export class DocumentService {
   /** The history, for reading. Null when history is off. */
   get repository(): Repository | null {
     return this.#repo
+  }
+
+  /** Days and versions, rather than paths and object ids (D32). */
+  get history(): StreamHistory | null {
+    return this.#repo === null ? null : new StreamHistory(this.#repo)
+  }
+
+  async versions(limit = 50): Promise<readonly Version[]> {
+    return (await this.history?.versions(limit)) ?? []
+  }
+
+  async readDay(version: VersionId, date: DateKey): Promise<string | null> {
+    return (await this.history?.readDay(version, date)) ?? null
+  }
+
+  /**
+   * Put the stream back the way it was at a version.
+   *
+   * **Flushed immediately, and a version taken straight away.** A restore that
+   * lived only in memory would be undone by a crash, and the one thing someone
+   * doing a restore cannot afford is for it not to have happened. Committing it
+   * at once also makes the restore itself a point to come back FROM, which is
+   * what makes "the way back from a bad restore is another restore" true.
+   */
+  async restore(version: VersionId): Promise<RestoreReport> {
+    const history = this.history
+    if (history === null) throw new Error('this notebook has no history to restore from')
+    const report = await this.#serial(() => history.restore(version, this.#doc))
+    this.#unsavedWork = true
+    await this.flush()
+    await this.#repo?.save(`Restored to ${version.slice(0, 7)}`)
+    return report
   }
 
   /**

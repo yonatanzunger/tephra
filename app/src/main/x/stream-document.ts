@@ -8,7 +8,7 @@
 import type {
   DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
   DocumentWindow, Edit, EditOrigin, Offset, SegmentKey, SessionGeneration, Span,
-  SpanKind, TypedSpan, Unsubscribe, Divergence,
+  SpanKind, TypedSpan, Unsubscribe, VersionId, Divergence,
 } from '../../shared/document-api.ts'
 import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
@@ -18,13 +18,14 @@ import { createHash } from 'node:crypto'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
 import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
+import type { RestoreReport } from '../../shared/history-api.ts'
 import { Segment, type ScannedSpan } from './segment.ts'
 import {
   anchorComment, at, author, insertBlock, insertBlockAt, renderBlock, restate, scanThreadBlocks, splice,
   thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
 } from './comments.ts'
 import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
-import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
+import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
 
 /**
@@ -72,6 +73,9 @@ interface HistoryEntry {
 }
 
 const GROUPING_WINDOW_MS = 1_500
+
+/** Enough parts to cover any real day; the split threshold is 1 MB (D20). */
+const MAX_PARTS = 64
 
 export class StreamDocument implements Document {
   readonly id = 'stream' as DocumentId
@@ -447,10 +451,22 @@ export class StreamDocument implements Document {
       now - this.#lastUserEditAt < GROUPING_WINDOW_MS
 
     if (groupable) {
-      // Merge: keep the earlier `from` and the later inverse, applied first.
+      // **Composed, not concatenated.** The two inverses are expressed against
+      // different texts — the newer one against the state after the newer edit,
+      // the older one against the state before it — so putting them in a single
+      // batch is only accidentally right. Typing never noticed, because
+      // appending characters produces inverses that do not overlap; two edits
+      // that both replace a whole paragraph within the grouping window produce
+      // a batch that overlaps itself, and undo threw `OverlappingEditsError`
+      // rather than doing anything.
+      //
+      // Undoing A-then-B means applying B⁻¹ and then A⁻¹, in that order, which
+      // is what `composeEdits` folds into one replacement — against the body as
+      // it stands now, which is why this must run after `setBody`.
       const merged = new Map(entry.inverse)
-      for (const [date, list] of previous.inverse) {
-        merged.set(date, [...(merged.get(date) ?? []), ...list])
+      for (const [date, older] of previous.inverse) {
+        const body = this.#segments.get(date)?.body ?? ''
+        merged.set(date, composeEdits(body, merged.get(date) ?? [], older))
       }
       this.#undo[this.#undo.length - 1] = {
         change: { ...entry.change, from: previous.change.from },
@@ -1074,6 +1090,50 @@ export class StreamDocument implements Document {
   ): () => void {
     this.#journalHandlers.add(handler)
     return () => this.#journalHandlers.delete(handler)
+  }
+
+  /**
+   * Replace the whole stream with what it held at some version.
+   *
+   * **Not an edit, and deliberately not shaped like one.** A restore can touch
+   * every day at once, so expressing it as a batch of replacements would build
+   * a change record the size of the corpus for nobody to read. It sets bodies
+   * and RESETS the windows — the path the design already calls "expensive,
+   * rare, and correct" — which is exactly what a large external change is.
+   *
+   * **It truncates the undo stack** (`history-api.ts`). Mapping an undo through
+   * a change of this size is not well defined, and a wrong answer there is
+   * silent corruption; the recovery path if a restore was wrong is another
+   * restore, not ⌘Z.
+   */
+  async restoreTo(target: ReadonlyMap<DateKey, string | null>): Promise<RestoreReport> {
+    let restored = 0
+    let removed = 0
+
+    for (const [date, body] of target) {
+      if (body === null) {
+        // Every part, not just the first: a day that had been split leaves the
+        // rest behind otherwise, and they would be read back as its tail.
+        for (let part = 1; part <= MAX_PARTS; part++) {
+          const rel = dayFile(date, part)
+          if (!(await this.#notebook.has(rel))) break
+          await this.#notebook.remove(rel)
+        }
+        this.#segments.delete(date)
+        removed++
+        continue
+      }
+      const segment = await this.segment(date)
+      if (segment.body !== body) restored++
+      segment.setBody(body)
+    }
+
+    this.#undo.length = 0
+    this.#redo.length = 0
+    this.#generation = (this.#generation + 1) as SessionGeneration
+    for (const window of this.#windows) window.reset()
+
+    return { version: '' as VersionId, restored, removed }
   }
 
   async reload(): Promise<void> {

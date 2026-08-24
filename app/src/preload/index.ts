@@ -14,7 +14,8 @@ import type {
   ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
   SpansRequest, WindowChangedMessage, WindowId, WindowSnapshot,
 } from '../shared/ipc.ts'
-import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan } from '../shared/document-api.ts'
+import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
+import type { RestoreReport, Version } from '../shared/history-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
 
 type Handler<T> = (message: T) => void
@@ -92,6 +93,13 @@ const tephra = {
       text: string,
       original: { content: string; ext: string },
     ): Promise<string> => ipcRenderer.invoke(CHANNEL.importText, at, text, original),
+    /** The durable half: commits, and what a day looked like at one (D32). */
+    versions: (limit?: number): Promise<readonly Version[]> =>
+      ipcRenderer.invoke(CHANNEL.versions, limit),
+    readDay: (version: VersionId, date: DateKey): Promise<string | null> =>
+      ipcRenderer.invoke(CHANNEL.readDay, version, date),
+    restore: (version: VersionId): Promise<RestoreReport> =>
+      ipcRenderer.invoke(CHANNEL.restore, version),
     comments: (): Promise<readonly CommentThread[]> => ipcRenderer.invoke(CHANNEL.comments),
     startComment: (span: Span, body: string): Promise<CommentId> =>
       ipcRenderer.invoke(CHANNEL.startComment, span, body),

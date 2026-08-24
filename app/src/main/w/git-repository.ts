@@ -135,6 +135,18 @@ export class GitRepository implements Repository {
   }
 
   /**
+   * Every path the tree held at a version, optionally under one directory.
+   *
+   * `listFiles` walks the commit's tree rather than the working directory, so
+   * this answers about the past and not about now — which is the whole point.
+   */
+  async filesAt(version: VersionId, under?: RelPath): Promise<readonly RelPath[]> {
+    const files = await git.listFiles({ fs, dir: this.#dir, ref: version })
+    const prefix = under === undefined ? '' : `${under.replace(/\/$/, '')}/`
+    return files.filter(file => file.startsWith(prefix)) as RelPath[]
+  }
+
+  /**
    * `'latest'` resolves to the branch rather than to HEAD, which is what makes
    * it useful: a machine that has just received a notebook wants the tip of the
    * line, and after a move to some earlier version HEAD is exactly the wrong

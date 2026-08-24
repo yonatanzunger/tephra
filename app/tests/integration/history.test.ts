@@ -12,6 +12,10 @@ import { join } from 'node:path'
 import { GitRepository } from '../../src/main/w/git-repository.ts'
 import { StreamHistory } from '../../src/main/x/history.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
+import { Notebook } from '../../src/main/w/notebook.ts'
+import { StreamDocument } from '../../src/main/x/stream-document.ts'
+import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import type { DateKey, VersionId  } from '../../src/shared/document-api.ts'
 
 const d = (s: string): DateKey => s as DateKey
@@ -32,6 +36,28 @@ async function history(t: TestContext) {
 
 const write = (dir: string, date: DateKey, body: string, part = 1): Promise<void> =>
   writeFile(join(dir, dayFile(date, part)), dayText(date, body))
+
+/** The same repository, with a live document over it — restore needs both. */
+async function withDocument(t: TestContext) {
+  const base = await history(t)
+  const notebook = await Notebook.open({ root: base.dir, lock: false, watch: false })
+  t.after(() => notebook.close())
+  return { ...base, root: base.dir, doc: new StreamDocument(notebook) }
+}
+
+/** Replace a whole day through the document, so its segments are live. */
+async function setDay(doc: StreamDocument, date: DateKey, body: string): Promise<void> {
+  const segment = await doc.segment(date)
+  await doc.replace(
+    [
+      {
+        span: { begin: doc.positionAt(date, 0), end: doc.positionAt(date, segment.length) },
+        payload: body,
+      },
+    ],
+    'user',
+  )
+}
 
 test('versions come back newest first, carrying their message', async t => {
   const { dir, repo, hist } = await history(t)
@@ -116,10 +142,62 @@ test('an empty repository has no versions, and that is not an error', async t =>
   assert.equal((await hist.status()).lastCommit, null)
 })
 
-test('restore refuses rather than pretending', async t => {
-  // M0's rule, applied again: `untag` and `branch` threw rather than silently
-  // doing nothing. A restore that quietly did nothing would be the worst
-  // possible behaviour for the one feature people reach for in a panic.
-  const { hist } = await history(t)
-  await assert.rejects(() => hist.restore(), /M2/)
+test('restore puts every day back the way it was at a version', async t => {
+  const { doc, hist, repo, root } = await withDocument(t)
+
+  await setDay(doc, DAY, 'The first draft, which will be replaced.\n')
+  await doc.flush()
+  const first = (await repo.save('first')) as VersionId
+
+  await setDay(doc, DAY, 'The second draft, which is a mistake.\n')
+  await setDay(doc, OTHER, 'A day that did not exist at the first version.\n')
+  await doc.flush()
+  await repo.save('second')
+
+  const report = await hist.restore(first, doc)
+  await doc.flush()
+
+  assert.equal(report.version, first)
+  assert.equal(report.restored, 1)
+  assert.equal(report.removed, 1, 'the later day should be gone, not blank')
+
+  assert.match(await readFile(join(root, dayFile(DAY)), 'utf8'), /The first draft/)
+  assert.equal(existsSync(join(root, dayFile(OTHER))), false)
+})
+
+test('a restore is a new version, not a rewrite of the old ones', async t => {
+  const { doc, hist, repo } = await withDocument(t)
+  await setDay(doc, DAY, 'One.\n')
+  await doc.flush()
+  const first = (await repo.save('first')) as VersionId
+  await setDay(doc, DAY, 'Two.\n')
+  await doc.flush()
+  await repo.save('second')
+
+  await hist.restore(first, doc)
+  await doc.flush()
+  await repo.save('restored')
+
+  // The mistake is still in the history. Undoing a restore is another restore,
+  // and that only works if nothing was thrown away.
+  const versions = await hist.versions()
+  assert.equal(versions.length >= 3, true)
+  assert.equal(await hist.readDay(versions[1]!.id, DAY), 'Two.\n')
+})
+
+test('a restore truncates the undo stack', async t => {
+  const { doc, hist, repo } = await withDocument(t)
+  await setDay(doc, DAY, 'One.\n')
+  await doc.flush()
+  const first = (await repo.save('first')) as VersionId
+  await setDay(doc, DAY, 'Two.\n')
+
+  assert.notEqual(await doc.undo(), null, 'there is something to undo before the restore')
+  await setDay(doc, DAY, 'Three.\n')
+
+  await hist.restore(first, doc)
+  // Mapping an undo through a change of this size is not well defined, and a
+  // wrong answer is silent corruption. The way back from a bad restore is
+  // another restore.
+  assert.equal(await doc.undo(), null, 'undo should have nothing to say after a restore')
 })

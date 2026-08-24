@@ -59,6 +59,15 @@ export interface History {
    * defined, and a wrong answer there is silent corruption. The recovery path
    * if a restore was wrong is another restore, not ⌘Z.
    */
-  restore(version: VersionId, doc: DocumentId): Promise<void>
+  restore(version: VersionId, doc: DocumentId): Promise<RestoreReport>
   status(): Promise<{ readonly dirty: boolean; readonly lastCommit: VersionId | null }>
+}
+
+/** What a restore did, so the reader is told rather than left to notice. */
+export interface RestoreReport {
+  readonly version: VersionId
+  /** Days whose text was put back. */
+  readonly restored: number
+  /** Days that did not exist at that version and were removed. */
+  readonly removed: number
 }

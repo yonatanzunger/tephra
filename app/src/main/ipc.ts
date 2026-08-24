@@ -8,7 +8,7 @@ import { verifyMode } from './verify-mode.ts'
 import type { Clipboard, PrintJob } from '../shared/ipc.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
-import type { DocumentPosition, Span } from '../shared/document-api.ts'
+import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
 import { StreamDocument } from './x/stream-document.ts'
 
 export { DocumentService }
@@ -67,6 +67,11 @@ export function registerDocumentIpc(service: DocumentService): void {
       service.importText(at, text, original),
   )
 
+  ipcMain.handle(CHANNEL.versions, (_e, limit?: number) => service.versions(limit))
+  ipcMain.handle(CHANNEL.readDay, (_e, version: VersionId, date: DateKey) =>
+    service.readDay(version, date),
+  )
+  ipcMain.handle(CHANNEL.restore, (_e, version: VersionId) => service.restore(version))
   ipcMain.handle(CHANNEL.comments, () => service.comments())
   if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())
   // The system's own picker, which knows every emoji and how to search them.

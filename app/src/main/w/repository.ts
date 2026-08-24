@@ -69,6 +69,15 @@ export interface Repository {
   contentAt(version: VersionId, file: RelPath): Promise<string | null>
 
   /**
+   * Every file the notebook held at a version, optionally under one directory.
+   *
+   * Restoring needs the SET, not just the contents: a day that exists now and
+   * did not exist then has to go, and nothing can work that out by asking about
+   * days it already knows about.
+   */
+  filesAt(version: VersionId, under?: RelPath): Promise<readonly RelPath[]>
+
+  /**
    * Make the working tree match a version.
    *
    * This is a W-layer capability, not the user-facing restore. What it means to

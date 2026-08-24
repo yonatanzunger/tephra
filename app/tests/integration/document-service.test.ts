@@ -8,18 +8,18 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/document-service.ts'
+import { DocumentService, type ServiceOptions } from '../../src/main/document-service.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import type { BufferPosition, DateKey } from '../../src/shared/document-api.ts'
+import type { BufferPosition, DateKey, VersionId } from '../../src/shared/document-api.ts'
 
 const bp = (n: number): BufferPosition => n as BufferPosition
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, options: ServiceOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-svc-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
   t.after(() => nb.close())
-  const service = new DocumentService(nb)
+  const service = new DocumentService(nb, options)
   const today = StreamDocument.today()
   const snapshot = await service.openWindow({ first: today, last: today })
   return { service, snapshot, root, today, nb }
@@ -163,4 +163,54 @@ test('continuous typing still reaches disk, because quiescence is not the only t
   }
   const onDisk = await readFile(join(root, dayFile(today as DateKey)), 'utf8')
   assert.match(onDisk, /x{5,}/, 'the ceiling fired even though quiescence never did')
+})
+
+test('a restore is flushed and committed at once, and is itself a version', async t => {
+  // Someone doing a restore cannot afford for it not to have happened: one that
+  // lived only in memory would be undone by a crash. Committing it straight
+  // away is also what makes "the way back from a bad restore is another
+  // restore" true, since the restore becomes a point to come back FROM.
+  // Short version timers: the tier's real clock is five minutes, and a pending
+  // timer of that size keeps the test process alive long after the assertions
+  // are done.
+  const { service, snapshot, root, today } = await fixture(t, {
+    versionQuiesceMs: 60,
+    versionMaxMs: 200,
+  })
+  await service.openHistory()
+
+  await service.edit({
+    id: snapshot.id,
+    generation: snapshot.generation,
+    edits: [{ from: bp(0), to: bp(0), insert: 'The good version.\n' }],
+    origin: 'user',
+  })
+  await service.flush()
+  const first = (await service.repository?.save('first')) as VersionId
+
+  const after = await service.openWindow({ first: today, last: today })
+  await service.edit({
+    id: after.id,
+    generation: after.generation,
+    edits: [{ from: bp(0), to: bp(0), insert: 'A regrettable addition.\n' }],
+    origin: 'user',
+  })
+  await service.flush()
+  await service.repository?.save('second')
+
+  const report = await service.restore(first)
+  assert.equal(report.version, first)
+  const now = await readFile(join(root, dayFile(today)), 'utf8')
+  assert.match(now, /The good version\./)
+  assert.doesNotMatch(now, /regrettable/, 'the restore did not take')
+
+  // Three versions, and the regrettable one is still readable — nothing was
+  // rewritten, which is the promise the purge procedure depends on too.
+  // Four: opening the notebook is itself a version, then first, second, and
+  // the restore. Nothing was rewritten — which is the promise the purge
+  // procedure depends on too.
+  const versions = await service.versions()
+  assert.equal(versions.length, 4)
+  assert.match(versions[0]?.reason ?? '', /^Restored to/)
+  assert.match((await service.readDay(versions[1]!.id, today)) ?? '', /regrettable/)
 })
