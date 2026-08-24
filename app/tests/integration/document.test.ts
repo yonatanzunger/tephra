@@ -537,3 +537,100 @@ test('branching is one undo step, and undo leaves the file rather than the hole'
   // and undoing into that state is the same trade: the branched file stays.
   assert.equal(await readFile(join(root, 'notes/that.md'), 'utf8') !== '', true)
 })
+
+// ── markers are not text (D44) ───────────────────────────────
+//
+// Each of these is one of the faults that made markers-in-the-buffer
+// untenable. They are written against a real window and a real file, because
+// every one of them was a disagreement between what the editor held and what
+// was on disk.
+
+const TAGGED = dayText(
+  '2026-03-14',
+  'One two <!--tephra:tag-start subject-->three four five<!--tephra:tag-end subject--> six seven.\n',
+)
+
+test('the buffer holds prose: no marker syntax reaches the editor', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: TAGGED })
+  const w = await windowOver(doc, DAY)
+  assert.equal(w.text, `One two ${'￼'}three four five six seven.\n`)
+  assert.equal(w.text.includes('tephra'), false, 'a copy of this buffer cannot carry a marker')
+})
+
+test('positions cross both ways, including inside a marker', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: TAGGED })
+  const w = await windowOver(doc, DAY)
+  for (let i = 0; i <= w.text.length; i++) {
+    assert.equal(w.toBuffer(w.toDocument(bp(i))), i, `buffer position ${i}`)
+  }
+  // A document position in the middle of the marker's bytes has no place of its
+  // own in prose, so it lands on the handle.
+  const insideMarker = TAGGED.indexOf('tag-start') + 3 - TAGGED.indexOf('One')
+  assert.equal(w.toBuffer(doc.positionAt(DAY, insideMarker)), w.text.indexOf('￼'))
+})
+
+test('deleting across the end of a range shrinks it instead of orphaning it', async t => {
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: TAGGED })
+  const w = await windowOver(doc, DAY)
+  // Sweep from inside the tag to past its end — the deletion contains the
+  // `tag-end` marker's bytes. Left alone, the unmatched `tag-start` would run
+  // to the end of the DAY, silently tagging everything after it.
+  const from = w.text.indexOf('four')
+  const to = w.text.indexOf('seven')
+  await w.edit([{ from: bp(from), to: bp(to), insert: '' }], 'user')
+  await doc.flush()
+
+  const written = await readFile(join(root, dayFile(DAY)), 'utf8')
+  assert.equal((written.match(/tag-start/g) ?? []).length, 1)
+  assert.equal((written.match(/tag-end/g) ?? []).length, 1, 'the pair survived the deletion')
+  const tags = await doc.spans('tag')
+  assert.equal(tags.length, 1)
+  assert.equal(await tagged(doc, w), 'three ', 'the range simply got shorter')
+})
+
+test('deleting the handle removes the whole tag, in one undo step', async t => {
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: TAGGED })
+  const w = await windowOver(doc, DAY)
+  const handle = w.text.indexOf('￼')
+
+  // Backspace over the mark. Nothing here knows about a keymap: this is the
+  // edit any keymap produces, and vim's `x` produces the same one.
+  await w.edit([{ from: bp(handle), to: bp(handle + 1), insert: '' }], 'user')
+  await doc.flush()
+
+  assert.deepEqual(await doc.spans('tag'), [], 'the tag is gone, not half gone')
+  const written = await readFile(join(root, dayFile(DAY)), 'utf8')
+  assert.equal(written.includes('tephra:tag'), false, 'and so are both markers')
+  assert.match(written, /One two three four five six seven\./, 'the prose is untouched')
+
+  await doc.undo()
+  await doc.flush()
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), TAGGED, 'one operation, one undo')
+})
+
+test('typing at the trailing boundary extends the range', async t => {
+  const { doc } = await fixture(t, { [dayFile(DAY)]: TAGGED })
+  const w = await windowOver(doc, DAY)
+  const end = w.text.indexOf(' six')
+  await w.edit([{ from: bp(end), to: bp(end), insert: ' and six' }], 'user')
+  assert.equal(await tagged(doc, w), 'three four five and six')
+})
+
+test('a handle pasted in from outside is not written to the file', async t => {
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'Clean.\n') })
+  const w = await windowOver(doc, DAY)
+  await w.edit([{ from: bp(0), to: bp(0), insert: `pasted ￼ text ` }], 'user')
+  await doc.flush()
+  const written = await readFile(join(root, dayFile(DAY)), 'utf8')
+  assert.equal(written.includes('￼'), false)
+  assert.match(written, /pasted {2}text Clean\./)
+})
+
+/** The text a tag actually covers, with any marker syntax taken back out. */
+async function tagged(doc: StreamDocument, w: DocumentWindow): Promise<string> {
+  const span = (await doc.spans('tag'))[0]
+  if (span === undefined) return ''
+  const from = w.toBuffer(span.span.begin)
+  const to = w.toBuffer(span.span.end)
+  return w.text.slice(from as number, to as number).replace(/￼/g, '')
+}

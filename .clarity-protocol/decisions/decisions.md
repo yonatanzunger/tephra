@@ -1175,3 +1175,64 @@ Still owed, and safely deferrable to M6 since nothing before then depends on
 them: `goal/requirements.md` (R26's reach, and the zero-routing framing recorded
 above) and `solution/architecture.md` (the W wrapper, and a trust boundary that
 now has a second shape).
+
+## D44: Tephra's markers are annotations, not text — the buffer carries prose only
+
+**Date:** 2026-08-23
+**Status:** decided
+
+**Decision.** A marker's bytes never reach the editor's buffer. The window hands
+Z **prose**, plus the typed spans it already reports; the marks and the extent
+of a tagged range are drawn from those spans. The file is unchanged — markers
+are still HTML comments in the text, exactly as format-spec describes.
+
+**Why, having tried the other thing first.** Markers were widgets over their own
+raw bytes, revealed when the caret came near. That produced, in order of
+discovery: a line that reflowed by twenty-five characters every time the caret
+passed a tag, which is D42's guarantee broken inside the line; raw comment
+syntax on screen at exactly the moment a tag was applied, since the selection is
+by definition touching it; markers carried into the clipboard by an ordinary
+copy, where pasting one produced an unmatched `tag-start` that swallows the rest
+of a day; and an ordinary deletion able to orphan a marker, with the same
+consequence. Each has a patch. None of the patches is *reasons*, and they
+compound.
+
+**And one that has no patch.** Inline widgets are marked atomic, but
+`@replit/codemirror-vim` does its own offset arithmetic and never consults
+`atomicRanges` — measured in the M0 spike and recorded at the top of
+`widgets.ts`. With vim on, the caret walks *inside* a hidden comment and `x`
+cuts a character out of it. Unrendering under the cursor exists partly to make
+that survivable. Markers that are not in the buffer cannot be walked into.
+
+**The line this draws.** Tephra's syntax is not text; markdown is. Asterisks are
+something a person types and may want to edit, so they stay, and Q11 remains
+open about them. `<!--tephra:tag-start …-->` is machine syntax nobody should
+ever edit by hand — the operation to remove a tag is a command, not a text edit
+— so it leaves. Raw mode still shows the bytes, because that is a view of the
+file rather than a place to write.
+
+**A marker has a prose width, and this is what makes the gesture work.** A
+marker that is a *handle* — a bookmark, the start of a tagged range — occupies
+**one** character of prose, drawn as a small mark. A marker that is only a
+*boundary* — the end of a tagged range — occupies **none** and cannot be
+addressed at all: the caret never lands on it and no keystroke can reach it,
+because the underline already shows where the range ends and a second glyph
+would be redundant twice over.
+
+So the handle **is a character**, in the buffer, for motion, selection and
+deletion — not a widget pretending to be one. Which means the removal gesture
+lives in the WINDOW, not in a keymap: an edit that removes a handle is turned
+into `untag` or `removeAnchor` rather than applied as text. Backspace, `x`,
+`dd`, a selection dragged over it and overtyped, and any keymap that arrives
+later all get the gesture for free, and vim gets it identically because vim sees
+exactly one character where the mark is.
+
+**Generalisable, which is the reason to build it as its own layer.** Comments
+(R27) want the same treatment: an anchor in the prose that is a handle, a body
+that is not text. Building the prose/raw mapping as a tested object of its own
+means comments inherit it rather than re-inventing it.
+
+**Cost, stated plainly.** `StreamWindow` gains a coordinate mapping in both
+directions, and every edit crossing a marker has to map through it correctly.
+That is where the bugs will be, so it is built and tested on its own before
+anything is drawn on top of it.

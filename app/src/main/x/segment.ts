@@ -7,7 +7,8 @@
 
 import type { DateKey, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
-import { resolveAnchors, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
+import { proseMarkers, resolveAnchors, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
+import { Prose } from './prose.ts'
 import { findAnomalies } from './anomalies.ts'
 import { splitBody, SPLIT_THRESHOLD } from './split.ts'
 import { dayFile } from '../w/layout.ts'
@@ -27,6 +28,7 @@ export class Segment {
 
   /** Lazily computed and dropped on every edit; scanning is cheap, staleness is not. */
   #markers: readonly RawMarker[] | null = null
+  #prose: Prose | null = null
 
   private constructor(date: DateKey, rel: RelPath, original: string) {
     this.date = date
@@ -69,6 +71,18 @@ export class Segment {
     return this.#body.length
   }
 
+  /**
+   * The prose view of this body — the text with marker syntax taken out and
+   * handles standing in for the markers a person can point at (D44).
+   *
+   * Cached beside the marker scan and invalidated with it, because the two are
+   * derived from the same walk of the same string.
+   */
+  get prose(): Prose {
+    if (this.#prose === null) this.#prose = Prose.of(this.#body, proseMarkers(this.#body))
+    return this.#prose
+  }
+
   get dirty(): boolean {
     return this.#dirty
   }
@@ -109,6 +123,7 @@ export class Segment {
     this.#body = body
     this.#dirty = true
     this.#markers = null
+    this.#prose = null
   }
 
   /** The bytes to write: original file with only the body replaced. */
@@ -160,6 +175,12 @@ export class Segment {
     this.#body = this.#parsed.body
     this.#dirty = false
     this.#markers = null
+    this.#prose = null
+  }
+
+  /** The markers in this body, cached beside the prose view. */
+  markers(): readonly RawMarker[] {
+    return this.#scan()
   }
 
   #scan(): readonly RawMarker[] {

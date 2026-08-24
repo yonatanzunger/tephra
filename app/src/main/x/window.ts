@@ -14,11 +14,17 @@ import type {
 } from '../../shared/document-api.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
 import type { Segment } from './segment.ts'
+import { stripHandles } from './prose.ts'
+import { minimalReplacement } from './text-edits.ts'
 import type { StreamDocument } from './stream-document.ts'
 
 interface Placed {
   readonly segment: Segment
-  /** Where this segment's body starts in the buffer. */
+  /**
+   * Where this segment starts in the buffer — a PROSE offset (D44). The buffer
+   * holds prose; the segment's body holds bytes; `segment.prose` crosses
+   * between them, and this is the only place the two are added together.
+   */
   readonly start: number
 }
 
@@ -91,13 +97,13 @@ export class StreamWindow implements DocumentWindow {
     const offset = Math.min(Math.max(0, at as number), this.#text.length)
     const placed = this.#placed[0] === undefined ? null : this.#segmentAt(offset)
     if (placed === null) return this.#doc.positionAt('' as DateKey, 0)
-    return this.#doc.positionAt(placed.segment.date, offset - placed.start)
+    return this.#doc.positionAt(placed.segment.date, placed.segment.prose.toRaw(offset - placed.start))
   }
 
   toBuffer(at: DocumentPosition): BufferPosition | null {
     for (const placed of this.#placed) {
       if (placed.segment.date === at.segment) {
-        return (placed.start + (at.offset as number)) as BufferPosition
+        return (placed.start + placed.segment.prose.toProse(at.offset as number)) as BufferPosition
       }
     }
     return null
@@ -136,39 +142,57 @@ export class StreamWindow implements DocumentWindow {
       // segments at a boundary and put the text in the earlier one — so the
       // caret sat at the start of today while what was typed went into
       // yesterday's file. Two implementations of one convention is one too many.
+      // Handles are the editor's, not the file's, and may not be written into
+      // it — a paste carrying one would otherwise put U+FFFC in the corpus.
+      const insert = stripHandles(edit.insert)
+
       if (from === to) {
         const placed = this.#segmentAt(from)
-        const local = from - placed.start
+        // Leftmost, which is the trailing-boundary rule: text typed at the end
+        // of a tagged range lands INSIDE it, so continuing a tagged sentence
+        // keeps the subject (D44).
+        const local = placed.segment.prose.toRaw(from - placed.start)
         out.push({
           span: {
             begin: this.#doc.positionAt(placed.segment.date, local),
             end: this.#doc.positionAt(placed.segment.date, local),
           },
-          payload: edit.insert,
+          payload: insert,
         })
         continue
       }
 
-      const touched = this.#placed.filter(p => from < p.start + p.segment.length && to > p.start)
+      const touched = this.#placed.filter(p => from < p.start + p.segment.prose.text.length && to > p.start)
       const spans = touched.length > 0 ? touched : [this.#segmentAt(from)]
 
       let payloadPlaced = false
       for (const placed of spans) {
-        const segmentEnd = placed.start + placed.segment.length
+        const segmentEnd = placed.start + placed.segment.prose.text.length
         const localFrom = Math.max(from, placed.start) - placed.start
         const localTo = Math.min(to, segmentEnd) - placed.start
         if (localFrom > localTo) continue
-        // The inserted text goes to the first touched segment; later segments in
-        // a crossing edit only lose their prefix.
-        const payload = payloadPlaced ? '' : edit.insert
-        payloadPlaced = true
-        out.push({
-          span: {
-            begin: this.#doc.positionAt(placed.segment.date, localFrom),
-            end: this.#doc.positionAt(placed.segment.date, localTo),
-          },
-          payload,
-        })
+
+        // In raw bytes, then carved around any range-end marker inside it. An
+        // ordinary deletion sweeping past the end of a tagged range would
+        // otherwise take the `tag-end` with it, and an unmatched `tag-start`
+        // runs to the end of its DAY — so deleting a sentence would silently
+        // tag everything after it. Handles are deliberately NOT carved out:
+        // deleting one means "remove this tag", which X turns into the removal
+        // of both markers (D44).
+        const prose = placed.segment.prose
+        for (const piece of prose.carve(prose.toRaw(localFrom), prose.toRaw(localTo))) {
+          // The inserted text goes to the first piece of the first touched
+          // segment; everything after it only loses text.
+          const payload = payloadPlaced ? '' : insert
+          payloadPlaced = true
+          out.push({
+            span: {
+              begin: this.#doc.positionAt(placed.segment.date, piece.from),
+              end: this.#doc.positionAt(placed.segment.date, piece.to),
+            },
+            payload,
+          })
+        }
       }
     }
     return out
@@ -266,28 +290,29 @@ export class StreamWindow implements DocumentWindow {
     this.#generation = change.to
     if (this.#originating) return
 
-    const edits: BufferEdit[] = []
-    for (const edit of change.edits) {
-      const from = this.toBuffer(edit.span.begin)
-      const to = this.toBuffer(edit.span.end)
-      if (from === null || to === null) continue // landed outside this window
-      edits.push({ from, to, insert: edit.payload })
-    }
-    if (edits.length === 0 && before === this.#text) return
-
-    // My text changed, but none of the change's edits could be expressed in my
-    // coordinates. That should not happen — and if it does, sending an empty
-    // edit list is the one response that cannot fix it: the renderer skips
-    // empty lists, so the editor's buffer would stay at the old text while
-    // RemoteWindow's copy moved to the new one. The next keystroke would then
-    // be computed against a buffer nobody else believes in, and the length
-    // check would turn it into a DesyncError several steps from the cause.
+    // **The buffer is told what its PROSE did, not what the document did.**
     //
-    // A reset is the honest answer: expensive, rare, and correct.
-    if (edits.length === 0) {
-      for (const handler of this.#resetHandlers) handler()
-      return
-    }
+    // A document edit carries raw bytes — `<!--tephra:tag-start …-->` — and a
+    // span in raw offsets. Handing those to the editor inserts marker syntax
+    // into a buffer that holds prose, and maps the span through a mapping that
+    // has already changed underneath it. Both happened at once: applying a tag
+    // put the comment on screen as literal text AND duplicated the sentence it
+    // covered, because `from` and `to` had collapsed to one place while the
+    // payload was still the raw insertion.
+    //
+    // Diffing the two prose texts cannot make either mistake, since it never
+    // consults the document's coordinates at all. Only changes this window did
+    // NOT originate reach here — typing returns above — so this is off the
+    // typing path.
+    const replacement = minimalReplacement(before, this.#text)
+    if (replacement === null) return
+    const edits: BufferEdit[] = [
+      {
+        from: replacement.from as BufferPosition,
+        to: replacement.to as BufferPosition,
+        insert: replacement.insert,
+      },
+    ]
     for (const handler of this.#changeHandlers) handler(edits, change.origin)
   }
 
@@ -398,8 +423,8 @@ export class StreamWindow implements DocumentWindow {
     let start = 0
     for (const segment of this.#segments) {
       placed.push({ segment, start })
-      parts.push(segment.body)
-      start += segment.length
+      parts.push(segment.prose.text)
+      start += segment.prose.text.length
     }
     this.#placed = placed
     this.#text = parts.join('')

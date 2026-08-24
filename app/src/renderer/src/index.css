@@ -382,17 +382,6 @@ body {
 /* Tephra's markers: present, named, out of the way. Zero-width in the text but
    a real thing in the document, so the reader has to be able to see one before
    they delete it by accident. */
-.tx-marker {
-  font-family: var(--font-ui); font-size: .62em; letter-spacing: .04em;
-  vertical-align: 0.28em; white-space: nowrap;
-  padding: .08em .42em; margin: 0 .12em; border-radius: 999px;
-  color: rgb(var(--surface)); background: rgb(var(--accent) / .82);
-}
-.tx-marker-tag-start, .tx-marker-tag-end {
-  color: rgb(var(--text-heading)); background: rgb(var(--accent) / .18);
-}
-.tx-marker-tag-end { opacity: .6; }
-
 /* Chrome buttons that carry a word as well as a glyph. The proof sheet had
    "≡ Sections" and it read better than the bare hamburger, which asks the
    reader to remember what it opens. */
@@ -432,3 +421,17 @@ body {
   text-underline-offset: 0.18em; text-decoration-color: rgb(var(--accent) / .45);
 }
 .tx-link:hover { text-decoration-color: rgb(var(--accent)); }
+
+/* A marker you can point at: a bookmark, or the start of a tagged range.
+   Drawn rather than typeset — a dingbat from a symbol font would arrive with
+   foreign metrics in the middle of a serif face, and would be far more ink than
+   this wants to be. One character wide, always present, so the line never
+   reflows as the caret goes past (D42). */
+.tx-handle {
+  display: inline-block; width: .62em; height: .62em; vertical-align: .04em;
+  margin: 0 .06em; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgb(var(--accent) / .55);
+  background:
+    radial-gradient(circle at 50% 50%, rgb(var(--accent) / .9) 0 28%, transparent 30%);
+}
+.tx-handle:hover { border-color: rgb(var(--accent)); background-color: rgb(var(--accent) / .12); }

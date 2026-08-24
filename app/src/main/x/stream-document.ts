@@ -15,11 +15,48 @@ import { StalePositionError, offsetOf } from '../../shared/positions.ts'
 import type { Notebook } from '../w/notebook.ts'
 import { dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
-import { placeMarker, tagBody } from './markers.ts'
+import { markerRemoval, placeMarker, subjectKey, tagBody } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { Segment } from './segment.ts'
 import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
+
+/**
+ * When an edit removes the start of a tagged range, the edits that remove its
+ * end as well.
+ *
+ * **The pairing invariant is X's to keep, not the editor's.** Deleting a handle
+ * is how a person removes a tag (D44), and it arrives here as an ordinary
+ * deletion covering the marker's bytes — from backspace, from `x`, from a
+ * selection overtyped, from any keymap. Left alone it would strip the start and
+ * orphan the end; an unmatched `tag-end` is ignored, so the tag would appear to
+ * vanish while leaving litter in the file forever.
+ *
+ * Only deletions pay for this, and they pay with a cached scan: an insertion
+ * cannot remove anything, so typing never reaches it.
+ */
+function partnerRemovals(segment: Segment, edits: readonly TextEdit[]): TextEdit[] {
+  if (edits.every(e => e.from === e.to)) return []
+  const markers = segment.markers()
+  const covered = (m: { from: number; to: number }): boolean =>
+    edits.some(e => m.from >= e.from && m.to <= e.to)
+
+  const out: TextEdit[] = []
+  for (const marker of markers) {
+    if (marker.kind !== 'tag-start' || !covered(marker)) continue
+    // Alternation is maintained everywhere else (D21), so a subject's partner
+    // is simply its next end.
+    const partner = markers.find(
+      other =>
+        other.kind === 'tag-end' &&
+        other.from >= marker.to &&
+        subjectKey(other.name) === subjectKey(marker.name),
+    )
+    if (partner === undefined || covered(partner)) continue
+    out.push(markerRemoval(segment.body, partner))
+  }
+  return out
+}
 
 /** One undo step: what happened, and what puts it back. */
 interface HistoryEntry {
@@ -325,7 +362,7 @@ export class StreamDocument implements Document {
       if (segment.diverged) {
         throw new Error(`${segment.rel} changed on disk while you were editing it; it is not being written`)
       }
-      const sorted = [...list].sort((a, b) => a.from - b.from)
+      const sorted = [...list, ...partnerRemovals(segment, list)].sort((a, b) => a.from - b.from)
       inverse.set(date, invertEdits(segment.body, sorted))
       // Emitted here because HERE is the only place the pre-edit length still
       // exists. Anywhere downstream the edit has already been applied, and the

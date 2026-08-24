@@ -108,6 +108,21 @@ export interface Span {
 // Spans — inferred from the text, never stored beside it (D20)
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * The character standing for a marker a person can point at (D44).
+ *
+ * The buffer holds PROSE — marker syntax never reaches it — but a bookmark and
+ * the start of a tagged range are things you step onto and delete, so each
+ * occupies exactly one character. U+FFFC OBJECT REPLACEMENT CHARACTER is
+ * Unicode's own name for a placeholder where something that is not text
+ * belongs.
+ *
+ * It exists only in the buffer: it is never written to a file, and text
+ * arriving from outside has it stripped, so its presence always means a marker
+ * and never means itself.
+ */
+export const HANDLE = '\ufffc'
+
 export type SpanKind = 'date' | 'heading' | 'anchor' | 'tag'
 
 /** No id: inference leaves nothing for one to identify (D21). */

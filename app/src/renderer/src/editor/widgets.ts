@@ -22,6 +22,7 @@ import type { Range } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import katex from 'katex'
+import { HANDLE } from '@shared/document-api.ts'
 
 export const rebuildWidgets = StateEffect.define<null>()
 
@@ -71,11 +72,10 @@ const CODE_SPAN = /`+[^`\n]*`+/g
 // it an image, which is handled above.
 const LINK = /(?<!!)\[([^\]\n]+)\]\(([^)\s]+)\)/g
 
-// Tephra's own markers. D16 and format-spec both say these are rendered as
-// widgets away from the cursor — "so it is rarely seen" — and until now they
-// were not, so bookmarking a phrase left `<!--tephra:mark …-->` sitting in the
-// middle of the sentence.
-const TEPHRA_MARKER = /<!--tephra:(mark|tag-start|tag-end)[ \t]+([^\n]*?)-->/g
+// A marker's HANDLE — one character of prose standing for a bookmark or the
+// start of a tagged range (D44). There is no marker SYNTAX to look for here:
+// the buffer holds prose, so `<!--tephra:…-->` never reaches this file.
+const HANDLE_CHAR = new RegExp(HANDLE, 'g')
 
 const katexCache = new Map<string, string>()
 
@@ -194,39 +194,42 @@ const insideCode = (spans: readonly [number, number][], at: number): boolean =>
   spans.some(([from, to]) => at >= from && at < to)
 
 /** A marker, as the reader should see it: present, named, and out of the way. */
-class MarkerWidget extends WidgetType {
-  readonly #kind: string
-  readonly #name: string
-
-  constructor(kind: string, name: string) {
-    super()
-    this.#kind = kind
-    this.#name = name
-  }
-
-  override eq(other: MarkerWidget): boolean {
-    return other.#kind === this.#kind && other.#name === this.#name
+/**
+ * A marker you can point at, drawn.
+ *
+ * Deliberately not a dingbat: ✪ and ❂ come from a symbol font, so in the middle
+ * of a serif face they arrive with foreign metrics and an unpredictable
+ * baseline, and both are a great deal of ink for something that should be
+ * quiet. Drawn in CSS it inherits the theme, sits where we put it, and is the
+ * same on every machine.
+ *
+ * It carries no name. The name is not in the buffer — it is in the span — and
+ * asking for it is what clicking the mark is for.
+ */
+class HandleWidget extends WidgetType {
+  override eq(): boolean {
+    return true // every handle is drawn identically; only its position differs
   }
 
   toDOM(): HTMLElement {
-    const span = document.createElement('span')
-    span.className = `tx-marker tx-marker-${this.#kind}`
-    span.textContent = this.#name
-    span.title = `${this.#kind === 'mark' ? 'Bookmark' : 'Tag'}: ${this.#name}`
-    return span
+    const el = document.createElement('span')
+    el.className = 'tx-handle'
+    el.setAttribute('aria-label', 'marker')
+    return el
   }
 
+  /** The click belongs to the mark, not to the editor underneath it. */
   override ignoreEvent(): boolean {
-    return false
+    return true
   }
 }
 
 /**
  * A markdown link, drawn as the words it names.
  *
- * Following it is main's job, not the renderer's: what a target means — whether
- * it is inside the notebook at all — is a question about the notebook, and the
- * renderer has no business resolving paths.
+ * Following it is main's job: what a target means — whether it is inside the
+ * notebook at all — is a question about the notebook, and the renderer has no
+ * business resolving paths.
  */
 class LinkWidget extends WidgetType {
   readonly #label: string
@@ -345,21 +348,16 @@ function buildInline(view: EditorView): DecorationSet {
 
       const spans = codeSpans(text)
 
-      // Tephra's markers, shown as a small badge rather than as raw comment
-      // syntax. A badge rather than nothing at all because a bookmark you
-      // cannot see is a bookmark you will delete by accident — the marker is
-      // zero-width in the text but it is a real thing in the document, and the
-      // reader is the one who has to know it is there.
-      TEPHRA_MARKER.lastIndex = 0
-      while ((m = TEPHRA_MARKER.exec(text)) !== null) {
-        if (insideCode(spans, m.index)) continue
+      // The handle, drawn. It is one character of prose and it is always
+      // rendered — there is no raw form to fall back to, which is why the line
+      // never reflows as the caret passes (D42).
+      HANDLE_CHAR.lastIndex = 0
+      while ((m = HANDLE_CHAR.exec(text)) !== null) {
         const from2 = line.from + m.index
-        const to2 = from2 + m[0].length
-        if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
         decos.push({
           from: from2,
-          to: to2,
-          deco: Decoration.replace({ widget: new MarkerWidget(m[1] as string, m[2] as string) }),
+          to: from2 + 1,
+          deco: Decoration.replace({ widget: new HandleWidget() }),
         })
       }
 

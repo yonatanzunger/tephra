@@ -1,4 +1,5 @@
 import { applyEdits, type TextEdit } from './text-edits.ts'
+import type { Marker } from './prose.ts'
 
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
@@ -311,7 +312,7 @@ export function tagBody(
 
   // Everything below happens on the body with this subject's markers gone, so
   // that no offset depends on a marker that is about to move.
-  const cuts = mine.map(m => removal(body, m))
+  const cuts = mine.map(m => markerRemoval(body, m))
   const clean = applyEdits(body, cuts)
   const project = (offset: number): number => {
     let shed = 0
@@ -380,7 +381,7 @@ function placed(
  * body is given its own line by `placeMarker` and there is nowhere else to put
  * it.
  */
-function removal(body: string, m: RawMarker): TextEdit {
+export function markerRemoval(body: string, m: RawMarker): TextEdit {
   const ownsLine = (m.from === 0 || body[m.from - 1] === '\n') && body[m.to] === '\n'
   return { from: m.from, to: ownsLine ? m.to + 1 : m.to, insert: '' }
 }
@@ -456,4 +457,23 @@ function canAppendTo(line: string): boolean {
   if (trimmed.startsWith('|')) return false // a table row
   if (/^ {4,}/.test(line)) return false // inside an indented code block
   return true
+}
+
+/**
+ * The body's markers as the prose mapping wants them (D44).
+ *
+ * Widths are assigned by role, not by kind: a bookmark and the start of a tagged
+ * range are HANDLES and take one character of prose, because they are what a
+ * person points at and deletes; the end of a range is a BOUNDARY and takes
+ * none, because the underline already shows where the range stops.
+ *
+ * Headings are not markers — they are ordinary text that happens to be a span.
+ */
+export function proseMarkers(body: string): readonly Marker[] {
+  const out: Marker[] = []
+  for (const m of scanMarkers(body)) {
+    if (m.kind === 'heading') continue
+    out.push({ from: m.from, to: m.to, width: m.kind === 'tag-end' ? 0 : 1 })
+  }
+  return out
 }
