@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
-import type { ImportResult, PrintJob } from '../shared/ipc.ts'
+import type { Clipboard, PrintJob } from '../shared/ipc.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
@@ -51,6 +51,8 @@ ipcRenderer.on(CHANNEL.setVim, (_e, value: boolean) => {
 const tephra = {
   hello: (): Promise<{ version: string; origin: string; author: string }> =>
     ipcRenderer.invoke('tephra:hello'),
+  /** What the clipboard holds. Converting it is the renderer's job. */
+  readClipboard: (): Promise<Clipboard> => ipcRenderer.invoke(CHANNEL.readClipboard),
   /** Open the system's emoji picker. It types into whatever has focus. */
   emojiPanel: (): Promise<boolean> => ipcRenderer.invoke(CHANNEL.emojiPanel),
   /** Follow a link found in the text. Main decides whether it may be followed. */
@@ -84,9 +86,12 @@ const tephra = {
     removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
     print: (request: PrintJob): Promise<boolean> => ipcRenderer.invoke(CHANNEL.print, request),
 
-    /** Import the clipboard at a point. Null when there is nothing on it. */
-    importClipboard: (at: DocumentPosition): Promise<ImportResult> =>
-      ipcRenderer.invoke(CHANNEL.importClipboard, at),
+    /** Store the original untouched and put a copy at this point (R28, D47). */
+    importText: (
+      at: DocumentPosition,
+      text: string,
+      original: { content: string; ext: string },
+    ): Promise<string> => ipcRenderer.invoke(CHANNEL.importText, at, text, original),
     comments: (): Promise<readonly CommentThread[]> => ipcRenderer.invoke(CHANNEL.comments),
     startComment: (span: Span, body: string): Promise<CommentId> =>
       ipcRenderer.invoke(CHANNEL.startComment, span, body),

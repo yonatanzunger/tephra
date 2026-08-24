@@ -24,6 +24,7 @@ import { widgetExtensions } from './widgets.ts'
 import { contextMenu, markAt, readSelection, reportSelection, type MarkInfo, type Selection } from './range-commands.ts'
 import { retag, tagExtents } from './tags.ts'
 import { commentExtents, recomment, type CommentAnchor } from './comment-anchors.ts'
+import { richPaste } from './paste.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
 
@@ -74,6 +75,7 @@ export function bindEditor(options: BindOptions): Binding {
         // right-click raises the same commands the menu bar shows.
         reportSelection(),
         contextMenu(),
+        richPaste(),
         // A day with nothing in it yet is the ordinary case first thing in the
         // morning, and with no gutter, no caret cue and no chrome it renders as
         // a blank rectangle — indistinguishable from the app having failed.

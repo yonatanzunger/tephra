@@ -5,7 +5,7 @@ import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type S
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
-import type { ImportResult, PrintJob } from '../shared/ipc.ts'
+import type { Clipboard, PrintJob } from '../shared/ipc.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DocumentPosition, Span } from '../shared/document-api.ts'
@@ -52,26 +52,20 @@ export function registerDocumentIpc(service: DocumentService): void {
    * badly would put a mangled approximation in the corpus while throwing the
    * good copy away.
    */
-  ipcMain.handle(CHANNEL.importClipboard, async (_e, at: DocumentPosition): Promise<ImportResult> => {
-    const text = clipboard.readText()
-    const html = clipboard.readHTML()
-    // macOS synthesises an HTML flavour for a plain-text copy, and it is the
-    // same characters with no markup in them. Storing THAT as `.html` puts a
-    // text file behind a name that lies about it — the sort of small untruth
-    // that costs somebody an hour in fifteen years. Only real markup counts.
-    const rich = /<[a-z!/][^>]*>/i.test(html)
+  // Main reads the clipboard because it is the only side that has one, and
+  // hands it over whole. **The conversion happens in the renderer**, where
+  // Chromium's HTML parser already is — doing it here would mean shipping a DOM
+  // implementation to a process that has no use for one.
+  ipcMain.handle(CHANNEL.readClipboard, (): Clipboard => ({
+    text: clipboard.readText(),
+    html: clipboard.readHTML(),
+  }))
 
-    if (text.trim() === '') {
-      // Formatted content with no plain-text flavour. Refused rather than
-      // stripped: a crude tag-strip of real-world HTML puts approximated junk
-      // in the corpus, and this is a notebook meant to be trusted in twenty
-      // years. Converting properly is the same job `.docx` needs.
-      return { refused: rich ? 'formatted-only' : 'nothing' }
-    }
-
-    const original = rich ? { content: html, ext: 'html' } : { content: text, ext: 'txt' }
-    return { stored: await service.importText(at, text, original) }
-  })
+  ipcMain.handle(
+    CHANNEL.importText,
+    (_e, at: DocumentPosition, text: string, original: { content: string; ext: string }) =>
+      service.importText(at, text, original),
+  )
 
   ipcMain.handle(CHANNEL.comments, () => service.comments())
   if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())

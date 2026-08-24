@@ -1153,3 +1153,78 @@ Two refusals, both saying the true thing:
   class as the m1 harness's note. Stripping tags crudely would put an
   approximation in a corpus meant to be trusted in twenty years; converting
   properly is the job `.docx` needs, and it is not this one.
+
+## Converting rich clipboard content (M2.7, second pass)
+
+The first cut refused formatted content that had no plain-text flavour, and
+flattened the rest to `text/plain`. Both were wrong for the same reason: **the
+structure is the point.** A pasted article that keeps its headings, lists and
+tables can be annotated section by section; the same article as one wall of text
+can only be annotated as a wall.
+
+### Where it runs decided most of it
+
+Parsing real-world HTML — Word's `<span style>` soup, Google Docs wrappers, MSO
+conditional comments — is the expensive half of the problem, and **the renderer
+already contains Chromium's parser**. Running the conversion there rather than in
+main removes that half from every candidate, and it has a measurable
+consequence: Turndown maps its DOM shim to `false` for browsers, and that shim
+unpacks to **7.7 MB**. In the renderer it is a small dependency; in main it would
+have been an enormous one.
+
+So main reads the clipboard, because it is the only side that has one, and hands
+it over whole. The renderer converts and asks for the import.
+
+### Turndown, and what makes it safe to be imperfect
+
+Chosen over a hand-rolled walk for the long tail — nested lists, tables,
+escaping — and over `rehype`/`hast-util-to-mdast`, which is fifteen packages and
+re-parses HTML with its own parser while Chromium's is right there.
+
+Configured to the house style rather than Turndown's defaults, because what it
+emits is read back by the same parser the editor uses: ATX headings, `**`/`*`
+rather than underscores (which would fight `some_file_name`), fenced code, `-`
+bullets. The list-item rule is overridden because Turndown indents by three
+spaces and four indents into a code block by accident — and because the raw file
+is read by people.
+
+**Two things make an imperfect converter acceptable rather than a gamble.** The
+original bytes are kept untouched in `attachments/` (D47), so anything lost is
+recoverable — that is precisely what the rule is for. And the round-trip test
+asks the question that actually matters: convert HTML to markdown, parse that
+markdown with the parser the editor uses, and require the visible text to equal
+the source's. The failure mode in the wild is an unescaped `*` or `#` in imported
+prose quietly becoming markup, and this is what catches it.
+
+That test accused the converter of corrupting text on its first run, and the
+converter was innocent: Turndown had escaped `\*` correctly and the test's own
+`visible()` helper did not understand lezer's `Escape` nodes. **The instrument
+was wrong again** — seventh entry — this time by not knowing the notation it was
+reading.
+
+### Paste keeps its structure too
+
+Reported as "pasting rich content gives plain text", and the converter was
+innocent: run against the reported clipboard — 9 344 bytes of Chromium HTML —
+it produced 1 906 characters of correct markdown, headings and all. The gap was
+that **conversion only happened on Import (⇧⌘V)**, and ⌘V is CodeMirror's default
+paste, which takes `text/plain` and throws the structure away.
+
+That was wrong by omission, and by the same argument that justified building a
+converter at all: a pasted article whose headings and lists have been flattened
+is not the same words. So ⌘V converts as well. The two gestures stay distinct
+and both are useful:
+
+| | converts | keeps the original | provenance line |
+|---|---|---|---|
+| **Paste** ⌘V | yes | no | no |
+| **Import** ⇧⌘V | yes | yes, in `attachments/` | yes |
+
+Paste is "these words, here"; import is "this passage, cited".
+
+It needs no IPC at all — a paste event carries the clipboard's flavours with it,
+so the renderer already has the HTML. Two deliberate fall-throughs to the default
+paste: when conversion throws, because this is the most ordinary gesture there is
+and words-without-structure beats a refusal; and when the conversion equals the
+plain-text flavour, since macOS synthesises HTML for a plain-text copy and
+converting it back only adds escapes nobody asked for.

@@ -20,6 +20,7 @@ import type { CommentThread } from '../../shared/comments.ts'
 import type { CommentAnchor } from './editor/comment-anchors.ts'
 import type { MarkInfo } from './editor/range-commands.ts'
 import { printPage, PRINT_CSS } from './print/page.ts'
+import { markdownFromHtml } from './import/html.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -161,20 +162,31 @@ export function App(): React.JSX.Element {
       if (command === 'import') {
         const stored = cursorRef.current
         if (stored === null) return
-        void window.tephra.doc
-          .importClipboard({
-            segment: stored.segment as SegmentKey,
-            offset: stored.offset as never,
-            generation: doc.generation,
-          })
-          .then(result => {
-            if ('refused' in result) {
-              setError(
-                result.refused === 'nothing'
-                  ? 'There is nothing on the clipboard to import.'
-                  : 'The clipboard holds formatted content with no plain text, which Tephra cannot convert yet.',
-              )
+        const at: DocumentPosition = {
+          segment: stored.segment as SegmentKey,
+          offset: stored.offset as never,
+          generation: doc.generation,
+        }
+        void window.tephra
+          .readClipboard()
+          .then(async board => {
+            // Rich content is CONVERTED, not refused and not flattened: a
+            // pasted article should arrive with its headings, lists and tables
+            // intact, because that is what makes it annotatable section by
+            // section rather than a wall of text.
+            const rich = markdownFromHtml(board.html)
+            const text = rich ?? board.text
+            if (text.trim() === '') {
+              setError('There is nothing on the clipboard to import.')
+              return
             }
+            // The ORIGINAL is what gets kept: the bytes that arrived, not the
+            // conversion, which is derived and lossy by nature (D47).
+            const original =
+              rich === null
+                ? { content: board.text, ext: 'txt' }
+                : { content: board.html, ext: 'html' }
+            await window.tephra.doc.importText(at, text, original)
           })
           .catch(fail)
       } else if (command === 'undo') void revealing(doc.undo())

@@ -380,6 +380,39 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'richpaste') {
+      // A paste event carrying both flavours, exactly as a browser copy does.
+      const board = await window.tephra.readClipboard()
+      const html = board.html
+      const data = new DataTransfer()
+      data.setData('text/html', html)
+      data.setData('text/plain', 'flattened plain text')
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+      await settle(200)
+      const before = view.state.doc.toString()
+      const content = document.querySelector('.cm-content') as HTMLElement | null
+      content?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+      await settle(900)
+      const added = view.state.doc.toString().slice(before.length)
+      say('pastedChars', added.length)
+      say('keptStructure', added.includes('## '))
+      say('flattened', added.includes('flattened plain text'))
+      say('head', added.trim().slice(0, 80))
+      await settle(400)
+    }
+
+    if (scene === 'clipboard') {
+      const board = await window.tephra.readClipboard()
+      say('textBytes', board.text.length)
+      say('htmlBytes', board.html.length)
+      say('htmlHead', board.html.slice(0, 120))
+      const { markdownFromHtml } = await import('./import/html.ts')
+      const md = markdownFromHtml(board.html)
+      say('converted', md === null ? 'NULL' : `${md.length} chars`)
+      say('mdHead', md === null ? '' : md.slice(0, 120))
+      await settle(400)
+    }
+
     if (scene === 'import') {
       view.dispatch({ selection: { anchor: view.state.doc.length } })
       await settle(400)
