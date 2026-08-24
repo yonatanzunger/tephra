@@ -14,10 +14,24 @@ import type { Offset } from '../../shared/document-api.ts'
 // Spans are INFERRED FROM THE TEXT, never stored beside it (D20). There is no
 // id anywhere here, because inference leaves nothing for one to identify (D21).
 
-export type RawSpanKind = 'heading' | 'anchor' | 'tag-start' | 'tag-end'
+/**
+ * What a single walk of a body finds — **the scanner's vocabulary, not the
+ * API's.**
+ *
+ * This is not a raw version of `SpanKind`, and the old name `RawSpanKind` said
+ * it was. They describe different things and neither is derived from the other:
+ * here a tag is a `tag-start` and a `tag-end`, two separate findings, because
+ * that is what is in the text; there a tag is ONE span, because that is what a
+ * reader has. `SpanKind` also contains `date`, which no marker produces.
+ * Resolving the first into the second is `resolveTags`'s whole job.
+ *
+ * `heading` rides along because it comes out of the same walk and there is no
+ * reason to walk twice.
+ */
+export type MarkerKind = 'heading' | 'anchor' | 'tag-start' | 'tag-end'
 
 export interface RawMarker {
-  readonly kind: RawSpanKind
+  readonly kind: MarkerKind
   readonly name: string
   /** Offsets into the body. For markers, the whole comment; for headings, the line. */
   readonly from: number
@@ -130,7 +144,7 @@ export function scanMarkers(body: string): readonly RawMarker[] {
     const name = (m[2] as string).trim()
     if (name === '') continue // an unnamed marker names nothing; ignore it
     out.push({
-      kind: verb === 'mark' ? 'anchor' : (verb as RawSpanKind),
+      kind: verb === 'mark' ? 'anchor' : (verb as MarkerKind),
       name,
       from: m.index,
       to: m.index + m[0].length,

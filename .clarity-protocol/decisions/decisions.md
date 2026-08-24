@@ -1284,77 +1284,123 @@ them: `goal/requirements.md` (R26's reach, and the zero-routing framing recorded
 above) and `solution/architecture.md` (the W wrapper, and a trust boundary that
 now has a second shape).
 
-## D47: Comments are a range-anchored thread with a visible markdown body
+## D47: Comments are a range-anchored thread whose body is content, and is not in the buffer
 
-**Date:** 2026-08-23
+**Date:** 2026-08-23, revised 2026-08-24
 **Status:** decided
-**Answers:** Q8; dissolves Q9
-**Extends:** the locked `document-api.md` and `format-spec.md` drafts
+**Answers:** Q8; dissolves Q9; constrains Q11
 **Detail:** `solution/comments.md`
 
 **Decision.** A comment is a **thread anchored to a range** by a marker pair
-carrying a short file-local id, whose **body is ordinary markdown in the same
-file** — a callout block, visible to any reader — placed immediately after the
-block containing the closing marker. `SpanKind` gains `'comment'`.
+carrying a short file-local id. Its **body is ordinary markdown in the same
+file** — plain blockquotes with a parseable byline, placed immediately after the
+block containing the closing marker — and is **elided from the editor's prose**
+exactly as markers are (D44), so the editor never holds it and the margin renders
+it. `SpanKind` gains `'comment'`.
 
 ### The line that decides the encoding
 
-**The anchor is metadata and stays hidden; the body is content and stays
-visible.** HTML-comment markers are right for anchors because an anchor is
-machine bookkeeping and a plain reader loses nothing. R27 argues the opposite
-about commentary — *commentary is durable content, and R26 applies to it exactly
-as it does to the base text* — so encoding a thread in an HTML comment would make
-the one part of the document invisible to every markdown renderer be precisely
-the part just argued to be as much the document as the text. That is a
-contradiction rather than a tradeoff.
+**The anchor is bookkeeping and stays hidden; the body is content and stays
+visible.** HTML-comment markers are right for anchors because a plain reader
+loses nothing by not seeing one. R27 argues the opposite about commentary —
+*commentary is durable content, and R26 applies to it exactly as it does to the
+base text* — so encoding a thread in an HTML comment would make the one part of
+the document invisible to every markdown renderer be precisely the part just
+argued to be as much the document as the text. That is a contradiction rather
+than a tradeoff.
 
-A callout (`> [!comment id] date`) degrades to an ordinary blockquote in every
-renderer, is hand-typable, follows the de facto convention for markdown
-extensions, and **prints for free** because it is simply text (R11).
+### And the line D44 draws, sharpened
 
-### Why identifiers, having previously resisted them
+The first version of this decision put the body **in the editor's buffer**, and
+left "how is a comment body edited" open in consequence: a block hidden mid-prose
+and revealed by moving the cursor into it, which reflows the text the note is
+anchored beside. That is Q11's complaint landing on the construct least able to
+afford it.
 
-Comments need identity in a way tags do not. The no-id property was earned by an
-argument that does not transfer: *same-subject spans may not overlap … tagging a
-range that already carries the subject merges the existing span, **which is what
-the user means anyway***. Two tags of one subject on a passage are one tag; two
-comments are not, and R27 says several may bear on one passage.
+D44 says *Tephra's syntax is not text; markdown is.* Commentary sharpens it:
+**what is not the passage is not in the passage's buffer.** A gloss is durable,
+printable, readable content and is still not part of the text it glosses. The
+file is unchanged by this — R26 and R27 are about the file — and three things
+follow: the open question disappears, nothing reflows, and `ProseMap` already
+does the work, since a comment block is a marker of width 0 that happens to be
+two hundred characters long.
 
-**But the property was narrower than it looked.** D21's "no id" means spans
-inferred from text need no synthetic key *to pair them*. **Anchors already carry
-file-local names**, with `duplicate-anchor → first wins` already in the
-degradation table — so a comment id is an existing concept, not a new one.
+### The body is a blockquote, not a callout
 
-The alternative considered was a rule that comment ranges may nest but not
-partially overlap, which would preserve no-ids by bracket-matching. **Rejected**:
-it buys a property that turns out not to be load-bearing, at the price of a
-constraint the format needs nowhere else, a new degradation case, and a real
-restriction on annotating.
+`> [!comment id]` renders as a styled box in Obsidian and GitHub and as the
+literal text `[!comment id]` everywhere else. A blockquote with a byline reads
+correctly in **every** renderer and never shows a machine token to a human, which
+is what the Talmudic arrangement is asking for. The id lives in an HTML comment
+at the END of the byline — not the start, because a comment beginning a block
+turns the block into an HTML block and kills its formatting.
 
-**The marker grammar does not change.** The existing regex takes everything after
-the verb as a free-text name; for comment markers that slot is read as
-whitespace-separated tokens — first the id, then flags. Only the verb alternation
-grows. **Ids are short random tokens rather than counters**, because a counter
-collides the first time a commented range is pasted between files.
+**One representation of every fact.** The byline is what a person reads *and*
+what Tephra parses; a human line plus parallel machine attributes would be the
+fault this codebase met four times in M2 (D45). Unrecognised tokens are preserved
+verbatim, which is what lets the grammar grow without a format break.
 
-### Built versus reserved
+**Ids are short random tokens rather than counters**, because a counter collides
+the first time a commented range is pasted between files.
 
-Built: the range anchor, the markdown body, threading by shared id, `resolved`,
-and a visible timestamp. **Reserved in the format and not built:** author,
-assignee, emoji reactions. Single user, two trusted devices, no sharing model —
-those fields serve the standardisation ambition rather than any Tephra
-requirement, and reserving them is free while building them is not.
+### Reactions are an ordered map from emoji to reactors
 
-### What this reuses rather than adds
+Not a list of emoji. **The view is the common case and the edit is the rare
+one** — rendering wants `👍 ×3` with the names available, which a flat list makes
+you group first, and a grouping computed in the renderer is a derived value that
+will be computed in two places as soon as there are two renderers. Finding your
+own reaction in order to toggle it is far rarer, and is a scan over three keys.
 
-Comment markers mirror tag markers in prose width — `comment-start` is a handle
-(1), `comment-end` a boundary (0) — so `partnerRemovals()` supplies the removal
-gesture with no keymap, `ProseMap.carve()` protects the boundary from deletion,
-`HandleWidget` is the template for the numbered circle, and `tagExtents` is the
-template for both the rail and the range underline. The desktop rail
-absolutely-positions over the **already reserved** gutter band, so D42's
-invariant holds by construction; `gutterFits` already computes the narrow fold;
-and Q10 already settled the mobile arrangement.
+**Order is content.** People spell things with emoji: three in a row are a
+sentence, not a set. So insertion order is preserved in the file (left to right
+along the byline) and in the API — a plain object, since JavaScript preserves
+insertion order for string keys that are not array indices, which emoji never
+are, and unlike a `Map` it survives JSON and both IPC hops.
+
+### Author, assignee and reactions are built, not reserved
+
+The earlier version reserved them: a single user with two devices needs none of
+them, which is true and beside the point. **They are cheap now and expensive
+later** — one token each in a line already being parsed and written — and
+deferring buys a second pass over the same grammar, a migration for files written
+in between, and a UI built twice.
+
+### The API knows about threads, and can edit
+
+`SpanKind` gains a member; it is a union in this codebase, not a contract with
+anyone else. **`MarkerKind` (formerly `RawSpanKind`) stays separate**, because
+the two are different vocabularies rather than raw and cooked forms of one: the
+scanner finds a `tag-start` and a `tag-end`, the API exposes one span, and
+`SpanKind` also contains `date`, which no marker produces. The name was the whole
+problem and is fixed.
+
+Seven operations — start, add, edit, delete, resolve, assign, react — each
+compiling to one `replace()` and therefore one undo step. **`editComment` exists**,
+and the earlier argument that it need not — the body is prose in the buffer,
+so it is edited like any prose — was true only while the body was in the buffer.
+
+### Editing happens where the note is rendered
+
+In the rail on the desktop, in the expanded box on the phone. **This is the same
+complaint as reflow in a different register:** reflow is bad because the text
+moves under the eye, and relocating a construct to edit it is bad because the eye
+must move to reach it. The cost is identical — you lose your place.
+
+Stated generally, since it is not about comments: **a construct is edited where it
+is rendered.** That is a constraint on any answer to Q11, and it eliminates the
+whole family of answers that reveal markup somewhere other than where the
+rendered form sits.
+
+### Printing is an option, and the question is not only about comments
+
+Every piece of apparatus Tephra adds — tags, bookmarks, comments — carries the
+same question to the printer, and the answer is a choice made when printing
+rather than one made once in the code. For comments it is three-way: **without**
+(the passage alone), **in the margin** (the Talmudic page, which narrows the
+measure and is therefore a second layout rather than a stylesheet toggle), or
+**inline** (each note after the block it is anchored to — the arrangement the
+folded gutter and the mobile open-all state already produce, so it is nearly
+free). Tephra's print dialog therefore has to be Tephra's own, which is a further
+argument for the PDF-preview route M2.4 took.
 
 ### Q9 is dissolved rather than answered
 
@@ -1368,28 +1414,28 @@ it protects nothing.
 creates an annotatable markdown copy. This removes the sidecar's only real
 argument, and Q8 resolves to inline.
 
-### Deliberately left open
+### What this reuses rather than adds
 
-**How a comment body is edited** — revealed in the main column (one editing
-surface, consistent with tables and equations, but it reflows the text the note
-is anchored beside) or edited in the rail (no reflow, but a second surface over
-the same buffer). **This is Q11 arriving where Q11 predicted**: it names printing
-and block constructs as the two tests any candidate must pass, and a comment body
-is a block construct that must print. Settled by building both and reacting, as
-the frame studies were. Nothing else in this decision depends on the answer.
+`comment-start` is a handle (width 1), `comment-end` a boundary (0), the thread
+block width 0 — so `partnerRemovals()` supplies the removal gesture with no
+keymap, `ProseMap.carve()` protects the boundary, `HandleWidget` is the template
+for the mark, and `tagExtents` for the range rule. The rail draws over the
+**already reserved** gutter band, so D42 holds by construction; `gutterFits`
+computes the narrow fold; Q10 settled the mobile arrangement.
 
 ### Reconsideration triggers
 
-- **If partial overlap turns out never to occur in a year's use**, the ids are
-  buying nothing and the nesting rule becomes the cheaper design.
+- **If partial overlap never occurs in a year's use**, the ids buy nothing and
+  nesting becomes the cheaper design.
 - **If bodies routinely grow long enough to dominate the file**, the sidecar
-  argument returns on different grounds — readability of the raw text rather than
-  pristineness.
-- **When Q11 is settled**, since that decides the editing surface above.
+  argument returns on different grounds — readability of the raw text rather
+  than pristineness.
+- **If margin printing proves to be the one people always want**, the measure
+  should narrow for it by default rather than on request.
 
 ### What this makes stale
 
-`solution/format-spec.md` (marker verbs, the degradation table, the callout
-form), `solution/document-api.md` (`SpanKind`, `TypedSpan`, three methods),
-`goal/open-questions.md` (Q8 answered, Q9 dissolved), `solution/milestones.md`
-(M2 items 5–7).
+`solution/format-spec.md` (marker verbs, the degradation table), 
+`solution/document-api.md` (`SpanKind`, `TypedSpan`, the comment methods),
+`goal/open-questions.md` (Q8 answered, Q9 dissolved, Q11 constrained),
+`solution/milestones.md` (M2 items 5–7).

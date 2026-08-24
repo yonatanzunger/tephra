@@ -388,7 +388,8 @@ export async function runVerify(scene: string): Promise<void> {
       const from = all.indexOf('The Shock Limit')
       view.dispatch({ selection: { anchor: from, head: all.length } })
       await settle(200)
-      say('selectionStartsAt', JSON.stringify(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.from + 6)))
+      const at = view.state.selection.main.from
+      say('selectionStartsAt', view.state.doc.toString().slice(at, at + 6))
       await settle(300)
       say('selected', from !== -1)
       say('menuItemFound', await window.tephra.clickMenu('Print Selection…'))

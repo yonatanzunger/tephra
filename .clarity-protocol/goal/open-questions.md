@@ -379,7 +379,15 @@ sheet's job is to find those numbers, not to reopen how themes work.
 
 ## Q11: What should revealing markup do to the line under it?
 
-**Status:** open, and **more consequential than it looks**. Raised on seeing the
+**Status:** open, and **narrowed by D47**. A construct is edited where it is
+rendered — reflow is bad because the text moves under the eye, and relocating a
+construct in order to edit it is bad because the eye must move to reach it, which
+costs the same thing. That eliminates every candidate that reveals markup
+somewhere other than where the rendered form sits, and it removed comments from
+this question entirely: a comment body is never in the buffer (D44, D47), so it
+has no markup to reveal. What remains is emphasis — where the question started.
+
+**More consequential than it looks**. Raised on seeing the
 first construct that conceals its own delimiters.
 
 **The tension, in one sentence.** D42 spent a whole design study establishing
