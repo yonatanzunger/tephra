@@ -155,7 +155,17 @@ app.whenReady().then(async () => {
   // and reaches everything else through the bridge.
   const configuredRoot = process.env['TEPHRA_ROOT']
   notebook = await Notebook.open(configuredRoot === undefined ? {} : { root: configuredRoot })
-  service = new DocumentService(notebook)
+  // The file tier's quiescence is supplied HERE rather than read there:
+  // reading it goes through the verify gate, which imports Electron, and
+  // `DocumentService` is deliberately free of Electron so that three
+  // integration suites can drive it under plain node. That has now been broken
+  // three times by three different imports; `tests/unit/main/no-electron.test.ts`
+  // is what stops the fourth.
+  const quiesce = Number(verifyEnv('TEPHRA_QUIESCE_MS'))
+  service = new DocumentService(
+    notebook,
+    Number.isFinite(quiesce) && quiesce > 0 ? { quiesceMs: quiesce } : {},
+  )
   registerDocumentIpc(service)
 
   // Seeded before the window opens, so the first launch already has a themes

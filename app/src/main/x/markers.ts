@@ -1,6 +1,4 @@
 import { applyEdits, type TextEdit } from './text-edits.ts'
-import type { Marker } from './prose.ts'
-import type { Offset } from '../../shared/document-api.ts'
 
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
@@ -28,7 +26,16 @@ import type { Offset } from '../../shared/document-api.ts'
  * `heading` rides along because it comes out of the same walk and there is no
  * reason to walk twice.
  */
-export type MarkerKind = 'heading' | 'anchor' | 'tag-start' | 'tag-end'
+export type MarkerKind =
+  | 'heading'
+  | 'anchor'
+  | 'tag-start'
+  | 'tag-end'
+  /** A comment's anchor: a handle and a boundary, exactly as a tag's are (D47). */
+  | 'comment-start'
+  | 'comment-end'
+  /** Identifies a thread block. Sits at the END of its byline, never the start. */
+  | 'comment'
 
 export interface RawMarker {
   readonly kind: MarkerKind
@@ -40,7 +47,7 @@ export interface RawMarker {
   readonly level: number
 }
 
-const MARKER = /<!--tephra:(mark|tag-start|tag-end)[ \t]+([^\n]*?)-->/g
+const MARKER = /<!--tephra:(mark|tag-start|tag-end|comment-start|comment-end|comment)[ \t]+([^\n]*?)-->/g
 const ATX = /^(#{1,6})[ \t]+(.*?)[ \t]*$/
 
 /**
@@ -206,15 +213,32 @@ export interface ResolvedTag {
  * `normalise` already trims on the way in; this makes the way out agree.
  */
 export function resolveTags(markers: readonly RawMarker[], body: string): readonly ResolvedTag[] {
+  return resolvePairs(markers, body, 'tag-start', 'tag-end')
+}
+
+/**
+ * Pair start/end markers of one kind into spans.
+ *
+ * Tags and comment anchors are the same shape — a named start, a named end,
+ * strictly alternating for one name — so they are the same resolver, degradation
+ * rules included. Comments do not overlap themselves any more than tags do,
+ * because two comments on one passage have different ids.
+ */
+export function resolvePairs(
+  markers: readonly RawMarker[],
+  body: string,
+  startKind: MarkerKind,
+  endKind: MarkerKind,
+): readonly ResolvedTag[] {
   const open = new Map<string, RawMarker>()
   const out: ResolvedTag[] = []
 
   for (const marker of markers) {
-    if (marker.kind === 'tag-start') {
-      // A second start for a subject already open cannot be nested; the first
-      // one wins and this is a no-op, which keeps alternation true.
+    if (marker.kind === startKind) {
+      // A second start for a name already open cannot be nested; the first one
+      // wins and this is a no-op, which keeps alternation true.
       if (!open.has(subjectKey(marker.name))) open.set(subjectKey(marker.name), marker)
-    } else if (marker.kind === 'tag-end') {
+    } else if (marker.kind === endKind) {
       const start = open.get(subjectKey(marker.name))
       if (start === undefined) continue // no start: ignored, per the table
       open.delete(subjectKey(marker.name))
@@ -523,23 +547,4 @@ function canAppendTo(line: string): boolean {
   return true
 }
 
-/**
- * The body's markers as the prose mapping wants them (D44).
- *
- * Widths are assigned by role, not by kind: a bookmark and the start of a tagged
- * range are HANDLES and take one character of prose, because they are what a
- * person points at and deletes; the end of a range is a BOUNDARY and takes
- * none, because the underline already shows where the range stops.
- *
- * Headings are not markers — they are ordinary text that happens to be a span.
- */
-export function proseMarkers(body: string): readonly Marker[] {
-  const out: Marker[] = []
-  for (const m of scanMarkers(body)) {
-    if (m.kind === 'heading') continue
-    // `RawMarker` offsets are byte offsets into the body, which is what an
-    // `Offset` is; the scan simply predates the brand.
-    out.push({ from: m.from as Offset, to: m.to as Offset, width: m.kind === 'tag-end' ? 0 : 1 })
-  }
-  return out
-}
+

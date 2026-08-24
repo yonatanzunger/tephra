@@ -146,7 +146,9 @@ export interface Span {
  */
 export const HANDLE = '\ufffc'
 
-export type SpanKind = 'date' | 'heading' | 'anchor' | 'tag'
+import type { CommentId, CommentThread } from './comments.ts'
+
+export type SpanKind = 'date' | 'heading' | 'anchor' | 'tag' | 'comment'
 
 /** No id: inference leaves nothing for one to identify (D21). */
 export type TypedSpan =
@@ -154,6 +156,17 @@ export type TypedSpan =
   | { readonly kind: 'heading'; readonly name: string; readonly level: number; readonly span: Span }
   | { readonly kind: 'anchor'; readonly name: string; readonly span: Span } // zero-length
   | { readonly kind: 'tag'; readonly name: string; readonly span: Span } // may overlap freely
+  /**
+   * A commented range (D47). `name` is the thread's id; the thread's CONTENTS
+   * come from `comments()`, because a decoration does not want a message list
+   * and the margin does not want to re-derive spans.
+   */
+  | {
+      readonly kind: 'comment'
+      readonly name: string
+      readonly resolved: boolean
+      readonly span: Span
+    }
 
 // ─────────────────────────────────────────────────────────────
 // Changes
@@ -296,6 +309,23 @@ export interface Document {
   renameTag(span: Span, from: string, to: string): Promise<void>
   /** One operation, never composed by Z: create → update references → delete (D13). */
   branch(span: Span, name: string): Promise<DocumentId>
+
+  // ── comments: a thread anchored to a range (D47) ───────────
+  //
+  // Thread-aware, and it includes editing, because a comment's body is not in
+  // the buffer — it is rendered in the margin and edited there, so changing it
+  // is an operation rather than ordinary typing.
+  comments(): Promise<readonly CommentThread[]>
+  commentsAt(at: DocumentPosition): Promise<readonly CommentThread[]>
+  startComment(span: Span, body: string): Promise<CommentId>
+  addComment(id: CommentId, body: string): Promise<void>
+  editComment(id: CommentId, index: number, body: string): Promise<void>
+  /** Removing the last message removes the thread, anchors included. */
+  deleteComment(id: CommentId, index: number): Promise<void>
+  setCommentResolved(id: CommentId, resolved: boolean): Promise<void>
+  setCommentAssignee(id: CommentId, to: string | null): Promise<void>
+  /** Toggles the CURRENT user's reaction. */
+  reactToComment(id: CommentId, index: number, emoji: string, on: boolean): Promise<void>
 
   // ── change feed ────────────────────────────────────────────
   onChanged(handler: (change: DocumentChange) => void): Unsubscribe

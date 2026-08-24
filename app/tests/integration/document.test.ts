@@ -769,3 +769,136 @@ test('a change that alters no prose is still announced', async t => {
   assert.deepEqual(announcements, [0], 'announced once, carrying no edits')
   assert.deepEqual((await doc.spans('tag')).map(s => s.name), ['Mortgage'])
 })
+
+// ── comments (M2.6, D47) ─────────────────────────────────────
+
+/** A window's prose, and the file's bytes, are different things here. */
+async function commented(t: TestContext) {
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'The premise is stated here.\n\nAnd the day continues.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const from = w.text.indexOf('premise is stated')
+  const span = { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 17)) }
+  return { doc, root, w, span }
+}
+
+const fileOf = async (root: string) => readFile(join(root, dayFile(DAY)), 'utf8')
+
+test('a comment anchors a range and writes a thread into the file', async t => {
+  const { doc, root, w, span } = await commented(t)
+  const id = await doc.startComment(span, 'This assumes the reader accepts it.')
+  await doc.flush()
+
+  const file = await fileOf(root)
+  assert.match(file, new RegExp(`<!--tephra:comment-start ${id}-->`))
+  assert.match(file, new RegExp(`<!--tephra:comment-end ${id}-->`))
+  assert.match(file, /> \*\*.+\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2} <!--tephra:comment/)
+  assert.match(file, /> This assumes the reader accepts it\./)
+
+  // The gloss sits after the paragraph it is about, so a plain reader gets
+  // passage-then-gloss with no tooling at all.
+  assert.ok(file.indexOf('> This assumes') > file.indexOf('The premise'))
+  assert.ok(file.indexOf('> This assumes') < file.indexOf('And the day continues'))
+})
+
+test('the body is NOT in the buffer, and the prose is otherwise untouched', async t => {
+  const { doc, w, span } = await commented(t)
+  await doc.startComment(span, 'A note that must not appear in the text.')
+  assert.equal(w.text.includes('A note that must not appear'), false, 'the body reached the buffer')
+  assert.equal(w.text.includes('tephra:'), false)
+  // One handle for the anchor's start; the end and the whole block are silent.
+  assert.equal([...w.text].filter(c => c === '￼').length, 1)
+  assert.match(w.text, /The ￼?premise is stated here\.\n\nAnd the day continues\./)
+})
+
+test('a thread reads back with its author, time and body', async t => {
+  const { doc, span } = await commented(t)
+  const id = await doc.startComment(span, 'First thought.')
+  await doc.addComment(id, 'Second thought.')
+
+  const threads = await doc.comments()
+  assert.equal(threads.length, 1)
+  const thread = threads[0]!
+  assert.equal(thread.id, id)
+  assert.equal(thread.resolved, false)
+  assert.deepEqual(thread.messages.map(m => m.body), ['First thought.', 'Second thought.'])
+  assert.ok(thread.messages.every(m => m.author !== ''))
+  assert.ok(thread.messages.every(m => /^\d{4}-\d{2}-\d{2}T/.test(m.at)))
+})
+
+test('editing a message changes that message and nothing else', async t => {
+  const { doc, span } = await commented(t)
+  const id = await doc.startComment(span, 'First thought.')
+  await doc.addComment(id, 'Second thought.')
+  const before = doc.currentGeneration()
+
+  await doc.editComment(id, 0, 'First thought, reconsidered.')
+  assert.equal(doc.currentGeneration(), before + 1, 'one operation, one undo step')
+  assert.deepEqual(
+    (await doc.comments())[0]!.messages.map(m => m.body),
+    ['First thought, reconsidered.', 'Second thought.'],
+  )
+})
+
+test('resolving and assigning live on the thread, not on every message', async t => {
+  const { doc, root, span } = await commented(t)
+  const id = await doc.startComment(span, 'A question.')
+  await doc.addComment(id, 'An answer.')
+  await doc.setCommentResolved(id, true)
+  await doc.setCommentAssignee(id, 'Rivka')
+  await doc.flush()
+
+  const thread = (await doc.comments())[0]!
+  assert.equal(thread.resolved, true)
+  assert.equal(thread.assignee, 'Rivka')
+  const file = await fileOf(root)
+  assert.equal((file.match(/resolved/g) ?? []).length, 1, 'state is written once, on the first block')
+  assert.equal((file.match(/→ \*\*Rivka\*\*/g) ?? []).length, 1)
+
+  // And the span says so, which is what lets the editor collapse it.
+  const span2 = (await doc.spans('comment'))[0]!
+  assert.equal(span2.kind === 'comment' && span2.resolved, true)
+})
+
+test('reactions keep the order they were first used in', async t => {
+  const { doc, span } = await commented(t)
+  const id = await doc.startComment(span, 'A thought.')
+  for (const emoji of ['🎉', '👀', '👍']) await doc.reactToComment(id, 0, emoji, true)
+
+  const reactions = (await doc.comments())[0]!.messages[0]!.reactions
+  assert.deepEqual(Object.keys(reactions), ['🎉', '👀', '👍'], 'three in a row are a sentence')
+
+  // Removing the middle one leaves the others where they were.
+  await doc.reactToComment(id, 0, '👀', false)
+  assert.deepEqual(Object.keys((await doc.comments())[0]!.messages[0]!.reactions), ['🎉', '👍'])
+})
+
+test('removing the last message removes the thread, anchors included', async t => {
+  const original = dayText('2026-03-14', 'The premise is stated here.\n\nAnd the day continues.\n')
+  const { doc, root, span } = await commented(t)
+  const id = await doc.startComment(span, 'A thought.')
+  await doc.addComment(id, 'Another.')
+
+  await doc.deleteComment(id, 1)
+  assert.equal((await doc.comments())[0]!.messages.length, 1, 'the thread survives its second message')
+  assert.equal((await doc.spans('comment')).length, 1, 'and keeps its anchor')
+
+  await doc.deleteComment(id, 0)
+  await doc.flush()
+  assert.deepEqual(await doc.comments(), [], 'a thread with no messages is not a thread')
+  assert.deepEqual(await doc.spans('comment'), [])
+  assert.equal(await fileOf(root), original, 'the file is exactly as it started')
+})
+
+test('deleting the first message carries the thread state to the next', async t => {
+  const { doc, span } = await commented(t)
+  const id = await doc.startComment(span, 'First.')
+  await doc.addComment(id, 'Second.')
+  await doc.setCommentResolved(id, true)
+
+  await doc.deleteComment(id, 0)
+  const thread = (await doc.comments())[0]!
+  assert.deepEqual(thread.messages.map(m => m.body), ['Second.'])
+  assert.equal(thread.resolved, true, 'state lived on the block that just left')
+})

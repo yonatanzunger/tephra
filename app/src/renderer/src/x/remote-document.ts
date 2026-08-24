@@ -9,6 +9,7 @@ import type {
   DocumentWindow, Edit, EditOrigin, SegmentKey, SessionGeneration, Span, SpanKind,
   TypedSpan, Unsubscribe, Divergence,
 } from '../../../shared/document-api.ts'
+import type { CommentId, CommentThread } from '../../../shared/comments.ts'
 import type { DocumentInfo } from '../../../shared/ipc.ts'
 import { RemoteWindow } from './remote-window.ts'
 
@@ -227,6 +228,36 @@ export class RemoteDocument implements Document {
   untag(_span: Span, _subject: string): Promise<void> {
     return this.#notYet('untag')
   }
+  // Comments (D47). The margin drives these through the bridge, not through
+  // this object, which exists so the editor has a Document to hold.
+  comments(): Promise<readonly CommentThread[]> {
+    return this.#notYet('comments')
+  }
+  commentsAt(_at: DocumentPosition): Promise<readonly CommentThread[]> {
+    return this.#notYet('commentsAt')
+  }
+  startComment(_span: Span, _body: string): Promise<CommentId> {
+    return this.#notYet('startComment')
+  }
+  addComment(_id: CommentId, _body: string): Promise<void> {
+    return this.#notYet('addComment')
+  }
+  editComment(_id: CommentId, _index: number, _body: string): Promise<void> {
+    return this.#notYet('editComment')
+  }
+  deleteComment(_id: CommentId, _index: number): Promise<void> {
+    return this.#notYet('deleteComment')
+  }
+  setCommentResolved(_id: CommentId, _resolved: boolean): Promise<void> {
+    return this.#notYet('setCommentResolved')
+  }
+  setCommentAssignee(_id: CommentId, _to: string | null): Promise<void> {
+    return this.#notYet('setCommentAssignee')
+  }
+  reactToComment(_id: CommentId, _index: number, _emoji: string, _on: boolean): Promise<void> {
+    return this.#notYet('reactToComment')
+  }
+
   renameTag(_span: Span, _from: string, _to: string): Promise<void> {
     return this.#notYet('renameTag')
   }

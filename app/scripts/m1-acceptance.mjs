@@ -19,7 +19,7 @@ import { join } from 'node:path'
 const root = await mkdtemp(join(tmpdir(), 'tephra-m1-'))
 const electron = './node_modules/.bin/electron'
 
-function launch(scene, { abrupt = false, timeoutMs = 45_000 } = {}) {
+function launch(scene, { abrupt = false, timeoutMs = 45_000, env: extra = {} } = {}) {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
@@ -27,6 +27,7 @@ function launch(scene, { abrupt = false, timeoutMs = 45_000 } = {}) {
       TEPHRA_VERIFY: scene,
       TEPHRA_ROOT: root,
       ...(abrupt ? { TEPHRA_EXIT: 'abrupt' } : {}),
+      ...extra,
     }
     delete env.ELECTRON_RUN_AS_NODE
     const child = spawn(electron, ['.'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
@@ -85,7 +86,9 @@ console.log(`notebook: ${root}\n`)
 
 // ── 1. a crash loses nothing ────────────────────────────────────────────────
 console.log('— the crash —')
-const crashed = report(await launch('crash', { abrupt: true }))
+// The file tier is held open for the duration, so "it had not written yet" is
+// a fact rather than a race. It was a race, and it lost twice under load.
+const crashed = report(await launch('crash', { abrupt: true, env: { TEPHRA_QUIESCE_MS: '60000' } }))
 check('typed something before dying', crashed.typed === true)
 
 const filesAfterCrash = await dayFiles()
@@ -95,7 +98,14 @@ const textAfterCrash = filesAfterCrash.length
 check(
   'the file tier had NOT yet written it — so the log is what is being tested',
   !textAfterCrash.includes('SURVIVES-THE-CRASH'),
-  filesAfterCrash.length === 0 ? 'no day file at all' : 'day file exists without the text',
+  // Report what was FOUND, not what was hoped for. This note claimed the text
+  // was absent without checking, so two earlier failures printed a reassuring
+  // sentence beside a red line and told nobody anything.
+  filesAfterCrash.length === 0
+    ? 'no day file at all'
+    : textAfterCrash.includes('SURVIVES-THE-CRASH')
+      ? 'the file tier HAD written it — the race was lost'
+      : 'day file exists, without the text',
 )
 const log = await readFile(join(root, '.tephra', 'wal', 'stream.jsonl'), 'utf8').catch(() => '')
 check('the write-ahead log holds the edit', log.includes('SURVIVES-THE-CRASH'))

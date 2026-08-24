@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { HANDLE, Prose, stripHandles } from '../../../../src/main/x/prose.ts'
-import { proseMarkers } from '../../../../src/main/x/markers.ts'
+import { proseMarkers } from '../../../../src/main/x/prose.ts'
 import type { Offset, ProseOffset } from '../../../../src/shared/document-api.ts'
 
 const START = (s: string): string => `<!--tephra:tag-start ${s}-->`

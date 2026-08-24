@@ -7,8 +7,24 @@
 
 import type { DateKey, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
-import { proseMarkers, resolveAnchors, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
-import { Prose } from './prose.ts'
+import { resolveAnchors, resolvePairs, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
+import { threadsIn } from './comments.ts'
+import { Prose, proseMarkers } from './prose.ts'
+
+/**
+ * A span as the scanner produces it: body offsets, not document positions.
+ *
+ * `resolved` is a comment's, and is absent everywhere else rather than false
+ * everywhere else — a heading is not an unresolved anything.
+ */
+export interface ScannedSpan {
+  readonly kind: TypedSpan['kind']
+  readonly name: string
+  readonly level: number
+  readonly resolved?: boolean
+  readonly from: number
+  readonly to: number
+}
 import { findAnomalies } from './anomalies.ts'
 import { splitBody, SPLIT_THRESHOLD } from './split.ts'
 import { dayFile } from '../w/layout.ts'
@@ -189,9 +205,9 @@ export class Segment {
   }
 
   /** Every span in this segment, in body coordinates. */
-  spans(): readonly { kind: TypedSpan['kind']; name: string; level: number; from: number; to: number }[] {
+  spans(): readonly ScannedSpan[] {
     const markers = this.#scan()
-    const out: { kind: TypedSpan['kind']; name: string; level: number; from: number; to: number }[] = []
+    const out: ScannedSpan[] = []
 
     out.push({ kind: 'date', name: this.date, level: 0, from: 0, to: this.#body.length })
 
@@ -206,6 +222,23 @@ export class Segment {
 
     for (const t of resolveTags(markers, this.#body)) {
       out.push({ kind: 'tag', name: t.name, level: 0, from: t.from, to: t.to })
+    }
+
+    // Comment anchors pair exactly as tags do — a named start, a named end,
+    // strictly alternating — so the same resolver does them, degradation rules
+    // included. Whether a thread is resolved lives in its first block.
+    const resolved = new Set(
+      threadsIn(this.#body).filter(thread => thread.resolved).map(thread => thread.id as string),
+    )
+    for (const c of resolvePairs(markers, this.#body, 'comment-start', 'comment-end')) {
+      out.push({
+        kind: 'comment',
+        name: c.name,
+        level: 0,
+        resolved: resolved.has(c.name),
+        from: c.from,
+        to: c.to,
+      })
     }
 
     return out.sort((a, b) => a.from - b.from || a.to - b.to)

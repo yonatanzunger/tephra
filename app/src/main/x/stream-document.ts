@@ -17,7 +17,12 @@ import { dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
 import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
-import { Segment } from './segment.ts'
+import { Segment, type ScannedSpan } from './segment.ts'
+import {
+  anchorComment, at, author, insertBlock, insertBlockAt, renderBlock, restate, scanThreadBlocks, splice,
+  thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
+} from './comments.ts'
+import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
 import { applyEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
 
@@ -677,6 +682,169 @@ export class StreamDocument implements Document {
    * M3. The step is written here rather than added later because its POSITION
    * in the sequence is the part that matters.
    */
+  // ── comments (D47) ─────────────────────────────────────────
+  //
+  // Seven operations, each compiling to one `replace()` and therefore one undo
+  // step. They exist because the body is not in the buffer: it is rendered in
+  // the margin and edited there, so editing it is an operation rather than
+  // ordinary typing.
+
+  async comments(): Promise<readonly CommentThread[]> {
+    const out: CommentThread[] = []
+    for (const date of await this.dates()) {
+      out.push(...threadsIn((await this.segment(date)).body))
+    }
+    return out
+  }
+
+  async commentsAt(at: DocumentPosition): Promise<readonly CommentThread[]> {
+    const ids = new Set(
+      (await this.spansAt(at)).filter(s => s.kind === 'comment').map(s => s.name),
+    )
+    return (await this.comments()).filter(thread => ids.has(thread.id as string))
+  }
+
+  /** Anchor a new thread to a range and open it with one message. */
+  async startComment(span: Span, body: string): Promise<CommentId> {
+    if (body.trim() === '') throw new Error('a comment needs something in it')
+    const date = span.begin.segment as DateKey
+    if ((span.end.segment as DateKey) !== date) {
+      throw new Error('a comment covers one day at a time')
+    }
+    const segment = await this.segment(date)
+    const id = unusedCommentId(segment.body)
+
+    // The anchor pair first, then the block after the paragraph the range ends
+    // in — computed against the body WITH the anchors, since they move it.
+    const anchored = anchorComment(segment.body, id, {
+      from: span.begin.offset as number,
+      to: span.end.offset as number,
+    })
+    const placed = insertBlock(
+      anchored.body,
+      anchored.endsAt,
+      renderBlock(id, this.#newMessage(body)),
+    )
+    await this.#writeBody(date, segment.body, placed)
+    return id
+  }
+
+  async addComment(id: CommentId, body: string): Promise<void> {
+    if (body.trim() === '') throw new Error('a comment needs something in it')
+    await this.#rewriteThread(id, (blocks, segment) => {
+      const last = blocks[blocks.length - 1] as ThreadBlock
+      return insertBlockAt(segment.body, last.to, renderBlock(id, this.#newMessage(body)))
+    })
+  }
+
+  async editComment(id: CommentId, index: number, body: string): Promise<void> {
+    if (body.trim() === '') throw new Error('an edited comment still needs something in it')
+    await this.#rewriteThread(id, (blocks, segment) => {
+      const block = at(blocks, index)
+      const message = { ...block.message, body }
+      return splice(segment.body, block, renderBlock(id, message, thread(blocks)))
+    })
+  }
+
+  /**
+   * Remove one message. **Removing the last one removes the thread**, anchors
+   * included — a thread with no messages is not a thread, the same rule as a tag
+   * span that covers only whitespace.
+   */
+  async deleteComment(id: CommentId, index: number): Promise<void> {
+    await this.#rewriteThread(id, (blocks, segment) => {
+      const block = at(blocks, index)
+      if (blocks.length > 1) {
+        const rest = blocks.filter(b => b !== block)
+        // Thread state lives on the first block, so removing the first block
+        // has to carry it to whatever becomes first.
+        const body = splice(segment.body, block, '')
+        return index === 0 ? restate(body, id, thread(blocks)) : body
+      }
+      return unanchorComment(splice(segment.body, block, ''), id)
+    })
+  }
+
+  async setCommentResolved(id: CommentId, resolved: boolean): Promise<void> {
+    await this.#rewriteThread(id, (blocks, segment) =>
+      restate(segment.body, id, { ...thread(blocks), resolved }),
+    )
+  }
+
+  async setCommentAssignee(id: CommentId, to: string | null): Promise<void> {
+    await this.#rewriteThread(id, (blocks, segment) =>
+      restate(segment.body, id, { ...thread(blocks), assignee: to }),
+    )
+  }
+
+  /** Toggles the CURRENT user's reaction; there is no reacting for someone else. */
+  async reactToComment(id: CommentId, index: number, emoji: string, on: boolean): Promise<void> {
+    await this.#rewriteThread(id, (blocks, segment) => {
+      const block = at(blocks, index)
+      const me = author()
+      const was = block.message.reactions[emoji] ?? []
+      const now = on ? (was.includes(me) ? was : [...was, me]) : was.filter(who => who !== me)
+
+      // Insertion order is content, so an emoji keeps its place while anyone is
+      // still using it and disappears only when nobody is.
+      const reactions: Record<string, readonly string[]> = {}
+      for (const [key, who] of Object.entries(block.message.reactions)) {
+        if (key === emoji) {
+          if (now.length > 0) reactions[key] = now
+        } else {
+          reactions[key] = who
+        }
+      }
+      if (now.length > 0 && reactions[emoji] === undefined) reactions[emoji] = now
+
+      const message = { ...block.message, reactions }
+      return splice(segment.body, block, renderBlock(id, message, thread(blocks)))
+    })
+  }
+
+  #newMessage(body: string): CommentMessage {
+    return {
+      author: author(),
+      at: new Date().toISOString().slice(0, 16),
+      body: body.trim(),
+      reactions: {},
+      unknown: [],
+    }
+  }
+
+  /** Find the day a thread lives in, rewrite its body, and write it as one edit. */
+  async #rewriteThread(
+    id: CommentId,
+    change: (blocks: readonly ThreadBlock[], segment: Segment) => string,
+  ): Promise<void> {
+    for (const date of await this.dates()) {
+      const segment = await this.segment(date)
+      const blocks = scanThreadBlocks(segment.body).filter(b => b.id === id)
+      if (blocks.length === 0) continue
+      await this.#writeBody(date, segment.body, change(blocks, segment))
+      return
+    }
+    throw new Error(`there is no comment ${id}`)
+  }
+
+  /** One replacement covering everything that differs, so one undo step. */
+  async #writeBody(date: DateKey, before: string, after: string): Promise<void> {
+    const replacement = minimalReplacement(before, after)
+    if (replacement === null) return
+    await this.replace(
+      [
+        {
+          span: {
+            begin: this.#positionAt(date, replacement.from),
+            end: this.#positionAt(date, replacement.to),
+          },
+          payload: replacement.insert,
+        },
+      ],
+      'operation',
+    )
+  }
+
   async branch(span: Span, name: string): Promise<DocumentId> {
     const title = name.trim()
     if (title === '') throw new Error('a branched file needs a name')
@@ -855,7 +1023,7 @@ export class StreamDocument implements Document {
     return this.#positionAt(segment, offset)
   }
 
-  #typed(date: DateKey, s: { kind: TypedSpan['kind']; name: string; level: number; from: number; to: number }): TypedSpan {
+  #typed(date: DateKey, s: ScannedSpan): TypedSpan {
     const span: Span = { begin: this.#positionAt(date, s.from), end: this.#positionAt(date, s.to) }
     switch (s.kind) {
       case 'date':
@@ -866,6 +1034,8 @@ export class StreamDocument implements Document {
         return { kind: 'anchor', name: s.name, span }
       case 'tag':
         return { kind: 'tag', name: s.name, span }
+      case 'comment':
+        return { kind: 'comment', name: s.name, resolved: s.resolved === true, span }
     }
   }
 

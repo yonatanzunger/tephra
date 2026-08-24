@@ -963,3 +963,56 @@ smaller piece of the document; it is a different document.**
 
 Tagging and branching deliberately do not widen: those apply to exactly the
 words chosen, and a tag over half a sentence is a perfectly good tag.
+
+## The m1 intermittent, finally caught
+
+`npm run m1` had failed 15/3 twice, weeks apart, and passed on every attempt to
+reproduce it. This run caught it, and the failure was three checks in the crash
+acceptance:
+
+```
+FAIL  the file tier had NOT yet written it — so the log is what is being tested
+        day file exists without the text
+FAIL  the write-ahead log holds the edit
+FAIL  reopening recovers it
+```
+
+**It was a race in the harness, not a fault in the product.** The crash scene
+types, waits 300 ms, and is killed abruptly; the file tier writes 1 s after the
+last edit. Whether the text reached the file first was decided by roughly seven
+hundred milliseconds of margin — ample on an idle machine, and not ample at all
+when the machine has just run an Electron test suite. When the tier won, the text
+was on disk, the log had been cleared, and there was nothing to recover.
+
+The fix is to stop it being a race: **verification can hold the file tier open**
+through `TEPHRA_QUIESCE_MS`, gated like every other affordance (`verifyEnv`), and
+the acceptance sets it to a minute. What the check asserts is now a fact rather
+than a coincidence.
+
+### The reason it went undiagnosed twice is worse than the race
+
+The note beside the check read `day file exists without the text` — and **nothing
+had checked that**. It was a bare `filesAfterCrash.length === 0 ? … : …`, so when
+the file DID contain the text, the harness printed a reassuring sentence next to
+a red line. Both earlier failures were looked at and told me nothing, because the
+diagnostic was describing what it hoped for rather than what it found.
+
+`notes.md` already records four instruments that perturbed or misrepresented what
+they measured. This is the fifth, and the first where the instrument's report was
+simply untrue. The note now says which of the two states was found — proven by
+forcing the race, where it correctly reads *the file tier HAD written it — the
+race was lost*.
+
+### And the fix broke the layering a third time
+
+The obvious place to read `TEPHRA_QUIESCE_MS` was `DocumentService`, so that is
+where I put it — through `verifyEnv`, which imports `app` from Electron. The
+three suites that drive the service under plain node failed instantly, exactly as
+they had for `app.isPackaged` and for `shell`.
+
+Three breakages, three different imports, each added for a good local reason,
+each fixed the same way: **the service says what it needs and the Electron layer
+supplies it.** A comment saying so was already in the file and did not prevent
+this one, so the invariant is now `tests/unit/main/no-electron.test.ts` — which
+also checks the second-hand route, since the third breakage never contained the
+word "electron" at all.

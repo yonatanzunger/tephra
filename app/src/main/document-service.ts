@@ -43,6 +43,7 @@ export interface MessageSink {
  * reliable component to own the most important guarantee.
  */
 const QUIESCE_MS = 1_000
+
 const MAX_INTERVAL_MS = 5_000
 
 /**
@@ -72,6 +73,12 @@ export interface ServiceOptions {
    * wrongly, that the commit never happens.
    */
   readonly walBatchMs?: number
+  /**
+   * The file tier's quiescence. Verification lengthens it so that "the file
+   * tier has not written yet" is a fact rather than a race — but the VALUE
+   * arrives from the caller, because reading it means reading the environment
+   * through the verify gate, and that gate imports Electron.
+   */
   readonly quiesceMs?: number
   readonly maxIntervalMs?: number
   readonly versionQuiesceMs?: number
