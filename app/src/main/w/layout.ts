@@ -42,6 +42,13 @@ export const LOCAL = {
   issues: `${LOCAL_DIR}/issues.json`,
   attachmentsManifest: `${LOCAL_DIR}/attachments.manifest`,
   uiState: `${LOCAL_DIR}/ui-state.json`,
+  /** The last thing sent to paper, kept so the viewer has a file to show. */
+  print: `${LOCAL_DIR}/print.pdf`,
+  /**
+   * The HTML it was rendered from. A real file rather than a data: URL, whose
+   * opaque origin cannot resolve the relative image links in a passage.
+   */
+  printSource: `${LOCAL_DIR}/print.html`,
 } as const
 
 /** The on-disk state version for a directory, so a future format can migrate. */

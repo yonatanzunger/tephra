@@ -66,6 +66,21 @@ export interface Selection {
   readonly empty: boolean
   /** Subjects already covering any part of it — what "Remove Tag…" offers. */
   readonly subjects: readonly string[]
+  /**
+   * The selection widened to whole lines.
+   *
+   * **Printing needs this and nothing else does.** A markdown renderer reads
+   * block structure off the beginning of a line — `##` makes a heading, `-` an
+   * item, `>` a quotation, `|` a table row — and those marks are concealed and
+   * atomic in the editor, so a selection that starts at the first visible
+   * character of a heading starts AFTER its hashes. Printed, it arrived as an
+   * ordinary paragraph. Half a line of markdown is not a smaller piece of the
+   * document; it is a different document.
+   *
+   * Tagging and branching deliberately do NOT use this: those apply to exactly
+   * the words chosen, and widening them would be wrong.
+   */
+  readonly lines: string
 }
 
 /**
@@ -78,6 +93,7 @@ export interface Selection {
  */
 export function readSelection(view: EditorView, docWindow: DocumentWindow): Selection {
   const main = view.state.selection.main
+  const whole = docWindow.snap(main.from as BufferPosition, main.to as BufferPosition)
   const subjects: string[] = []
   for (const span of docWindow.spans('tag')) {
     const from = docWindow.toBuffer(span.span.begin)
@@ -89,7 +105,12 @@ export function readSelection(view: EditorView, docWindow: DocumentWindow): Sele
       subjects.push(span.name)
     }
   }
-  return { span: selectedSpan(view, docWindow), empty: main.empty, subjects }
+  return {
+    span: selectedSpan(view, docWindow),
+    empty: main.empty,
+    subjects,
+    lines: view.state.sliceDoc(whole.from as number, whole.to as number),
+  }
 }
 
 /** What a mark stands for, once someone clicks it. */

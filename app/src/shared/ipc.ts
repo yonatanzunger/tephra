@@ -32,6 +32,7 @@ export const CHANNEL = {
   branch: 'tephra:doc:branch',
   renameTag: 'tephra:doc:renameTag',
   removeAnchor: 'tephra:doc:removeAnchor',
+  print: 'tephra:doc:print',
   openLink: 'tephra:doc:openLink',
   extent: 'tephra:doc:extent',
   today: 'tephra:doc:today',
@@ -154,3 +155,20 @@ export interface Boundaries {
 }
 
 export type { DocumentPosition }
+
+/**
+ * A passage on its way to paper.
+ *
+ * The HTML is rendered in the renderer, where the markdown parser already lives
+ * (Spike B: printing is a web-layer job and the shell contributes the panel).
+ * `segment` says which day the passage came from, which is what relative links
+ * resolve against — main turns it into a base URL, since only main knows where
+ * the notebook is. Spike B's fourth trap: without one, printing through a temp
+ * file makes every relative image silently 404.
+ */
+export interface PrintJob {
+  readonly html: string
+  readonly css: string
+  readonly title: string
+  readonly segment: DateKey
+}

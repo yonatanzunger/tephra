@@ -172,8 +172,13 @@ putting the commentary somewhere else to look at.
    the sequence is the part worth fixing now. The link left behind renders as its
    own words and opens the file, since it is v1's only path back. Finding a
    branched file independently is still v2.
-4. **Print a range.** Independent of the rest and mostly proven in Spike B: the
-   web layer renders, the shell supplies the panel.
+4. ✅ **Print a range.** Spike B's division held: the web layer renders markdown
+   to HTML and the shell contributes a window. It renders from the editor's OWN
+   parser rather than a second markdown library, so paper and screen cannot
+   disagree about what is bold. Math goes to MathML rather than KaTeX's HTML,
+   because a print document has to be self-contained and KaTeX's output needs a
+   stylesheet and sixty font files. Shown as a PDF in Chromium's viewer, which
+   restores the preview the spike found missing beside the native panel.
 5. **Settle Q8 and Q9**, with the machinery built and the question concrete.
 6. **Comment on a range, rendered in the reserved margin** (R27). MV reserved
    the space; this fills it.
@@ -197,6 +202,14 @@ putting the commentary somewhere else to look at.
 
 ## M3 — navigation and filesets
 
+- **Print the whole document**, on `Cmd+P` where every other application puts
+  it. For an ordinary document that is all of it; **for the stream it cannot
+  be** — "the whole document" is twenty years of days — so it needs a chooser,
+  and a date range is the natural axis since dates are how the stream is
+  organised (D8). Deferred here rather than built with M2.4 because it is a
+  navigation question wearing a printing hat: the same range-of-days idea the
+  nav needs. The accelerator was freed in M2 so the habit never forms wrong —
+  printing a range is `Cmd+Shift+P`.
 - Section/fileset index format, and the left nav of expandos (D10)
 - The default section, holding the pins, always present
 - Jump to a bookmark, a file, a URL, an external document by OS intent

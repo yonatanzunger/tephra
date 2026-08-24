@@ -15,6 +15,7 @@ import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { MarkPanel } from './frame/MarkPanel'
 import type { MarkInfo } from './editor/range-commands.ts'
+import { printPage, PRINT_CSS } from './print/page.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -203,6 +204,23 @@ export function App(): React.JSX.Element {
             })
           },
         })
+        return
+      }
+
+      if (id === 'print') {
+        const selection = selectionRef.current?.()
+        if (selection === undefined || selection.empty) return
+        const day = selection.span.begin.segment as DateKey
+        void window.tephra.doc
+          .print({
+            ...printPage(selection.lines, day),
+            css: PRINT_CSS,
+            segment: day,
+          })
+          .then(ok => {
+            if (!ok) setError('That passage could not be prepared for printing.')
+          })
+          .catch(fail)
         return
       }
 

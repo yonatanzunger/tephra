@@ -30,6 +30,12 @@ export interface RangeCommand {
 }
 
 /**
+ * **`Cmd+P` is not here, and that is deliberate.** Every application prints the
+ * whole document on `Cmd+P`, and taking that for a range operation would be a
+ * small daily surprise in exchange for one saved keystroke. Printing a range is
+ * `Cmd+Shift+P`; printing the whole thing arrives with a File menu, where the
+ * stream will need a date range rather than a document.
+ *
  * Order matters: it is the order both menus show, so it should read as a
  * sequence someone might actually work through — mark a place, name a subject,
  * say something about it, move it out, put it on paper.
@@ -40,7 +46,7 @@ export const RANGE_COMMANDS: readonly RangeCommand[] = [
   { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', built: true },
   { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+K', needs: 'range', built: false },
   { id: 'branch', label: 'Branch to Its Own File…', accelerator: '', needs: 'range', built: true },
-  { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+P', needs: 'range', built: false },
+  { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', built: true },
 ]
 
 /** What the renderer tells main about the caret, so menus can enable correctly. */

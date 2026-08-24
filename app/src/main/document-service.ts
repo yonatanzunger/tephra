@@ -278,6 +278,11 @@ export class DocumentService {
     })
   }
 
+  /** Where the notebook is. Printing resolves relative links against it. */
+  get notebookRoot(): string {
+    return this.#notebook.root
+  }
+
   anomalies(): readonly Anomaly[] {
     return this.#doc.anomalies()
   }

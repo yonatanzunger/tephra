@@ -3,6 +3,8 @@
 import { ipcMain, shell, type BrowserWindow } from 'electron'
 import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
+import { printPassage } from './print.ts'
+import type { PrintJob } from '../shared/ipc.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DocumentPosition, Span } from '../shared/document-api.ts'
 import { StreamDocument } from './x/stream-document.ts'
@@ -37,6 +39,7 @@ export function registerDocumentIpc(service: DocumentService): void {
     service.renameTag(span, from, to),
   )
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
+  ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
   ipcMain.handle(CHANNEL.undo, () => service.undo())
   ipcMain.handle(CHANNEL.redo, () => service.redo())
   ipcMain.handle(CHANNEL.flush, () => service.flush())

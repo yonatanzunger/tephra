@@ -910,3 +910,56 @@ Worth noting what did NOT go wrong, because it says where to look next time: the
 document was correct every single time. Every one of the four lived in the gap
 between two objects holding one fact — and in three of the four, the object
 holding the stale copy was the renderer's half of a split pair.
+
+## Printing (M2.4)
+
+Spike B's prediction held exactly: the work is in the web layer, and the shell's
+whole contribution is `src/main/print.ts` — a window, a PDF, and a viewer.
+
+Three decisions inside it were not in the spike.
+
+**It renders from the editor's own parser.** Adding `marked` would have been
+fewer lines and would have installed the fault this milestone has now met four
+times: two computations of one quantity, disagreeing quietly and only about the
+awkward cases. `@lezer/markdown` with GFM is already present because the editor
+uses it, so paper and screen cannot disagree about what is bold.
+
+**Math goes to MathML, where the screen uses KaTeX's HTML.** KaTeX's HTML output
+is a lattice of positioned spans that means nothing without its stylesheet, and
+the stylesheet means nothing without its sixty font files. A print document is
+rendered offscreen and thrown away, so it has to be self-contained; MathML is
+rendered by the browser itself and needs no assets at all. The first attempt
+shipped KaTeX HTML with no CSS and printed an integral as `∫0τ r(t) dt`.
+
+**Raw HTML in a passage prints as the text it is.** The first version dropped
+the tags and kept what was between them, so `<script>alert(1)</script>` printed
+as `alert(1)` — the worst of the three options, because it silently altered what
+the person wrote. A document is prose, not a template: it may not put markup on
+the page, and it may not have its words quietly removed either. Comments are the
+exception and print as nothing, which is what they are everywhere else — and
+Tephra's own markers are comments.
+
+### The one trap that came back wearing a different hat
+
+Spike B's fourth trap was that Electron prints through a temp file, so relative
+images 404 without an explicit `<base href>`. The base was there from the start
+and every image still arrived broken, because the document was handed over as a
+**data: URL** — an opaque origin, which is allowed to resolve nothing. Written
+to a real file and loaded as one, the base works. The spike found the right
+rule; the reason it applies is one layer deeper than it recorded.
+
+### Print takes whole lines, and why that is the rule rather than a convenience
+
+Selecting a heading and printing it produced a paragraph. The cause is not in
+the printer: **the editor conceals `## ` and the concealment is atomic**, so a
+selection starting at the heading's first visible character starts *after* the
+hashes. Verified in the running app — the selection began at `"The Sh"`.
+
+Every block construct fails the same way, because markdown reads block structure
+off the START of a line: `-` makes an item, `>` a quotation, `|` a table row,
+```` ``` ```` a code fence. So the fix is not to special-case headings but to
+widen the printed range to whole lines. **Half a line of markdown is not a
+smaller piece of the document; it is a different document.**
+
+Tagging and branching deliberately do not widen: those apply to exactly the
+words chosen, and a tag over half a sentence is a perfectly good tag.

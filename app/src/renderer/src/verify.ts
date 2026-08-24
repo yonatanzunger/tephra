@@ -380,6 +380,23 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'print') {
+      const all = view.state.doc.toString()
+      // From the first VISIBLE character of the heading, which is where a
+      // person's selection starts: the hashes are concealed and atomic, so the
+      // caret cannot be put before them.
+      const from = all.indexOf('The Shock Limit')
+      view.dispatch({ selection: { anchor: from, head: all.length } })
+      await settle(200)
+      say('selectionStartsAt', JSON.stringify(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.from + 6)))
+      await settle(300)
+      say('selected', from !== -1)
+      say('menuItemFound', await window.tephra.clickMenu('Print Selection…'))
+      await settle(3500)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(1500)
+    }
+
     if (scene === 'markpanel') {
       const click = (index: number): boolean => {
         const marks = document.querySelectorAll('.tx-handle')

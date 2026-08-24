@@ -6,6 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
+import type { PrintJob } from '../shared/ipc.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
@@ -75,6 +76,7 @@ const tephra = {
     renameTag: (span: Span, from: string, to: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.renameTag, span, from, to),
     removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
+    print: (request: PrintJob): Promise<boolean> => ipcRenderer.invoke(CHANNEL.print, request),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
 
