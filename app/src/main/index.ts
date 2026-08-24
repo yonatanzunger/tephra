@@ -6,6 +6,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection, setMenuVim } from './menu.ts'
 import { verifyMode, verifyEnv } from './verify-mode.ts'
+import { author } from './x/comments.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
@@ -143,6 +144,9 @@ function createWindow(): BrowserWindow {
 ipcMain.handle('tephra:hello', () => ({
   version: process.versions.electron,
   origin: DEV_SERVER ?? APP_ORIGIN,
+  // Who is writing. A name in a file, not an identity claim — the margin needs
+  // it to tell your own reactions from anyone else's.
+  author: author(),
 }))
 
 let notebook: Notebook | null = null

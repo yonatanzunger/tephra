@@ -14,6 +14,10 @@ import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { MarkPanel } from './frame/MarkPanel'
+import { Rail } from './frame/Rail'
+import { createPortal } from 'react-dom'
+import type { CommentThread } from '../../shared/comments.ts'
+import type { CommentAnchor } from './editor/comment-anchors.ts'
 import type { MarkInfo } from './editor/range-commands.ts'
 import { printPage, PRINT_CSS } from './print/page.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
@@ -161,6 +165,10 @@ export function App(): React.JSX.Element {
   }, [doc, pane])
 
   useEffect(() => {
+    void window.tephra.hello().then(hello => setMe(hello.author))
+  }, [])
+
+  useEffect(() => {
     if (doc === null) return
     let cancelled = false
     void window.tephra.doc.anomalies().then(found => {
@@ -204,6 +212,17 @@ export function App(): React.JSX.Element {
             })
           },
         })
+        return
+      }
+
+      if (id === 'comment') {
+        const selection = selectionRef.current?.()
+        if (selection === undefined || selection.empty) return
+        // No dialog. The note opens in the margin, empty and ready to type in —
+        // the same surface it will be read and edited in ever after (D47). A
+        // one-line prompt for something the margin already does properly is the
+        // "edit where it is rendered" rule broken by the creation path.
+        void window.tephra.doc.startComment(selection.span, '').then(refreshComments).catch(fail)
         return
       }
 
@@ -282,6 +301,28 @@ export function App(): React.JSX.Element {
   // Where the caret is, remembered. Debounced because it moves on every
   // keystroke and this is a file write; the last position is the one that
   // matters, not every position on the way there.
+  // The margin. Threads come from X; anchors come from the editor's geometry;
+  // neither knows about the other, which is what keeps the rail out of the
+  // typing path.
+  const [threads, setThreads] = useState<readonly CommentThread[]>([])
+  const [anchors, setAnchors] = useState<readonly CommentAnchor[]>([])
+  const [railHost, setRailHost] = useState<HTMLElement | null>(null)
+  const [me, setMe] = useState('')
+
+  const refreshComments = useCallback(() => {
+    void window.tephra.doc.comments().then(setThreads).catch(() => setThreads([]))
+  }, [])
+
+  // The margin follows the document: a comment made, undone, or arriving from a
+  // hand-edit all change the same list, and all of them announce themselves the
+  // same way (D45).
+  useEffect(() => {
+    if (doc === null) return
+    refreshComments()
+    return docWindow?.onSpansChanged(refreshComments)
+  }, [doc, docWindow, refreshComments])
+
+
   // The mark someone clicked, and what it stands for. Null when nothing is open.
   const [mark, setMark] = useState<MarkInfo | null>(null)
 
@@ -447,6 +488,8 @@ export function App(): React.JSX.Element {
             onError={err => setError(err.message)}
             onSelectionReader={read => (selectionRef.current = read)}
             onMark={setMark}
+            onCommentAnchors={setAnchors}
+            onRailHost={setRailHost}
           />
         )}
         {anomaliesOpen && (
@@ -460,6 +503,18 @@ export function App(): React.JSX.Element {
           />
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
+        {railHost !== null &&
+          createPortal(
+            <Rail
+              threads={threads}
+              anchors={anchors}
+              me={me}
+              onChanged={refreshComments}
+              onError={fail}
+            />,
+            railHost,
+          )}
+
         {mark !== null && (
           <MarkPanel
             mark={mark}

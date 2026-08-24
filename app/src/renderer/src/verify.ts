@@ -380,6 +380,74 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(200)
     }
 
+    if (scene === 'comment') {
+      const type = async (text: string): Promise<boolean> => {
+        const area = document.querySelector('.rail textarea') as HTMLTextAreaElement | null
+        if (area === null) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+        set?.call(area, text)
+        area.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        area.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1200)
+        return true
+      }
+
+      const all = view.state.doc.toString()
+      const from = all.indexOf('largest sudden loss a participant can absorb')
+      view.dispatch({ selection: { anchor: from, head: from + 44 } })
+      say('selected', from !== -1)
+      // The menu learns about the selection over IPC, and a range command is
+      // greyed until it has.
+      await settle(700)
+      const w0 = (pane as unknown as { window?: { text: string } }).window
+      say('bufferBefore', w0?.text.length ?? -1)
+      say('menuItemFound', await window.tephra.clickMenu('Comment…'))
+
+      // Poll rather than guess: how long the note takes to appear is the
+      // question, and a fixed sleep answers it only by accident.
+      let waited = 0
+      while (waited < 6000 && document.querySelector('.rail textarea') === null) {
+        await settle(200)
+        waited += 200
+      }
+      say('composerAppearedAfterMs', waited)
+      say('bufferAfter', w0?.text.length ?? -1)
+      const w3 = (pane as unknown as { window?: { spans(k?: string): unknown[] } }).window
+      say('spansSeenByRenderer', w3?.spans('comment')?.length ?? -1)
+      say('threadsSeenByRenderer', (await window.tephra.doc.comments()).length)
+
+      // No dialog: the note is already in the margin, open and waiting.
+      say('promptShown', document.querySelector('.prompt') !== null)
+      say('composerOpen', document.querySelector('.rail textarea') !== null)
+      say('typed', await type('This assumes the reader already accepts premise 2.'))
+
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      say('notesInMargin', document.querySelectorAll('.rail .note').length)
+      say('noteText', document.querySelector('.rail .note-body')?.textContent ?? '(none)')
+      say('markInText', document.querySelectorAll('.tx-handle').length)
+      say('ruleUnderRange', document.querySelectorAll('.tx-commented').length)
+      say('rawInBuffer', view.state.doc.toString().includes('tephra:'))
+      say('bodyInBuffer', view.state.doc.toString().includes('premise 2'))
+      say('quickReactions', [...document.querySelectorAll('.rail .quick')].map(b => b.textContent))
+
+      // React, and check the actions did not move as a result.
+      const before = (document.querySelector('.rail .note-actions') as HTMLElement | null)?.getBoundingClientRect().left ?? -1
+      ;(document.querySelector('.rail .quick') as HTMLButtonElement | null)?.click()
+      await settle(1000)
+      const after = (document.querySelector('.rail .note-actions') as HTMLElement | null)?.getBoundingClientRect().left ?? -2
+      say('actionsStayedPut', before === after)
+      say('reactions', [...document.querySelectorAll('.rail .reaction')].map(b => b.textContent))
+
+      // And a reply, written where the note is read.
+      const reply = [...document.querySelectorAll('.rail .link')].find(b => b.textContent === 'Reply') as HTMLButtonElement | undefined
+      reply?.click()
+      await settle(300)
+      say('replied', await type('On reflection, premise 2 is the interesting part.'))
+      say('messagesNow', document.querySelectorAll('.rail .note-message').length)
+      await settle(2500)
+    }
+
     if (scene === 'print') {
       const all = view.state.doc.toString()
       // From the first VISIBLE character of the heading, which is where a

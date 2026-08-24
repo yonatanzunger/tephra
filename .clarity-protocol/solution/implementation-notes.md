@@ -1016,3 +1016,91 @@ supplies it.** A comment saying so was already in the file and did not prevent
 this one, so the invariant is now `tests/unit/main/no-electron.test.ts` — which
 also checks the second-hand route, since the third breakage never contained the
 word "electron" at all.
+
+## The margin (M2.6)
+
+The band MV reserved and D42 kept empty for four milestones now holds notes. It
+works because the gutter is `padding-right` on `.cm-content` rather than a grid
+track: drawing into it moves nothing, which is why a note can arrive without the
+paragraph beside it shifting.
+
+Two decisions worth keeping:
+
+**The rail is mounted inside `.cm-scroller`.** Notes then scroll with the text
+natively. A rail outside the scroller would need a scroll handler recomputing
+every note's position as the reader moves — sixty times a second, to achieve
+exactly what the browser does for free.
+
+**Notes are placed by writing to the DOM, not through React.** A note wants to
+sit beside what it annotates and must not sit on top of its neighbour, and the
+second wins; heights are only knowable after layout, so the stacking pass reads
+`offsetHeight` and writes `style.top` in a layout effect. Feeding that back
+through state would be a second render per placement.
+
+### A `{ kind: 'tag' }` fallthrough, and comments arriving as tags
+
+`StreamWindow.spans()` had **its own copy** of the scanned-span-to-typed-span
+mapping, ending in a `{ kind: 'tag', … }` default. The day a new kind existed,
+every comment reached the renderer labelled a tag: `spans('comment')` was empty,
+the margin drew nothing, and the tag rail would have drawn them.
+
+The document's `#typed` is now the only implementation and the window calls it.
+The general lesson is narrower and sharper than "two copies of one quantity":
+**a switch with a fallthrough default is a mapping that silently mislabels
+whatever it has not been taught.** An exhaustive switch would have failed to
+compile the moment `SpanKind` grew, which is precisely when it needed to.
+
+### And `#touched`, which was nine copies of two lines
+
+Noticed while reading: every mutation in `document-service.ts` ended with
+`#unsavedWork = true` and `#scheduleFlush()`, written out nine times. Nine
+chances for the next one to set the flag and forget the timer — a document that
+then saves only when something else happens to save. Now `#touched()`, with
+`#versionable()` for the version tier's much longer clock, and one deliberate
+exception that says why it flushes immediately (D13).
+
+## Four changes to the margin, and one intermittent left open
+
+**Commenting no longer asks in a dialog.** It creates the thread with an empty
+message and opens it in the rail, already in edit mode. The dialog was the "edit
+where it is rendered" rule (D47) broken by the *creation* path: a one-row text
+field in the middle of the screen, for something the margin does properly three
+inches to the right. Abandoning an empty note deletes it, and deleting the only
+message deletes the thread — so backing out leaves the file exactly as it was.
+
+**Reactions get their own line.** Sharing a row with Edit and Delete made those
+move sideways every time anyone reacted, which is reflow at a smaller scale and
+objectionable for the same reason. Asserted now, not just eyeballed: the scene
+measures the actions' left edge before and after a reaction and requires it
+unchanged.
+
+**The quick set is ➕ 👀 🎉, and everything else goes through the system's own
+picker.** `app.showEmojiPanel()` types into whatever has focus, so the note
+focuses a hidden field and reads the first grapheme out of it. Cheaper than
+shipping an emoji database and a search box, and better, because it is the picker
+the reader already knows.
+
+**Notes are 0.9rem**, up from 0.72. Marginalia should be quieter than the text
+and still comfortably readable; the smaller size bought the first at the cost of
+the second.
+
+### The intermittent, characterised and not yet explained
+
+Roughly one run in five, the note does not appear: the file is written correctly
+and `comments()` returns the thread, but the editor's buffer never changes. One
+failing run was traced far enough to be precise about it — **main's own prose
+length was unchanged**, 258 before and 258 after, while the raw body had grown.
+The announcement fired (`origin=operation`, one handler), so this is not the
+IPC push; the prose the window rebuilt from simply did not reflect the edit.
+
+What has been ruled out: the elision itself (`proseMarkers` on that exact body,
+in isolation, produces the right handle and elides the block); the cached prose
+being stale on `setBody`; and `Segment.adopt()`, the watcher's take-the-file-as-
+truth path, which never fired in any observed run. Adding a `console.log` to the
+announcement flipped it from failing consistently to passing consistently, which
+says it is a timing race and not a logic error in the synchronous path.
+
+**It is not in the tests** — the X-level assertions for exactly this ("the body
+is NOT in the buffer", handle count of one) pass every time — so whatever it is,
+it needs the running app. Next step is a trace of `Segment.prose`'s cache
+identity across the operation, which is the one thing not yet instrumented.

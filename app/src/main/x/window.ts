@@ -234,19 +234,10 @@ export class StreamWindow implements DocumentWindow {
     for (const placed of this.#placed) {
       for (const s of placed.segment.spans()) {
         if (kind !== undefined && s.kind !== kind) continue
-        const span: Span = {
-          begin: this.#doc.positionAt(placed.segment.date, s.from),
-          end: this.#doc.positionAt(placed.segment.date, s.to),
-        }
-        out.push(
-          s.kind === 'heading'
-            ? { kind: 'heading', name: s.name, level: s.level, span }
-            : s.kind === 'date'
-              ? { kind: 'date', name: placed.segment.date, span }
-              : s.kind === 'anchor'
-                ? { kind: 'anchor', name: s.name, span }
-                : { kind: 'tag', name: s.name, span },
-        )
+        // Through the document's mapping, not a copy of it. The copy that used
+        // to live here ended in a `{ kind: 'tag' }` fallthrough, so comments
+        // arrived as tags the day comments existed.
+        out.push(this.#doc.typed(placed.segment.date, s))
       }
     }
     return out

@@ -476,3 +476,99 @@ body {
   color: rgb(var(--text-muted)); font: inherit; text-decoration: underline;
 }
 .mark-panel .link:hover { color: rgb(var(--accent)); }
+
+/* A commented range: a dotted rule, quieter than a tag's and in the theme's
+   colour rather than a subject's, because a comment is not a subject. Sits
+   below the tag rules so the two never collide. */
+.tx-commented {
+  padding-bottom: 0.36em;
+  background-image: linear-gradient(to right, rgb(var(--text-muted) / .85) 0 60%, transparent 60% 100%);
+  background-repeat: repeat-x;
+  background-size: 3px 1px;
+  background-position: 0 calc(100% - 0.02em);
+}
+.tx-commented.tx-resolved { opacity: .55; }
+
+/* ── the margin ───────────────────────────────────────────────────────────
+   Drawn over the band `.cm-content` reserves as padding-right, so notes
+   appearing and disappearing move no line of text. That is D42's invariant,
+   and it is the reason the gutter was reserved from the very first frame. */
+.rail-host {
+  position: absolute; top: 0; height: 100%; width: 0;
+  left: calc(var(--measure) + 0.9rem);
+  pointer-events: none;
+}
+.rail { position: relative; }
+.rail > * { pointer-events: auto; }
+
+.note {
+  position: absolute; left: 0; width: calc(var(--gutter) - 1.2rem);
+  /* Marginalia should be quieter than the text and still comfortably readable;
+     .72rem was quiet at the cost of the second one. */
+  font-family: var(--font-ui); font-size: .9rem; line-height: 1.45;
+  color: rgb(var(--text));
+  border-left: 2px solid rgb(var(--accent) / .4);
+  padding: 0 0 .2rem .55rem;
+  transition: top .12s ease-out;
+}
+.note-resolved { opacity: .5; border-left-color: rgb(var(--border)); }
+.note-assignee { color: rgb(var(--text-muted)); font-style: italic; margin-bottom: .15rem; }
+
+.note-message + .note-message { margin-top: .5rem; padding-top: .4rem; border-top: 1px solid rgb(var(--border)); }
+.note-message header { display: flex; gap: .4rem; align-items: baseline; color: rgb(var(--text-muted)); }
+.note-who { font-weight: 600; color: rgb(var(--text)); }
+.note-message time { font-size: .92em; }
+.note-body { margin: .15rem 0 .25rem; }
+.note-body p { margin: 0 0 .3rem; }
+.note-body :last-child { margin-bottom: 0; }
+.note-body code { font-size: .92em; }
+
+.note-message footer, .note-foot { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.note-actions { display: flex; gap: .3rem; opacity: 0; transition: opacity .1s; }
+.note:hover .note-actions, .note:focus-within .note-actions { opacity: 1; }
+
+.note .link, .note .quick {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  font: inherit; color: rgb(var(--text-muted));
+}
+.note .link { text-decoration: underline; }
+.note .link:hover, .note .quick:hover { color: rgb(var(--accent)); }
+.reaction {
+  border: 1px solid rgb(var(--border)); border-radius: 999px; cursor: pointer;
+  background: transparent; font: inherit; color: rgb(var(--text-muted));
+  padding: 0 .35rem; line-height: 1.5;
+}
+.reaction.mine { border-color: rgb(var(--accent) / .6); color: rgb(var(--text)); }
+
+.composer { display: flex; flex-direction: column; gap: .25rem; margin: .2rem 0; }
+.composer textarea {
+  font: inherit; color: rgb(var(--text)); resize: vertical;
+  background: rgb(var(--surface)); border: 1px solid rgb(var(--border));
+  border-radius: 4px; padding: .3rem .4rem; width: 100%; box-sizing: border-box;
+}
+.composer-actions { display: flex; gap: .5rem; align-items: center; }
+.composer-actions button:not(.link) {
+  font: inherit; cursor: pointer; border: 0; border-radius: 4px;
+  background: rgb(var(--accent) / .85); color: rgb(var(--surface)); padding: .12rem .5rem;
+}
+
+/* Folded: below the width where the gutter fits, notes go under the paragraph
+   they belong to. Position is the right thing to give up first (D42). */
+.frame[data-gutter='folded'] .rail-host { left: 0; width: 100%; }
+.frame[data-gutter='folded'] .note {
+  position: static; width: auto; max-width: var(--measure);
+  margin: .3rem 0 .6rem;
+}
+
+/* Reactions keep their own line. Sharing one with Edit and Delete made those
+   move sideways every time anyone reacted — reflow, at a smaller scale. */
+.note-message footer { display: block; }
+.note-reactions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; min-height: 1.4em; }
+.note-actions { display: flex; gap: .5rem; margin-top: .15rem; }
+.note .more { position: relative; display: inline-flex; }
+/* The system picker types into whatever has focus, so there has to be
+   something to type into. It is never meant to be seen. */
+.note .more-catch {
+  position: absolute; left: 0; bottom: 0; width: 1px; height: 1px;
+  opacity: 0; border: 0; padding: 0; pointer-events: none;
+}

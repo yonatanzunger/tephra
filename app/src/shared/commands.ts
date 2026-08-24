@@ -44,7 +44,7 @@ export const RANGE_COMMANDS: readonly RangeCommand[] = [
   { id: 'bookmark', label: 'Bookmark…', accelerator: 'CmdOrCtrl+D', needs: 'point', built: true },
   { id: 'tag', label: 'Tag…', accelerator: 'CmdOrCtrl+T', needs: 'range', built: true },
   { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', built: true },
-  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+K', needs: 'range', built: false },
+  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+K', needs: 'range', built: true },
   { id: 'branch', label: 'Branch to Its Own File…', accelerator: '', needs: 'range', built: true },
   { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', built: true },
 ]

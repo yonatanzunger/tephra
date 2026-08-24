@@ -7,6 +7,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
 import type { PrintJob } from '../shared/ipc.ts'
+import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
@@ -48,7 +49,10 @@ ipcRenderer.on(CHANNEL.setVim, (_e, value: boolean) => {
 })
 
 const tephra = {
-  hello: (): Promise<{ version: string; origin: string }> => ipcRenderer.invoke('tephra:hello'),
+  hello: (): Promise<{ version: string; origin: string; author: string }> =>
+    ipcRenderer.invoke('tephra:hello'),
+  /** Open the system's emoji picker. It types into whatever has focus. */
+  emojiPanel: (): Promise<boolean> => ipcRenderer.invoke(CHANNEL.emojiPanel),
   /** Follow a link found in the text. Main decides whether it may be followed. */
   openLink: (target: string): Promise<boolean> => ipcRenderer.invoke(CHANNEL.openLink, target),
   /** Self-check only; the handler exists only when TEPHRA_VERIFY is set. */
@@ -77,6 +81,22 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.renameTag, span, from, to),
     removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
     print: (request: PrintJob): Promise<boolean> => ipcRenderer.invoke(CHANNEL.print, request),
+
+    comments: (): Promise<readonly CommentThread[]> => ipcRenderer.invoke(CHANNEL.comments),
+    startComment: (span: Span, body: string): Promise<CommentId> =>
+      ipcRenderer.invoke(CHANNEL.startComment, span, body),
+    addComment: (id: CommentId, body: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.addComment, id, body),
+    editComment: (id: CommentId, index: number, body: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.editComment, id, index, body),
+    deleteComment: (id: CommentId, index: number): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.deleteComment, id, index),
+    setCommentResolved: (id: CommentId, resolved: boolean): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.setCommentResolved, id, resolved),
+    setCommentAssignee: (id: CommentId, to: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.setCommentAssignee, id, to),
+    reactToComment: (id: CommentId, index: number, emoji: string, on: boolean): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.reactToComment, id, index, emoji, on),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
 

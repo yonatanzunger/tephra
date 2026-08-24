@@ -14,6 +14,7 @@
 import type { Anomaly } from '../shared/anomalies.ts'
 import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
+import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
 import { Wal, type WalRecord } from './w/wal.ts'
 import { GitRepository } from './w/git-repository.ts'
@@ -175,8 +176,7 @@ export class DocumentService {
         // is that a commit becomes worth scheduling, and that the message
         // admits the notebook was edited from outside.
         this.#sawExternal = true
-        this.#unsavedWork = true
-        this.#scheduleVersion()
+        this.#versionable()
       })
     })
 
@@ -321,8 +321,7 @@ export class DocumentService {
     this.#walPending = []
     await this.#wal.clear()
     if (written.length > 0) {
-      this.#unsavedWork = true
-      this.#scheduleVersion()
+      this.#versionable()
     }
   }
 
@@ -502,8 +501,7 @@ export class DocumentService {
   /** Bookmark a point (R11's degenerate range). Serial, like every mutation. */
   async setAnchor(at: DocumentPosition, name: string): Promise<void> {
     await this.#serial(() => this.#doc.setAnchor(at, name))
-    this.#unsavedWork = true
-    this.#scheduleFlush()
+    this.#touched()
   }
 
   /**
@@ -514,14 +512,12 @@ export class DocumentService {
    */
   async tag(span: Span, subject: string): Promise<void> {
     await this.#serial(() => this.#doc.tag(span, subject))
-    this.#unsavedWork = true
-    this.#scheduleFlush()
+    this.#touched()
   }
 
   async untag(span: Span, subject: string): Promise<void> {
     await this.#serial(() => this.#doc.untag(span, subject))
-    this.#unsavedWork = true
-    this.#scheduleFlush()
+    this.#touched()
   }
 
   /**
@@ -531,6 +527,8 @@ export class DocumentService {
    */
   async branch(span: Span, name: string): Promise<DocumentId> {
     const id = await this.#serial(() => this.#doc.branch(span, name))
+    // Not `#touched()`: the branched file is already on disk, so the window
+    // where the two halves disagree is closed now rather than in a second (D13).
     this.#unsavedWork = true
     await this.flush()
     return id
@@ -561,14 +559,76 @@ export class DocumentService {
   /** Change what one span is tagged as. Not a corpus-wide rename (D44). */
   async renameTag(span: Span, from: string, to: string): Promise<void> {
     await this.#serial(() => this.#doc.renameTag(span, from, to))
-    this.#unsavedWork = true
-    this.#scheduleFlush()
+    this.#touched()
   }
 
   async removeAnchor(name: string): Promise<void> {
     await this.#serial(() => this.#doc.removeAnchor(name))
+    this.#touched()
+  }
+
+  // ── comments (D47) ─────────────────────────────────────────
+  //
+  // Serial like every mutation, and flushed on the ordinary schedule. Reading
+  // is not serialised: a thread list is derived from bodies already in memory.
+
+  comments(): Promise<readonly CommentThread[]> {
+    return this.#doc.comments()
+  }
+
+  async startComment(span: Span, body: string): Promise<CommentId> {
+    const id = await this.#serial(() => this.#doc.startComment(span, body))
+    this.#touched()
+    return id
+  }
+
+  async addComment(id: CommentId, body: string): Promise<void> {
+    await this.#serial(() => this.#doc.addComment(id, body))
+    this.#touched()
+  }
+
+  async editComment(id: CommentId, index: number, body: string): Promise<void> {
+    await this.#serial(() => this.#doc.editComment(id, index, body))
+    this.#touched()
+  }
+
+  async deleteComment(id: CommentId, index: number): Promise<void> {
+    await this.#serial(() => this.#doc.deleteComment(id, index))
+    this.#touched()
+  }
+
+  async setCommentResolved(id: CommentId, resolved: boolean): Promise<void> {
+    await this.#serial(() => this.#doc.setCommentResolved(id, resolved))
+    this.#touched()
+  }
+
+  async setCommentAssignee(id: CommentId, to: string | null): Promise<void> {
+    await this.#serial(() => this.#doc.setCommentAssignee(id, to))
+    this.#touched()
+  }
+
+  async reactToComment(id: CommentId, index: number, emoji: string, on: boolean): Promise<void> {
+    await this.#serial(() => this.#doc.reactToComment(id, index, emoji, on))
+    this.#touched()
+  }
+
+  /**
+   * Something changed that has to reach the file tier.
+   *
+   * Every mutation ends with this pair, and for a while every mutation wrote it
+   * out again — nine copies of two lines, which is nine chances for the next
+   * one to set the flag and forget the timer, and a document that then saves
+   * only when something else happens to save.
+   */
+  #touched(): void {
     this.#unsavedWork = true
     this.#scheduleFlush()
+  }
+
+  /** The same, for the version tier's much longer clock (D32). */
+  #versionable(): void {
+    this.#unsavedWork = true
+    this.#scheduleVersion()
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {

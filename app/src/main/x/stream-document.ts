@@ -705,8 +705,17 @@ export class StreamDocument implements Document {
   }
 
   /** Anchor a new thread to a range and open it with one message. */
+  /**
+   * Anchor a new thread to a range, with or without anything to say yet.
+   *
+   * **An empty first message is allowed on purpose.** Commenting opens the note
+   * in the margin already in edit mode, where the note is read — asking for the
+   * text in a dialog first would put the writing somewhere other than the
+   * reading, which is the thing D47 rules out. An empty message that is never
+   * filled in is removed when the composer is dismissed, and removing the only
+   * message removes the thread, so nothing is left behind.
+   */
   async startComment(span: Span, body: string): Promise<CommentId> {
-    if (body.trim() === '') throw new Error('a comment needs something in it')
     const date = span.begin.segment as DateKey
     if ((span.end.segment as DateKey) !== date) {
       throw new Error('a comment covers one day at a time')
@@ -1023,6 +1032,21 @@ export class StreamDocument implements Document {
     return this.#positionAt(segment, offset)
   }
 
+  /** The one mapping from a scanned span to a typed one. See `#typed`. */
+  typed(date: DateKey, s: ScannedSpan): TypedSpan {
+    return this.#typed(date, s)
+  }
+
+  /**
+   * A scanned span becomes a typed one.
+   *
+   * **The only implementation, and it has to stay that way.** `StreamWindow`
+   * had a second copy whose last branch was `{ kind: 'tag' }`, so the moment a
+   * new kind arrived — comments — every one of them reached the renderer
+   * labelled a tag: `spans('comment')` was empty, the margin drew nothing, and
+   * the tag rail would have drawn them. A switch with a fallthrough default is
+   * a mapping that silently mislabels whatever it has not been taught.
+   */
   #typed(date: DateKey, s: ScannedSpan): TypedSpan {
     const span: Span = { begin: this.#positionAt(date, s.from), end: this.#positionAt(date, s.to) }
     switch (s.kind) {

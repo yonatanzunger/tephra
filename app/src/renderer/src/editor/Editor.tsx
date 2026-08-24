@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react'
 import type { BufferPosition, DocumentPosition, DocumentWindow } from '../../../shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
 import type { MarkInfo, Selection } from './range-commands.ts'
+import type { CommentAnchor } from './comment-anchors.ts'
 import type { Typography } from './theme'
 
 export interface EditorProps {
@@ -34,6 +35,8 @@ export interface EditorProps {
   readonly onSelectionReader?: (read: (() => Selection) | null) => void
   /** A mark was clicked. What it stands for, and where it is on screen. */
   readonly onMark?: (mark: MarkInfo) => void
+  readonly onCommentAnchors?: (anchors: readonly CommentAnchor[]) => void
+  readonly onRailHost?: (host: HTMLElement | null) => void
 }
 
 export function Editor({
@@ -46,6 +49,8 @@ export function Editor({
   onError,
   onSelectionReader,
   onMark,
+  onCommentAnchors,
+  onRailHost,
 }: EditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const binding = useRef<Binding | null>(null)
@@ -64,6 +69,8 @@ export function Editor({
       ...(initialCursor !== undefined ? { initialCursor } : {}),
       ...(onError !== undefined ? { onError } : {}),
       ...(onMark !== undefined ? { onMark } : {}),
+      ...(onCommentAnchors !== undefined ? { onCommentAnchors } : {}),
+      ...(onRailHost !== undefined ? { onRailHost } : {}),
     })
     binding.current = bound
     onSelectionReader?.(() => bound.selection())

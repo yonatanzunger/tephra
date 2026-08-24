@@ -23,6 +23,7 @@ import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, Edit
 import { widgetExtensions } from './widgets.ts'
 import { contextMenu, markAt, readSelection, reportSelection, type MarkInfo, type Selection } from './range-commands.ts'
 import { retag, tagExtents } from './tags.ts'
+import { commentExtents, recomment, type CommentAnchor } from './comment-anchors.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
 
@@ -45,6 +46,10 @@ export interface BindOptions {
   readonly onError?: (err: Error) => void
   /** A mark was clicked: here is what it stands for and where it sits. */
   readonly onMark?: (mark: MarkInfo) => void
+  /** Where each visible thread's anchor sits, so the margin can align to it. */
+  readonly onCommentAnchors?: (anchors: readonly CommentAnchor[]) => void
+  /** The element the margin renders into, or null when this editor goes away. */
+  readonly onRailHost?: (host: HTMLElement | null) => void
 }
 
 export interface Binding {
@@ -81,6 +86,7 @@ export function bindEditor(options: BindOptions): Binding {
         EditorView.lineWrapping,
         widgetExtensions(),
         tagExtents(docWindow),
+        commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors)),
         keymap.of([...defaultKeymap, ...searchKeymap]),
         typographyCompartment.of(tephraTheme(typography)),
         editorToWindow(docWindow, options.onError),
@@ -114,6 +120,13 @@ export function bindEditor(options: BindOptions): Binding {
   // as on edits from elsewhere. Deleting a tag's mark is exactly that case: the
   // buffer loses one character locally, and the tag it stood for goes away in
   // the answer that comes back a moment later.
+  // The rail's home. Inside `.cm-scroller`, so notes scroll with the text and
+  // nothing has to recompute their positions as the reader moves.
+  const railHost = document.createElement('div')
+  railHost.className = 'rail-host'
+  view.scrollDOM.append(railHost)
+  options.onRailHost?.(railHost)
+
   // A mark was clicked. The widget knows where it is; only the window knows
   // what it stands for.
   const onHandle = (event: Event): void => {
@@ -123,7 +136,7 @@ export function bindEditor(options: BindOptions): Binding {
   view.dom.addEventListener('tephra-handle', onHandle)
 
   const unsubscribeSpans = docWindow.onSpansChanged(() => {
-    view.dispatch({ effects: retag.of(null) })
+    view.dispatch({ effects: [retag.of(null), recomment.of(null)] })
   })
   const unsubscribeReset = docWindow.onReset(() => {
     view.dispatch({
@@ -145,6 +158,8 @@ export function bindEditor(options: BindOptions): Binding {
       view.dispatch({ effects: typographyCompartment.reconfigure(tephraTheme(t)) })
     },
     destroy(): void {
+      options.onRailHost?.(null)
+      railHost.remove()
       view.dom.removeEventListener('tephra-handle', onHandle)
       unsubscribeChanged()
       unsubscribeSpans()
