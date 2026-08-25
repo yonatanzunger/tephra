@@ -287,8 +287,25 @@ class LinkWidget extends WidgetType {
   }
 }
 
+/**
+ * Whether a CARET is in this construct — not whether a selection covers it.
+ *
+ * **A selection is not an edit intent; a caret is.** Revealing on any
+ * overlapping range meant that dragging a selection past a link unrendered it
+ * mid-drag, and a link's raw form is eighty characters longer than its words:
+ * the line rewrapped, everything below moved, and the pointer ended up over
+ * different text. Reported as "halfway through selecting there's a jump and
+ * suddenly I'm selecting the text below", which is exactly what it looks like.
+ *
+ * Selecting across markup never needs to see it. Replacing a selection that
+ * contains a construct removes the construct, which is what anyone would
+ * expect; and reading is the thing people do while dragging, not editing.
+ *
+ * This is Q11's complaint again, at the one moment it does the most damage —
+ * reflow while the pointer is down.
+ */
 function overlapsCursor(state: EditorState, from: number, to: number): boolean {
-  return state.selection.ranges.some(r => r.from <= to && r.to >= from)
+  return state.selection.ranges.some(r => r.empty && r.from <= to && r.to >= from)
 }
 
 /** One line either side, so vertical motion has somewhere to land. */

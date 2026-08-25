@@ -401,6 +401,27 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(400)
     }
 
+    if (scene === 'growth') {
+      // Watch the document over time. If growth is looping, the length keeps
+      // moving; if it is duplicating, the same text appears more than once.
+      const samples: number[] = []
+      for (let i = 0; i < 40; i++) {
+        samples.push(view.state.doc.length)
+        await settle(200)
+      }
+      say('lengths', samples.filter((n, i) => i === 0 || n !== samples[i - 1]))
+      say('settled', samples[samples.length - 1] === samples[samples.length - 6])
+      const text = view.state.doc.toString()
+      say('mondayCount', (text.match(/Monday: a paragraph/g) ?? []).length)
+      say('fridayCount', (text.match(/Friday: a paragraph/g) ?? []).length)
+      say('separators', document.querySelectorAll('.tx-daybreak').length)
+      const vp = (view as unknown as { viewport?: { from: number; to: number } }).viewport
+      say('viewport', vp === undefined ? null : { from: vp.from, to: vp.to })
+      say('caretAt', view.state.selection.main.head)
+      say('linesInDom', document.querySelectorAll('.cm-line').length)
+      say('daysReported', (await window.tephra.doc.spans({ kind: 'date' })).length)
+    }
+
     if (scene === 'landing') {
       // Growth happens behind the reader, so the question is not where the app
       // landed at first paint but where it is once the region has finished
@@ -471,6 +492,153 @@ export async function runVerify(scene: string): Promise<void> {
       say('converted', md === null ? 'NULL' : `${md.length} chars`)
       say('mdHead', md === null ? '' : md.slice(0, 120))
       await settle(400)
+    }
+
+    if (scene === 'mousedrag') {
+      // The reported gesture, with real mouse events: press between the final
+      // digits of the URL and its closing paren, then drag left and up.
+      const all = view.state.doc.toString()
+      // A few characters back from the line end, so the press point is
+      // unambiguously on the URL's own visual row rather than at a wrap.
+      const anchor = all.indexOf('#gid=507948599') + '#gid=507948599'.length - 4
+      const from = view.coordsAtPos(anchor)
+      const upLine = all.lastIndexOf('\n', anchor - 1)
+      const target = Math.max(0, upLine - 20)
+      const to = view.coordsAtPos(target)
+      say('haveCoords', from !== null && to !== null)
+      if (from === null || to === null) { console.log('VERIFY done'); return }
+
+      const content = document.querySelector('.cm-content') as HTMLElement
+      const at = (c: { left: number; top: number; bottom: number }): [number, number] =>
+        [c.left, (c.top + c.bottom) / 2]
+      const [x1, y1] = at(from)
+      const [x2, y2] = at(to)
+      const fire = (type: string, x: number, y: number): void => {
+        content.dispatchEvent(new MouseEvent(type, {
+          bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1,
+          // A synthetic MouseEvent defaults `detail` to 0, and CodeMirror reads
+          // it as the click count — 0 is not a click a mouse can produce, and
+          // it selected whole ranges. The instrument was inventing the bug.
+          detail: 1,
+        }))
+      }
+      fire('mousedown', x1, y1)
+      await settle(60)
+      say('afterPress', { from: view.state.selection.main.from, to: view.state.selection.main.to, wanted: anchor })
+      say('pressCollapsed', view.state.selection.main.empty)
+      say('textAtPress', all.slice(anchor - 14, anchor + 6))
+      // A few steps, as a hand would move.
+      for (let i = 1; i <= 4; i++) {
+        fire('mousemove', x1 + ((x2 - x1) * i) / 4, y1 + ((y2 - y1) * i) / 4)
+        await settle(60)
+      }
+      fire('mouseup', x2, y2)
+      await settle(200)
+
+      const sel = view.state.selection.main
+      say('selected', { from: sel.from, to: sel.to, anchor, target })
+      say('selectedText', view.state.doc.toString().slice(sel.from, sel.to).slice(0, 90))
+      say('wentTheRightWay', sel.to <= anchor + 1)
+      await settle(600)
+    }
+
+    if (scene === 'coords') {
+      // Does a screen point map back to the position it came from? Near a block
+      // widget whose height CodeMirror has not been told, it may not.
+      const all = view.state.doc.toString()
+      const seam = all.indexOf('Things to do:')
+      const probes: { at: number; back: number | null; off: number | null }[] = []
+      for (let d = -260; d <= 260; d += 40) {
+        const at = seam + d
+        if (at < 0 || at > view.state.doc.length) continue
+        const c = view.coordsAtPos(at)
+        if (c === null) { probes.push({ at, back: null, off: null }); continue }
+        const back = view.posAtCoords({ x: (c as { left?: number }).left ?? 0, y: (c.top + c.bottom) / 2 })
+        probes.push({ at, back, off: back === null ? null : back - at })
+      }
+      say('roundTrip', probes)
+      say('worstOffset', Math.max(...probes.map(p => Math.abs(p.off ?? 0))))
+      await settle(600)
+    }
+
+    if (scene === 'dragup') {
+      const all = view.state.doc.toString()
+      // The reported start: just after the closing digits of the URL, before ')'.
+      const anchor = all.indexOf('#gid=507948599') + '#gid=507948599'.length
+      // A landmark BELOW the drag, whose screen position must not move.
+      const landmark = all.indexOf('- Review')
+      const where = (): number | null => view.coordsAtPos(landmark)?.top ?? null
+
+      view.dispatch({ selection: { anchor, head: anchor } })
+      await settle(400)
+      const start = where()
+      say('landmarkAtStart', start === null ? null : Math.round(start))
+
+      // Drag left and up, a step at a time, watching the landmark.
+      const moves: { head: number; landmark: number | null; shifted: boolean }[] = []
+      for (const back of [10, 40, 90, 140, 200, 260]) {
+        view.dispatch({ selection: { anchor, head: Math.max(0, anchor - back) } })
+        await settle(180)
+        const now = where()
+        moves.push({
+          head: anchor - back,
+          landmark: now === null ? null : Math.round(now),
+          shifted: start !== null && now !== null && Math.abs(now - start) > 1,
+        })
+      }
+      say('drag', moves)
+      say('everShifted', moves.some(m => m.shifted))
+      say('textLength', view.state.doc.length)
+      await settle(600)
+    }
+
+    if (scene === 'dragselect') {
+      const all = view.state.doc.toString()
+      const start = all.indexOf('https://docs.google.com/spreadsheets')
+      const end = all.indexOf('Olga') + 12
+
+      const shown = (): string => document.querySelector('.cm-content')?.textContent ?? ''
+      say('linkRenderedBefore', document.querySelectorAll('.tx-link').length)
+      const before = shown()
+
+      // Selecting the URL above and dragging down PAST the link below it —
+      // which is where the jump happened.
+      view.dispatch({ selection: { anchor: start, head: end } })
+      await settle(400)
+      say('linkStillRendered', document.querySelectorAll('.tx-link').length)
+      say('textUnchangedWhileSelecting', shown() === before)
+      say('rawUrlOnScreen', shown().includes('1apEoM9wc8PKMBR58z'))
+
+      // A caret inside the link still reveals it, which is how it is edited.
+      view.dispatch({ selection: { anchor: all.indexOf('Olga') + 2 } })
+      await settle(400)
+      say('revealedForCaret', (document.querySelector('.cm-content')?.textContent ?? '').includes('1apEoM9wc8PKMBR58z'))
+      await settle(800)
+    }
+
+    if (scene === 'link') {
+      const all = view.state.doc.toString()
+      const from = all.indexOf('Klein, Crawford and Alchian')
+      view.dispatch({ selection: { anchor: from, head: from + 27 } })
+      await settle(700)
+      say('menuItemFound', await window.tephra.clickMenu('Link…'))
+      await settle(500)
+      const input = document.querySelector('.prompt input') as HTMLInputElement | null
+      say('promptOpened', input !== null)
+      // The clipboard held a URL, so it should already be filled in.
+      say('prefilled', input?.value ?? '(none)')
+      if (input !== null) {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(900)
+      }
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      say('buffer', view.state.doc.toString().slice(from - 12, from + 70))
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(400)
+      say('linkRendered', document.querySelectorAll('.tx-link').length)
+      say('onScreen', document.querySelector('.cm-content')?.textContent ?? '')
+      await settle(1200)
     }
 
     if (scene === 'import') {
@@ -1187,7 +1355,9 @@ interface EditorViewLike {
   }
   dispatch(spec: unknown): void
   /** Where a position is on screen. Used to check what a reader can see. */
-  coordsAtPos(at: number): { top: number; bottom: number } | null
+  coordsAtPos(at: number): { top: number; bottom: number; left: number } | null
+  posAtCoords(coords: { x: number; y: number }): number | null
+  readonly viewport: { from: number; to: number }
 }
 interface PaneLike {
   readonly location: unknown

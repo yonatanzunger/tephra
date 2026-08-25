@@ -13,7 +13,7 @@
 import { useEffect, useRef } from 'react'
 import type { BufferPosition, DocumentPosition, DocumentWindow } from '../../../shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
-import type { MarkInfo, Selection } from './range-commands.ts'
+import type { EditorHandle, MarkInfo } from './range-commands.ts'
 import type { CommentAnchor } from './comment-anchors.ts'
 import type { Typography } from './theme'
 
@@ -31,7 +31,7 @@ export interface EditorProps {
    * Passing a reader upward — rather than pushing the selection up on every
    * cursor motion — keeps the typing path clear.
    */
-  readonly onSelectionReader?: (read: (() => Selection) | null) => void
+  readonly onEditorHandle?: (handle: EditorHandle | null) => void
   /** A mark was clicked. What it stands for, and where it is on screen. */
   readonly onMark?: (mark: MarkInfo) => void
   readonly onCommentAnchors?: (anchors: readonly CommentAnchor[]) => void
@@ -45,7 +45,7 @@ export function Editor({
   onViewport,
   onCursor,
   onError,
-  onSelectionReader,
+  onEditorHandle,
   onMark,
   onCommentAnchors,
   onRailHost,
@@ -70,12 +70,12 @@ export function Editor({
       ...(onRailHost !== undefined ? { onRailHost } : {}),
     })
     binding.current = bound
-    onSelectionReader?.(() => bound.selection())
+    onEditorHandle?.(bound)
     bound.view.focus()
     // Temporary: the self-check drives this. Goes away with verify.ts.
     ;(globalThis as unknown as { __view: unknown }).__view = bound.view
     return () => {
-      onSelectionReader?.(null)
+      onEditorHandle?.(null)
       bound.destroy()
       binding.current = null
     }

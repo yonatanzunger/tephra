@@ -10,7 +10,7 @@
 // Type-only plus data: no Electron, no DOM. Main builds native menus from it;
 // the renderer decides what is currently applicable.
 
-export type RangeCommandId = 'bookmark' | 'tag' | 'untag' | 'comment' | 'branch' | 'print'
+export type RangeCommandId = 'bookmark' | 'tag' | 'untag' | 'link' | 'comment' | 'branch' | 'print'
 
 /** What a command needs before it can do anything. */
 export type CommandNeeds =
@@ -44,7 +44,11 @@ export const RANGE_COMMANDS: readonly RangeCommand[] = [
   { id: 'bookmark', label: 'Bookmark…', accelerator: 'CmdOrCtrl+D', needs: 'point', built: true },
   { id: 'tag', label: 'Tag…', accelerator: 'CmdOrCtrl+T', needs: 'range', built: true },
   { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', built: true },
-  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+K', needs: 'range', built: true },
+  // ⌘K is where every editor puts "make this a link", and a reader who has
+  // used one before will try it. Commenting is the rarer act and takes the
+  // longer reach.
+  { id: 'link', label: 'Link…', accelerator: 'CmdOrCtrl+K', needs: 'range', built: true },
+  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+Alt+M', needs: 'range', built: true },
   { id: 'branch', label: 'Branch to Its Own File…', accelerator: '', needs: 'range', built: true },
   { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', built: true },
 ]

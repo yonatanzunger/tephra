@@ -1434,3 +1434,129 @@ above and room below (caret at 324 of 914), a short one does not scroll at all
 was the old rule written down, so it was rewritten to require the file to be
 gone and the days on either side untouched — which is what that test is actually
 about.
+
+## ⌘K is a link; commenting moves to ⌘⌥M
+
+**⌘K is where every editor puts "make this a link"**, and a reader who has used
+one before will try it. Commenting is the rarer act and takes the longer reach.
+Both are entries in the one command list, so the menu, the accelerators and the
+context menu changed together — which is what that list is for.
+
+Linking is the first command that edits the PROSE rather than adding apparatus
+around it, and it is done as ordinary typing: `wrapSelection` dispatches the same
+kind of change a keystroke does, so the window maps it, the marker rules apply,
+and it is one undo step. A bespoke document operation would have had to earn all
+three separately.
+
+Two details worth their lines:
+
+**The URL is prefilled from the clipboard**, when the clipboard holds something
+that looks like one. The sequence that ends in ⌘K almost always began with
+copying a URL.
+
+**A destination containing a space or a bracket goes in angle brackets.** Written
+bare it ends the link early, and the rest of the URL becomes prose sitting beside
+a broken link — quietly, and in the file. `destination()` lives in its own module
+rather than inside `App.tsx` for the ordinary reason: it is a rule with an edge
+case, and a rule with an edge case wants a test. That test asks the parser the
+editor uses whether the URL came back whole, rather than asking whether the
+string looks right.
+
+## Reveal for a caret, never for a selection
+
+Reported as: selecting a bare URL, and "halfway through selecting there's a jump
+and suddenly I'm selecting the text below".
+
+The reveal rule fired on any selection range that overlapped a construct. So
+dragging a selection down past a link unrendered it **mid-drag** — and a link's
+raw form is eighty characters longer than its words, so the line rewrapped,
+everything below it moved, and the text under the pointer was no longer the text
+that had been there when the drag began.
+
+**A selection is not an edit intent; a caret is.** Selecting across markup never
+needs to see it, and replacing a selection that contains a construct removes the
+construct, which is what anyone would expect. So the predicate now considers only
+empty ranges.
+
+This is Q11's complaint at the one moment it does the most damage — reflow while
+the pointer is down — and removing that case narrows the question again without
+answering it. It also quietly improves the tagging gesture: applying a tag used
+to leave raw marker syntax on screen, because the selection is by definition
+still on the passage that was just tagged.
+
+Reproduced before the fix and after: with the old predicate the scene reports
+`linkStillRendered: 0, textUnchangedWhileSelecting: false`; with the new one,
+`1` and `true`, and a caret inside the link still reveals it.
+
+### The fifth attempt, and why the fourth looked right
+
+The landing broke again, and the report was the old symptom — scrolling down
+"keeps reloading the same text over and over". It was not a loop. Measured
+against a copy of the real notebook, the document settled at 37 460 characters
+in one step, with each day appearing exactly once. What was wrong was where the
+window had stopped:
+
+```
+viewport: { from: 28699, to: 31248 }   caret: 37460   separators: 0
+```
+
+Parked in the middle of yesterday, with the caret twenty pages below it.
+
+**`coordsAtPos` returns null for a position outside the rendered range.** The
+fourth attempt measured the caret in order to place it a third down the screen;
+after growth prepends thirty thousand characters, the append position is nowhere
+near what has been rendered, the measurement returned null, and the function
+returned without scrolling at all. It had been tested on documents small enough
+to render whole — which is why it measured correctly twice and was still wrong.
+
+The answer is to ask CodeMirror instead: `scrollIntoView` does that measurement
+internally, across regions that have not been rendered, which is exactly the part
+that cannot be done from outside. `center` rather than `end`, so the 60vh of
+bottom padding ends up under the caret rather than off the screen.
+
+The missing day seam had the same cause and was the better clue: the decoration
+was built and emitted — `days-emit: 1` — and simply never rendered, because a
+block widget outside the viewport has no DOM.
+
+### And the diagnostic could not reach me
+
+Two rounds of tracing produced nothing at all, because `src/main/index.ts`
+forwards renderer console output to the terminal only for lines beginning with
+`VERIFY`. The instrument was working; its output was being filtered on the way
+out. Ninth in the list, and the second where the harness itself swallowed the
+evidence.
+
+## A block widget's margins are not measured
+
+Reported as: press the mouse inside a URL, drag up and left, and the selection
+jumps down to the row below.
+
+Driven with real mouse events against a copy of the real notebook, a press at
+the coordinates for position 37 338 landed at **37 460** — a hundred and
+twenty-two characters away, at the end of the document.
+
+`coordsAtPos` reports where text is DRAWN, by measuring the DOM.
+`posAtCoords` consults the editor's HEIGHT MAP. The two disagreed by about one
+line for everything below the day seam, because the seam's spacing was
+`margin: 1.2em 0 1em` — and **a margin falls outside the box a block widget's
+height is measured from.** The height map was short by exactly that much, so
+every screen coordinate below it resolved one line late.
+
+The fix is one word: padding instead of margin. Space that has to be counted has
+to be inside the box. Proven by putting the margin back — the same press lands at
+37 460 again — and by taking it away, where it lands exactly where it was
+pressed.
+
+### The instrument invented a symptom on the way
+
+The first repro showed something stranger: a single mousedown producing a
+116-character selection before any drag. That was not real. **A synthetic
+`MouseEvent` defaults `detail` to 0, and CodeMirror reads `detail` as the click
+count** — zero is not a click a mouse can produce, and it was taken as a range
+gesture. One round of diagnosis went into explaining a range selection that no
+hand could have made.
+
+Tenth in the instruments list, and a new failure mode among them: not filtered,
+not perturbing, not lying about what it found — **fabricating an input the real
+world cannot produce.** The lesson for the next synthetic event: a real one
+carries fields nobody thinks about, and the defaults are not neutral.

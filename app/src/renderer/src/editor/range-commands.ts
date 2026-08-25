@@ -155,3 +155,22 @@ export function markAt(docWindow: DocumentWindow, at: number, box: DOMRect): Mar
 
   return { box, anchor: anchor === null ? null : anchor.name, tags: [...opens, ...covers] }
 }
+
+/**
+ * What the app can ask of a live editor.
+ *
+ * The caret lives here and the commands arrive from the menu, which is in main
+ * — so the app holds this rather than the view itself, and asks in terms of the
+ * selection rather than in terms of CodeMirror.
+ */
+export interface EditorHandle {
+  selection(): Selection
+  /**
+   * Put text around the selection, as ordinary typing would.
+   *
+   * Ordinary on purpose: it goes through the same path a keystroke does, so the
+   * window maps it, the marker rules apply, and it is one undo step — none of
+   * which a bespoke document operation would get for free.
+   */
+  wrapSelection(before: string, after: string): void
+}

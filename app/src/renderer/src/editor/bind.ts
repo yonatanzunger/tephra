@@ -12,7 +12,7 @@
 // THE EDITOR'S OWN HISTORY IS DISABLED. Undo is document-scoped (D23, D32) and
 // may land outside the loaded region; two histories over one text diverge.
 
-import { ChangeSet, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
+import { ChangeSet, EditorSelection, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, crosshairCursor, drawSelection, keymap, placeholder, rectangularSelection } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
@@ -56,6 +56,8 @@ export interface Binding {
   readonly view: EditorView
   /** The selection right now, in document terms. See `readSelection`. */
   selection(): Selection
+  /** Put text around the selection, as ordinary typing would. */
+  wrapSelection(before: string, after: string): void
   setVim(on: boolean): void
   setTypography(t: Typography): void
   destroy(): void
@@ -160,6 +162,21 @@ export function bindEditor(options: BindOptions): Binding {
     selection(): Selection {
       return readSelection(view, docWindow)
     },
+    wrapSelection(before: string, after: string): void {
+      view.dispatch(
+        view.state.changeByRange(r => ({
+          changes: [
+            { from: r.from, insert: before },
+            { from: r.to, insert: after },
+          ],
+          // Leave the words selected, so a second thought about the URL does not
+          // begin with finding them again.
+          range: EditorSelection.range(r.from + before.length, r.to + before.length),
+        })),
+        { userEvent: 'input' },
+      )
+      view.focus()
+    },
     setVim(on: boolean): void {
       view.dispatch({ effects: vimCompartment.reconfigure(vimExtensions(on)) })
       view.focus()
@@ -242,41 +259,31 @@ function editorToWindow(
  * 'after' the caret travels with the text it was attached to, which is where
  * the person left it.
  */
-/** Where the append position sits on screen: a third down, with room below. */
-const APPEND_FROM_TOP = 0.35
-
 /**
  * Put the append position where it is comfortable to write.
  *
- * **Stated as a place on the screen rather than as an amount to scroll**, which
- * is the fourth attempt and the first that is right in both directions. The
- * earlier ones each fixed one case and broke the other:
+ * **Asked of CodeMirror rather than computed here**, which is the fifth attempt
+ * and the reason the previous four are worth listing:
  *
- *   - `scrollIntoView(end)` aligns the last line with the bottom EDGE, leaving
- *     the caret jammed against it with nowhere to type into.
- *   - scrolling to `scrollHeight` uses the 60vh of bottom padding properly on a
- *     long day and scrolls a SHORT one clean off the top — the padding is
- *     taller than the text, so "the bottom of the document" is below everything
- *     in it. Measured at −368px: the caret was above the window.
+ *   - `scrollIntoView(end, 'end')` aligns the last line with the bottom EDGE,
+ *     leaving the caret jammed against it with nowhere to type into.
+ *   - scrolling to `scrollHeight` uses the 60vh of bottom padding well on a long
+ *     day and scrolls a SHORT one clean off the top: the padding is taller than
+ *     the text, so "the bottom of the document" is below everything in it.
+ *   - measuring the caret and placing it a third down fixed both — **as long as
+ *     the caret was rendered.** `coordsAtPos` returns null outside the rendered
+ *     range, and after growth prepends thirty thousand characters the append
+ *     position is nowhere near it. It returned null, this returned without
+ *     scrolling, and the window sat in the middle of yesterday: viewport at
+ *     28699 with the caret at 37460.
  *
- * Asking for the caret to be a third of the way down, and clamping to what the
- * document can actually scroll, degrades correctly at both ends: a long stream
- * puts yesterday above and room below, and a short one does not move at all.
+ * `scrollIntoView` does that measurement internally, across regions that have
+ * not been rendered, which is precisely the part that cannot be done from out
+ * here. `center` rather than `end` because the padding is meant to be under the
+ * caret rather than off the screen.
  */
 function scrollToAppendPosition(view: EditorView): void {
-  view.requestMeasure({
-    read: () => {
-      const scroller = view.scrollDOM
-      const caret = view.coordsAtPos(view.state.doc.length)
-      if (caret === null) return null
-      const box = scroller.getBoundingClientRect()
-      const wanted = scroller.scrollTop + (caret.bottom - box.top) - box.height * APPEND_FROM_TOP
-      return Math.max(0, Math.min(wanted, scroller.scrollHeight - scroller.clientHeight))
-    },
-    write: top => {
-      if (top !== null) view.scrollDOM.scrollTop = top
-    },
-  })
+  view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.length, { y: 'center' }) })
 }
 
 /**

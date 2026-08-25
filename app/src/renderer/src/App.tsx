@@ -7,7 +7,7 @@ import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
 import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { Editor } from './editor/Editor'
-import type { Selection } from './editor/range-commands.ts'
+import type { EditorHandle } from './editor/range-commands.ts'
 import { defaultTypography, type Typography } from './editor/theme'
 import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
@@ -21,6 +21,7 @@ import type { CommentAnchor } from './editor/comment-anchors.ts'
 import type { MarkInfo } from './editor/range-commands.ts'
 import { printPage, PRINT_CSS } from './print/page.ts'
 import { markdownFromHtml } from './import/html.ts'
+import { destination } from './editor/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -214,7 +215,7 @@ export function App(): React.JSX.Element {
       // Tag and untag are the same operation with opposite signs, so they are
       // one branch: read the selection, ask for a subject, send it.
       if (id === 'tag' || id === 'untag') {
-        const selection = selectionRef.current?.()
+        const selection = editorRef.current?.selection()
         if (selection === undefined || selection.empty) return
         const removing = id === 'untag'
         if (removing && selection.subjects.length === 0) {
@@ -241,8 +242,26 @@ export function App(): React.JSX.Element {
         return
       }
 
+      if (id === 'link') {
+        const selection = editorRef.current?.selection()
+        if (selection === undefined || selection.empty) return
+        // Prefilled from the clipboard when it holds one, because the sequence
+        // that ends in ⌘K almost always began with copying a URL.
+        void window.tephra.readClipboard().then(board => {
+          const copied = board.text.trim()
+          setPrompt({
+            title: 'Link this to',
+            placeholder: 'https://…  or  ../../../notes/something.md',
+            ...(/^(https?:\/\/|\.{1,2}\/)\S+$/.test(copied) ? { initial: copied } : {}),
+            submitLabel: 'Link',
+            onSubmit: target => editorRef.current?.wrapSelection('[', `](${destination(target)})`),
+          })
+        })
+        return
+      }
+
       if (id === 'comment') {
-        const selection = selectionRef.current?.()
+        const selection = editorRef.current?.selection()
         if (selection === undefined || selection.empty) return
         // No dialog. The note opens in the margin, empty and ready to type in —
         // the same surface it will be read and edited in ever after (D47). A
@@ -253,7 +272,7 @@ export function App(): React.JSX.Element {
       }
 
       if (id === 'print') {
-        const selection = selectionRef.current?.()
+        const selection = editorRef.current?.selection()
         if (selection === undefined || selection.empty) return
         const day = selection.span.begin.segment as DateKey
         void window.tephra.doc
@@ -270,7 +289,7 @@ export function App(): React.JSX.Element {
       }
 
       if (id === 'branch') {
-        const selection = selectionRef.current?.()
+        const selection = editorRef.current?.selection()
         if (selection === undefined || selection.empty) return
         setPrompt({
           title: 'Move this to its own file called',
@@ -362,7 +381,7 @@ export function App(): React.JSX.Element {
   }, [])
 
   // How to ask the editor what is selected, for as long as one is mounted.
-  const selectionRef = useRef<(() => Selection) | null>(null)
+  const editorRef = useRef<EditorHandle | null>(null)
 
   const cursorRef = useRef<UiState['cursor']>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -511,7 +530,7 @@ export function App(): React.JSX.Element {
             onViewport={onViewport}
             onCursor={onCursor}
             onError={err => setError(err.message)}
-            onSelectionReader={read => (selectionRef.current = read)}
+            onEditorHandle={handle => (editorRef.current = handle)}
             onMark={setMark}
             onCommentAnchors={setAnchors}
             onRailHost={setRailHost}

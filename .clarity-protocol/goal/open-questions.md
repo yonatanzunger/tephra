@@ -379,7 +379,16 @@ sheet's job is to find those numbers, not to reopen how themes work.
 
 ## Q11: What should revealing markup do to the line under it?
 
-**Status:** open, and **narrowed by D47**. A construct is edited where it is
+**Status:** open, and **narrowed twice**. By D47 (below), and by a rule found
+in use: **reveal for a caret, never for a selection.** Revealing markup because a
+selection merely covers it reflows the line while the pointer is down — a drag
+past a link unrendered it, the raw form is eighty characters longer than its
+words, and the text under the pointer moved. Selecting across markup never needs
+to see it, and replacing a selection that contains a construct removes the
+construct, which is what anyone expects. That removes the worst instance of the
+reflow complaint without answering the question.
+
+Originally: **narrowed by D47**. A construct is edited where it is
 rendered — reflow is bad because the text moves under the eye, and relocating a
 construct in order to edit it is bad because the eye must move to reach it, which
 costs the same thing. That eliminates every candidate that reveals markup
