@@ -25,6 +25,7 @@ import { contextMenu, markAt, readSelection, reportSelection, type MarkInfo, typ
 import { retag, tagExtents } from './tags.ts'
 import { commentExtents, recomment, type CommentAnchor } from './comment-anchors.ts'
 import { richPaste } from './paste.ts'
+import { dayBoundaries, redays } from './days.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
 
@@ -42,8 +43,6 @@ export interface BindOptions {
   readonly onViewport?: (visible: { from: BufferPosition; to: BufferPosition }) => void
   /** Where the caret is, in document space, so it can outlive the session. */
   readonly onCursor?: (at: DocumentPosition) => void
-  /** Restored position from a previous session. Absent means "end of today". */
-  readonly initialCursor?: DocumentPosition | null
   readonly onError?: (err: Error) => void
   /** A mark was clicked: here is what it stands for and where it sits. */
   readonly onMark?: (mark: MarkInfo) => void
@@ -88,6 +87,7 @@ export function bindEditor(options: BindOptions): Binding {
         EditorView.lineWrapping,
         widgetExtensions(),
         tagExtents(docWindow),
+        dayBoundaries(docWindow),
         commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors)),
         keymap.of([...defaultKeymap, ...searchKeymap]),
         typographyCompartment.of(tephraTheme(typography)),
@@ -98,24 +98,32 @@ export function bindEditor(options: BindOptions): Binding {
     }),
   })
 
-  // Where to land.
+  // Where to land: **the append position, always.**
   //
-  // Restored position first, if the previous session left one. Otherwise the
-  // END of the loaded region: the stream is oldest-first and appended to (Q7),
-  // so opening Tephra should put the cursor where the next sentence goes. That
-  // matters more than it looks — the window grows backwards in the background,
-  // so offset zero stops meaning "today" a moment after opening, and a cursor
-  // left there would put the first thing typed into whatever old day had just
-  // been loaded above it.
-  const restored = options.initialCursor == null ? null : docWindow.toBuffer(options.initialCursor)
-  const landing = restored ?? (docWindow.text.length as BufferPosition)
+  // The stream is oldest-first and appended to (Q7), so opening Tephra should
+  // put the caret where the next sentence goes and the window should show what
+  // came before it — you are continuing, not arriving somewhere. Scrolled to
+  // the END rather than centred, so the blank space is below the caret and
+  // yesterday is above it; the region grows backwards behind the reader, which
+  // fills that space in with where they left off.
+  //
+  // **This used to prefer the position the last session left.** It was the
+  // wrong default for a stream: it opens you in the middle of something you
+  // have already finished reading, and the first keystroke lands wherever the
+  // caret happened to be rather than at the end of today. The cursor is still
+  // recorded — it is a true fact about the session, and navigation may want it
+  // — it simply no longer decides where the app opens.
+  const landing = docWindow.text.length as BufferPosition
   view.dispatch({
     selection: { anchor: landing as number },
-    effects: EditorView.scrollIntoView(landing as number, { y: restored === null ? 'end' : 'center' }),
   })
+  scrollToAppendPosition(view)
 
   const unsubscribeChanged = docWindow.onChanged((edits, origin) => {
     applyFromDocument(view, edits, origin)
+    // Growth prepends a whole day, which is a change to WHICH days are loaded
+    // and not only to the text.
+    if (origin === 'external') view.dispatch({ effects: redays.of(null) })
   })
   // Redrawing the extents is its own subscription, because spans change on
   // edits this editor MADE — where `onChanged` is deliberately silent — as well
@@ -138,7 +146,7 @@ export function bindEditor(options: BindOptions): Binding {
   view.dom.addEventListener('tephra-handle', onHandle)
 
   const unsubscribeSpans = docWindow.onSpansChanged(() => {
-    view.dispatch({ effects: [retag.of(null), recomment.of(null)] })
+    view.dispatch({ effects: [retag.of(null), recomment.of(null), redays.of(null)] })
   })
   const unsubscribeReset = docWindow.onReset(() => {
     view.dispatch({
@@ -234,19 +242,119 @@ function editorToWindow(
  * 'after' the caret travels with the text it was attached to, which is where
  * the person left it.
  */
+/** Where the append position sits on screen: a third down, with room below. */
+const APPEND_FROM_TOP = 0.35
+
+/**
+ * Put the append position where it is comfortable to write.
+ *
+ * **Stated as a place on the screen rather than as an amount to scroll**, which
+ * is the fourth attempt and the first that is right in both directions. The
+ * earlier ones each fixed one case and broke the other:
+ *
+ *   - `scrollIntoView(end)` aligns the last line with the bottom EDGE, leaving
+ *     the caret jammed against it with nowhere to type into.
+ *   - scrolling to `scrollHeight` uses the 60vh of bottom padding properly on a
+ *     long day and scrolls a SHORT one clean off the top — the padding is
+ *     taller than the text, so "the bottom of the document" is below everything
+ *     in it. Measured at −368px: the caret was above the window.
+ *
+ * Asking for the caret to be a third of the way down, and clamping to what the
+ * document can actually scroll, degrades correctly at both ends: a long stream
+ * puts yesterday above and room below, and a short one does not move at all.
+ */
+function scrollToAppendPosition(view: EditorView): void {
+  view.requestMeasure({
+    read: () => {
+      const scroller = view.scrollDOM
+      const caret = view.coordsAtPos(view.state.doc.length)
+      if (caret === null) return null
+      const box = scroller.getBoundingClientRect()
+      const wanted = scroller.scrollTop + (caret.bottom - box.top) - box.height * APPEND_FROM_TOP
+      return Math.max(0, Math.min(wanted, scroller.scrollHeight - scroller.clientHeight))
+    },
+    write: top => {
+      if (top !== null) view.scrollDOM.scrollTop = top
+    },
+  })
+}
+
+/**
+ * Apply a change that came from the document, keeping the reader where they are.
+ *
+ * **Text arriving ABOVE the viewport must not move what is on screen.** The
+ * region grows backwards behind the reader (D40), so a day is prepended at
+ * offset zero and everything below it shifts down by that day's height —
+ * scrollTop stays the same number of pixels, so the view silently slides to the
+ * top of whatever just arrived.
+ *
+ * That single omission produced both of the symptoms it was reported as. The app
+ * appeared to open at the START of the stream, because the caret was placed at
+ * the end and then a day was inserted above it. And scrolling down never
+ * reached the bottom: each jump to the top made the viewport report itself as
+ * near the beginning, `Pane.viewportChanged` read that as "the reader is
+ * approaching the edge", and grew the region again — a loop that only stopped
+ * when there were no earlier days left.
+ *
+ * Anchoring is the ordinary fix for upward-infinite-scroll, and `extend`'s own
+ * comment already claimed it: applying growth as an insertion rather than a
+ * reset is what lets the cursor and the scroll position survive. The cursor did;
+ * the scroll position needed this.
+ */
 function applyFromDocument(view: EditorView, edits: readonly BufferEdit[], _origin: EditOrigin): void {
   if (edits.length === 0) return
   const changes = ChangeSet.of(
     edits.map(e => ({ from: e.from as number, to: e.to as number, insert: e.insert })),
     view.state.doc.length,
   )
+
+  // Entirely above what is rendered? Then the reader should not feel it at all.
+  const firstVisible = view.visibleRanges[0]?.from ?? 0
+  const above = edits.every(edit => Math.max(edit.from as number, edit.to as number) <= firstVisible)
+  const scroller = view.scrollDOM
+  const topBefore = scroller.scrollTop
+  const heightBefore = scroller.scrollHeight
+
   const head = view.state.selection.main.head
+
+  // **Two different right answers, and which one applies depends on where the
+  // reader is.** Someone reading history wants the page held still. Someone
+  // sitting at the append position — which is where the app opens — wants to
+  // stay there, at the bottom, watching earlier days fill in above. Preserving
+  // the visual position does the first and gets the second wrong: at startup
+  // the buffer is one short day, so "where you were" is the top of an almost
+  // empty screen, and holding that leaves the caret stranded up there.
+  //
+  // The test is whether the caret is at the end AND on screen. If it is, this
+  // is the append position and it stays pinned; if it is not, the reader has
+  // gone somewhere and is not to be moved.
+  const caret = view.coordsAtPos(head)
+  const box = scroller.getBoundingClientRect()
+  const pinned =
+    head === view.state.doc.length &&
+    caret !== null &&
+    caret.bottom <= box.bottom + 1 &&
+    caret.top >= box.top - 1
   const anchor = view.state.selection.main.anchor
   view.dispatch({
     changes,
     selection: { anchor: changes.mapPos(anchor, 1), head: changes.mapPos(head, 1) },
     effects: fromDocument.of(null),
     annotations: Transaction.addToHistory.of(false),
+  })
+
+  if (pinned) {
+    scrollToAppendPosition(view)
+    return
+  }
+  if (!above) return
+  // Measured rather than computed: the inserted text's height depends on how it
+  // wraps, which only layout knows.
+  view.requestMeasure({
+    read: () => scroller.scrollHeight - heightBefore,
+    write: grew => {
+      if (grew !== 0) scroller.scrollTop = topBefore + grew
+    },
   })
 }
 

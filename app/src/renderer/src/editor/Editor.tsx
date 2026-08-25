@@ -23,7 +23,6 @@ export interface EditorProps {
   readonly typography: Typography
   readonly onViewport?: (visible: { from: BufferPosition; to: BufferPosition }) => void
   readonly onCursor?: (at: DocumentPosition) => void
-  readonly initialCursor?: DocumentPosition | null
   readonly onError?: (err: Error) => void
   /**
    * Handed a way to ask what is selected, for as long as this editor lives.
@@ -45,7 +44,6 @@ export function Editor({
   typography,
   onViewport,
   onCursor,
-  initialCursor,
   onError,
   onSelectionReader,
   onMark,
@@ -66,7 +64,6 @@ export function Editor({
       typography,
       ...(onViewport !== undefined ? { onViewport } : {}),
       ...(onCursor !== undefined ? { onCursor } : {}),
-      ...(initialCursor !== undefined ? { initialCursor } : {}),
       ...(onError !== undefined ? { onError } : {}),
       ...(onMark !== undefined ? { onMark } : {}),
       ...(onCommentAnchors !== undefined ? { onCommentAnchors } : {}),

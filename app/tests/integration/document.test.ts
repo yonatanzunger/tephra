@@ -4,6 +4,7 @@
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
@@ -1026,4 +1027,48 @@ test('two whole-paragraph edits in quick succession still undo', async t => {
   // One step, because the two were grouped — and it goes all the way back.
   assert.notEqual(await doc.undo(), null)
   assert.equal((await doc.segment(DAY)).body, 'First.\n')
+})
+
+test('a day with nothing in it is not written, and one that empties is removed', async t => {
+  // Opening the app creates a segment for today whether or not anything is
+  // written. Writing that out leaves a file of pure frontmatter, which reads
+  // back as a real day, draws its own seam in the stream, and accumulates one
+  // per day the notebook was merely opened.
+  const { doc, root } = await fixture(t)
+  await doc.segment(DAY) // as opening does
+  await doc.flush()
+  assert.equal(existsSync(join(root, dayFile(DAY))), false, 'an untouched day should leave no file')
+
+  // Written once there is something to write.
+  const w = await windowOver(doc, DAY)
+  await w.edit([{ from: bp(0), to: bp(0), insert: 'Something.\n' }], 'user')
+  await doc.flush()
+  assert.equal(existsSync(join(root, dayFile(DAY))), true)
+
+  // …and removed again when emptied. Nothing is lost: every version is in the
+  // repository.
+  await w.edit([{ from: bp(0), to: bp(w.text.length as number), insert: '' }], 'user')
+  await doc.flush()
+  assert.equal(existsSync(join(root, dayFile(DAY))), false)
+})
+
+test('an empty day written by an older version is collected when it is loaded', async t => {
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', '\n'),
+    [dayFile(d('2026-03-15'))]: dayText('2026-03-15', 'Real content.\n'),
+  })
+  await doc.segment(DAY)
+  await doc.flush()
+  assert.equal(existsSync(join(root, dayFile(DAY))), false, 'the contentless day should be gone')
+  assert.equal(existsSync(join(root, dayFile(d('2026-03-15')))), true)
+})
+
+test('but a contentless day carrying hand-written frontmatter is left alone', async t => {
+  // "Unknown keys are preserved verbatim" (format-spec) would be an odd promise
+  // to keep on rewrite and break by deletion. Somebody put that there.
+  const original = '---\ntephra: 1\ndate: 2026-03-14\nkind: stream\nmood: bleak\n---\n\n'
+  const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
+  await doc.segment(DAY)
+  await doc.flush()
+  assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), original)
 })

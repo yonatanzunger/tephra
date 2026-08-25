@@ -1299,3 +1299,138 @@ looked for `.tx-marker`, the badge class MB replaced with a drawn mark. **An
 assertion about a rendering that no longer exists** — the eighth instrument in
 the list, and a reminder that acceptance scripts rot exactly like the code they
 watch.
+
+## The seam between days, and where the app opens
+
+Two changes to how the stream reads, both about orientation rather than
+mechanism.
+
+**A rule between successive days, naming the day on each side.** The stream is
+one continuous document (D8) and that is the point — but a document with no
+seams is also one with no dates in it, and scrolling back through a week you
+cannot tell Tuesday's thought from Wednesday's. **The two dates are not
+necessarily consecutive**: a day with nothing in it has no file, so `FRI, AUG 21
+——— MON, AUG 24` shows a weekend that was never written in, and naming both
+sides is what makes the gap visible rather than invisible.
+
+Drawn as a block widget from a `StateField`, because CodeMirror refuses block
+widgets from a view plugin, and rebuilt on the same effect the tag and comment
+layers use — growth prepending a whole day is a change to WHICH days are loaded,
+not only to the text.
+
+**The app opens at the append position, always** — and getting there took three
+attempts, described below because the first two were wrong in instructive ways. It used to prefer the caret
+the last session left, and that was the wrong default for a stream: it opens you
+in the middle of something you have already finished reading, and the first
+keystroke lands wherever the caret happened to be. Now the caret goes where the
+next sentence goes, scrolled to the end so the space below it is empty and the
+region grows backwards behind the reader to fill the space above with where they
+left off.
+
+The cursor is still recorded — it is a true fact about the session and
+navigation will want it — but it no longer decides where the app opens, and the
+plumbing that carried it into the editor is gone rather than left looking used.
+
+### An acceptance claim changed, deliberately
+
+`npm run m0` asserted "the caret came back to where it was left". That check
+encoded the old decision, so it was rewritten rather than worked around: it now
+requires the reopened window to land at the end of the document with the
+previous session's last sentence above it.
+
+### And the harness had a date hard-coded in it
+
+`npm run m2` began failing at midnight. It pinned `2026-08-24`; the app opened a
+day the harness had never seeded, the import landed there, and the checks read
+yesterday's file. It now computes today by the same rule the app files by (D38).
+**A test that only passes on the day it was written is a test that will be
+deleted rather than debugged** — and this one had been green for exactly one day.
+
+### Landing at the end: one omission, two symptoms, three attempts
+
+Reported as two bugs — the app opened at the START of the stream, and scrolling
+down never reached the bottom because the last day seemed to reload forever.
+**Both were one omission**: `applyFromDocument` mapped the selection through a
+change and did nothing about scroll.
+
+The region grows backwards behind the reader (D40), so a day is prepended at
+offset zero and everything below shifts down by its height while `scrollTop`
+stays the same number of pixels — the view slides to the top of whatever just
+arrived. That alone looks like opening at the beginning. And it is self-feeding:
+the viewport then reports itself as near the start, `Pane.viewportChanged` reads
+that as the reader approaching the edge and grows again, which slides it up
+again. The loop only stops when there are no earlier days left, which is exactly
+"I never reach the bottom".
+
+**Attempt one — anchor the scroll.** Preserve the visual position when text
+arrives above: measure the height the document gained and add it to `scrollTop`.
+Correct for a reader in the middle of history, and wrong at startup, where "where
+you were" is the top of an almost-empty screen. The caret ended up stranded off
+the top.
+
+**Attempt two — pin the append position.** If the caret is at the end AND on
+screen, it is the append position and stays pinned; otherwise anchor. Two right
+answers, chosen by where the reader actually is. This put the caret on screen —
+jammed against the bottom edge, with nothing under it to type into.
+
+**Attempt three — scroll to the true bottom.** `.cm-content` carries 60vh of
+bottom padding, added in MV precisely so the append position sits up the screen
+with room below it. `scrollIntoView(end)` aligns the last line with the bottom
+EDGE and leaves all of that padding off-screen. Scrolling the scroller to its
+full height instead uses the affordance that was already there: the caret lands
+about a third down, yesterday above it, room below.
+
+The measurement that ended it was geometric rather than logical — caret at 324px
+of a 914px viewport, scrolled fully to the bottom. "It looks right" would not
+have distinguished attempt two from attempt three.
+
+## Empty days, and the seam's second draft
+
+**A day with nothing in it is not a day.** Opening the app creates a segment for
+today whether or not anything is written, and writing that out left a file of
+pure frontmatter — which read back as a real day, drew its own seam, and
+accumulated one per day the notebook was merely opened. Two rules with no text
+between them say nothing except that something is wrong.
+
+Three parts, in the three places the fact shows up:
+
+- **Not written.** A blank day produces no file.
+- **Collected.** A blank file already on disk is removed when its day is
+  loaded, so corpora written before this rule tidy themselves. Nothing is lost:
+  there is no text, and every version is in the repository.
+- **Not drawn.** A blank day is skipped when building seams, so the boundary
+  reads `FRI, AUG 21 → TUE, AUG 25` rather than showing two rules around
+  nothing. The LAST day is kept whatever it holds — an empty today is where you
+  are about to write, and the seam above it is what says so.
+
+**One exception, deliberately.** A contentless day carrying frontmatter keys
+somebody added by hand is left alone. "Unknown keys are preserved verbatim"
+(format-spec) would be an odd promise to keep on rewrite and break by deletion.
+
+### The dates moved to one side
+
+Flanking the rule read as a RANGE — as though the seam covered the span between
+two dates — when what it marks is a boundary: this day ends, that one begins.
+Stacked at the left, one above the rule and one below, the rule is literally
+between them and the reading is unambiguous.
+
+### And a fourth attempt at the landing
+
+Scrolling to `scrollHeight` was right for a long stream and wrong for a short
+one: the 60vh bottom padding is taller than the text, so "the bottom of the
+document" is below everything in it, and the caret measured at −368px — above
+the window, on a screen that rendered blank.
+
+The rule is now stated as a PLACE rather than an amount: put the append position
+about a third down the viewport, clamped to what the document can actually
+scroll. That degrades correctly at both ends — a long stream puts yesterday
+above and room below (caret at 324 of 914), a short one does not scroll at all
+(caret at 250, everything visible). Two measurements, two shapes of document;
+"it looks right" had already been wrong twice.
+
+### A second acceptance claim changed
+
+`window-split.test.ts` required an emptied day to survive as frontmatter. That
+was the old rule written down, so it was rewritten to require the file to be
+gone and the days on either side untouched — which is what that test is actually
+about.

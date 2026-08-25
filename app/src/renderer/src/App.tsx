@@ -30,7 +30,6 @@ export function App(): React.JSX.Element {
   const [doc, setDoc] = useState<RemoteDocument | null>(null)
   const [pane, setPane] = useState<Pane | null>(null)
   const [vim, setVim] = useState(false)
-  const [restored, setRestored] = useState<DocumentPosition | null>(null)
   const [themeName, setThemeName] = useState<string>(defaultUiState.theme)
   const [panelOpen, setPanelOpen] = useState(false)
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
@@ -75,19 +74,15 @@ export function App(): React.JSX.Element {
         ;(globalThis as unknown as { __pane: Pane }).__pane = p
         ;(globalThis as unknown as { __doc: RemoteDocument }).__doc = opened
 
-        // Where the last session left off (R1.2). A stored cursor is soft
-        // state: if the text it named has moved, landing slightly off and
-        // scrolling is the whole cost (D11).
         const state = await window.tephra.doc.loadUiState()
         setVim(state.vim)
         setThemeName(state.theme)
-        if (state.cursor !== null) {
-          setRestored({
-            segment: state.cursor.segment as SegmentKey,
-            offset: state.cursor.offset as never,
-            generation: opened.generation,
-          })
-        }
+        // **The stored cursor no longer decides where the app opens.** Tephra
+        // opens at the append position with yesterday above it, because that is
+        // what continuing looks like; landing in the middle of something
+        // already finished is the wrong default for a stream. It is still
+        // recorded — a true fact about the session, and what navigation will
+        // want when it learns to go back to where you were.
         await p.goTo(state.location, { push: false })
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
@@ -515,7 +510,6 @@ export function App(): React.JSX.Element {
             typography={typography}
             onViewport={onViewport}
             onCursor={onCursor}
-            initialCursor={restored}
             onError={err => setError(err.message)}
             onSelectionReader={read => (selectionRef.current = read)}
             onMark={setMark}

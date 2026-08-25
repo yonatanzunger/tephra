@@ -26,13 +26,24 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const electron = './node_modules/.bin/electron'
-const DAY = '2026-08-24'
-const dayPath = root => join(root, 'stream', '2026', '08', `${DAY}.md`)
+
+/**
+ * Today, in the reference zone — the same rule the app files by (D38).
+ *
+ * **Not a hard-coded date.** The first version pinned one, and the acceptance
+ * began failing the moment the clock passed midnight: the app opened a day the
+ * harness had never seeded, the import landed there, and the checks read
+ * yesterday's file and found nothing. A test that only passes on the day it was
+ * written is a test that will be deleted rather than debugged.
+ */
+const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
+const [YEAR, MONTH] = DAY.split('-')
+const dayPath = root => join(root, 'stream', YEAR, MONTH, `${DAY}.md`)
 
 /** A fresh notebook holding one day, so scenes cannot contaminate each other. */
 async function notebook(body) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-m2-'))
-  await mkdir(join(root, 'stream', '2026', '08'), { recursive: true })
+  await mkdir(join(root, 'stream', YEAR, MONTH), { recursive: true })
   await writeFile(dayPath(root), `---\ndate: ${DAY}\n---\n\n${body}`)
   return root
 }
@@ -170,7 +181,10 @@ console.log('\n— importing —')
 
   check('something arrived from the clipboard', typeof r.inBuffer === 'string' && r.inBuffer.length > 0)
   check('with a provenance line', /\*Imported \d{4}-\d{2}-\d{2} from \[the clipboard\]/.test(day))
-  check('the original was kept', /attachments\/2026\/08\/2026-08-24-clipboard-[0-9a-f]{6}\.(txt|html)/.test(day))
+  check(
+    'the original was kept',
+    new RegExp(`attachments/${YEAR}/${MONTH}/${DAY}-clipboard-[0-9a-f]{6}\\.(txt|html)`).test(day),
+  )
   check('and the link renders', r.linkRendered >= 1)
 }
 

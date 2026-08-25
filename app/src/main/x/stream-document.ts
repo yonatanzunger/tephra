@@ -1049,8 +1049,31 @@ export class StreamDocument implements Document {
     for (const segment of this.#segments.values()) {
       // A diverged segment is frozen: writing it would destroy the hand-edit
       // that caused the divergence, which is the one outcome nothing recovers.
-      if (!segment.dirty || segment.readOnly || segment.diverged) continue
+      if (segment.readOnly || segment.diverged) continue
 
+      // **A day with nothing in it is not a day.** Opening the app creates a
+      // segment for today whether or not anything is written, and writing that
+      // out leaves a file of pure frontmatter — which then reads back as a real
+      // day, draws its own seam in the stream, and accumulates one per day the
+      // notebook was merely opened. Nothing is lost by removing one: it has no
+      // text, and every version of it is in the repository.
+      //
+      // Checked even when the segment is CLEAN, so files written before this
+      // rule existed are collected as the days holding them are loaded. A day
+      // carrying frontmatter keys somebody added by hand is not disposable —
+      // that is content, in the only place the format has to put it.
+      if (segment.disposable) {
+        for (let part = 1; ; part++) {
+          const stale = dayFile(segment.date, part)
+          if (!(await this.#notebook.has(stale))) break
+          await this.#notebook.remove(stale)
+          written.push(stale)
+        }
+        segment.markClean(segment.serialise())
+        continue
+      }
+
+      if (!segment.dirty) continue
       const files = segment.files()
       for (const file of files) {
         await this.#notebook.write(file.rel, file.text)

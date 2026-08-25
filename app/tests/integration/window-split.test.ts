@@ -16,6 +16,7 @@
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
@@ -145,6 +146,18 @@ test('an edit covering a whole day removes that day’s body entirely', async t 
   await doc.flush()
 
   assert.equal(w.text, (BODIES[0] as string) + (BODIES[2] as string))
-  const two = await readFile(join(root, dayFile(DAYS[1] as DateKey)), 'utf8')
-  assert.match(two, /kind: stream\n---\n$/, 'the file survives with an empty body, frontmatter intact')
+
+  // **Changed deliberately.** This used to require the file to survive with an
+  // empty body and its frontmatter intact. A day with nothing in it is not a
+  // day: it reads back as one, draws its own seam in the stream, and
+  // accumulates one per day the notebook was merely opened. Nothing is lost by
+  // removing it — there is no text, and every version is in the repository.
+  assert.equal(
+    existsSync(join(root, dayFile(DAYS[1] as DateKey))),
+    false,
+    'a day emptied of everything should not be left behind as frontmatter',
+  )
+  // The days on either side are untouched, which is the actual claim here.
+  assert.match(await readFile(join(root, dayFile(DAYS[0] as DateKey)), 'utf8'), /kind: stream/)
+  assert.match(await readFile(join(root, dayFile(DAYS[2] as DateKey)), 'utf8'), /kind: stream/)
 })

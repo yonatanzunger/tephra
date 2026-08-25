@@ -88,6 +88,19 @@ export class Segment {
   }
 
   /**
+   * Whether this day is nothing but its frontmatter, and that frontmatter says
+   * nothing a person put there.
+   *
+   * The distinction matters for removal: a contentless day is not a day, but a
+   * contentless day carrying keys someone added by hand is a note in itself,
+   * and "unknown keys are preserved verbatim" (format-spec) would be an odd
+   * promise to keep on rewrite and break by deletion.
+   */
+  get disposable(): boolean {
+    return this.#body.trim() === '' && (this.#parsed.frontmatter?.extra.length ?? 0) === 0
+  }
+
+  /**
    * The prose view of this body — the text with marker syntax taken out and
    * handles standing in for the markers a person can point at (D44).
    *

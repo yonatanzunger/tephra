@@ -401,6 +401,66 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(400)
     }
 
+    if (scene === 'landing') {
+      // Growth happens behind the reader, so the question is not where the app
+      // landed at first paint but where it is once the region has finished
+      // arriving.
+      const scroller = document.querySelector('.cm-scroller') as HTMLElement | null
+      let waited = 0
+      let steady = 0
+      let last = -1
+      while (waited < 8000 && steady < 5) {
+        await settle(200)
+        waited += 200
+        const now = view.state.doc.length
+        steady = now === last ? steady + 1 : 0
+        last = now
+      }
+      say('daysLoaded', document.querySelectorAll('.tx-daybreak').length + 1)
+      say('caretAtEnd', view.state.selection.main.head === view.state.doc.length)
+
+      // The claim that matters: the append position is ON SCREEN, near the
+      // bottom, with earlier days above it.
+      const caret = view.coordsAtPos(view.state.doc.length)
+      const box = scroller?.getBoundingClientRect()
+      say('caretVisible', caret !== null && box !== undefined &&
+        caret.top >= box.top && caret.bottom <= box.bottom)
+      say('scrolledToBottom', scroller !== null &&
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 4)
+      say('somethingAbove', (view.state.doc.toString().slice(0, view.state.doc.length - 20)).includes('Friday'))
+      const rail = document.querySelector('.rail-host') as HTMLElement | null
+      const content = document.querySelector('.cm-content') as HTMLElement | null
+      say('heights', {
+        content: Math.round(content?.getBoundingClientRect().height ?? -1),
+        railHost: Math.round(rail?.getBoundingClientRect().height ?? -1),
+        railBottom: Math.round((rail?.getBoundingClientRect().bottom ?? 0) - (scroller?.getBoundingClientRect().top ?? 0)),
+      })
+      say('geometry', scroller === null ? null : {
+        scrollTop: Math.round(scroller.scrollTop),
+        scrollHeight: Math.round(scroller.scrollHeight),
+        clientHeight: Math.round(scroller.clientHeight),
+        caretTop: caret === null ? null : Math.round(caret.top - (box?.top ?? 0)),
+      })
+      await settle(1500)
+    }
+
+    if (scene === 'days') {
+      // Growth is what brings earlier days in, so wait for it rather than
+      // assuming the first paint has them.
+      let waited = 0
+      while (waited < 4000 && document.querySelectorAll('.tx-daybreak').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      say('separators', document.querySelectorAll('.tx-daybreak').length)
+      say('labels', [...document.querySelectorAll('.tx-daybreak')].map(e =>
+        [...e.querySelectorAll('time')].map(t => t.textContent).join(' → ')))
+      say('daysInBuffer', (view.state.doc.toString().match(/Friday|Lorem/g) ?? []).length)
+      say('landedAtEnd', view.state.selection.main.head === view.state.doc.length)
+      say('daysLoaded', view.state.doc.toString().split('\n').length > 4)
+      await settle(2500)
+    }
+
     if (scene === 'clipboard') {
       const board = await window.tephra.readClipboard()
       say('textBytes', board.text.length)
@@ -1107,8 +1167,11 @@ export async function runVerify(scene: string): Promise<void> {
     if (scene === 'reopen') {
       const head = view.state.selection.main.head
       say('buffer', view.state.doc.toString())
-      say('cursorRestoredTo', head)
-      say('textAtCursor', view.state.doc.toString().slice(head, head + 6))
+      say('landedAt', head)
+      say('docLength', view.state.doc.length)
+      // What a reader sees above the caret is the point of landing there: the
+      // append position with the work already done visible above it.
+      say('textAbove', view.state.doc.toString().slice(Math.max(0, head - 18), head))
       say('location', pane.location)
     }
   } catch (err) {
@@ -1123,6 +1186,8 @@ interface EditorViewLike {
     selection: { main: { head: number; from: number; to: number; empty: boolean } }
   }
   dispatch(spec: unknown): void
+  /** Where a position is on screen. Used to check what a reader can see. */
+  coordsAtPos(at: number): { top: number; bottom: number } | null
 }
 interface PaneLike {
   readonly location: unknown

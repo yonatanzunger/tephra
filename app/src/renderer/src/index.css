@@ -572,3 +572,19 @@ body {
   position: absolute; left: 0; bottom: 0; width: 1px; height: 1px;
   opacity: 0; border: 0; padding: 0; pointer-events: none;
 }
+
+/* The seam between two days. Drawn in the leading rather than in the measure,
+   so it separates without interrupting: the rule runs the width of the text
+   column and the dates sit at its ends, quiet enough to scroll past and
+   present enough to answer "which day am I in". */
+.tx-daybreak {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .18em;
+  margin: 1.2em 0 1em; user-select: none;
+  font-family: var(--font-ui); font-size: .68rem; letter-spacing: .05em;
+  text-transform: uppercase; color: rgb(var(--text-muted));
+}
+/* The rule sits BETWEEN the two dates rather than beside them: what it marks is
+   a boundary — this day ends, that one begins — and flanking read as a range,
+   as though the seam covered the span between the two. */
+.tx-daybreak-rule { align-self: stretch; height: 1px; background: rgb(var(--border)); margin: .1em 0; }
+.tx-daybreak-date { font-variant-numeric: tabular-nums; }
