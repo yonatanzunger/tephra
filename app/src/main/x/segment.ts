@@ -221,10 +221,28 @@ export class Segment {
 
     out.push({ kind: 'date', name: this.date, level: 0, from: 0, to: this.#body.length })
 
+    // **A heading is a RANGE: its section, not its line** (D51). It runs to the
+    // next heading of equal or greater precedence, or to the end of the day —
+    // which is what makes days and headings one containment tree, and what lets
+    // the sidebar highlight a section exactly as it highlights a subject.
+    //
+    // The heading's own text is `name`, so nothing is lost by the range being
+    // the larger thing; what would be lost the other way is any way to say
+    // where the section ENDS, which no other span could supply.
+    const headings = markers.filter(m => m.kind === 'heading')
+    headings.forEach((m, i) => {
+      const next = headings.slice(i + 1).find(other => other.level <= m.level)
+      out.push({
+        kind: 'heading',
+        name: m.name,
+        level: m.level,
+        from: m.from,
+        to: next?.from ?? this.#body.length,
+      })
+    })
+
     for (const m of markers) {
-      if (m.kind === 'heading') {
-        out.push({ kind: 'heading', name: m.name, level: m.level, from: m.from, to: m.to })
-      } else if (m.kind === 'anchor') {
+      if (m.kind === 'anchor') {
         // Zero-length: an anchor is a point that travels with the text (D20).
         out.push({ kind: 'anchor', name: m.name, level: 0, from: m.from, to: m.from })
       }

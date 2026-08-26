@@ -182,6 +182,18 @@ export function themeFile(name: string): RelPath {
  * `format-spec.md` lays it out. v1 has a single document, the stream, but the
  * shape is the spec's and costs nothing to honour now.
  */
+/**
+ * Where a directory's index lives, mirroring the corpus's own tree (D52).
+ *
+ * `stream/2026/08` becomes `.tephra/index/stream/2026/08.json`, which is per
+ * month because that is how the corpus is laid out (D9) — the granularity falls
+ * out of the tree rather than being a rule of its own. The root's own files, if
+ * a corpus ever has any, go in `_root.json`, since `.json` alone is not a name.
+ */
+export function indexFile(dir: RelPath): RelPath {
+  return `${LOCAL_DIR}/index/${dir === '' ? '_root' : dir}.json`
+}
+
 export function walFile(docId: string): RelPath {
   return `${LOCAL_DIR}/wal/${slug(docId)}.jsonl`
 }

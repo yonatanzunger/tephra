@@ -113,6 +113,23 @@ export class Notebook {
    * excluded because it is not part of the corpus.
    */
   async list(subdir: RelPath = ''): Promise<readonly RelPath[]> {
+    return this.#walk(subdir, false)
+  }
+
+  /**
+   * The same, INSIDE `.tephra/` — the only way to enumerate the machinery.
+   *
+   * `list` excludes it on purpose: the corpus is what a person wrote, and a
+   * caller asking for the notebook's files does not mean the write-ahead log.
+   * But the machinery has to be enumerable by the code that owns it — the index
+   * cannot sweep a cache it cannot list — so it gets its own door rather than a
+   * flag on the front one.
+   */
+  async listMachinery(subdir: RelPath): Promise<readonly RelPath[]> {
+    return isLocal(subdir) ? this.#walk(subdir, true) : []
+  }
+
+  async #walk(subdir: RelPath, machinery: boolean): Promise<readonly RelPath[]> {
     const out: RelPath[] = []
     const walk = async (rel: RelPath): Promise<void> => {
       let entries
@@ -123,13 +140,31 @@ export class Notebook {
       }
       for (const entry of entries) {
         const child = rel === '' ? entry.name : `${rel}/${entry.name}`
-        if (isLocal(child) || entry.name.startsWith('.')) continue
+        if (!machinery && (isLocal(child) || entry.name.startsWith('.'))) continue
+        if (machinery && entry.name.startsWith('.')) continue // a torn temp file
         if (entry.isDirectory()) await walk(child)
         else out.push(child)
       }
     }
     await walk(subdir)
     return out.sort()
+  }
+
+  /**
+   * Size and modification time, in one call and without reading the file.
+   *
+   * **This is the whole staleness check for the index** (D52): a cached entry
+   * whose stamp still matches is trusted, and one that does not is rescanned.
+   * Two numbers from a `stat` rather than a hash of the contents, because the
+   * point is to avoid reading seven thousand files to find the three that moved.
+   */
+  async stamp(rel: RelPath): Promise<{ size: number; mtime: number } | null> {
+    try {
+      const info = await stat(this.#abs(rel))
+      return { size: info.size, mtime: info.mtimeMs }
+    } catch {
+      return null
+    }
   }
 
   async sizeOf(rel: RelPath): Promise<number | null> {
