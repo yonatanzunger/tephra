@@ -8,7 +8,7 @@
 
 import { toHtml } from './markdown.ts'
 import type { DayProse } from '../../../shared/ipc.ts'
-import { fromWire, stripHandles, type Prose } from '../../../shared/prose.ts'
+import { stripHandles, type Prose } from '../../../shared/prose.ts'
 import { CLEAN, place, PAPER_SURFACE, type Placed, type Presentation } from '../../../shared/presentation.ts'
 import type { ProseOffset } from '../../../shared/document-api.ts'
 
@@ -57,7 +57,7 @@ export function printRangePage(
   const sameYear = new Set(days.map(d => d.date.slice(0, 4))).size === 1
   const html = days
     .map(day => {
-      const prose = fromWire(day.prose)
+      const prose = day.prose
       const placed = place(prose, how, PAPER_SURFACE)
       const heading = placed.some(p => p.annotation.kind === 'date' && p.slot !== 'none')
         ? `<h2 class="date">${readable(day.date, sameYear)}</h2>\n`

@@ -6,7 +6,7 @@
 
 import {
   proseText, ProseMap, stripHandles, HANDLE,
-  type Annotation, type Marker, type Prose, type ProseWidth,
+  type Annotation, type Marker, type Prose, type ProseWidth, type SegmentProse,
 } from '../../shared/prose.ts'
 import type { DocumentOffset, ProseOffset, ProseText, DocumentText } from '../../shared/document-api.ts'
 import { scanMarkers, type ScannedSpan } from './markers.ts'
@@ -14,7 +14,7 @@ import { scanThreadBlocks } from './comments.ts'
 import type { CommentThread } from '../../shared/comments.ts'
 
 export { HANDLE, ProseMap, stripHandles }
-export type { Marker, Prose, ProseWidth }
+export type { Marker, Prose, ProseWidth, SegmentProse }
 
 /**
  * A body's prose, ready to be displayed (D50).
@@ -44,7 +44,7 @@ export function proseOf(
   markers: readonly Marker[],
   spans: readonly ScannedSpan[] = [],
   threads: readonly CommentThread[] = [],
-): Prose<ProseOffset> {
+): SegmentProse {
   const map = ProseMap.of(body.length, markers)
   const byId = new Map(threads.map(t => [t.id as string, t]))
   const annotations: Annotation<ProseOffset>[] = []

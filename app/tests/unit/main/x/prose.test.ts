@@ -6,7 +6,7 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { HANDLE, proseOf, stripHandles, type Prose } from '../../../../src/main/x/prose.ts'
+import { HANDLE, proseOf, stripHandles, type SegmentProse } from '../../../../src/main/x/prose.ts'
 import { proseMarkers } from '../../../../src/main/x/prose.ts'
 import type { DocumentOffset, ProseOffset } from '../../../../src/shared/document-api.ts'
 import type { DocumentText } from '../../../../src/shared/document-api.ts'
@@ -16,7 +16,7 @@ const START = (s: string): string => `<!--tephra:tag-start ${s}-->`
 const END = (s: string): string => `<!--tephra:tag-end ${s}-->`
 const MARK = (s: string): string => `<!--tephra:mark ${s}-->`
 
-const of = (raw: DocumentText): Prose<ProseOffset> => proseOf(raw, proseMarkers(raw))
+const of = (raw: DocumentText): SegmentProse => proseOf(raw, proseMarkers(raw))
 
 /** The two coordinate spaces are different types on purpose; these say which. */
 const rawAt = (n: number): DocumentOffset => n as DocumentOffset

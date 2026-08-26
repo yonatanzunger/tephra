@@ -1,7 +1,8 @@
 # Prose — the document as displayed
 
-> **A sketch, not a decision.** Written for D50. The code below typechecks
-> against the current tree; nothing is wired to it yet.
+> **Decided as D50, and built.** The shapes below are the ones in
+> `src/shared/prose.ts` and `src/shared/presentation.ts`; where the sketch was
+> wrong — the map — the correction is marked in place and recorded in D50.
 
 ## The claim
 
@@ -50,10 +51,21 @@ export type Annotation<At extends Anchored> =
 
 export interface Prose<At extends Anchored> {
   readonly text: ProseText
-  readonly map: ProseMap
   readonly annotations: readonly Annotation<At>[]
 }
+
+/** One segment's prose, which has a single map because it has one body. */
+export interface SegmentProse extends Prose<ProseOffset> {
+  readonly map: ProseMap
+}
 ```
+
+**The map is not in `Prose`, and the first draft of this had it there.** A map
+relates one prose to one document text; a segment owns both, and a window owns
+neither — it is several segments joined, and a document position is segment plus
+offset (D48). See D50's revision note. Nothing downstream wanted it: the printer
+converts no coordinates, and the renderer builds its own maps from the markers
+the snapshot already carries.
 
 **Generic over its coordinate, and that is not decoration.** A segment's prose is
 addressed in `ProseOffset` and a window's in `WindowPosition` (D48); the same

@@ -15,7 +15,7 @@ import type {
 } from '../../../shared/document-api.ts'
 import type { WindowSnapshot } from '../../../shared/ipc.ts'
 import { applyEdits } from './apply-edits.ts'
-import { inSegment, inWindow, ProseMap } from '../../../shared/prose.ts'
+import { inSegment, inWindow, inWindowProse, ProseMap, type Prose } from '../../../shared/prose.ts'
 
 type Placement = WindowSnapshot['placement']
 
@@ -68,6 +68,18 @@ export class RemoteWindow implements DocumentWindow {
   }
   get text(): ProseText {
     return this.#text
+  }
+
+  /**
+   * The window's prose (D50), assembled from the snapshot's parts by the same
+   * rule main uses — the placement says where each segment starts, and its
+   * annotations are shifted by that.
+   */
+  get prose(): Prose<WindowPosition> {
+    return {
+      text: this.#text,
+      annotations: this.#placement.flatMap(p => inWindowProse(p.annotations, p.start)),
+    }
   }
   get span(): Span {
     return this.#span

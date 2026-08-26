@@ -10,7 +10,7 @@ import type {
   WindowEdit, DateKey, DocumentChange, DocumentMeta, EditOrigin, SessionGeneration,
   Span, SpanKind, TypedSpan, DocumentPosition,
 } from './document-api.ts'
-import type { Marker, ProseWire } from './prose.ts'
+import type { Annotation, Marker, Prose } from './prose.ts'
 import type { WindowPosition, ProseOffset, ProseText } from './document-api.ts'
 
 /** Windows are addressed by handle; the objects themselves never cross. */
@@ -104,6 +104,14 @@ export interface WindowSnapshot {
     readonly start: WindowPosition
     readonly length: number
     readonly markers: readonly Marker[]
+    /**
+     * In the SEGMENT's coordinates; the renderer shifts them by `start` (D50).
+     *
+     * Sent per segment rather than pre-shifted for the same reason the markers
+     * are sent at all: a segment arriving from growth carries its own, and the
+     * window is assembled from the parts on both sides by the same rule.
+     */
+    readonly annotations: readonly Annotation<ProseOffset>[]
   }[]
   readonly boundaries: Boundaries
 }
@@ -190,7 +198,7 @@ export type { DocumentPosition }
  */
 export interface DayProse {
   readonly date: DateKey
-  readonly prose: ProseWire<ProseOffset>
+  readonly prose: Prose<ProseOffset>
 }
 
 export interface PrintJob {

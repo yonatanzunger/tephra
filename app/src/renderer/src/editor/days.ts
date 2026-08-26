@@ -13,6 +13,7 @@
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state'
 import type { DateKey, DocumentWindow } from '../../../shared/document-api.ts'
+import { DESKTOP, place } from '../../../shared/presentation.ts'
 
 /** Dispatched when the loaded days may have changed — growth, or a jump. */
 export const redays = StateEffect.define<null>()
@@ -20,13 +21,14 @@ export const redays = StateEffect.define<null>()
 export function dayBoundaries(docWindow: DocumentWindow): Extension {
   const build = (state: { doc: { lineAt(at: number): { from: number }; length: number } }): DecorationSet => {
     const found: { at: number; to: number; date: DateKey }[] = []
-    for (const span of docWindow.spans('date')) {
-      const at = docWindow.toWindow(span.span.begin)
-      const to = docWindow.toWindow(span.span.end)
-      if (at === null || to === null) continue
-      found.push({ at: at as number, to: to as number, date: span.name as DateKey })
+    for (const item of place(docWindow.prose, DESKTOP)) {
+      if (item.annotation.kind !== 'date' || item.slot === 'none') continue
+      found.push({
+        at: item.annotation.at.from as number,
+        to: item.annotation.at.to as number,
+        date: item.annotation.date as DateKey,
+      })
     }
-    found.sort((a, b) => a.at - b.at)
 
     // **A day with nothing in it is not a seam.** Files of pure frontmatter can
     // still be in a corpus written before they stopped being created, and two

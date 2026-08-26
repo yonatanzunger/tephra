@@ -14,7 +14,10 @@ import type {
 } from '../../shared/document-api.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
 import type { Segment } from './segment.ts'
-import { documentText, inSegment, inWindow, stripHandles } from '../../shared/prose.ts'
+import {
+  documentText, inSegment, inWindow, inWindowProse, stripHandles,
+  type Annotation, type Prose,
+} from '../../shared/prose.ts'
 import { minimalReplacement } from './text-edits.ts'
 import type { WindowSnapshot } from '../../shared/ipc.ts'
 import type { StreamDocument } from './stream-document.ts'
@@ -34,6 +37,7 @@ export class StreamWindow implements DocumentWindow {
   #segments: Segment[]
   #placed: Placed[] = []
   #text = '' as ProseText
+  #prose: Prose<WindowPosition> = { text: '' as ProseText, annotations: [] }
   #generation: SessionGeneration
 
   readonly #changeHandlers = new Set<(edits: readonly WindowEdit[], origin: EditOrigin) => void>()
@@ -62,6 +66,18 @@ export class StreamWindow implements DocumentWindow {
 
   get text(): ProseText {
     return this.#text
+  }
+
+  /**
+   * The window's prose: its text, and every annotation shifted into the
+   * window's own coordinates (D50).
+   *
+   * Built where the text is built, from the same walk over the same segments —
+   * the two are one value in two fields, and computing them apart is how they
+   * would come to disagree.
+   */
+  get prose(): Prose<WindowPosition> {
+    return this.#prose
   }
 
   get span(): Span {
@@ -461,6 +477,7 @@ export class StreamWindow implements DocumentWindow {
       start: p.start,
       length: p.segment.length,
       markers: p.segment.prose.map.markers,
+      annotations: p.segment.prose.annotations,
     }))
   }
 
@@ -469,14 +486,17 @@ export class StreamWindow implements DocumentWindow {
   #rebuild(): void {
     const placed: Placed[] = []
     const parts: string[] = []
+    const annotations: Annotation<WindowPosition>[] = []
     let start = 0
     for (const segment of this.#segments) {
       placed.push({ segment, start: start as WindowPosition })
       parts.push(segment.prose.text)
+      annotations.push(...inWindowProse(segment.prose.annotations, start as WindowPosition))
       start += segment.prose.text.length
     }
     this.#placed = placed
     this.#text = parts.join('') as ProseText
+    this.#prose = { text: this.#text, annotations }
   }
 }
 

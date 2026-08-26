@@ -293,6 +293,7 @@ export interface Span {
 export const HANDLE = '\ufffc'
 
 import type { CommentId, CommentThread } from './comments.ts'
+import type { Prose } from './prose.ts'
 
 export type SpanKind = 'date' | 'heading' | 'anchor' | 'tag' | 'comment'
 
@@ -524,6 +525,17 @@ export interface DocumentWindow {
   /** What was actually served, after boundary widening. */
   readonly span: Span
   readonly text: ProseText
+  /**
+   * The same text, with everything anchored into it (D50).
+   *
+   * **What a renderer should read.** `spans()` answers in DOCUMENT positions,
+   * which is right for a command that edits and wrong for a decoration that
+   * draws: every drawing path used to convert each span back to a window
+   * position itself, four times over, and every one of those conversions was a
+   * chance to add a segment start to the wrong kind of offset. Here the ranges
+   * are already the buffer's own.
+   */
+  readonly prose: Prose<WindowPosition>
 
   // ── coordinates ────────────────────────────────────────────
   /**

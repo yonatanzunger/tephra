@@ -60,6 +60,9 @@ const tephra = {
   openLink: (target: string): Promise<boolean> => ipcRenderer.invoke(CHANNEL.openLink, target),
   /** Self-check only. What each window holds, for comparing against main. */
   diagnose: (): Promise<unknown> => ipcRenderer.invoke('tephra:verify:diagnose'),
+  /** Verify only: seed the clipboard, and get back what was on it. */
+  setClipboard: (next: Clipboard | null): Promise<Clipboard> =>
+    ipcRenderer.invoke('tephra:verify:clipboard', next),
   /** Self-check only; the handler exists only when TEPHRA_VERIFY is set. */
   clickMenu: (label: string): Promise<boolean> => ipcRenderer.invoke('tephra:verify:menu', label),
 

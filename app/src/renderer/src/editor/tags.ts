@@ -14,6 +14,7 @@
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, type Extension } from '@codemirror/state'
 import type { DocumentWindow } from '../../../shared/document-api.ts'
+import { DESKTOP, place } from '../../../shared/presentation.ts'
 import { stack } from '../../../shared/tags.ts'
 
 /** Dispatched when the spans may have changed without the text changing. */
@@ -22,15 +23,16 @@ export const retag = StateEffect.define<null>()
 export function tagExtents(docWindow: DocumentWindow): Extension {
   const build = (view: EditorView): DecorationSet => {
     const length = view.state.doc.length
+    // The policy decides whether tags are drawn at all, and where (D50). The
+    // ranges arrive in the buffer's own coordinates, so there is no conversion
+    // here to get wrong — which is what four separate ones used to be for.
     const spans: { from: number; to: number; name: string }[] = []
-    for (const span of docWindow.spans('tag')) {
-      const from = docWindow.toWindow(span.span.begin)
-      const to = docWindow.toWindow(span.span.end)
-      if (from === null || to === null) continue
+    for (const item of place(docWindow.prose, DESKTOP)) {
+      if (item.annotation.kind !== 'tag' || item.slot !== 'flow') continue
       spans.push({
-        from: Math.max(0, Math.min(from as number, length)),
-        to: Math.max(0, Math.min(to as number, length)),
-        name: span.name,
+        from: Math.max(0, Math.min(item.annotation.at.from as number, length)),
+        to: Math.max(0, Math.min(item.annotation.at.to as number, length)),
+        name: item.annotation.subject,
       })
     }
 

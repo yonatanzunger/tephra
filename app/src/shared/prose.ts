@@ -269,52 +269,27 @@ export type Annotation<At extends Anchored> =
 export type AnnotationKind = Annotation<ProseOffset>['kind']
 
 /**
- * The document as displayed: the text, the map back to the file, and everything
- * anchored into it.
+ * The document as displayed: the text, and everything anchored into it.
  *
- * **Plain data, with no methods on purpose.** This crosses a process boundary
- * and goes to a printer; the arithmetic lives on `map`, which is a value both
- * sides build for themselves from the same markers.
+ * **The map is deliberately NOT here, and D50 said it was.** Implementing the
+ * window found the flaw: a map relates one prose to one document text, so it
+ * belongs to whatever owns both — a `Segment` does, and a WINDOW DOES NOT. A
+ * window spans several segments and crosses to the document through its
+ * placement and their maps, so a single `map` field would have been a lie at
+ * exactly the scope the editor uses. Nothing downstream missed it: the printer
+ * never converted a coordinate, and the renderer builds its own maps from the
+ * markers in the snapshot.
+ *
+ * Plain data, so it crosses a process boundary as itself.
  */
 export interface Prose<At extends Anchored> {
   readonly text: ProseText
+  readonly annotations: readonly Annotation<At>[]
+}
+
+/** One segment's prose, which does have a single map, because it has one body. */
+export interface SegmentProse extends Prose<ProseOffset> {
   readonly map: ProseMap
-  readonly annotations: readonly Annotation<At>[]
-}
-
-/**
- * Prose on its way across a process boundary.
- *
- * **The map is rebuilt on the far side, never sent.** `ProseMap` is a class,
- * and structured clone keeps an object's fields while dropping its prototype —
- * so a cloned map arrives as data with no methods, which fails at the first
- * conversion rather than at the boundary. Sending the markers instead is what
- * the window snapshot already does, for the same reason and with the same
- * guarantee: both sides compute one mapping from one input (D44).
- */
-export interface ProseWire<At extends Anchored> {
-  readonly text: ProseText
-  /** The document text this was made from — what the map is built against. */
-  readonly documentLength: number
-  readonly markers: readonly Marker[]
-  readonly annotations: readonly Annotation<At>[]
-}
-
-export function toWire<At extends Anchored>(prose: Prose<At>, documentLength: number): ProseWire<At> {
-  return {
-    text: prose.text,
-    documentLength,
-    markers: prose.map.markers,
-    annotations: prose.annotations,
-  }
-}
-
-export function fromWire<At extends Anchored>(wire: ProseWire<At>): Prose<At> {
-  return {
-    text: wire.text,
-    map: ProseMap.of(wire.documentLength, wire.markers),
-    annotations: wire.annotations,
-  }
 }
 
 /** Shift a segment's annotations into the window that segment sits in. */

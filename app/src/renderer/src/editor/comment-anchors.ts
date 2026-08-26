@@ -8,6 +8,7 @@
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, type Extension } from '@codemirror/state'
 import type { DocumentWindow } from '../../../shared/document-api.ts'
+import { DESKTOP, place } from '../../../shared/presentation.ts'
 
 /** Dispatched when the spans may have changed without the text changing (D45). */
 export const recomment = StateEffect.define<null>()
@@ -104,19 +105,16 @@ interface Anchored {
 
 function spansOf(docWindow: DocumentWindow, view: EditorView): Anchored[] {
   const out: Anchored[] = []
-  for (const span of docWindow.spans('comment')) {
-    if (span.kind !== 'comment') continue
-    const from = docWindow.toWindow(span.span.begin)
-    const to = docWindow.toWindow(span.span.end)
-    if (from === null || to === null) continue
+  for (const item of place(docWindow.prose, DESKTOP)) {
+    if (item.annotation.kind !== 'comment' || item.slot !== 'margin') continue
     out.push({
-      id: span.name,
+      id: item.annotation.thread.id as string,
       // The handle is one character before the range it opens; the note points
       // at the mark, which is what a reader sees.
-      from: Math.max(0, (from as number) - 1),
-      to: to as number,
-      resolved: span.resolved,
+      from: Math.max(0, (item.annotation.at.from as number) - 1),
+      to: item.annotation.at.to as number,
+      resolved: item.annotation.thread.resolved,
     })
   }
-  return out.sort((a, b) => a.from - b.from)
+  return out
 }

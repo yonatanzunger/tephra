@@ -26,7 +26,7 @@ import {
 } from './comments.ts'
 import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
 import type { DayProse } from '../../shared/ipc.ts'
-import { stripHandles, toWire } from '../../shared/prose.ts'
+import { stripHandles } from '../../shared/prose.ts'
 import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
 
@@ -286,7 +286,7 @@ export class StreamDocument implements Document {
       if (compareDateKeys(date, first) < 0 || compareDateKeys(date, last) > 0) continue
       const segment = await this.segment(date)
       if (stripHandles(segment.prose.text).trim() === '') continue
-      out.push({ date, prose: toWire(segment.prose, segment.length) })
+      out.push({ date, prose: { text: segment.prose.text, annotations: segment.prose.annotations } })
     }
     return out
   }

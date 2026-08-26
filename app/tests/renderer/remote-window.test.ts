@@ -42,7 +42,7 @@ function fixture(raw: DocumentText) {
     },
     generation: 1 as SessionGeneration,
     spans: [],
-    placement: [{ date: DAY, start: 0 as WindowPosition, length: raw.length, markers }],
+    placement: [{ date: DAY, start: 0 as WindowPosition, length: raw.length, markers, annotations: [] }],
     boundaries: { earlier: false, later: false },
   }
   const window = new RemoteWindow({} as Document, snapshot)
@@ -53,7 +53,7 @@ const BODY = rt(`Every market ${START}participant has a finite${END} shock limit
 
 const at = (n: number) => ({ segment: DAY as unknown as SegmentKey, offset: n as DocumentOffset, generation: 1 as SessionGeneration })
 const SPAN: TypedSpan = { kind: 'tag', name: 'Foo', span: { begin: at(10), end: at(20) } }
-const PLACEMENT = [{ date: DAY, start: 0 as WindowPosition, length: BODY.length, markers: [] }]
+const PLACEMENT = [{ date: DAY, start: 0 as WindowPosition, length: BODY.length, markers: [], annotations: [] }]
 const EDGES = { earlier: false, later: false }
 
 test('a prose position becomes the RAW offset it stands for, not itself', () => {

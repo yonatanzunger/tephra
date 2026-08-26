@@ -1564,19 +1564,41 @@ where the compiler cannot help because pixels are not our type to brand.
 
 ---
 
-## D50: Prose is the document as displayed — text, mapping and annotations, with one presentation policy over it
+## D50: Prose is the document as displayed — text and annotations, with one presentation policy over it
 
-**Date:** 2026-08-26
+**Date:** 2026-08-26, revised 2026-08-26
 **Status:** decided
 **Constrains:** Q11; raises Q13 and Q14
 **Detail:** `solution/prose.md`
 
-**Decision.** **`Prose` is one value: the text a person sees, the map that
-relates it to the document's text, and every annotation anchored into it.** The
-annotations are a single union — a day, a heading, a bookmark, a tagged range, a
-comment thread — carrying their payloads, in prose coordinates, generic over
-which prose (`Prose<ProseOffset>` for a segment, `Prose<WindowPosition>` for a
-window). `ProseMap` becomes the offset table inside it rather than the noun.
+**Decision.** **`Prose` is one value: the text a person sees, and every
+annotation anchored into it.** The annotations are a single union — a day, a
+heading, a bookmark, a tagged range, a comment thread — carrying their payloads,
+in prose coordinates, generic over which prose (`Prose<ProseOffset>` for a
+segment, `Prose<WindowPosition>` for a window).
+
+**REVISED, one day in: the map is not part of it.** As first written this said
+Prose was text, map and annotations. Implementing the window found that wrong. A
+`ProseMap` relates ONE prose to ONE document text, so it belongs to whatever
+owns both — a `Segment` does, and a **window does not**: a window is several
+segments joined, and on the document side there is no single string to map to,
+because a document position is segment + offset (D48). A `map` field on a
+window's prose could only have been a lie (one segment's map standing for all,
+which is the tag-27-characters-early bug in new clothes), a fake (a map into an
+offset space that does not exist), or dead. So `Prose` is `{ text, annotations }`
+at both scopes, `SegmentProse` adds the map where a map is meaningful, and the
+window crosses to the document through its placement, as it always did.
+
+Two things confirm it rather than merely permitting it: **nothing downstream
+missed the map** — the printer never converts a coordinate and the renderer
+builds its own from the markers in the snapshot — and removing it deleted the
+`ProseWire`/`toWire`/`fromWire` machinery whole, which existed only because
+`ProseMap` is a class and structured clone drops prototypes. With the map out,
+prose crosses a process boundary as itself.
+
+The general lesson is D48's, pointed at a value rather than a name: **a map
+between two layers is not part of either layer.** It belongs to the thing that
+holds both sides.
 
 **How it is drawn is a policy, not a feature.** A `Presentation` names a
 treatment per kind — a day is `absent | seam | pageHeader`, a comment is

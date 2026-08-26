@@ -75,6 +75,31 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.restore, (_e, version: VersionId) => service.restore(version))
   ipcMain.handle(CHANNEL.comments, () => service.comments())
   if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())
+
+  /**
+   * Put something known on the clipboard, and hand back what was there.
+   *
+   * **The acceptance run must not depend on what the operator last copied.**
+   * Before this, `npm run m2`'s import section passed or failed according to
+   * the state of a system pasteboard nobody had set on purpose — it went green
+   * for a fortnight because there happened to be HTML on it, and went red the
+   * first morning there was not. A test whose result is decided by ambient
+   * state is not reporting on the code.
+   *
+   * Verify mode only, and it gives back the previous contents so the scene can
+   * put them back: clobbering a person's clipboard because they ran the tests
+   * would be a rude way to fix a flaky check.
+   */
+  if (verifyMode()) {
+    ipcMain.handle('tephra:verify:clipboard', (_e, next: Clipboard | null): Clipboard => {
+      const had: Clipboard = { text: clipboard.readText(), html: clipboard.readHTML() }
+      if (next !== null) {
+        if (next.html !== '') clipboard.write({ text: next.text, html: next.html })
+        else clipboard.writeText(next.text)
+      }
+      return had
+    })
+  }
   // The system's own picker, which knows every emoji and how to search them.
   // It types into whatever has focus, so the renderer focuses a field first.
   ipcMain.handle(CHANNEL.emojiPanel, () => {

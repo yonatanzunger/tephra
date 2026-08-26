@@ -700,6 +700,18 @@ export async function runVerify(scene: string): Promise<void> {
     }
 
     if (scene === 'import') {
+      // Seeded, not borrowed: what this checks is that an import keeps the
+      // original and annotates a copy, and that claim has nothing to do with
+      // what happens to be on the operator's pasteboard. Put back at the end.
+      const had = await window.tephra.setClipboard({
+        text: 'Contract theory, in plain text.',
+        html:
+          '<meta charset="utf-8"><h2>Contract theory</h2>' +
+          '<p>A <b>hold-up problem</b> arises when investment is relationship-specific.</p>' +
+          '<p>See <a href="https://example.org/klein">Klein, Crawford and Alchian</a>.</p>',
+      })
+      say('clipboardSeeded', true)
+
       view.dispatch({ selection: { anchor: view.state.doc.length } })
       await settle(400)
       const before = view.state.doc.toString()
@@ -715,6 +727,7 @@ export async function runVerify(scene: string): Promise<void> {
       say('inBuffer', view.state.doc.toString().slice(before.length).trim().slice(0, 120))
       say('linkRendered', document.querySelectorAll('.tx-link').length)
       await window.tephra.doc.flush()
+      await window.tephra.setClipboard(had)
       await settle(600)
     }
 

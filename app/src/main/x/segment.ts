@@ -5,14 +5,14 @@
 // not text the user is editing, and if offsets included it then editing a
 // keyword would silently move every position in the day.
 
-import type { DateKey, DocumentText, ProseOffset, TypedSpan } from '../../shared/document-api.ts'
+import type { DateKey, DocumentText, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
 import {
   resolveAnchors, resolvePairs, resolveTags, scanMarkers,
   type DocumentMarker, type ScannedSpan,
 } from './markers.ts'
 import { threadsIn } from './comments.ts'
-import { proseOf, proseMarkers, type Prose } from './prose.ts'
+import { proseOf, proseMarkers, type SegmentProse } from './prose.ts'
 
 /**
  * A span as the scanner produces it: body offsets, not document positions.
@@ -39,7 +39,7 @@ export class Segment {
 
   /** Lazily computed and dropped on every edit; scanning is cheap, staleness is not. */
   #markers: readonly DocumentMarker[] | null = null
-  #prose: Prose<ProseOffset> | null = null
+  #prose: SegmentProse | null = null
 
   private constructor(date: DateKey, rel: RelPath, original: string) {
     this.date = date
@@ -102,7 +102,7 @@ export class Segment {
    * Cached beside the marker scan and invalidated with it, because the two are
    * derived from the same walk of the same string.
    */
-  get prose(): Prose<ProseOffset> {
+  get prose(): SegmentProse {
     if (this.#prose === null) {
       this.#prose = proseOf(this.#body, proseMarkers(this.#body), this.spans(), threadsIn(this.#body))
     }

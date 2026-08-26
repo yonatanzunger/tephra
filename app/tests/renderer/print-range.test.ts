@@ -23,8 +23,6 @@ const day = (
   date: date as DateKey,
   prose: {
     text: text as ProseText,
-    documentLength: text.length,
-    markers: [],
     annotations: [{ kind: 'date', at: at(0, text.length), date }, ...annotations],
   },
 })
