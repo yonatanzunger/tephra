@@ -6,13 +6,15 @@
 // and the bold vanishes from the file permanently.
 
 import { strict as assert } from 'node:assert'
+import type { DocumentText } from '../../../../src/shared/document-api.ts'
 import { test } from 'node:test'
 import { parser } from '@lezer/markdown'
 import { placeMarker } from '../../../../src/main/x/markers.ts'
+import { rt } from '../../../support/text.ts'
 
 const MARK = '<!--tephra:mark m-->'
 
-const apply = (body: string, offset: number): string => {
+const apply = (body: DocumentText, offset: number): string => {
   const { at, text } = placeMarker(body, offset, MARK)
   return body.slice(0, at) + text + body.slice(at)
 }
@@ -38,7 +40,7 @@ test('THE BUG: a marker beginning a paragraph would kill its formatting', () => 
 })
 
 test('placed by the rule, the bold survives', () => {
-  const body = '**Intrinsic S** is a property.\n'
+  const body = rt('**Intrinsic S** is a property.\n')
   const out = apply(body, 0)
   assert.equal(shape(out).strong, true)
   assert.ok(out.includes(MARK))
@@ -47,7 +49,7 @@ test('placed by the rule, the bold survives', () => {
 test('a hard-wrapped paragraph is not split', () => {
   // The trap in the obvious fix: giving the marker its own line splits a
   // paragraph in two, which is worse than what it was fixing.
-  const body = 'A paragraph hard-wrapped\nacross two lines by hand.\n'
+  const body = rt('A paragraph hard-wrapped\nacross two lines by hand.\n')
   const at = body.indexOf('across')
   const out = apply(body, at)
   assert.equal(shape(out).paragraphs, 1, 'still one paragraph')
@@ -60,7 +62,7 @@ test('a marker never begins a line that has content after it', () => {
     'Para one.\n\n**Bold** para two.\n',
     'A\nB\nC\n',
   ]
-  for (const body of bodies) {
+  for (const body of bodies.map(rt)) {
     for (let offset = 0; offset <= body.length; offset++) {
       const { at, text } = placeMarker(body, offset, MARK)
       const out = body.slice(0, at) + text + body.slice(at)
@@ -73,7 +75,7 @@ test('a marker never begins a line that has content after it', () => {
 })
 
 test('mid-line placements are left exactly alone', () => {
-  const body = 'Some text and more text.\n'
+  const body = rt('Some text and more text.\n')
   const at = body.indexOf('and')
   assert.deepEqual(placeMarker(body, at, MARK), { at, text: MARK })
 })
@@ -84,7 +86,7 @@ test('the prose is never altered, wherever the marker is placed', () => {
   // newline follows it. That adds a line to the file and changes nothing about
   // what the file RENDERS — a comment on its own line before a paragraph
   // produces no output anywhere.
-  const body = 'Alpha bravo\ncharlie delta\n\nEcho foxtrot\n'
+  const body = rt('Alpha bravo\ncharlie delta\n\nEcho foxtrot\n')
   for (let offset = 0; offset <= body.length; offset++) {
     const stripped = apply(body, offset).split(MARK).join('')
     const allowed = offset === 0 ? `\n${body}` : body
@@ -93,7 +95,7 @@ test('the prose is never altered, wherever the marker is placed', () => {
 })
 
 test('the added newline at offset zero costs nothing in the rendering', () => {
-  const body = '**Bold** opens the day.\n'
+  const body = rt('**Bold** opens the day.\n')
   const out = apply(body, 0)
   assert.equal(shape(out).strong, true, 'bold survives')
   assert.equal(shape(out).paragraphs, 1, 'and it is still one paragraph')

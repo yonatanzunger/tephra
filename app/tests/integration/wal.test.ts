@@ -13,9 +13,10 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocumentService } from '../../src/main/document-service.ts'
 import { dayFile, walFile } from '../../src/main/w/layout.ts'
-import type { BufferPosition, DateKey } from '../../src/shared/document-api.ts'
+import type { WindowPosition, DateKey } from '../../src/shared/document-api.ts'
+import { pt } from '../support/text.ts'
 
-const bp = (n: number): BufferPosition => n as BufferPosition
+const wp = (n: number): WindowPosition => n as WindowPosition
 const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
 
 async function session(t: TestContext, root: string, options = {}) {
@@ -38,7 +39,7 @@ async function type(svc: DocumentService, text: string): Promise<DateKey> {
   const w = await svc.openWindow({ first: info.today, last: info.today })
   await svc.edit({
     id: w.id,
-    edits: [{ from: bp(w.text.length), to: bp(w.text.length), insert: text }],
+    edits: [{ from: wp(w.text.length), to: wp(w.text.length), insert: pt(text) }],
     origin: 'user',
     generation: w.generation,
   })

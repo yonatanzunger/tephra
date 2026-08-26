@@ -9,7 +9,7 @@
 // reports facts upward rather than being observed — which is what keeps the
 // dependency pointing the right way.
 
-import type { BufferPosition, DateKey, DocumentWindow, SegmentKey, Unsubscribe } from '../../../shared/document-api.ts'
+import type { WindowPosition, DateKey, DocumentWindow, SegmentKey, Unsubscribe } from '../../../shared/document-api.ts'
 import type { BoundaryState, NavTarget } from '../../../shared/pane-api.ts'
 import { ScreenMetric, V1_EXTENT_POLICY, charsFor, type ExtentPolicy } from '../../../shared/extent.ts'
 import type { RemoteDocument } from '../x/remote-document'
@@ -160,7 +160,7 @@ export class Pane {
    * watch. v1 ships option 1 so nothing here grows on its own — and D36's
    * deferral of the ceiling measurement depends on exactly that.
    */
-  viewportChanged(visible: { from: BufferPosition; to: BufferPosition }): void {
+  viewportChanged(visible: { from: WindowPosition; to: WindowPosition }): void {
     this.#metric.observe((visible.to as number) - (visible.from as number))
     if (!this.#policy.autoExtendOnApproach) return
 

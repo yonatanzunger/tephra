@@ -14,7 +14,8 @@
 // CommonMark's rule, and the same one that decides where markers may be placed.
 
 import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
-import { markerRemoval, placeMarker, scanMarkers, type RawMarker } from './markers.ts'
+import type { DocumentText } from '../../shared/document-api.ts'
+import { markerRemoval, placeMarker, scanMarkers, type DocumentMarker } from './markers.ts'
 import { applyEdits } from './text-edits.ts'
 import { userInfo } from 'node:os'
 
@@ -39,7 +40,7 @@ const QUOTE = /^ {0,3}> ?/
  * inside a code fence is text and not a thread — which matters in a notebook
  * where one writes about the thing one is building.
  */
-export function scanThreadBlocks(body: string): readonly ThreadBlock[] {
+export function scanThreadBlocks(body: DocumentText): readonly ThreadBlock[] {
   const out: ThreadBlock[] = []
   for (const marker of scanMarkers(body)) {
     if (marker.kind !== 'comment') continue
@@ -51,7 +52,7 @@ export function scanThreadBlocks(body: string): readonly ThreadBlock[] {
 }
 
 /** Threads assembled from their blocks: same id, document order. */
-export function threadsIn(body: string): readonly CommentThread[] {
+export function threadsIn(body: DocumentText): readonly CommentThread[] {
   const byId = new Map<string, ThreadBlock[]>()
   for (const block of scanThreadBlocks(body)) {
     const held = byId.get(block.id) ?? []
@@ -75,7 +76,7 @@ export function threadsIn(body: string): readonly CommentThread[] {
  * leave the prose with two blank lines where it had one, which turns one
  * paragraph break into a wider gap for no reason a reader could explain.
  */
-function blockAround(body: string, marker: RawMarker): ThreadBlock | null {
+function blockAround(body: DocumentText, marker: DocumentMarker): ThreadBlock | null {
   const lines = lineIndex(body)
   const first = lines.findIndex(l => marker.from >= l.from && marker.from < l.to)
   if (first === -1 || !QUOTE.test(lineText(body, lines[first] as Line))) return null
@@ -271,7 +272,7 @@ export function at(blocks: readonly ThreadBlock[], index: number): ThreadBlock {
 export const author = (): string => process.env['TEPHRA_AUTHOR']?.trim() || userInfo().username
 
 /** An id no thread in this body is using. Short, random, not a counter. */
-export function unusedCommentId(body: string): CommentId {
+export function unusedCommentId(body: DocumentText): CommentId {
   const taken = new Set(scanMarkers(body).map(m => m.name))
   for (let attempt = 0; attempt < 100; attempt++) {
     const id = Math.floor(Math.random() * 36 ** 4).toString(36).padStart(4, '0')
@@ -287,21 +288,21 @@ export function unusedCommentId(body: string): CommentId {
  * line, because a comment beginning a line turns the block into an HTML block.
  */
 export function anchorComment(
-  body: string,
+  body: DocumentText,
   id: CommentId,
   range: { from: number; to: number },
-): { body: string; endsAt: number } {
+): { body: DocumentText; endsAt: number } {
   const end = placeMarker(body, range.to, `<!--tephra:comment-end ${id}-->`)
-  const withEnd = body.slice(0, end.at) + end.text + body.slice(end.at)
+  const withEnd = (body.slice(0, end.at) + end.text + body.slice(end.at)) as DocumentText
   const start = placeMarker(withEnd, Math.min(range.from, end.at), `<!--tephra:comment-start ${id}-->`)
   return {
-    body: withEnd.slice(0, start.at) + start.text + withEnd.slice(start.at),
+    body: (withEnd.slice(0, start.at) + start.text + withEnd.slice(start.at)) as DocumentText,
     endsAt: end.at + end.text.length + start.text.length,
   }
 }
 
 /** Take a thread's anchor markers out, leaving the prose exactly as it was. */
-export function unanchorComment(body: string, id: CommentId): string {
+export function unanchorComment(body: DocumentText, id: CommentId): DocumentText {
   const cuts = scanMarkers(body)
     .filter(m => (m.kind === 'comment-start' || m.kind === 'comment-end') && m.name === id)
     .map(m => markerRemoval(body, m))
@@ -317,12 +318,12 @@ export function unanchorComment(body: string, id: CommentId): string {
  * comment. At the end of a body one newline is enough, and a second would leave
  * a blank line the file never had.
  */
-export function insertBlockAt(body: string, at: number, block: string): string {
+export function insertBlockAt(body: DocumentText, at: number, block: string): DocumentText {
   const before = body.slice(0, at)
   const rest = body.slice(at)
   const lead = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
   const trail = rest === '' ? '\n' : rest.startsWith('\n') ? '\n' : '\n\n'
-  return before + lead + block + trail + rest
+  return (before + lead + block + trail + rest) as DocumentText
 }
 
 /**
@@ -337,7 +338,7 @@ export function insertBlockAt(body: string, at: number, block: string): string {
  * thread stays together. Routing a reply to the enclosing paragraph's end sent
  * it to the end of the FILE whenever the anchor was in the last paragraph.
  */
-export function insertBlock(body: string, after: number, block: string): string {
+export function insertBlock(body: DocumentText, after: number, block: string): DocumentText {
   return insertBlockAt(body, paragraphEnd(body, after), block)
 }
 
@@ -351,18 +352,18 @@ export function insertBlock(body: string, after: number, block: string): string 
  * dropping it did not leave a cosmetic gap: it fed the next paragraph into the
  * comment.
  */
-export function splice(body: string, block: ThreadBlock, text: string): string {
-  if (text === '') return body.slice(0, block.from) + body.slice(block.to)
+export function splice(body: DocumentText, block: ThreadBlock, text: string): DocumentText {
+  if (text === '') return (body.slice(0, block.from) + body.slice(block.to)) as DocumentText
   const tail = /\n*$/.exec(body.slice(block.from, block.to))?.[0] ?? '\n'
-  return body.slice(0, block.from) + text + tail + body.slice(block.to)
+  return (body.slice(0, block.from) + text + tail + body.slice(block.to)) as DocumentText
 }
 
 /** Rewrite a thread's FIRST block so it carries the thread's state. */
 export function restate(
-  body: string,
+  body: DocumentText,
   id: CommentId,
   state: { resolved: boolean; assignee: string | null },
-): string {
+): DocumentText {
   const first = scanThreadBlocks(body).find(b => b.id === id)
   if (first === undefined) return body
   return splice(body, first, renderBlock(id, first.message, state))

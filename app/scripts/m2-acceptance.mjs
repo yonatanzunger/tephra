@@ -19,6 +19,8 @@
 //   4. importing keeps the original and annotates a copy
 //   5. printing produces a real PDF from the selection
 //   6. deleting a mark removes what it stood for
+//   7. the geometry agrees with itself: a point maps back to its position,
+//      and the append position is on screen when the app has settled
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises'
@@ -45,6 +47,23 @@ async function notebook(body) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-m2-'))
   await mkdir(join(root, 'stream', YEAR, MONTH), { recursive: true })
   await writeFile(dayPath(root), `---\ndate: ${DAY}\n---\n\n${body}`)
+  return root
+}
+
+/**
+ * Several days, so there is a day seam — and therefore a block widget — in the
+ * buffer. Every bug in the geometry family lived under one.
+ */
+async function week(bodies) {
+  const root = await mkdtemp(join(tmpdir(), 'tephra-m2-'))
+  const days = bodies.length
+  for (let back = 0; back < days; back++) {
+    const at = new Date(Date.parse(`${DAY}T12:00:00Z`) - back * 86_400_000)
+    const key = at.toISOString().slice(0, 10)
+    const [y, m] = key.split('-')
+    await mkdir(join(root, 'stream', y, m), { recursive: true })
+    await writeFile(join(root, 'stream', y, m, `${key}.md`), `---\ndate: ${key}\n---\n\n${bodies[back]}`)
+  }
   return root
 }
 
@@ -217,6 +236,35 @@ console.log('\n— removing —')
   check('deleting it removed the whole tag', r.tagSpansAfter === 0 && !/tephra:tag/.test(file))
   check('and what it drew went with it', r.extentsAfter === 0 && r.handlesAfter === 0)
   check('the prose is untouched', /Every market participant has a finite shock limit\./.test(file))
+}
+
+// ── 7. geometry ─────────────────────────────────────────────────────────────
+//
+// Not a feature — a property. Three bugs in this milestone were a screen point
+// resolving to a position a line away from the one it was drawn at, and each
+// was found by hand, in the running app, after it had shipped a bad selection.
+// Both halves are asserted here so the fourth is found by the harness.
+console.log('\n— geometry —')
+{
+  const filler = n =>
+    Array.from({ length: 12 }, (_, i) => `Paragraph ${i} of day ${n}, long enough to wrap at any sane measure and then some.`).join('\n\n')
+  const root = await week([
+    `Today, at the end.\n\n${filler(0)}\n`,
+    `A day called yesterday.\n\n${filler(1)}\n`,
+    `And <!--tephra:tag-start Foo-->one with a mark<!--tephra:tag-end Foo--> in it.\n\n${filler(2)}\n`,
+  ])
+  const r = report(await launch('geometry', root, { timeoutMs: 90_000, shotDelay: 30_000 }))
+
+  check('more than one day is loaded, so there is a seam', r.daysLoaded >= 2, `days=${r.daysLoaded}`)
+  check('enough positions were measurable to mean anything', r.probed >= 100, `probed=${r.probed}`)
+  check(
+    'every point maps back to the position it was drawn at',
+    r.roundTripWorst === 0,
+    `worst=${r.roundTripWorst} ${JSON.stringify(r.roundTripFailures ?? [])}`,
+  )
+  check('and the append position is on screen', r.caretVisible === true && r.caretAtEnd === true,
+    `visible=${r.caretVisible} atEnd=${r.caretAtEnd}`)
+  check('with an earlier day above it', r.earlierDayAbove === true)
 }
 
 const failed = checks.filter(c => !c.ok)

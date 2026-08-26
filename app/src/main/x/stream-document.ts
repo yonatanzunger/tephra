@@ -7,8 +7,8 @@
 
 import type {
   DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
-  DocumentWindow, Edit, EditOrigin, Offset, SegmentKey, SessionGeneration, Span,
-  SpanKind, TypedSpan, Unsubscribe, VersionId, Divergence,
+  DocumentWindow, Edit, EditOrigin, DocumentOffset, SegmentKey, SessionGeneration, Span,
+  SpanKind, TypedSpan, Unsubscribe, VersionId, Divergence, DocumentText,
 } from '../../shared/document-api.ts'
 import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
@@ -34,7 +34,7 @@ import { StreamWindow } from './window.ts'
  *
  * **The pairing invariant is X's to keep, not the editor's.** Deleting a handle
  * is how a person removes a tag (D44), and it arrives here as an ordinary
- * deletion covering the marker's bytes — from backspace, from `x`, from a
+ * deletion covering the marker's characters — from backspace, from `x`, from a
  * selection overtyped, from any keymap. Left alone it would strip the start and
  * orphan the end; an unmatched `tag-end` is ignored, so the tag would appear to
  * vanish while leaving litter in the file forever.
@@ -42,13 +42,13 @@ import { StreamWindow } from './window.ts'
  * Only deletions pay for this, and they pay with a cached scan: an insertion
  * cannot remove anything, so typing never reaches it.
  */
-function partnerRemovals(segment: Segment, edits: readonly TextEdit[]): TextEdit[] {
+function partnerRemovals(segment: Segment, edits: readonly TextEdit<DocumentText>[]): TextEdit<DocumentText>[] {
   if (edits.every(e => e.from === e.to)) return []
   const markers = segment.markers()
   const covered = (m: { from: number; to: number }): boolean =>
     edits.some(e => m.from >= e.from && m.to <= e.to)
 
-  const out: TextEdit[] = []
+  const out: TextEdit<DocumentText>[] = []
   for (const marker of markers) {
     if (marker.kind !== 'tag-start' || !covered(marker)) continue
     // Alternation is maintained everywhere else (D21), so a subject's partner
@@ -69,7 +69,7 @@ function partnerRemovals(segment: Segment, edits: readonly TextEdit[]): TextEdit
 interface HistoryEntry {
   readonly change: DocumentChange
   /** Per segment, expressed against the POST-edit body. */
-  readonly inverse: ReadonlyMap<DateKey, TextEdit[]>
+  readonly inverse: ReadonlyMap<DateKey, TextEdit<DocumentText>[]>
 }
 
 const GROUPING_WINDOW_MS = 1_500
@@ -93,7 +93,7 @@ export class StreamDocument implements Document {
 
   readonly #changeHandlers = new Set<(c: DocumentChange) => void>()
   readonly #journalHandlers = new Set<
-    (date: DateKey, baseLen: number, edits: readonly TextEdit[]) => void
+    (date: DateKey, baseLen: number, edits: readonly TextEdit<DocumentText>[]) => void
   >()
   readonly #divergeHandlers = new Set<(d: Divergence) => void>()
 
@@ -320,7 +320,7 @@ export class StreamDocument implements Document {
     if (segment === undefined) return // not loaded; the next read gets it fresh
 
     const text = await this.#notebook.read(rel)
-    const theirs = text === null ? '' : parseFile(text).body
+    const theirs = text === null ? ('' as DocumentText) : parseFile(text).body
     if (theirs === segment.body) return // same content, nothing to say
 
     if (segment.dirty) {
@@ -335,7 +335,7 @@ export class StreamDocument implements Document {
     // small, and it is what lets a cursor elsewhere in the day survive.
     const replacement = minimalReplacement(segment.body, theirs)
     if (text !== null) segment.adopt(text)
-    else segment.setBody('')
+    else segment.setBody('' as DocumentText)
     if (replacement === null) return
 
     const from = this.#generation
@@ -382,7 +382,7 @@ export class StreamDocument implements Document {
     origin: EditOrigin,
     record: boolean,
   ): Promise<DocumentChange> {
-    const perSegment = new Map<DateKey, TextEdit[]>()
+    const perSegment = new Map<DateKey, TextEdit<DocumentText>[]>()
     for (const edit of edits) {
       const date = edit.span.begin.segment as DateKey
       if (edit.span.end.segment !== date) {
@@ -391,12 +391,12 @@ export class StreamDocument implements Document {
         // up silently.
         throw new Error('an Edit may not cross a segment boundary')
       }
-      const list = perSegment.get(date) ?? []
+      const list: TextEdit<DocumentText>[] = perSegment.get(date) ?? []
       list.push({ from: edit.span.begin.offset as number, to: edit.span.end.offset as number, insert: edit.payload })
       perSegment.set(date, list)
     }
 
-    const inverse = new Map<DateKey, TextEdit[]>()
+    const inverse = new Map<DateKey, TextEdit<DocumentText>[]>()
     for (const [date, list] of perSegment) {
       const segment = await this.segment(date)
       if (segment.readOnly) {
@@ -463,9 +463,9 @@ export class StreamDocument implements Document {
       // Undoing A-then-B means applying B⁻¹ and then A⁻¹, in that order, which
       // is what `composeEdits` folds into one replacement — against the body as
       // it stands now, which is why this must run after `setBody`.
-      const merged = new Map(entry.inverse)
+      const merged = new Map<DateKey, TextEdit<DocumentText>[]>(entry.inverse)
       for (const [date, older] of previous.inverse) {
-        const body = this.#segments.get(date)?.body ?? ''
+        const body = this.#segments.get(date)?.body ?? ('' as DocumentText)
         merged.set(date, composeEdits(body, merged.get(date) ?? [], older))
       }
       this.#undo[this.#undo.length - 1] = {
@@ -583,7 +583,7 @@ export class StreamDocument implements Document {
       .sort((a, b) => a.from - b.from)
     const moved = mapOffset(at.offset as number, relevant)
     if (moved === null) return null
-    return { segment: at.segment, offset: moved as Offset, generation: through.to }
+    return { segment: at.segment, offset: moved as DocumentOffset, generation: through.to }
   }
 
   // ── sugar, all of which compiles to replace ────────────────
@@ -660,7 +660,7 @@ export class StreamDocument implements Document {
               begin: this.#positionAt(date, cut.from),
               end: this.#positionAt(date, cut.to),
             },
-            payload: '',
+            payload: '' as DocumentText,
           },
         ],
         'operation',
@@ -874,7 +874,7 @@ export class StreamDocument implements Document {
   /** Find the day a thread lives in, rewrite its body, and write it as one edit. */
   async #rewriteThread(
     id: CommentId,
-    change: (blocks: readonly ThreadBlock[], segment: Segment) => string,
+    change: (blocks: readonly ThreadBlock[], segment: Segment) => DocumentText,
   ): Promise<void> {
     for (const date of await this.dates()) {
       const segment = await this.segment(date)
@@ -887,7 +887,7 @@ export class StreamDocument implements Document {
   }
 
   /** One replacement covering everything that differs, so one undo step. */
-  async #writeBody(date: DateKey, before: string, after: string): Promise<void> {
+  async #writeBody(date: DateKey, before: DocumentText, after: DocumentText): Promise<void> {
     const replacement = minimalReplacement(before, after)
     if (replacement === null) return
     await this.replace(
@@ -978,7 +978,7 @@ export class StreamDocument implements Document {
           begin: this.#positionAt(piece.date, piece.from),
           end: this.#positionAt(piece.date, piece.to),
         },
-        payload: index === 0 ? link : '',
+        payload: (index === 0 ? link : '') as DocumentText,
       })),
       'operation',
     )
@@ -1109,7 +1109,7 @@ export class StreamDocument implements Document {
    * needs pre-edit state, and nothing else should be given it.
    */
   onJournal(
-    handler: (date: DateKey, baseLen: number, edits: readonly TextEdit[]) => void,
+    handler: (date: DateKey, baseLen: number, edits: readonly TextEdit<DocumentText>[]) => void,
   ): () => void {
     this.#journalHandlers.add(handler)
     return () => this.#journalHandlers.delete(handler)
@@ -1129,7 +1129,7 @@ export class StreamDocument implements Document {
    * silent corruption; the recovery path if a restore was wrong is another
    * restore, not ⌘Z.
    */
-  async restoreTo(target: ReadonlyMap<DateKey, string | null>): Promise<RestoreReport> {
+  async restoreTo(target: ReadonlyMap<DateKey, DocumentText | null>): Promise<RestoreReport> {
     let restored = 0
     let removed = 0
 
@@ -1177,7 +1177,7 @@ export class StreamDocument implements Document {
   // ── helpers ────────────────────────────────────────────────
 
   #positionAt(segment: SegmentKey, offset: number): DocumentPosition {
-    return { segment, offset: offset as Offset, generation: this.#generation }
+    return { segment, offset: offset as DocumentOffset, generation: this.#generation }
   }
 
   /** The segment object this document is holding for a date, if any. */
@@ -1227,14 +1227,14 @@ export class StreamDocument implements Document {
 }
 
 /** Widen backwards to the start of the line. */
-function snapBack(body: string, offset: Offset): number {
+function snapBack(body: string, offset: DocumentOffset): number {
   const at = Math.min(Math.max(0, offset as number), body.length)
   const nl = body.lastIndexOf('\n', at - 1)
   return nl === -1 ? 0 : nl + 1
 }
 
 /** Widen forwards to the end of the line. */
-function snapForward(body: string, offset: Offset): number {
+function snapForward(body: string, offset: DocumentOffset): number {
   const at = Math.min(Math.max(0, offset as number), body.length)
   const nl = body.indexOf('\n', at)
   return nl === -1 ? body.length : nl + 1

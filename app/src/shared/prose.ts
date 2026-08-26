@@ -1,4 +1,4 @@
-// Crossing between the bytes on disk and the prose a person edits (D44).
+// Crossing between the document's text and the prose a person edits (D44).
 //
 // **Shared, and that is the point.** Main holds the bodies and the renderer
 // holds the buffer, and both have to answer "where is this position in the
@@ -6,11 +6,13 @@
 // this codebase keeps meeting — the frame computed its measure twice, the
 // generation had two homes — and here it showed up as tag underlines drawn in
 // the wrong place, because the renderer was still adding a segment offset to a
-// raw offset.
+// document offset.
 //
 // The map needs no text: only where the markers are and how wide the body is.
 
-import { HANDLE, type BufferPosition, type Offset, type ProseOffset } from './document-api.ts'
+import {
+  HANDLE, type WindowPosition, type DocumentOffset, type ProseOffset, type ProseText, type DocumentText,
+} from './document-api.ts'
 
 export { HANDLE }
 
@@ -31,8 +33,8 @@ export { HANDLE }
 export type ProseWidth = 0 | 1
 
 export interface Marker {
-  readonly from: Offset
-  readonly to: Offset
+  readonly from: DocumentOffset
+  readonly to: DocumentOffset
   readonly width: ProseWidth
 }
 
@@ -44,29 +46,29 @@ export interface Marker {
  * kinds. Everything that went wrong with markers in the buffer went wrong at an
  * addition that looked innocent.
  */
-export const inWindow = (start: BufferPosition, local: ProseOffset): BufferPosition =>
-  (start + local) as BufferPosition
+export const inWindow = (start: WindowPosition, local: ProseOffset): WindowPosition =>
+  (start + local) as WindowPosition
 
 /** The inverse: where a buffer position falls within its segment's prose. */
-export const inSegment = (at: BufferPosition, start: BufferPosition): ProseOffset =>
+export const inSegment = (at: WindowPosition, start: WindowPosition): ProseOffset =>
   (at - start) as ProseOffset
 
 export class ProseMap {
-  readonly #rawLength: number
+  readonly #documentLength: number
   /** Ascending, non-overlapping. */
   readonly #markers: readonly Marker[]
   /** Prose offset at which each marker sits, parallel to `#markers`. */
   readonly #at: readonly number[]
   readonly proseLength: number
 
-  private constructor(rawLength: number, markers: readonly Marker[], at: readonly number[], proseLength: number) {
-    this.#rawLength = rawLength
+  private constructor(documentLength: number, markers: readonly Marker[], at: readonly number[], proseLength: number) {
+    this.#documentLength = documentLength
     this.#markers = markers
     this.#at = at
     this.proseLength = proseLength
   }
 
-  static of(rawLength: number, markers: readonly Marker[]): ProseMap {
+  static of(documentLength: number, markers: readonly Marker[]): ProseMap {
     const sorted = [...markers]
       .sort((a, b) => a.from - b.from || a.to - b.to)
       .filter((m, i, all) => i === 0 || m.from >= (all[i - 1] as Marker).to)
@@ -79,7 +81,7 @@ export class ProseMap {
       prose += marker.width
       cursor = marker.to
     }
-    return new ProseMap(rawLength, sorted, at, prose + (rawLength - cursor))
+    return new ProseMap(documentLength, sorted, at, prose + (documentLength - cursor))
   }
 
   get markers(): readonly Marker[] {
@@ -87,14 +89,14 @@ export class ProseMap {
   }
 
   /**
-   * Where a raw offset lands in prose.
+   * Where a document offset lands in prose.
    *
    * An offset INSIDE a marker has no prose position of its own, so it collapses
    * to where the marker sits. Callers that care about the difference are asking
    * the wrong question: there is nothing inside a marker to point at.
    */
-  toProse(raw: Offset): ProseOffset {
-    const at = clamp(raw, 0, this.#rawLength)
+  toProse(at_: DocumentOffset): ProseOffset {
+    const at = clamp(at_, 0, this.#documentLength)
     let shed = 0
     for (let i = 0; i < this.#markers.length; i++) {
       const marker = this.#markers[i] as Marker
@@ -106,24 +108,24 @@ export class ProseMap {
   }
 
   /**
-   * Where a prose offset lands in the raw body.
+   * Where a prose offset lands in the document's text.
    *
    * **Leftmost, and that is the trailing-boundary rule.** A prose position with
-   * a zero-width marker sitting at it is one visual place and two raw offsets —
+   * a zero-width marker sitting at it is one visual place and two document offsets —
    * before the marker or after it. Answering "before" means text inserted at
    * the end of a tagged range lands INSIDE the range, so continuing a tagged
-   * sentence keeps the subject. Use `toRawAfter` where the other side is wanted.
+   * sentence keeps the subject. Use `toDocumentAfter` where the other side is wanted.
    */
-  toRaw(prose: ProseOffset): Offset {
-    return this.#toRaw(clamp(prose, 0, this.proseLength), false)
+  toDocument(prose: ProseOffset): DocumentOffset {
+    return this.#toDocument(clamp(prose, 0, this.proseLength), false)
   }
 
-  /** As `toRaw`, but past any zero-width marker sitting at that position. */
-  toRawAfter(prose: ProseOffset): Offset {
-    return this.#toRaw(clamp(prose, 0, this.proseLength), true)
+  /** As `toDocument`, but past any zero-width marker sitting at that position. */
+  toDocumentAfter(prose: ProseOffset): DocumentOffset {
+    return this.#toDocument(clamp(prose, 0, this.proseLength), true)
   }
 
-  #toRaw(prose: number, after: boolean): Offset {
+  #toDocument(prose: number, after: boolean): DocumentOffset {
     let added = 0
     for (let i = 0; i < this.#markers.length; i++) {
       const marker = this.#markers[i] as Marker
@@ -136,7 +138,7 @@ export class ProseMap {
       }
       added += marker.to - marker.from - marker.width
     }
-    return (prose + added) as Offset
+    return (prose + added) as DocumentOffset
   }
 
   /** The marker whose handle occupies this prose offset, if any. */
@@ -149,13 +151,13 @@ export class ProseMap {
     return null
   }
 
-  /** Every marker whose bytes fall inside a raw range, handles and boundaries alike. */
-  within(from: Offset, to: Offset): readonly Marker[] {
+  /** Every marker inside a range of document text, handles and boundaries alike. */
+  within(from: DocumentOffset, to: DocumentOffset): readonly Marker[] {
     return this.#markers.filter(m => m.from >= from && m.to <= to)
   }
 
   /**
-   * A raw range with the boundary markers inside it carved out.
+   * A range of document text with the boundary markers inside it carved out.
    *
    * An ordinary deletion sweeping across the end of a tagged range would take
    * the `tag-end` with it, and an unmatched `tag-start` runs to the end of its
@@ -166,8 +168,8 @@ export class ProseMap {
    * Handles are NOT carved out: deleting one is a deliberate gesture with its
    * own meaning (D44), recognised before an edit ever gets here.
    */
-  carve(from: Offset, to: Offset): readonly { from: Offset; to: Offset }[] {
-    const out: { from: Offset; to: Offset }[] = []
+  carve(from: DocumentOffset, to: DocumentOffset): readonly { from: DocumentOffset; to: DocumentOffset }[] {
+    const out: { from: DocumentOffset; to: DocumentOffset }[] = []
     let cursor = from
     for (const marker of this.#markers) {
       if (marker.width !== 0 || marker.to <= from || marker.from >= to) continue
@@ -182,17 +184,38 @@ export class ProseMap {
 const clamp = (n: number, low: number, high: number): number => Math.max(low, Math.min(n, high))
 
 /** The body with marker syntax removed and handles standing in their place. */
-export function proseText(raw: string, map: ProseMap): string {
+export function proseText(text: DocumentText, map: ProseMap): ProseText {
   const parts: string[] = []
   let cursor = 0
   for (const marker of map.markers) {
-    parts.push(raw.slice(cursor, marker.from))
+    parts.push(text.slice(cursor, marker.from))
     if (marker.width === 1) parts.push(HANDLE)
     cursor = marker.to
   }
-  parts.push(raw.slice(cursor))
-  return parts.join('')
+  parts.push(text.slice(cursor))
+  return parts.join('') as ProseText
 }
+
+/**
+ * A string taken out of the editor buffer, which by construction holds prose.
+ *
+ * Not a conversion — the characters do not change — but a place to say WHERE
+ * the claim comes from. Everything CodeMirror hands back is measured in the
+ * same coordinates as the text it was given, so the only way this is wrong is
+ * if the buffer were loaded with something other than a window's prose.
+ */
+export const fromBuffer = (text: string): ProseText => text as ProseText
 
 /** Text arriving from outside — a paste, an import — may not carry handles. */
 export const stripHandles = (text: string): string => text.split(HANDLE).join('')
+
+/**
+ * Prose on its way into the file.
+ *
+ * The only conversion in this direction, and it is not the identity: handles
+ * exist in the buffer alone (D44), so text a person typed or pasted must have
+ * them removed before it becomes bytes. The other direction needs the map and
+ * lives in `proseText` — there is no way across that does not go through one of
+ * these two.
+ */
+export const documentText = (prose: string): DocumentText => stripHandles(prose) as DocumentText

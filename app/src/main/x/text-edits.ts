@@ -10,10 +10,17 @@
 // against the result of the previous one, which is a coordinate system nobody
 // can hold in their head.
 
-export interface TextEdit {
+/**
+ * An edit within ONE string, in that string's own coordinates.
+ *
+ * Generic over the kind of text, so an edit to a segment's document text and an edit
+ * to the editor's prose cannot be handed to each other by accident (D44). The
+ * default keeps the many call sites that genuinely do not care unchanged.
+ */
+export interface TextEdit<T extends string = string> {
   readonly from: number
   readonly to: number // from === to ⇒ insert
-  readonly insert: string // '' ⇒ delete
+  readonly insert: T // '' ⇒ delete
 }
 
 export class OverlappingEditsError extends Error {
@@ -38,7 +45,7 @@ export function checkBatch(text: string, edits: readonly TextEdit[]): void {
   }
 }
 
-export function applyEdits(text: string, edits: readonly TextEdit[]): string {
+export function applyEdits<T extends string>(text: T, edits: readonly TextEdit<T>[]): T {
   checkBatch(text, edits)
   if (edits.length === 0) return text
   const out: string[] = []
@@ -48,7 +55,7 @@ export function applyEdits(text: string, edits: readonly TextEdit[]): string {
     cursor = e.to
   }
   out.push(text.slice(cursor))
-  return out.join('')
+  return out.join('') as T
 }
 
 /**
@@ -58,13 +65,13 @@ export function applyEdits(text: string, edits: readonly TextEdit[]): string {
  * what was taken out, so the replaced text has to be captured at the moment it
  * is replaced. There is nowhere later to recover it from.
  */
-export function invertEdits(text: string, edits: readonly TextEdit[]): TextEdit[] {
+export function invertEdits<T extends string>(text: T, edits: readonly TextEdit<T>[]): TextEdit<T>[] {
   checkBatch(text, edits)
-  const out: TextEdit[] = []
+  const out: TextEdit<T>[] = []
   let drift = 0
   for (const e of edits) {
     const from = e.from + drift
-    out.push({ from, to: from + e.insert.length, insert: text.slice(e.from, e.to) })
+    out.push({ from, to: from + e.insert.length, insert: text.slice(e.from, e.to) as T })
     drift += e.insert.length - (e.to - e.from)
   }
   return out
@@ -111,11 +118,11 @@ export function mapOffset(
 }
 
 /** Compose two batches into one, expressed against the original text. */
-export function composeEdits(
-  text: string,
-  first: readonly TextEdit[],
-  second: readonly TextEdit[],
-): TextEdit[] {
+export function composeEdits<T extends string>(
+  text: T,
+  first: readonly TextEdit<T>[],
+  second: readonly TextEdit<T>[],
+): TextEdit<T>[] {
   // Deliberately not clever: apply, diff the ends, and emit one replacement.
   // A general composition is subtle enough to get wrong quietly, and this is
   // only ever used to fold a rewind into a single change record.
@@ -124,8 +131,14 @@ export function composeEdits(
   return [minimalReplacement(text, final)].filter(e => e !== null)
 }
 
-/** One replacement covering everything that differs, trimmed at both ends. */
-export function minimalReplacement(before: string, after: string): TextEdit | null {
+/**
+ * One replacement covering everything that differs, trimmed at both ends.
+ *
+ * Generic so the brand survives: given two prose strings it produces an edit to
+ * prose, and given two document bodies an edit to document text. Flattening both
+ * to `string` here is how a document's payload once reached the editor.
+ */
+export function minimalReplacement<T extends string>(before: T, after: T): TextEdit<T> | null {
   if (before === after) return null
   let start = 0
   const max = Math.min(before.length, after.length)
@@ -137,5 +150,5 @@ export function minimalReplacement(before: string, after: string): TextEdit | nu
     endBefore--
     endAfter--
   }
-  return { from: start, to: endBefore, insert: after.slice(start, endAfter) }
+  return { from: start, to: endBefore, insert: after.slice(start, endAfter) as T }
 }

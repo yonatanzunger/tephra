@@ -11,7 +11,7 @@
 import { EditorView } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
 import { NO_SELECTION, type SelectionState } from '../../../shared/commands.ts'
-import type { BufferPosition, DocumentWindow, Span } from '../../../shared/document-api.ts'
+import type { WindowPosition, DocumentWindow, Span } from '../../../shared/document-api.ts'
 
 /**
  * Report the caret to main whenever it changes, so menu items enable and grey
@@ -55,8 +55,8 @@ export function contextMenu(): Extension {
 export function selectedSpan(view: EditorView, docWindow: DocumentWindow): Span {
   const main = view.state.selection.main
   return {
-    begin: docWindow.toDocument(main.from as BufferPosition),
-    end: docWindow.toDocument(main.to as BufferPosition),
+    begin: docWindow.toDocument(main.from as WindowPosition),
+    end: docWindow.toDocument(main.to as WindowPosition),
   }
 }
 
@@ -93,11 +93,11 @@ export interface Selection {
  */
 export function readSelection(view: EditorView, docWindow: DocumentWindow): Selection {
   const main = view.state.selection.main
-  const whole = docWindow.snap(main.from as BufferPosition, main.to as BufferPosition)
+  const whole = docWindow.snap(main.from as WindowPosition, main.to as WindowPosition)
   const subjects: string[] = []
   for (const span of docWindow.spans('tag')) {
-    const from = docWindow.toBuffer(span.span.begin)
-    const to = docWindow.toBuffer(span.span.end)
+    const from = docWindow.toWindow(span.span.begin)
+    const to = docWindow.toWindow(span.span.end)
     if (from === null || to === null) continue
     // Overlap, not containment: a selection half inside a tagged passage is
     // still a selection someone may want that tag taken off.
@@ -141,13 +141,13 @@ export interface MarkInfo {
  */
 export function markAt(docWindow: DocumentWindow, at: number, box: DOMRect): MarkInfo {
   const anchor =
-    docWindow.spans('anchor').find(s => (docWindow.toBuffer(s.span.begin) as number | null) === at) ?? null
+    docWindow.spans('anchor').find(s => (docWindow.toWindow(s.span.begin) as number | null) === at) ?? null
 
   const opens: { name: string; span: Span }[] = []
   const covers: { name: string; span: Span }[] = []
   for (const span of docWindow.spans('tag')) {
-    const from = docWindow.toBuffer(span.span.begin) as number | null
-    const to = docWindow.toBuffer(span.span.end) as number | null
+    const from = docWindow.toWindow(span.span.begin) as number | null
+    const to = docWindow.toWindow(span.span.end) as number | null
     if (from === null || to === null) continue
     if (from === at + 1) opens.push({ name: span.name, span: span.span })
     else if (from <= at && to >= at) covers.push({ name: span.name, span: span.span })

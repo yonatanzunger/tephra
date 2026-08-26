@@ -8,8 +8,10 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { parseByline, renderBlock, scanThreadBlocks, threadsIn } from '../../../../src/main/x/comments.ts'
 import type { CommentId, CommentMessage } from '../../../../src/shared/comments.ts'
+import type { DocumentText } from '../../../../src/shared/document-api.ts'
+import { rt } from '../../../support/text.ts'
 
-const day = (body: string): string => body
+const day = (body: string): DocumentText => rt(body)
 
 test('a byline is read the way it reads', () => {
   const b = parseByline('**Yonatan** 2026-08-23T14:02')
@@ -102,7 +104,7 @@ test('a marker in the middle of a quotation is not a byline', () => {
 })
 
 test('an ordinary blockquote is left entirely alone', () => {
-  assert.deepEqual(threadsIn('> Just a quotation.\n'), [])
+  assert.deepEqual(threadsIn(rt('> Just a quotation.\n')), [])
 })
 
 test('what is written can be read back', () => {
@@ -114,7 +116,7 @@ test('what is written can be read back', () => {
     unknown: ['priority=high'],
   }
   const text = renderBlock('k3f9' as CommentId, message, { resolved: true, assignee: 'Rivka' })
-  const back = scanThreadBlocks(`${text}\n`)[0]!
+  const back = scanThreadBlocks(rt(`${text}\n`))[0]!
   assert.deepEqual(back.message, message)
   assert.equal(back.resolved, true)
   assert.equal(back.assignee, 'Rivka')

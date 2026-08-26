@@ -22,10 +22,11 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import type { BufferPosition, DateKey, DocumentWindow } from '../../src/shared/document-api.ts'
+import type { WindowPosition, DateKey, DocumentWindow } from '../../src/shared/document-api.ts'
+import { pt } from '../support/text.ts'
 
 const d = (s: string): DateKey => s as DateKey
-const bp = (n: number): BufferPosition => n as BufferPosition
+const wp = (n: number): WindowPosition => n as WindowPosition
 const DAYS = [d('2026-03-14'), d('2026-03-15'), d('2026-03-16')]
 const BODIES = ['alpha bravo\n', 'charlie\n', 'delta echo foxtrot\n']
 
@@ -78,9 +79,9 @@ test('EVERY range in the window edits exactly as if the buffer were one string',
     for (let to = from; to <= WHOLE.length; to++) {
       const { doc, window } = await threeDays(t)
       const w = await window()
-      const insert = from === to ? 'X' : 'Y'
+      const insert = pt(from === to ? 'X' : 'Y')
       try {
-        await w.edit([{ from: bp(from), to: bp(to), insert }], 'user')
+        await w.edit([{ from: wp(from), to: wp(to), insert }], 'user')
       } catch (err) {
         failures.push(`${from}..${to} threw ${(err as Error).message}`)
         continue
@@ -105,7 +106,7 @@ test('a deletion sweeping across midnight rewrites BOTH files, each correctly', 
   const w = await window()
   const from = 'alpha '.length //  inside day 1
   const to = (BODIES[0] as string).length + 'char'.length // inside day 2
-  await w.edit([{ from: bp(from), to: bp(to), insert: 'MERGED' }], 'user')
+  await w.edit([{ from: wp(from), to: wp(to), insert: pt('MERGED') }], 'user')
   // Writes are tiered and debounced (D32); without this the files on disk still
   // hold their original text and the assertions below test nothing at all.
   await doc.flush()
@@ -127,7 +128,7 @@ test('an insertion exactly at a day boundary lands in the LATER day', async t =>
   const { doc, root, window } = await threeDays(t)
   const w = await window()
   const boundary = (BODIES[0] as string).length
-  await w.edit([{ from: bp(boundary), to: bp(boundary), insert: 'HERE' }], 'user')
+  await w.edit([{ from: wp(boundary), to: wp(boundary), insert: pt('HERE') }], 'user')
   await doc.flush()
 
   const one = await readFile(join(root, dayFile(DAYS[0] as DateKey)), 'utf8')
@@ -142,7 +143,7 @@ test('an edit covering a whole day removes that day’s body entirely', async t 
   const w = await window()
   const start = (BODIES[0] as string).length
   const end = start + (BODIES[1] as string).length
-  await w.edit([{ from: bp(start), to: bp(end), insert: '' }], 'user')
+  await w.edit([{ from: wp(start), to: wp(end), insert: pt('') }], 'user')
   await doc.flush()
 
   assert.equal(w.text, (BODIES[0] as string) + (BODIES[2] as string))

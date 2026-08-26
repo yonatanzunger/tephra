@@ -1,6 +1,8 @@
 # The Document API
 
 > **Locked as the v1 draft, 2026-08-12.** Changes from here need a decision record, not an edit. Build-time obligations live in `implementation-notes.md`.
+>
+> **Amended by D44** (markers are annotations, so a window carries prose, not the document's text), **D45** (a window's announcement carries its whole state), **D47** (comments), and **D48** (one branded pair per layer, which renamed every coordinate below). The layer map those names come from is the comment at the top of `src/shared/document-api.ts`, and it is the live version of this section.
 
 v1's first artifact, ahead of the format spec. Written against D8, D13, D14, D16, D18–D24, D26, D27, D29, D32, D33.
 
@@ -24,19 +26,38 @@ The clarifying picture is **journal plus digest**: a document is a sequence of `
 - **A read is `(span, generation)`** — a slice of a particular session generation.
 - **A window is a UX affordance**: load this region, adjust its boundaries to something meaningful, make it fast to render and edit. Nothing more.
 
-**`DocumentPosition` is the true position; everything else derives from it.** `BufferPosition` is a rendering convenience, `StoragePosition` is an implementation detail.
+**`DocumentPosition` is the true position; everything else derives from it** — see the coordinate table below.
 
 **The model is adopted; the storage architecture is not** (D23). Making the journal authoritative would demote the plain text files to a derived snapshot — which is precisely the fork Q2 closed in the other direction, arriving through a different door. The journal is a write-ahead log over authoritative text, folded in and discarded at quiescence.
 
 ---
 
-## Three coordinate systems
+## The layers, and the coordinates that address them
 
-| Type | Shape | Who uses it |
-|---|---|---|
-| `DocumentPosition` | `(segment, offset)` | The public API. The only true position |
-| `BufferPosition` | offset into a `DocumentWindow`'s buffer | The editor, inside one window |
-| `StoragePosition` | `(file, offset)` | **Internal only.** Never crosses the Document boundary |
+**Amended by D48.** Text makes four stops between the disk and the screen — the
+files, the document, the window, the editor — with a halfway house between the
+last two, and each stop has its own text type and its own kind of address. The
+full map, with the class that manages each layer and the function that crosses
+each boundary, is the comment at the top of `src/shared/document-api.ts`; this
+section carries only the coordinates.
+
+| Type | Shape | Addresses | Who uses it |
+|---|---|---|---|
+| `DocumentPosition` | `(segment, DocumentOffset, generation)` | `DocumentText` — one segment, markers and all | The public API. The only true position |
+| `ProseOffset` | offset within ONE segment's prose | `ProseText` | The crossing itself: markers out, before flattening |
+| `WindowPosition` | offset into a loaded window | `ProseText`, the segments joined | The editor, inside one window |
+| `StoragePosition` | `(file, offset)` | the bytes of one file | **Internal only.** Never crosses the Document boundary |
+
+**`DocumentPosition` is the true position; everything else derives from it.**
+`WindowPosition` is a rendering convenience, `ProseOffset` exists because the two
+conversions between them are independent, and `StoragePosition` is an
+implementation detail.
+
+**There are two crossings, not one, and that is why the middle row exists.**
+Taking marker syntax out is per segment and needs that segment's `ProseMap`;
+flattening segments into one window is per window and needs the placement.
+Performing both in a single subtraction is how tagging once wrote its markers a
+marker's width early.
 
 `(segment, offset)` — the segment being a date in the stream, a constant elsewhere (D27) — rather than an absolute stream offset (D21): an absolute form needs a global index of every file's *character* length, which `stat` cannot supply, and every offset in the corpus would shift on any edit anywhere. Here an edit changes offsets only within its own date, so `mapPosition` is O(1) and a no-op outside the edited date. It also makes `dateAt` a field access, and makes a within-day split invisible.
 
@@ -67,7 +88,7 @@ export type DocumentId = string & { readonly __brand: 'DocumentId' }
 // ─────────────────────────────────────────────────────────────
 // TWO VERSION AXES — never one axis at two resolutions (D33)
 //
-// These are as distinct as DocumentPosition and BufferPosition, and for the
+// These are as distinct as DocumentPosition and WindowPosition, and for the
 // same reason: conflating them is silent and expensive. Different underlying
 // primitives (number vs string) so a cast cannot bridge them, different owning
 // objects, no conversion function in either direction, and no method anywhere
@@ -99,7 +120,7 @@ export declare function compareGenerations(a: SessionGeneration, b: SessionGener
  */
 export type VersionId = string & { readonly [VersionIdBrand]: void }
 
-declare const OffsetBrand: unique symbol
+declare const DocumentOffsetBrand: unique symbol
 
 /**
  * An opaque character offset (D24). Its unit is UTF-16 code units — chosen
@@ -116,25 +137,34 @@ declare const OffsetBrand: unique symbol
  * INVARIANT: no offset ever falls between the halves of a surrogate pair.
  * Asserted at construction, not discovered at a render.
  */
-export type Offset = number & { readonly [OffsetBrand]: void }
+export type DocumentOffset = number & { readonly [DocumentOffsetBrand]: void }
 
 /** Implementation-only constructor. Validates the surrogate invariant. */
-export declare function offsetOf(n: number, inText: string): Offset
+export declare function offsetOf(n: number, inText: string): DocumentOffset
 
 /** The true position. NEVER PERSISTED (D11). */
 export interface DocumentPosition {
   readonly segment: SegmentKey     // a DateKey in the stream; a constant elsewhere
-  readonly offset: Offset          // within that segment's content
+  readonly offset: DocumentOffset          // within that segment's content
   readonly generation: SessionGeneration
 }
 
 /** A rendering convenience: an offset inside one loaded window. NEVER PERSISTED. */
-export type BufferPosition = number & { readonly __brand: 'BufferPosition' }
+export type WindowPosition = number & { readonly __brand: 'WindowPosition' }
+
+/** An offset within ONE segment's prose — the halfway house between the two (D48). */
+export type ProseOffset = number & { readonly __brand: 'ProseOffset' }
+
+/** A segment's content as the logical file holds it: markers and all (D48). */
+export type DocumentText = string & { readonly __brand: 'DocumentText' }
+
+/** What a window holds, and the editor after it: marker syntax gone (D44). */
+export type ProseText = string & { readonly __brand: 'ProseText' }
 
 /** INTERNAL ONLY — must never appear in a signature Z can reach. */
 export interface StoragePosition {
   readonly file: string
-  readonly offset: Offset
+  readonly offset: DocumentOffset
 }
 
 /** Half-open [begin, end). A zero-length span is a point. NEVER PERSISTED. */
@@ -335,10 +365,10 @@ export interface Document {
 }
 
 /** An edit expressed in window coordinates — what an editor naturally produces. */
-export interface BufferEdit {
-  readonly from: BufferPosition
-  readonly to: BufferPosition        // from === to ⇒ insert
-  readonly insert: string            // '' ⇒ delete
+export interface WindowEdit {
+  readonly from: WindowPosition
+  readonly to: WindowPosition        // from === to ⇒ insert
+  readonly insert: ProseText         // '' ⇒ delete
 }
 
 /**
@@ -353,7 +383,7 @@ export interface DocumentWindow {
   readonly generation: SessionGeneration
   /** What was actually served, after boundary widening. */
   readonly span: Span
-  readonly text: string
+  readonly text: ProseText
 
   // ── coordinates ────────────────────────────────────────────
   /**
@@ -361,8 +391,8 @@ export interface DocumentWindow {
    * of D24, since this is the boundary crossed on the hot path. The window is
    * one of only two places permitted to know that.
    */
-  toDocument(at: BufferPosition): DocumentPosition
-  toBuffer(at: DocumentPosition): BufferPosition | null   // null if outside
+  toDocument(at: WindowPosition): DocumentPosition
+  toWindow(at: DocumentPosition): WindowPosition | null   // null if outside
 
   // ── editing, in window coordinates ─────────────────────────
   /**
@@ -377,18 +407,18 @@ export interface DocumentWindow {
    * window originated. The editor has already applied them; re-applying is how
    * text gets duplicated.
    */
-  edit(edits: readonly BufferEdit[], origin?: EditOrigin): Promise<void>
+  edit(edits: readonly WindowEdit[], origin?: EditOrigin): Promise<void>
 
   // ── queries, synchronous because the region is loaded ──────
-  spansAt(at: BufferPosition): readonly TypedSpan[]
+  spansAt(at: WindowPosition): readonly TypedSpan[]
   spans(kind?: SpanKind): readonly TypedSpan[]
-  snap(from: BufferPosition, to: BufferPosition): { from: BufferPosition; to: BufferPosition }
-  advance(from: BufferPosition, chars: number): BufferPosition | null
-  distance(a: BufferPosition, b: BufferPosition): number
+  snap(from: WindowPosition, to: WindowPosition): { from: WindowPosition; to: WindowPosition }
+  advance(from: WindowPosition, chars: number): WindowPosition | null
+  distance(a: WindowPosition, b: WindowPosition): number
 
   // ── changes originating elsewhere ──────────────────────────
   /** Fires for external edits, sync pulls and undos that land inside this window. */
-  onChanged(handler: (edits: readonly BufferEdit[], origin: EditOrigin) => void): Unsubscribe
+  onChanged(handler: (edits: readonly WindowEdit[], origin: EditOrigin) => void): Unsubscribe
   /** The window's region moved or reloaded wholesale; rebind. */
   onReset(handler: () => void): Unsubscribe
 

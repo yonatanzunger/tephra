@@ -1,7 +1,7 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BufferPosition, DateKey, DocumentChange, DocumentPosition, SegmentKey } from '../../shared/document-api.ts'
+import type { WindowPosition, DateKey, DocumentChange, DocumentPosition, SegmentKey } from '../../shared/document-api.ts'
 import { defaultUiState, type UiState } from '../../shared/ui-state.ts'
 import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
@@ -140,7 +140,7 @@ export function App(): React.JSX.Element {
      * see nothing, and the natural response is to press it again — silently
      * unwinding more work in a file you are not looking at.
      *
-     * `toBuffer` returns null for a segment the window does not cover, which is
+     * `toWindow` returns null for a segment the window does not cover, which is
      * the containment test; no new API is needed for it.
      */
     const revealing = async (work: Promise<DocumentChange | null>): Promise<void> => {
@@ -148,7 +148,7 @@ export function App(): React.JSX.Element {
       const segment = change?.edits[0]?.span.begin.segment
       if (segment === undefined) return
       const w = pane?.window
-      if (w != null && w.toBuffer({ segment, offset: 0 as never, generation: w.generation }) !== null) {
+      if (w != null && w.toWindow({ segment, offset: 0 as never, generation: w.generation }) !== null) {
         return // already on screen; nothing to go to
       }
       await pane?.goTo({ kind: 'date', date: segment as DateKey })
@@ -339,7 +339,7 @@ export function App(): React.JSX.Element {
   }, [doc, pane])
 
   const onViewport = useCallback(
-    (visible: { from: BufferPosition; to: BufferPosition }) => pane?.viewportChanged(visible),
+    (visible: { from: WindowPosition; to: WindowPosition }) => pane?.viewportChanged(visible),
     [pane],
   )
 

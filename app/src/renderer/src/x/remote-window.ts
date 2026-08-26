@@ -2,7 +2,7 @@
 //
 // Document is authoritative and lives in main. This holds the text, the span
 // list and the segment placement, which is exactly what the synchronous half of
-// the API needs — toDocument, toBuffer, spansAt, snap, advance and distance all
+// the API needs — toDocument, toWindow, spansAt, snap, advance and distance all
 // answer without a round trip, which is the whole reason the split is drawn
 // here rather than anywhere else.
 //
@@ -10,8 +10,8 @@
 // the change is durable. The editor fires and does not await.
 
 import type {
-  BufferEdit, BufferPosition, DateKey, Document, DocumentPosition, DocumentWindow,
-  EditOrigin, Offset, SegmentKey, SessionGeneration, Span, SpanKind, TypedSpan, Unsubscribe,
+  WindowEdit, WindowPosition, DateKey, Document, DocumentPosition, DocumentWindow,
+  EditOrigin, DocumentOffset, ProseText, SegmentKey, SessionGeneration, Span, SpanKind, TypedSpan, Unsubscribe,
 } from '../../../shared/document-api.ts'
 import type { WindowSnapshot } from '../../../shared/ipc.ts'
 import { applyEdits } from './apply-edits.ts'
@@ -29,7 +29,7 @@ export class DesyncError extends Error {
 export class RemoteWindow implements DocumentWindow {
   readonly id: number
   readonly #doc: Document
-  #text: string
+  #text: ProseText
   #span: Span
   #generation: SessionGeneration
   #spans: readonly TypedSpan[]
@@ -37,7 +37,7 @@ export class RemoteWindow implements DocumentWindow {
   readonly #maps = new WeakMap<Placement[number], ProseMap>()
   #boundaries: { earlier: boolean; later: boolean }
 
-  readonly #changeHandlers = new Set<(edits: readonly BufferEdit[], origin: EditOrigin) => void>()
+  readonly #changeHandlers = new Set<(edits: readonly WindowEdit[], origin: EditOrigin) => void>()
   readonly #resetHandlers = new Set<() => void>()
   readonly #spansHandlers = new Set<() => void>()
 
@@ -66,7 +66,7 @@ export class RemoteWindow implements DocumentWindow {
   get generation(): SessionGeneration {
     return this.#generation
   }
-  get text(): string {
+  get text(): ProseText {
     return this.#text
   }
   get span(): Span {
@@ -81,20 +81,20 @@ export class RemoteWindow implements DocumentWindow {
    * text typed there must land in the file the reader sees it under. The end of
    * the window belongs to the last segment, which is what makes appending work.
    */
-  toDocument(at: BufferPosition): DocumentPosition {
-    const offset = clamp(at as number, 0, this.#text.length) as BufferPosition
+  toDocument(at: WindowPosition): DocumentPosition {
+    const offset = clamp(at as number, 0, this.#text.length) as WindowPosition
     for (let i = this.#placement.length - 1; i >= 0; i--) {
       const p = this.#placement[i] as Placement[number]
       if (offset >= p.start) {
         // Through the map, NOT by subtraction. `offset - p.start` is a prose
-        // offset within the segment, and returning it as an `Offset` claims it
-        // counts bytes — which it only does when the segment has no markers.
+        // offset within the segment, and returning it as an `DocumentOffset` claims it
+        // counts document offsets — which it only does when the segment has no markers.
         // With one marker present it is short by that marker's width, so
-        // tagging a phrase wrote its markers twenty-seven bytes early and the
+        // tagging a phrase wrote its markers twenty-seven characters early and the
         // second tag of a paragraph landed inside the first.
         return {
           segment: p.date as SegmentKey,
-          offset: this.#map(p).toRaw(inSegment(offset, p.start)),
+          offset: this.#map(p).toDocument(inSegment(offset, p.start)),
           generation: this.#generation,
         }
       }
@@ -102,15 +102,15 @@ export class RemoteWindow implements DocumentWindow {
     const first = this.#placement[0]
     return {
       segment: (first?.date ?? '') as SegmentKey,
-      offset: 0 as Offset,
+      offset: 0 as DocumentOffset,
       generation: this.#generation,
     }
   }
 
-  toBuffer(at: DocumentPosition): BufferPosition | null {
+  toWindow(at: DocumentPosition): WindowPosition | null {
     for (const p of this.#placement) {
       if (p.date === at.segment) {
-        // Through the SAME map main uses (D44). Adding a raw offset to a prose
+        // Through the SAME map main uses (D44). Adding a document offset to a prose
         // start is how tag underlines ended up drawn where no marker had ever
         // been accounted for.
         return inWindow(p.start, this.#map(p).toProse(at.offset))
@@ -131,7 +131,7 @@ export class RemoteWindow implements DocumentWindow {
 
   // ── editing ────────────────────────────────────────────────
 
-  async edit(edits: readonly BufferEdit[], origin: EditOrigin = 'user'): Promise<void> {
+  async edit(edits: readonly WindowEdit[], origin: EditOrigin = 'user'): Promise<void> {
     // Synchronously, before anything is awaited: the editor has already painted
     // this and must not be told about it again.
     this.#text = applyEdits(this.#text, edits)
@@ -191,7 +191,7 @@ export class RemoteWindow implements DocumentWindow {
     return kind === undefined ? this.#spans : this.#spans.filter(s => s.kind === kind)
   }
 
-  spansAt(at: BufferPosition): readonly TypedSpan[] {
+  spansAt(at: WindowPosition): readonly TypedSpan[] {
     const position = this.toDocument(at)
     const offset = position.offset as number
     return this.#spans.filter(
@@ -202,27 +202,27 @@ export class RemoteWindow implements DocumentWindow {
     )
   }
 
-  snap(from: BufferPosition, to: BufferPosition): { from: BufferPosition; to: BufferPosition } {
+  snap(from: WindowPosition, to: WindowPosition): { from: WindowPosition; to: WindowPosition } {
     const text = this.#text
     const a = clamp(from as number, 0, text.length)
     const b = clamp(to as number, 0, text.length)
     const start = text.lastIndexOf('\n', a - 1) + 1
     const nl = text.indexOf('\n', b)
-    return { from: start as BufferPosition, to: (nl === -1 ? text.length : nl + 1) as BufferPosition }
+    return { from: start as WindowPosition, to: (nl === -1 ? text.length : nl + 1) as WindowPosition }
   }
 
-  advance(from: BufferPosition, chars: number): BufferPosition | null {
+  advance(from: WindowPosition, chars: number): WindowPosition | null {
     const next = (from as number) + chars
-    return next < 0 || next > this.#text.length ? null : (next as BufferPosition)
+    return next < 0 || next > this.#text.length ? null : (next as WindowPosition)
   }
 
-  distance(a: BufferPosition, b: BufferPosition): number {
+  distance(a: WindowPosition, b: WindowPosition): number {
     return (b as number) - (a as number)
   }
 
   // ── changes from elsewhere ─────────────────────────────────
 
-  onChanged(handler: (edits: readonly BufferEdit[], origin: EditOrigin) => void): Unsubscribe {
+  onChanged(handler: (edits: readonly WindowEdit[], origin: EditOrigin) => void): Unsubscribe {
     this.#changeHandlers.add(handler)
     return () => this.#changeHandlers.delete(handler)
   }
@@ -239,9 +239,9 @@ export class RemoteWindow implements DocumentWindow {
 
   /** Called by the document when main pushes a change for this window. */
   applyRemote(
-    edits: readonly BufferEdit[],
+    edits: readonly WindowEdit[],
     origin: EditOrigin,
-    text: string,
+    text: ProseText,
     generation: SessionGeneration,
     spans: readonly TypedSpan[],
     placement: Placement,

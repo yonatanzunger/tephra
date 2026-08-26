@@ -1439,3 +1439,103 @@ computes the narrow fold; Q10 settled the mobile arrangement.
 `solution/document-api.md` (`SpanKind`, `TypedSpan`, the comment methods),
 `goal/open-questions.md` (Q8 answered, Q9 dissolved, Q11 constrained),
 `solution/milestones.md` (M2 items 5–7).
+
+---
+
+## D48: Every layer has its own branded text and coordinate types, and the names say which layer
+
+**Date:** 2026-08-25
+**Status:** decided
+**Detail:** the layer map at the top of `src/shared/document-api.ts`
+
+**Decision.** Where two things are semantically related, of the same wire type,
+and belong to different logical layers — the document's text and the prose a
+person edits; an offset into a segment and a position in a window — **they get
+different branded types, and the only way between them is a named conversion
+function.** No layer's value may be assigned into another's, and no cast may
+stand in for a conversion.
+
+**The names follow the layers, in two axes.** A text type says which CONTENT it
+is; an offset type says which content it indexes and at what SCOPE:
+
+|  | document — markers present | prose — handles instead |
+|---|---|---|
+| in one segment | `DocumentOffset` → `DocumentText` | `ProseOffset` → `ProseText` |
+| across a window | *never exists* | `WindowPosition` → `ProseText` |
+
+The empty cell is a design property rather than an omission: a window never
+holds document text, because markers are not text (D44). And `Position` versus
+`Offset` is the other half of the rule — a Position is a COMPLETE address at its
+layer, an Offset is one component of one, which is why a `DocumentPosition`
+carries a segment key and a generation beside its offset and a `WindowPosition`
+is a bare number.
+
+### Why, in the only currency that counts here
+
+Every one of these layers is "a string and a number" at runtime, so a mistake
+between two of them is invisible to the compiler, invisible to a reader, and
+invisible to any test written against text with no markers — which is most text
+while a feature is being built. Five bugs in M2 were exactly this:
+
+- growth handed the editor a segment's **body** where prose was owed, putting
+  `<!--tephra:…-->` on screen;
+- a change announcement handed it the document's **payload**, the same way;
+- `RemoteWindow.toDocument` subtracted a segment start from a window position
+  and returned it as a document offset, so tagging a phrase wrote its markers
+  twenty-seven characters early;
+- `extend` inserted a segment's body rather than its prose;
+- `StreamWindow.spans()` mapped a second time over an already-mapped list.
+
+All five compiled. All five would have been type errors under this rule, and
+three of them were found only by a person looking at the screen.
+
+### What it costs, and why that is the right trade
+
+A brand makes literals inconvenient: a test that wants document text must say
+so, and `tests/support/text.ts` exists for exactly that. That inconvenience is
+the mechanism working — the place where a plain string becomes a layer's value
+is a claim, and the rule forces it to be written down where someone can check it.
+
+### The rule generalises past text
+
+It applies to any two logical layers with different coordinates and the same
+wire type — a version id and a session generation (already D33), a file path and
+a document id, a pixel and a position. When a new pair appears, brand it before
+the first bug rather than after the third.
+
+### What this makes stale
+
+`solution/document-api.md` (every coordinate name, the three-coordinate table).
+
+---
+
+## D49: Layout may not change during a pointer gesture, and space that must be counted lives inside the box
+
+**Date:** 2026-08-25
+**Status:** decided
+**Detail:** `solution/implementation-notes.md`, "A block widget's margins are not measured"
+
+**Decision.** Two rules about the editor layer, both learned the same way:
+
+1. **Nothing may add, remove or resize a decoration while a pointer gesture is
+   in progress.** A reveal, a widget swap, a growth-driven prepend: if it
+   changes where anything is drawn, it waits for the gesture to end.
+2. **Any space the editor must account for goes inside the measured box** —
+   `padding`, never `margin`, on a block widget.
+
+**And the property is asserted, not merely believed**: `npm run m2` measures
+`posAtCoords(coordsAtPos(p)) === p` across every rendered position outside an
+atomic range, and that the append position is on screen once the region settles.
+
+### Why these two and not a longer list
+
+CodeMirror answers "where is this position" two ways: `coordsAtPos` measures the
+DOM, `posAtCoords` consults the height map. Everything in this family is those
+two disagreeing. A margin on the day seam put them a line apart for the whole
+document below it, so a press inside a URL selected the row beneath; a decoration
+appearing mid-drag moved the text out from under the pointer, which is the same
+disagreement introduced deliberately.
+
+Neither is a bug in the editor. Both are the consequence of treating a layer's
+geometry as if it were the layer below's coordinates — D48 applied to pixels,
+where the compiler cannot help because pixels are not our type to brand.

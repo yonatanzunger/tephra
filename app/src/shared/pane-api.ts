@@ -11,7 +11,7 @@ import type {
   DocumentWindow,
   Span,
   Unsubscribe,
-  BufferPosition,
+  WindowPosition,
 } from './document-api.ts'
 import type { ExtentPolicy } from './extent.ts'
 
@@ -65,7 +65,7 @@ export interface Pane {
    * character extent of one screenful, so this is also how ScreenMetric stays
    * calibrated. No extra signal is needed for it.
    */
-  viewportChanged(visible: { readonly from: BufferPosition; readonly to: BufferPosition }): void
+  viewportChanged(visible: { readonly from: WindowPosition; readonly to: WindowPosition }): void
 
   /** Mutable; that is the point. */
   policy: ExtentPolicy

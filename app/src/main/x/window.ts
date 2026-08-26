@@ -8,13 +8,13 @@
 // A rendering affordance: it holds no history and owns nothing lost by closing.
 
 import type {
-  BufferEdit, BufferPosition, DateKey, Document, DocumentChange, DocumentPosition,
-  DocumentWindow, Edit, EditOrigin, Offset, SessionGeneration, Span, SpanKind,
-  TypedSpan, Unsubscribe,
+  WindowEdit, WindowPosition, DateKey, Document, DocumentChange, DocumentPosition,
+  DocumentWindow, Edit, EditOrigin, DocumentOffset, SessionGeneration, Span, SpanKind,
+  TypedSpan, Unsubscribe, ProseText, DocumentText,
 } from '../../shared/document-api.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
 import type { Segment } from './segment.ts'
-import { inSegment, inWindow, stripHandles } from '../../shared/prose.ts'
+import { documentText, inSegment, inWindow, stripHandles } from '../../shared/prose.ts'
 import { minimalReplacement } from './text-edits.ts'
 import type { WindowSnapshot } from '../../shared/ipc.ts'
 import type { StreamDocument } from './stream-document.ts'
@@ -23,20 +23,20 @@ interface Placed {
   readonly segment: Segment
   /**
    * Where this segment starts in the buffer — a PROSE offset (D44). The buffer
-   * holds prose; the segment's body holds bytes; `segment.prose` crosses
+   * holds prose; the segment's body holds document text; `segment.prose` crosses
    * between them, and this is the only place the two are added together.
    */
-  readonly start: BufferPosition
+  readonly start: WindowPosition
 }
 
 export class StreamWindow implements DocumentWindow {
   readonly #doc: StreamDocument
   #segments: Segment[]
   #placed: Placed[] = []
-  #text = ''
+  #text = '' as ProseText
   #generation: SessionGeneration
 
-  readonly #changeHandlers = new Set<(edits: readonly BufferEdit[], origin: EditOrigin) => void>()
+  readonly #changeHandlers = new Set<(edits: readonly WindowEdit[], origin: EditOrigin) => void>()
   readonly #resetHandlers = new Set<() => void>()
   readonly #spansHandlers = new Set<() => void>()
 
@@ -60,7 +60,7 @@ export class StreamWindow implements DocumentWindow {
     return this.#generation
   }
 
-  get text(): string {
+  get text(): ProseText {
     return this.#text
   }
 
@@ -95,17 +95,17 @@ export class StreamWindow implements DocumentWindow {
    * The end of the whole window is unaffected: there is no later segment, so it
    * belongs to the last one, which is what makes appending work.
    */
-  toDocument(at: BufferPosition): DocumentPosition {
+  toDocument(at: WindowPosition): DocumentPosition {
     const offset = Math.min(Math.max(0, at as number), this.#text.length)
     const placed = this.#placed[0] === undefined ? null : this.#segmentAt(offset)
     if (placed === null) return this.#doc.positionAt('' as DateKey, 0)
     return this.#doc.positionAt(
       placed.segment.date,
-      placed.segment.prose.toRaw(inSegment(offset as BufferPosition, placed.start)),
+      placed.segment.prose.toDocument(inSegment(offset as WindowPosition, placed.start)),
     )
   }
 
-  toBuffer(at: DocumentPosition): BufferPosition | null {
+  toWindow(at: DocumentPosition): WindowPosition | null {
     for (const placed of this.#placed) {
       if (placed.segment.date === at.segment) {
         return inWindow(placed.start, placed.segment.prose.toProse(at.offset))
@@ -121,7 +121,7 @@ export class StreamWindow implements DocumentWindow {
    * returning; the promise resolves when the change is durable. An editor fires
    * and does not await, but a rejection is a real failure and must surface.
    */
-  async edit(edits: readonly BufferEdit[], origin: EditOrigin = 'user'): Promise<void> {
+  async edit(edits: readonly WindowEdit[], origin: EditOrigin = 'user'): Promise<void> {
     const documentEdits = this.#toDocumentEdits(edits)
     this.#originating = true
     try {
@@ -136,7 +136,7 @@ export class StreamWindow implements DocumentWindow {
    * boundary. A single deletion sweeping across midnight is two edits, one per
    * file, and getting that wrong writes half of it to the wrong day.
    */
-  #toDocumentEdits(edits: readonly BufferEdit[]): Edit[] {
+  #toDocumentEdits(edits: readonly WindowEdit[]): Edit[] {
     const out: Edit[] = []
     for (const edit of edits) {
       const from = Math.min(edit.from as number, edit.to as number)
@@ -156,13 +156,13 @@ export class StreamWindow implements DocumentWindow {
         // Leftmost, which is the trailing-boundary rule: text typed at the end
         // of a tagged range lands INSIDE it, so continuing a tagged sentence
         // keeps the subject (D44).
-        const local = placed.segment.prose.toRaw(inSegment(from as BufferPosition, placed.start))
+        const local = placed.segment.prose.toDocument(inSegment(from as WindowPosition, placed.start))
         out.push({
           span: {
             begin: this.#doc.positionAt(placed.segment.date, local),
             end: this.#doc.positionAt(placed.segment.date, local),
           },
-          payload: insert,
+          payload: documentText(insert),
         })
         continue
       }
@@ -173,11 +173,11 @@ export class StreamWindow implements DocumentWindow {
       let payloadPlaced = false
       for (const placed of spans) {
         const segmentEnd = placed.start + placed.segment.prose.text.length
-        const localFrom = inSegment(Math.max(from, placed.start) as BufferPosition, placed.start)
-        const localTo = inSegment(Math.min(to, segmentEnd) as BufferPosition, placed.start)
+        const localFrom = inSegment(Math.max(from, placed.start) as WindowPosition, placed.start)
+        const localTo = inSegment(Math.min(to, segmentEnd) as WindowPosition, placed.start)
         if (localFrom > localTo) continue
 
-        // In raw bytes, then carved around any range-end marker inside it. An
+        // In document offsets, then carved around any range-end marker inside it. An
         // ordinary deletion sweeping past the end of a tagged range would
         // otherwise take the `tag-end` with it, and an unmatched `tag-start`
         // runs to the end of its DAY — so deleting a sentence would silently
@@ -185,10 +185,10 @@ export class StreamWindow implements DocumentWindow {
         // deleting one means "remove this tag", which X turns into the removal
         // of both markers (D44).
         const prose = placed.segment.prose
-        for (const piece of prose.carve(prose.toRaw(localFrom), prose.toRaw(localTo))) {
+        for (const piece of prose.carve(prose.toDocument(localFrom), prose.toDocument(localTo))) {
           // The inserted text goes to the first piece of the first touched
           // segment; everything after it only loses text.
-          const payload = payloadPlaced ? '' : insert
+          const payload = payloadPlaced ? ('' as DocumentText) : documentText(insert)
           payloadPlaced = true
           out.push({
             span: {
@@ -219,7 +219,7 @@ export class StreamWindow implements DocumentWindow {
 
   // ── queries ────────────────────────────────────────────────
 
-  spansAt(at: BufferPosition): readonly TypedSpan[] {
+  spansAt(at: WindowPosition): readonly TypedSpan[] {
     const position = this.toDocument(at)
     return this.spans().filter(
       s =>
@@ -243,29 +243,29 @@ export class StreamWindow implements DocumentWindow {
     return out
   }
 
-  snap(from: BufferPosition, to: BufferPosition): { from: BufferPosition; to: BufferPosition } {
+  snap(from: WindowPosition, to: WindowPosition): { from: WindowPosition; to: WindowPosition } {
     const text = this.#text
     const a = Math.min(Math.max(0, from as number), text.length)
     const b = Math.min(Math.max(0, to as number), text.length)
     const lineStart = text.lastIndexOf('\n', a - 1) + 1
     const nl = text.indexOf('\n', b)
     const lineEnd = nl === -1 ? text.length : nl + 1
-    return { from: lineStart as BufferPosition, to: lineEnd as BufferPosition }
+    return { from: lineStart as WindowPosition, to: lineEnd as WindowPosition }
   }
 
-  advance(from: BufferPosition, chars: number): BufferPosition | null {
+  advance(from: WindowPosition, chars: number): WindowPosition | null {
     const next = (from as number) + chars
     if (next < 0 || next > this.#text.length) return null
-    return next as BufferPosition
+    return next as WindowPosition
   }
 
-  distance(a: BufferPosition, b: BufferPosition): number {
+  distance(a: WindowPosition, b: WindowPosition): number {
     return (b as number) - (a as number)
   }
 
   // ── changes from elsewhere ─────────────────────────────────
 
-  onChanged(handler: (edits: readonly BufferEdit[], origin: EditOrigin) => void): Unsubscribe {
+  onChanged(handler: (edits: readonly WindowEdit[], origin: EditOrigin) => void): Unsubscribe {
     this.#changeHandlers.add(handler)
     return () => this.#changeHandlers.delete(handler)
   }
@@ -299,13 +299,13 @@ export class StreamWindow implements DocumentWindow {
 
     // **The buffer is told what its PROSE did, not what the document did.**
     //
-    // A document edit carries raw bytes — `<!--tephra:tag-start …-->` — and a
-    // span in raw offsets. Handing those to the editor inserts marker syntax
+    // A document edit carries document text — `<!--tephra:tag-start …-->` — and
+    // a span in document offsets. Handing those to the editor inserts marker syntax
     // into a buffer that holds prose, and maps the span through a mapping that
     // has already changed underneath it. Both happened at once: applying a tag
     // put the comment on screen as literal text AND duplicated the sentence it
     // covered, because `from` and `to` had collapsed to one place while the
-    // payload was still the raw insertion.
+    // payload was still the document's insertion.
     //
     // Diffing the two prose texts cannot make either mistake, since it never
     // consults the document's coordinates at all. Only changes this window did
@@ -322,13 +322,13 @@ export class StreamWindow implements DocumentWindow {
     // an empty edit list is a no-op for the buffer, and the span comparison is
     // a no-op when the spans match.
     const replacement = minimalReplacement(before, this.#text)
-    const edits: BufferEdit[] =
+    const edits: WindowEdit[] =
       replacement === null
         ? []
         : [
             {
-              from: replacement.from as BufferPosition,
-              to: replacement.to as BufferPosition,
+              from: replacement.from as WindowPosition,
+              to: replacement.to as WindowPosition,
               insert: replacement.insert,
             },
           ]
@@ -379,18 +379,18 @@ export class StreamWindow implements DocumentWindow {
     const ordered = direction === 'earlier' ? [...added].reverse() : added
     // PROSE, not bodies. The buffer holds prose (D44), and a day arriving from
     // the corpus is the same as any other text reaching the editor: its marker
-    // syntax is not text. Inserting `s.body` here put raw `<!--tephra:…-->` on
+    // syntax is not text. Inserting `s.body` here put `<!--tephra:…-->` on
     // screen for every day loaded by growth — which is every day but the one
     // being written, so it appeared on opening a notebook that already had
     // history and nowhere else.
-    const insert = ordered.map(s => s.prose.text).join('')
+    const insert = ordered.map(s => s.prose.text).join('') as ProseText
     const at = direction === 'earlier' ? 0 : this.#text.length
 
     this.#segments = direction === 'earlier' ? [...ordered, ...this.#segments] : [...this.#segments, ...ordered]
     this.#rebuild()
     await this.refreshBoundaries()
 
-    const edit: BufferEdit = { from: at as BufferPosition, to: at as BufferPosition, insert }
+    const edit: WindowEdit = { from: at as WindowPosition, to: at as WindowPosition, insert }
     for (const handler of this.#changeHandlers) handler([edit], 'external')
   }
 
@@ -431,7 +431,7 @@ export class StreamWindow implements DocumentWindow {
   /**
    * Where each segment's body sits in the buffer.
    *
-   * The renderer's half of this window needs it to answer toDocument/toBuffer
+   * The renderer's half of this window needs it to answer toDocument/toWindow
    * synchronously across the process boundary — that mapping is the whole of
    * what makes those methods cheap, and it is small enough to send on every
    * change.
@@ -471,13 +471,13 @@ export class StreamWindow implements DocumentWindow {
     const parts: string[] = []
     let start = 0
     for (const segment of this.#segments) {
-      placed.push({ segment, start: start as BufferPosition })
+      placed.push({ segment, start: start as WindowPosition })
       parts.push(segment.prose.text)
       start += segment.prose.text.length
     }
     this.#placed = placed
-    this.#text = parts.join('')
+    this.#text = parts.join('') as ProseText
   }
 }
 
-export type { Offset }
+export type { DocumentOffset }

@@ -1,3 +1,4 @@
+import type { DocumentText } from '../../shared/document-api.ts'
 // The write-ahead log (D32).
 //
 // The file tier writes after a second of quiet, or every five seconds. This
@@ -30,7 +31,7 @@ export interface WalRecord {
   /** Offsets within that day's body, before the edit. */
   readonly from: number
   readonly to: number
-  readonly insert: string
+  readonly insert: DocumentText
   /**
    * The body's length before this edit.
    *

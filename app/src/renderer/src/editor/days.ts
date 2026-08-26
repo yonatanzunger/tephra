@@ -21,8 +21,8 @@ export function dayBoundaries(docWindow: DocumentWindow): Extension {
   const build = (state: { doc: { lineAt(at: number): { from: number }; length: number } }): DecorationSet => {
     const found: { at: number; to: number; date: DateKey }[] = []
     for (const span of docWindow.spans('date')) {
-      const at = docWindow.toBuffer(span.span.begin)
-      const to = docWindow.toBuffer(span.span.end)
+      const at = docWindow.toWindow(span.span.begin)
+      const to = docWindow.toWindow(span.span.end)
       if (at === null || to === null) continue
       found.push({ at: at as number, to: to as number, date: span.name as DateKey })
     }

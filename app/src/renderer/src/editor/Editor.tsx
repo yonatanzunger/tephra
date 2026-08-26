@@ -11,7 +11,7 @@
 // created by the caller and handed in; this component only binds a view to it.
 
 import { useEffect, useRef } from 'react'
-import type { BufferPosition, DocumentPosition, DocumentWindow } from '../../../shared/document-api.ts'
+import type { WindowPosition, DocumentPosition, DocumentWindow } from '../../../shared/document-api.ts'
 import { bindEditor, type Binding } from './bind'
 import type { EditorHandle, MarkInfo } from './range-commands.ts'
 import type { CommentAnchor } from './comment-anchors.ts'
@@ -21,7 +21,7 @@ export interface EditorProps {
   readonly window: DocumentWindow
   readonly vim: boolean
   readonly typography: Typography
-  readonly onViewport?: (visible: { from: BufferPosition; to: BufferPosition }) => void
+  readonly onViewport?: (visible: { from: WindowPosition; to: WindowPosition }) => void
   readonly onCursor?: (at: DocumentPosition) => void
   readonly onError?: (err: Error) => void
   /**

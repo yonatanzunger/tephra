@@ -19,7 +19,8 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
-import type { BufferEdit, BufferPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
+import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
+import { fromBuffer } from '../../../shared/prose.ts'
 import { widgetExtensions } from './widgets.ts'
 import { contextMenu, markAt, readSelection, reportSelection, type MarkInfo, type Selection } from './range-commands.ts'
 import { retag, tagExtents } from './tags.ts'
@@ -40,7 +41,7 @@ export interface BindOptions {
   readonly vim: boolean
   readonly typography?: Typography
   /** Reported upward so the Pane can own extent policy (D35). */
-  readonly onViewport?: (visible: { from: BufferPosition; to: BufferPosition }) => void
+  readonly onViewport?: (visible: { from: WindowPosition; to: WindowPosition }) => void
   /** Where the caret is, in document space, so it can outlive the session. */
   readonly onCursor?: (at: DocumentPosition) => void
   readonly onError?: (err: Error) => void
@@ -115,7 +116,7 @@ export function bindEditor(options: BindOptions): Binding {
   // caret happened to be rather than at the end of today. The cursor is still
   // recorded — it is a true fact about the session, and navigation may want it
   // — it simply no longer decides where the app opens.
-  const landing = docWindow.text.length as BufferPosition
+  const landing = docWindow.text.length as WindowPosition
   view.dispatch({
     selection: { anchor: landing as number },
   })
@@ -225,12 +226,12 @@ function editorToWindow(
       if (tr.effects.some(e => e.is(fromDocument))) continue // came from the document
       if (tr.changes.empty) continue
 
-      const edits: BufferEdit[] = []
+      const edits: WindowEdit[] = []
       tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
         edits.push({
-          from: fromA as BufferPosition,
-          to: toA as BufferPosition,
-          insert: inserted.toString(),
+          from: fromA as WindowPosition,
+          to: toA as WindowPosition,
+          insert: fromBuffer(inserted.toString()),
         })
       })
       if (edits.length === 0) continue
@@ -308,7 +309,7 @@ function scrollToAppendPosition(view: EditorView): void {
  * reset is what lets the cursor and the scroll position survive. The cursor did;
  * the scroll position needed this.
  */
-function applyFromDocument(view: EditorView, edits: readonly BufferEdit[], _origin: EditOrigin): void {
+function applyFromDocument(view: EditorView, edits: readonly WindowEdit[], _origin: EditOrigin): void {
   if (edits.length === 0) return
   const changes = ChangeSet.of(
     edits.map(e => ({ from: e.from as number, to: e.to as number, insert: e.insert })),
@@ -376,7 +377,7 @@ function cursorReporter(
   if (onCursor === undefined) return []
   return EditorView.updateListener.of(update => {
     if (!update.selectionSet && !update.docChanged) return
-    onCursor(docWindow.toDocument(update.state.selection.main.head as BufferPosition))
+    onCursor(docWindow.toDocument(update.state.selection.main.head as WindowPosition))
   })
 }
 
@@ -386,12 +387,12 @@ function cursorReporter(
  * how ScreenMetric stays calibrated — `to - from` is a screenful in characters.
  */
 function viewportReporter(
-  onViewport: ((visible: { from: BufferPosition; to: BufferPosition }) => void) | undefined,
+  onViewport: ((visible: { from: WindowPosition; to: WindowPosition }) => void) | undefined,
 ): Extension {
   if (onViewport === undefined) return []
   return EditorView.updateListener.of(update => {
     if (!update.viewportChanged && !update.geometryChanged) return
     const { from, to } = update.view.viewport
-    onViewport({ from: from as BufferPosition, to: to as BufferPosition })
+    onViewport({ from: from as WindowPosition, to: to as WindowPosition })
   })
 }

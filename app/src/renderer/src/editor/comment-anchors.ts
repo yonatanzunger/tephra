@@ -106,8 +106,8 @@ function spansOf(docWindow: DocumentWindow, view: EditorView): Anchored[] {
   const out: Anchored[] = []
   for (const span of docWindow.spans('comment')) {
     if (span.kind !== 'comment') continue
-    const from = docWindow.toBuffer(span.span.begin)
-    const to = docWindow.toBuffer(span.span.end)
+    const from = docWindow.toWindow(span.span.begin)
+    const to = docWindow.toWindow(span.span.end)
     if (from === null || to === null) continue
     out.push({
       id: span.name,

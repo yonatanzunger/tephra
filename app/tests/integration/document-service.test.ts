@@ -11,9 +11,10 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocumentService, type ServiceOptions } from '../../src/main/document-service.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import type { BufferPosition, DateKey, VersionId } from '../../src/shared/document-api.ts'
+import type { WindowPosition, DateKey, VersionId } from '../../src/shared/document-api.ts'
+import { pt } from '../support/text.ts'
 
-const bp = (n: number): BufferPosition => n as BufferPosition
+const wp = (n: number): WindowPosition => n as WindowPosition
 
 async function fixture(t: TestContext, options: ServiceOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-svc-'))
@@ -44,7 +45,7 @@ test('edits apply in the order they were composed, not the order they finish', a
     pending.push(
       service.edit({
         id: snapshot.id,
-        edits: [{ from: bp(at), to: bp(at), insert: ch }],
+        edits: [{ from: wp(at), to: wp(at), insert: pt(ch) }],
         origin: 'user',
         generation: 1 as never,
       }),
@@ -66,7 +67,7 @@ test('a failed edit does not wedge the queue behind it', async t => {
   )
   const ack = await service.edit({
     id: snapshot.id,
-    edits: [{ from: bp(0), to: bp(0), insert: 'still works' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('still works') }],
     origin: 'user',
     generation: 1 as never,
   })
@@ -79,7 +80,7 @@ test('the ack reports the length main actually holds', async t => {
   const { service, snapshot } = await fixture(t)
   const ack = await service.edit({
     id: snapshot.id,
-    edits: [{ from: bp(0), to: bp(0), insert: 'twelve chars' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('twelve chars') }],
     origin: 'user',
     generation: 1 as never,
   })
@@ -95,7 +96,7 @@ test('pushed messages reach every attached sink and stop when detached', async t
   await service.undo()
   await service.edit({
     id: snapshot.id,
-    edits: [{ from: bp(0), to: bp(0), insert: 'x' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('x') }],
     origin: 'user',
     generation: 1 as never,
   })
@@ -106,7 +107,7 @@ test('pushed messages reach every attached sink and stop when detached', async t
   const before = seen.length
   await service.edit({
     id: snapshot.id,
-    edits: [{ from: bp(0), to: bp(0), insert: 'y' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('y') }],
     origin: 'user',
     generation: 1 as never,
   })
@@ -118,7 +119,7 @@ test('flush writes through the service, and the file is on disk', async t => {
   const { service, snapshot, root, today } = await fixture(t)
   await service.edit({
     id: snapshot.id,
-    edits: [{ from: bp(0), to: bp(0), insert: 'persisted\n' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('persisted\n') }],
     origin: 'user',
     generation: 1 as never,
   })
@@ -135,7 +136,7 @@ test('a change is written without anyone asking, on quiescence', async t => {
   const { service, snapshot, root, today } = await fixture(t)
   await service.edit({
     id: snapshot.id,
-    edits: [{ from: bp(0), to: bp(0), insert: 'unprompted\n' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('unprompted\n') }],
     origin: 'user',
     generation: 1 as never,
   })
@@ -154,7 +155,7 @@ test('continuous typing still reaches disk, because quiescence is not the only t
   while (Date.now() < deadline) {
     await service.edit({
       id: snapshot.id,
-      edits: [{ from: bp(at), to: bp(at), insert: 'x' }],
+      edits: [{ from: wp(at), to: wp(at), insert: pt('x') }],
       origin: 'user',
       generation: 1 as never,
     })
@@ -182,7 +183,7 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   await service.edit({
     id: snapshot.id,
     generation: snapshot.generation,
-    edits: [{ from: bp(0), to: bp(0), insert: 'The good version.\n' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('The good version.\n') }],
     origin: 'user',
   })
   await service.flush()
@@ -192,7 +193,7 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   await service.edit({
     id: after.id,
     generation: after.generation,
-    edits: [{ from: bp(0), to: bp(0), insert: 'A regrettable addition.\n' }],
+    edits: [{ from: wp(0), to: wp(0), insert: pt('A regrettable addition.\n') }],
     origin: 'user',
   })
   await service.flush()

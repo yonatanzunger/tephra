@@ -15,9 +15,10 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { SPLIT_THRESHOLD } from '../../src/main/x/split.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import type { BufferPosition, DateKey } from '../../src/shared/document-api.ts'
+import type { WindowPosition, DateKey } from '../../src/shared/document-api.ts'
+import { pt } from '../support/text.ts'
 
-const bp = (n: number): BufferPosition => n as BufferPosition
+const wp = (n: number): WindowPosition => n as WindowPosition
 const DAY = '2026-03-14' as DateKey
 
 async function notebook(t: TestContext) {
@@ -34,7 +35,7 @@ async function notebook(t: TestContext) {
 /** Type `text` at the end of the day, as the editor would. */
 async function append(doc: StreamDocument, text: string): Promise<void> {
   const w = await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
-  await w.edit([{ from: bp(w.text.length), to: bp(w.text.length), insert: text }], 'user')
+  await w.edit([{ from: wp(w.text.length), to: wp(w.text.length), insert: pt(text) }], 'user')
 }
 
 const paragraph = (i: number): string => `Paragraph ${i}. ${'word '.repeat(40)}\n\n`
@@ -127,7 +128,7 @@ test('a day that shrinks back removes the parts it no longer needs', async t => 
   assert.ok((await readdir(join(root, 'stream', '2026', '03'))).length > 1)
 
   const w = await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
-  await w.edit([{ from: bp(0), to: bp(w.text.length), insert: 'Almost nothing left.\n' }], 'operation')
+  await w.edit([{ from: wp(0), to: wp(w.text.length), insert: pt('Almost nothing left.\n') }], 'operation')
   await doc.flush()
 
   assert.deepEqual(

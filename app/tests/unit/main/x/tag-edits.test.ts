@@ -10,6 +10,8 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { parser } from '@lezer/markdown'
 import { resolveTags, scanMarkers, subjectKey, tagBody } from '../../../../src/main/x/markers.ts'
+import type { DocumentText } from '../../../../src/shared/document-api.ts'
+import { rt } from '../../../support/text.ts'
 
 /** Asked of the real markdown parser, never of a belief about it. */
 function strong(src: string): boolean {
@@ -18,11 +20,11 @@ function strong(src: string): boolean {
   return found
 }
 
-const apply = (body: string, subject: string, from: number, to: number, op: 'add' | 'remove'): string =>
+const apply = (body: DocumentText, subject: string, from: number, to: number, op: 'add' | 'remove'): DocumentText =>
   tagBody(body, subject, { from, to }, op)
 
 /** The subject's spans, as the text they actually cover. */
-const covered = (body: string, subject: string): string[] =>
+const covered = (body: DocumentText, subject: string): string[] =>
   resolveTags(scanMarkers(body), body)
     .filter(t => subjectKey(t.name) === subjectKey(subject))
     .map(t => body.slice(t.from, t.to).replace(/<!--tephra:[^>]*-->/g, '').trim())
@@ -69,7 +71,7 @@ function at(body: string, text: string): { from: number; to: number } {
 }
 
 test('tagging a range covers exactly that text', () => {
-  const body = 'The house deal closed on Tuesday.\n'
+  const body = rt('The house deal closed on Tuesday.\n')
   const r = at(body, 'house deal')
   const out = apply(body, 'house deal', r.from, r.to, 'add')
   assert.deepEqual(covered(out, 'house deal'), ['house deal'])
@@ -77,7 +79,7 @@ test('tagging a range covers exactly that text', () => {
 })
 
 test('tagging an overlapping range merges rather than nesting', () => {
-  const body = 'alpha beta gamma delta\n'
+  const body = rt('alpha beta gamma delta\n')
   let out = apply(body, 's', at(body, 'alpha beta').from, at(body, 'alpha beta').to, 'add')
   out = apply(out, 's', at(out, 'beta gamma').from, at(out, 'beta gamma').to, 'add')
   assert.deepEqual(covered(out, 's'), ['alpha beta gamma'])
@@ -85,7 +87,7 @@ test('tagging an overlapping range merges rather than nesting', () => {
 })
 
 test('tagging an abutting range extends the existing span', () => {
-  const body = 'alpha beta gamma\n'
+  const body = rt('alpha beta gamma\n')
   let out = apply(body, 's', at(body, 'alpha').from, at(body, 'alpha').to, 'add')
   const next = at(out, ' beta')
   out = apply(out, 's', next.from, next.to, 'add')
@@ -93,7 +95,7 @@ test('tagging an abutting range extends the existing span', () => {
 })
 
 test('untagging the middle of a span splits it in two', () => {
-  const body = 'alpha beta gamma\n'
+  const body = rt('alpha beta gamma\n')
   let out = apply(body, 's', 0, 16, 'add')
   out = apply(out, 's', at(out, ' beta ').from, at(out, ' beta ').to, 'remove')
   assert.deepEqual(covered(out, 's'), ['alpha', 'gamma'])
@@ -101,7 +103,7 @@ test('untagging the middle of a span splits it in two', () => {
 })
 
 test('untagging an edge trims the span', () => {
-  const body = 'alpha beta gamma\n'
+  const body = rt('alpha beta gamma\n')
   let out = apply(body, 's', 0, 16, 'add')
   out = apply(out, 's', at(out, 'alpha ').from, at(out, 'alpha ').to, 'remove')
   assert.ok(alternates(out, 's'))
@@ -113,7 +115,7 @@ test('untagging the whole span restores the original text exactly', () => {
     'alpha beta gamma\n',
     '**Bold opening** and then some text that wraps\nonto a second line.\n',
     'A line.\n\nAnother paragraph entirely.\n',
-  ]) {
+  ].map(rt)) {
     const tagged = apply(body, 'House Deal', 0, body.length, 'add')
     assert.notEqual(tagged, body, `nothing was tagged in ${JSON.stringify(body)}`)
     const back = apply(tagged, 'house deal', 0, tagged.length, 'remove')
@@ -122,7 +124,7 @@ test('untagging the whole span restores the original text exactly', () => {
 })
 
 test('tagging the same range twice changes nothing the second time', () => {
-  const body = 'alpha beta gamma\n'
+  const body = rt('alpha beta gamma\n')
   const r = at(body, 'alpha beta')
   const once = apply(body, 's', r.from, r.to, 'add')
   const again = at(once, 'alpha beta')
@@ -130,28 +132,28 @@ test('tagging the same range twice changes nothing the second time', () => {
 })
 
 test('tagging a bold opening leaves it bold, per the real parser', () => {
-  const body = '**Bold opening** is a property of the thing.\n'
+  const body = rt('**Bold opening** is a property of the thing.\n')
   const out = apply(body, 's', 0, body.length, 'add')
   assert.ok(out.includes('**Bold opening**'), 'the text itself was altered')
   assert.ok(strong(out), `the bold did not survive: ${JSON.stringify(out)}`)
 })
 
 test('a subject already in the file keeps the capitalisation it was given', () => {
-  const body = 'alpha beta gamma delta\n'
+  const body = rt('alpha beta gamma delta\n')
   let out = apply(body, 'House Deal', at(body, 'alpha').from, at(body, 'alpha').to, 'add')
   out = apply(out, 'HOUSE DEAL', at(out, 'gamma').from, at(out, 'gamma').to, 'add')
   assert.equal(out.match(/tag-start [^-]*/g)?.every(s => s.includes('House Deal')), true)
 })
 
 test('markers in fenced code are text, not tags', () => {
-  const body = '```\n<!--tephra:tag-start s-->\n```\nreal text here\n'
+  const body = rt('```\n<!--tephra:tag-start s-->\n```\nreal text here\n')
   const out = apply(body, 's', at(body, 'real text').from, at(body, 'real text').to, 'add')
   assert.ok(out.includes('```\n<!--tephra:tag-start s-->\n```'), 'the code block was rewritten')
   assert.deepEqual(covered(out, 's'), ['real text'])
 })
 
 test('two subjects over the same text overlap freely and independently', () => {
-  const body = 'alpha beta gamma delta\n'
+  const body = rt('alpha beta gamma delta\n')
   let out = apply(body, 'one', at(body, 'alpha beta').from, at(body, 'alpha beta').to, 'add')
   out = apply(out, 'two', at(out, 'beta gamma').from, at(out, 'beta gamma').to, 'add')
   assert.deepEqual(covered(out, 'one'), ['alpha beta'])
@@ -164,11 +166,11 @@ test('two subjects over the same text overlap freely and independently', () => {
 })
 
 test('untagging text that carries no such subject is a no-op', () => {
-  const body = 'alpha beta\n'
+  const body = rt('alpha beta\n')
   assert.equal(tagBody(body, 'absent', { from: 0, to: 5 }, 'remove'), body)
 })
 
 test('a range of only whitespace tags nothing', () => {
-  const body = 'alpha   beta\n'
+  const body = rt('alpha   beta\n')
   assert.equal(tagBody(body, 's', { from: 5, to: 8 }, 'add'), body)
 })

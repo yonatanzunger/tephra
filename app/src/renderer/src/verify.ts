@@ -422,6 +422,64 @@ export async function runVerify(scene: string): Promise<void> {
       say('daysReported', (await window.tephra.doc.spans({ kind: 'date' })).length)
     }
 
+    if (scene === 'geometry') {
+      // THE TWO GEOMETRY CLAIMS, asserted rather than debugged (D48's family C).
+      //
+      // Every bug in this family had the same shape: the editor's HEIGHT MAP
+      // and the DOM disagreed about where a line is, so a screen point resolved
+      // to a position a line away from the one it was drawn at. A block widget
+      // whose spacing was `margin` rather than `padding` was one cause — the
+      // margin falls outside the box the height is measured from — and it was
+      // found only by driving real mouse events at a real notebook. The round
+      // trip below is the same measurement, made cheap enough to run every time.
+      let waited = 0
+      let steady = 0
+      let last = -1
+      while (waited < 8000 && steady < 5) {
+        await settle(200)
+        waited += 200
+        const now = view.state.doc.length
+        steady = now === last ? steady + 1 : 0
+        last = now
+      }
+
+      const text = view.state.doc.toString()
+      say('daysLoaded', document.querySelectorAll('.tx-daybreak').length + 1)
+
+      // 1. A point on screen maps back to the position it was drawn at.
+      //
+      // Only for positions the viewport has actually rendered — `coordsAtPos`
+      // answers null outside it and there is nothing to compare — and not
+      // inside an atomic range, where every point in the widget belongs to one
+      // position and the round trip is not expected to be the identity.
+      const HANDLE = '\ufffc'
+      const atomic = (at: number): boolean =>
+        text[at] === HANDLE || text[at - 1] === HANDLE
+      const probes: { at: number; off: number }[] = []
+      let measured = 0
+      for (let at = 0; at <= view.state.doc.length; at += 7) {
+        if (atomic(at)) continue
+        const c = view.coordsAtPos(at)
+        if (c === null) continue // outside the rendered range
+        measured++
+        const back = view.posAtCoords({ x: c.left, y: (c.top + c.bottom) / 2 })
+        if (back !== null && back !== at) probes.push({ at, off: back - at })
+      }
+      say('probed', measured)
+      say('roundTripWorst', Math.max(0, ...probes.map(p => Math.abs(p.off))))
+      say('roundTripFailures', probes.slice(0, 8))
+
+      // 2. The append position is on screen once the region has settled.
+      const scroller = document.querySelector('.cm-scroller') as HTMLElement | null
+      const box = scroller?.getBoundingClientRect()
+      const caret = view.coordsAtPos(view.state.doc.length)
+      say('caretAtEnd', view.state.selection.main.head === view.state.doc.length)
+      say('caretVisible', caret !== null && box !== undefined &&
+        caret.top >= box.top && caret.bottom <= box.bottom)
+      say('earlierDayAbove', text.slice(0, Math.max(0, view.state.doc.length - 40)).includes('yesterday'))
+      await settle(400)
+    }
+
     if (scene === 'landing') {
       // Growth happens behind the reader, so the question is not where the app
       // landed at first paint but where it is once the region has finished

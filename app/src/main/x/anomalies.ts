@@ -12,13 +12,13 @@
 import type { Anomaly } from '../../shared/anomalies.ts'
 import type { DateKey } from '../../shared/document-api.ts'
 import type { ParsedFile } from './frontmatter.ts'
-import { subjectKey, type RawMarker } from './markers.ts'
+import { subjectKey, type DocumentMarker } from './markers.ts'
 
 export interface AnomalyInput {
   readonly file: string
   readonly date: DateKey
   readonly parsed: ParsedFile
-  readonly markers: readonly RawMarker[]
+  readonly markers: readonly DocumentMarker[]
   /** Where the body starts in the file, so line numbers are file lines. */
   readonly bodyOffset: number
   readonly text: string
@@ -48,7 +48,7 @@ export function findAnomalies(input: AnomalyInput): readonly Anomaly[] {
   // Re-run the alternation rather than reading `resolveTags`' output, because
   // an orphaned `tag-end` is *dropped* there — it is invisible in the result by
   // design, and this is the one place that needs to see it.
-  const open = new Map<string, RawMarker>()
+  const open = new Map<string, DocumentMarker>()
   for (const marker of markers) {
     if (marker.kind === 'tag-start') {
       if (!open.has(subjectKey(marker.name))) open.set(subjectKey(marker.name), marker)

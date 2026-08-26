@@ -17,6 +17,7 @@ import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import type { DateKey, VersionId  } from '../../src/shared/document-api.ts'
+import { rt } from '../support/text.ts'
 
 const d = (s: string): DateKey => s as DateKey
 const DAY = d('2026-08-22')
@@ -52,7 +53,7 @@ async function setDay(doc: StreamDocument, date: DateKey, body: string): Promise
     [
       {
         span: { begin: doc.positionAt(date, 0), end: doc.positionAt(date, segment.length) },
-        payload: body,
+        payload: rt(body),
       },
     ],
     'user',

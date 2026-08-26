@@ -22,7 +22,7 @@ import type { StreamDocument } from './stream-document.ts'
 import type { RestoreReport } from '../../shared/history-api.ts'
 import { parseFile } from './frontmatter.ts'
 import type { Repository } from '../w/repository.ts'
-import type { DateKey, VersionId } from '../../shared/document-api.ts'
+import type { DateKey, DocumentText, VersionId } from '../../shared/document-api.ts'
 import type { Version } from '../../shared/history-api.ts'
 
 /** Enough parts to cover any real day; the split threshold is 1 MB (D20). */
@@ -106,8 +106,8 @@ export class StreamHistory {
     const then = await this.daysAt(version)
     const now = await doc.dates()
 
-    const target = new Map<DateKey, string | null>()
-    for (const date of then) target.set(date, (await this.readDay(version, date)) ?? '')
+    const target = new Map<DateKey, DocumentText | null>()
+    for (const date of then) target.set(date, ((await this.readDay(version, date)) ?? '') as DocumentText)
     for (const date of now) if (!target.has(date)) target.set(date, null)
 
     return { ...(await doc.restoreTo(target)), version }

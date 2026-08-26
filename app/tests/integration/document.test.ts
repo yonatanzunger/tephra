@@ -10,10 +10,11 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { dayFile, resolveInsideNotebook } from '../../src/main/w/layout.ts'
-import type { BufferPosition, DateKey, DocumentWindow } from '../../src/shared/document-api.ts'
+import type { WindowPosition, DateKey, DocumentWindow } from '../../src/shared/document-api.ts'
+import { pt, rt } from '../support/text.ts'
 
 const d = (s: string): DateKey => s as DateKey
-const bp = (n: number): BufferPosition => n as BufferPosition
+const wp = (n: number): WindowPosition => n as WindowPosition
 const DAY = d('2026-03-14')
 const NEXT = d('2026-03-15')
 
@@ -46,7 +47,7 @@ test('typing lands in the file, with the frontmatter untouched', async t => {
   const original = dayText('2026-03-14', 'Hello.\n')
   const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(6), to: bp(6), insert: ' World.' }], 'user')
+  await w.edit([{ from: wp(6), to: wp(6), insert: pt(' World.') }], 'user')
   await doc.flush()
 
   const onDisk = await readFile(join(root, dayFile(DAY)), 'utf8')
@@ -60,7 +61,7 @@ test('a hand-edited file with odd frontmatter round-trips byte for byte', async 
   const odd = '---\ntephra:   1\ndate: 2026-03-14\nauthor: someone\n#  note\n---\nbody\n'
   const { doc, root } = await fixture(t, { [dayFile(DAY)]: odd })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(4), to: bp(4), insert: '!' }], 'user')
+  await w.edit([{ from: wp(4), to: wp(4), insert: pt('!') }], 'user')
   await doc.flush()
   const onDisk = await readFile(join(root, dayFile(DAY)), 'utf8')
   assert.equal(onDisk, '---\ntephra:   1\ndate: 2026-03-14\nauthor: someone\n#  note\n---\nbody!\n')
@@ -70,7 +71,7 @@ test('a file whose frontmatter cannot be parsed is never rewritten', async t => 
   const broken = '---\nnested:\n  - cannot round-trip\n---\nbody\n'
   const { doc, root } = await fixture(t, { [dayFile(DAY)]: broken })
   const w = await windowOver(doc, DAY)
-  await assert.rejects(() => w.edit([{ from: bp(0), to: bp(0), insert: 'x' }], 'user'), /could not be parsed/)
+  await assert.rejects(() => w.edit([{ from: wp(0), to: wp(0), insert: pt('x') }], 'user'), /could not be parsed/)
   await doc.flush()
   assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), broken)
 })
@@ -79,7 +80,7 @@ test('a day with no file yet is writable, and the file appears on flush', async 
   const { doc, root } = await fixture(t)
   const w = await windowOver(doc, DAY)
   assert.equal(w.text, '')
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'First words.\n' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('First words.\n') }], 'user')
   await doc.flush()
   const onDisk = await readFile(join(root, dayFile(DAY)), 'utf8')
   assert.match(onDisk, /^---\ntephra: 1\ndate: 2026-03-14\nkind: stream\n---\nFirst words\.\n$/)
@@ -89,18 +90,18 @@ test('generation advances on every change and positions carry it', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'abc\n') })
   const w = await windowOver(doc, DAY)
   const before = doc.generation
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'x' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('x') }], 'user')
   assert.ok(doc.generation > before)
-  assert.equal(w.toDocument(bp(0)).generation, doc.generation)
+  assert.equal(w.toDocument(wp(0)).generation, doc.generation)
 })
 
 test('a stale position is refused rather than applied to moved text', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'abcdef\n') })
   const w = await windowOver(doc, DAY)
-  const stale = w.toDocument(bp(3))
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'XX' }], 'user')
+  const stale = w.toDocument(wp(3))
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('XX') }], 'user')
   await assert.rejects(
-    () => doc.replace([{ span: { begin: stale, end: stale }, payload: 'boom' }], 'operation'),
+    () => doc.replace([{ span: { begin: stale, end: stale }, payload: rt('boom') }], 'operation'),
     /generation/,
   )
 })
@@ -108,7 +109,7 @@ test('a stale position is refused rather than applied to moved text', async t =>
 test('undo restores the text, and is non-destructive about generations', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'original\n') })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(0), to: bp(8), insert: 'replaced' }], 'operation')
+  await w.edit([{ from: wp(0), to: wp(8), insert: pt('replaced') }], 'operation')
   assert.equal(w.text, 'replaced\n')
 
   const generationBeforeUndo = doc.generation
@@ -120,7 +121,7 @@ test('undo restores the text, and is non-destructive about generations', async t
 test('redo puts it back', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'original\n') })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(0), to: bp(8), insert: 'replaced' }], 'operation')
+  await w.edit([{ from: wp(0), to: wp(8), insert: pt('replaced') }], 'operation')
   await doc.undo()
   await doc.redo()
   assert.equal(w.text, 'replaced\n')
@@ -130,7 +131,7 @@ test('a typed run is one undo step, not one per keystroke', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', '\n') })
   const w = await windowOver(doc, DAY)
   for (const [i, ch] of [...'hello'].entries()) {
-    await w.edit([{ from: bp(i), to: bp(i), insert: ch }], 'user')
+    await w.edit([{ from: wp(i), to: wp(i), insert: pt(ch) }], 'user')
   }
   assert.equal(w.text, 'hello\n')
   await doc.undo()
@@ -147,8 +148,8 @@ test('a typed run is one undo step, not one per keystroke', async t => {
 test('redo puts back a grouped typing run', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'start\n') })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(5), to: bp(5), insert: ' one' }], 'user')
-  await w.edit([{ from: bp(9), to: bp(9), insert: ' two' }], 'user')
+  await w.edit([{ from: wp(5), to: wp(5), insert: pt(' one') }], 'user')
+  await w.edit([{ from: wp(9), to: wp(9), insert: pt(' two') }], 'user')
   assert.equal(w.text, 'start one two\n')
 
   await doc.undo()
@@ -161,8 +162,8 @@ test('redo puts back a grouped typing run', async t => {
 test('an operation is its own undo step even among typing', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'x\n') })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(1), to: bp(1), insert: 'y' }], 'user')
-  await w.edit([{ from: bp(2), to: bp(2), insert: 'OP' }], 'operation')
+  await w.edit([{ from: wp(1), to: wp(1), insert: pt('y') }], 'user')
+  await w.edit([{ from: wp(2), to: wp(2), insert: pt('OP') }], 'operation')
   await doc.undo()
   assert.equal(w.text, 'xy\n', 'only the operation came back')
 })
@@ -182,7 +183,7 @@ test('an anchor resolves to a position, and travels when text is inserted above'
   const w = await windowOver(doc, DAY)
   const before = await doc.resolveAnchor('here')
   assert.ok(before !== null)
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'prepended\n' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('prepended\n') }], 'user')
   const after = await doc.resolveAnchor('here')
   assert.equal((after!.offset as number), (before!.offset as number) + 'prepended\n'.length)
 })
@@ -207,7 +208,7 @@ test('an edit spanning midnight is written correctly to both files', async t => 
   assert.equal(w.text, 'aaaa\nbbbb\n')
 
   // Delete from the middle of day one through the middle of day two.
-  await w.edit([{ from: bp(2), to: bp(7), insert: '' }], 'user')
+  await w.edit([{ from: wp(2), to: wp(7), insert: pt('') }], 'user')
   await doc.flush()
 
   assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), dayText('2026-03-14', 'aa'))
@@ -221,16 +222,16 @@ test('a buffer position on a day boundary resolves to the later day', async t =>
     [dayFile(NEXT)]: dayText('2026-03-15', 'bbbb\n'),
   })
   const w = await windowOver(doc, DAY, NEXT)
-  // Offset 5 is both the end of day one and the start of day two. Day one ends
+  // DocumentOffset 5 is both the end of day one and the start of day two. Day one ends
   // with a newline, so that offset renders at the first column of day two —
   // and text typed there must land in the file the reader can see it under.
-  assert.equal(w.toDocument(bp(5)).segment, NEXT)
-  assert.equal(w.toDocument(bp(5)).offset as number, 0)
+  assert.equal(w.toDocument(wp(5)).segment, NEXT)
+  assert.equal(w.toDocument(wp(5)).offset as number, 0)
 
   // The end of the window still belongs to the last day, which is what makes
   // appending to today work at all.
-  assert.equal(w.toDocument(bp(w.text.length)).segment, NEXT)
-  assert.equal(w.toDocument(bp(w.text.length)).offset as number, 5)
+  assert.equal(w.toDocument(wp(w.text.length)).segment, NEXT)
+  assert.equal(w.toDocument(wp(w.text.length)).offset as number, 5)
 })
 
 test('the window is not told about changes it originated', async t => {
@@ -240,7 +241,7 @@ test('the window is not told about changes it originated', async t => {
   const w = await windowOver(doc, DAY)
   let echoes = 0
   w.onChanged(() => echoes++)
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'X' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('X') }], 'user')
   assert.equal(echoes, 0)
   assert.equal(w.text, 'Xabc\n')
 })
@@ -251,7 +252,7 @@ test('a change from elsewhere does reach the window', async t => {
   let seen = 0
   w.onChanged(() => seen++)
   const at = doc.positionAt(DAY, 0)
-  await doc.replace([{ span: { begin: at, end: at }, payload: 'Z' }], 'operation')
+  await doc.replace([{ span: { begin: at, end: at }, payload: rt('Z') }], 'operation')
   assert.equal(seen, 1)
   assert.equal(w.text, 'Zabc\n')
 })
@@ -263,7 +264,7 @@ test('flush writes only the days that were touched', async t => {
   })
   const w = await windowOver(doc, DAY, NEXT)
   const untouchedBefore = await nb.read(dayFile(NEXT))
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'X' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('X') }], 'user')
   await doc.flush()
   assert.equal(await readFile(join(root, dayFile(NEXT)), 'utf8'), untouchedBefore)
 })
@@ -329,7 +330,7 @@ test('typing at the end of the window goes to the last day, not the one before',
   assert.equal(w.text, 'yesterday\n')
 
   // The very end of the buffer is also the boundary, since today is empty.
-  await w.edit([{ from: bp(w.text.length), to: bp(w.text.length), insert: 'today!\n' }], 'user')
+  await w.edit([{ from: wp(w.text.length), to: wp(w.text.length), insert: pt('today!\n') }], 'user')
   await doc.flush()
 
   assert.equal(await readFile(join(root, dayFile(d('2026-03-13'))), 'utf8'), dayText('2026-03-13', 'yesterday\n'))
@@ -362,7 +363,7 @@ test('a hand-edit onto unsaved edits diverges, and NOTHING is overwritten', asyn
   const divergences: string[] = []
   doc.onDiverged(d => divergences.push(d.date))
 
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'MINE ' }], 'user') // now dirty
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('MINE ') }], 'user') // now dirty
   await writeFile(join(root, dayFile(DAY)), dayText('2026-03-14', 'THEIRS\n'))
   await doc.externalChanged(dayFile(DAY))
 
@@ -378,12 +379,12 @@ test('a hand-edit onto unsaved edits diverges, and NOTHING is overwritten', asyn
 test('a diverged day refuses further writes rather than failing quietly', async t => {
   const { doc, root } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'original\n') })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'MINE ' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('MINE ') }], 'user')
   await writeFile(join(root, dayFile(DAY)), dayText('2026-03-14', 'THEIRS\n'))
   await doc.externalChanged(dayFile(DAY))
 
   await assert.rejects(
-    () => w.edit([{ from: bp(0), to: bp(0), insert: 'more' }], 'user'),
+    () => w.edit([{ from: wp(0), to: wp(0), insert: pt('more') }], 'user'),
     /changed on disk/,
   )
 })
@@ -461,7 +462,7 @@ test('tagging text that already carries the subject is not an undo step', async 
   const reach = (text: string) => {
     const from = w.text.indexOf(text)
     assert.notEqual(from, -1, `"${text}" is not in the window`)
-    return { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) }
+    return { begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + text.length)) }
   }
 
   const settled = doc.currentGeneration()
@@ -487,7 +488,7 @@ test('branching creates the file, then leaves a link where the text was', async 
   const text = 'The long argument about titration curves, which deserves its own\nplace to live.'
   const from = w.text.indexOf(text)
   const id = await doc.branch(
-    { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) },
+    { begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + text.length)) },
     'Titration curves',
   )
   await doc.flush()
@@ -513,7 +514,7 @@ test('branching twice under one name does not overwrite the first', async t => {
   const reach = (text: string) => {
     const from = w.text.indexOf(text)
     assert.notEqual(from, -1, `"${text}" is not in the window`)
-    return { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) }
+    return { begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + text.length)) }
   }
   await doc.branch(reach('One thought here.'), 'Thoughts')
   const second = await doc.branch(reach('Another thought here.'), 'Thoughts')
@@ -529,7 +530,7 @@ test('branching is one undo step, and undo leaves the file rather than the hole'
   const { doc, root } = await fixture(t, { [dayFile(DAY)]: original })
   const w = await windowOver(doc, DAY)
   const from = w.text.indexOf('Move that.')
-  await doc.branch({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 10)) }, 'That')
+  await doc.branch({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 10)) }, 'That')
   await doc.undo()
   await doc.flush()
 
@@ -562,12 +563,12 @@ test('positions cross both ways, including inside a marker', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: TAGGED })
   const w = await windowOver(doc, DAY)
   for (let i = 0; i <= w.text.length; i++) {
-    assert.equal(w.toBuffer(w.toDocument(bp(i))), i, `buffer position ${i}`)
+    assert.equal(w.toWindow(w.toDocument(wp(i))), i, `buffer position ${i}`)
   }
   // A document position in the middle of the marker's bytes has no place of its
   // own in prose, so it lands on the handle.
   const insideMarker = TAGGED.indexOf('tag-start') + 3 - TAGGED.indexOf('One')
-  assert.equal(w.toBuffer(doc.positionAt(DAY, insideMarker)), w.text.indexOf('￼'))
+  assert.equal(w.toWindow(doc.positionAt(DAY, insideMarker)), w.text.indexOf('￼'))
 })
 
 test('deleting across the end of a range shrinks it instead of orphaning it', async t => {
@@ -578,7 +579,7 @@ test('deleting across the end of a range shrinks it instead of orphaning it', as
   // to the end of the DAY, silently tagging everything after it.
   const from = w.text.indexOf('four')
   const to = w.text.indexOf('seven')
-  await w.edit([{ from: bp(from), to: bp(to), insert: '' }], 'user')
+  await w.edit([{ from: wp(from), to: wp(to), insert: pt('') }], 'user')
   await doc.flush()
 
   const written = await readFile(join(root, dayFile(DAY)), 'utf8')
@@ -598,7 +599,7 @@ test('deleting the handle removes the whole tag, in one undo step', async t => {
 
   // Backspace over the mark. Nothing here knows about a keymap: this is the
   // edit any keymap produces, and vim's `x` produces the same one.
-  await w.edit([{ from: bp(handle), to: bp(handle + 1), insert: '' }], 'user')
+  await w.edit([{ from: wp(handle), to: wp(handle + 1), insert: pt('') }], 'user')
   await doc.flush()
 
   assert.deepEqual(await doc.spans('tag'), [], 'the tag is gone, not half gone')
@@ -615,14 +616,14 @@ test('typing at the trailing boundary extends the range', async t => {
   const { doc } = await fixture(t, { [dayFile(DAY)]: TAGGED })
   const w = await windowOver(doc, DAY)
   const end = w.text.indexOf(' six')
-  await w.edit([{ from: bp(end), to: bp(end), insert: ' and six' }], 'user')
+  await w.edit([{ from: wp(end), to: wp(end), insert: pt(' and six') }], 'user')
   assert.equal(await tagged(doc, w), 'three four five and six')
 })
 
 test('a handle pasted in from outside is not written to the file', async t => {
   const { doc, root } = await fixture(t, { [dayFile(DAY)]: dayText('2026-03-14', 'Clean.\n') })
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(0), to: bp(0), insert: `pasted ￼ text ` }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt(`pasted ￼ text `) }], 'user')
   await doc.flush()
   const written = await readFile(join(root, dayFile(DAY)), 'utf8')
   assert.equal(written.includes('￼'), false)
@@ -633,8 +634,8 @@ test('a handle pasted in from outside is not written to the file', async t => {
 async function tagged(doc: StreamDocument, w: DocumentWindow): Promise<string> {
   const span = (await doc.spans('tag'))[0]
   if (span === undefined) return ''
-  const from = w.toBuffer(span.span.begin)
-  const to = w.toBuffer(span.span.end)
+  const from = w.toWindow(span.span.begin)
+  const to = w.toWindow(span.span.end)
   return w.text.slice(from as number, to as number).replace(/￼/g, '')
 }
 
@@ -669,8 +670,8 @@ test('a day arriving through growth arrives as prose, not as bytes', async t => 
   // And the spans that came with it still land on the right words.
   const tag = (await doc.spans('tag'))[0]
   assert.notEqual(tag, undefined)
-  const from = w.toBuffer(tag!.span.begin) as number
-  const to = w.toBuffer(tag!.span.end) as number
+  const from = w.toWindow(tag!.span.begin) as number
+  const to = w.toWindow(tag!.span.end) as number
   assert.equal(w.text.slice(from, to), 'already tagged')
 })
 
@@ -709,7 +710,7 @@ test('renaming a span changes that passage and leaves the others alone', async t
   const reach = (text: string) => {
     const from = w.text.indexOf(text)
     assert.notEqual(from, -1, `"${text}" is not in the window`)
-    return { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + text.length)) }
+    return { begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + text.length)) }
   }
   await doc.tag(reach('The house closed'), 'House Deal')
   await doc.tag(reach('separate mention of the house'), 'House Deal')
@@ -728,7 +729,7 @@ test('renaming a span changes that passage and leaves the others alone', async t
   const spans = await doc.spans('tag')
   const covered = (name: string) => {
     const span = spans.find(s => s.name === name)!
-    return w.text.slice(w.toBuffer(span.span.begin) as number, w.toBuffer(span.span.end) as number)
+    return w.text.slice(w.toWindow(span.span.begin) as number, w.toWindow(span.span.end) as number)
   }
   assert.equal(covered('Mortgage'), 'The house closed')
   assert.equal(covered('House Deal'), 'separate mention of the house')
@@ -740,7 +741,7 @@ test('renaming a span to what it is already called is not a change', async t => 
   })
   const w = await windowOver(doc, DAY)
   const from = w.text.indexOf('house')
-  await doc.tag({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 5)) }, 'House Deal')
+  await doc.tag({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 5)) }, 'House Deal')
   const settled = doc.currentGeneration()
   const span = (await doc.spans('tag'))[0]!
   await doc.renameTag(span.span, 'House Deal', 'house  deal')
@@ -757,7 +758,7 @@ test('a change that alters no prose is still announced', async t => {
   })
   const w = await windowOver(doc, DAY)
   const from = w.text.indexOf('house')
-  await doc.tag({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 5)) }, 'House Deal')
+  await doc.tag({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 5)) }, 'House Deal')
 
   const announcements: number[] = []
   w.onChanged(edits => announcements.push(edits.length))
@@ -780,7 +781,7 @@ async function commented(t: TestContext) {
   })
   const w = await windowOver(doc, DAY)
   const from = w.text.indexOf('premise is stated')
-  const span = { begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 17)) }
+  const span = { begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 17)) }
   return { doc, root, w, span }
 }
 
@@ -934,7 +935,7 @@ test('a window built during a concurrent load still sees later edits', async t =
   ])
   const before = w.text
   const from = w.text.indexOf('premise')
-  await doc.startComment({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 7)) }, 'A note.')
+  await doc.startComment({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 7)) }, 'A note.')
 
   assert.notEqual(w.text, before, 'the window is rebuilding from an orphan')
   assert.equal([...w.text].filter(ch => ch === '￼').length, 1, 'the handle should have arrived')
@@ -976,7 +977,7 @@ test('the imported copy is annotatable like anything else', async t => {
 
   // No special case: the same gesture that tags anything tags this.
   const from = w.text.indexOf('imported passage')
-  await doc.tag({ begin: w.toDocument(bp(from)), end: w.toDocument(bp(from + 16)) }, 'sources')
+  await doc.tag({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 16)) }, 'sources')
   assert.deepEqual((await doc.spans('tag')).map(s => s.name), ['sources'])
 })
 
@@ -1013,7 +1014,7 @@ test('two whole-paragraph edits in quick succession still undo', async t => {
       [
         {
           span: { begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, segment.length) },
-          payload: body,
+          payload: rt(body),
         },
       ],
       'user',
@@ -1041,13 +1042,13 @@ test('a day with nothing in it is not written, and one that empties is removed',
 
   // Written once there is something to write.
   const w = await windowOver(doc, DAY)
-  await w.edit([{ from: bp(0), to: bp(0), insert: 'Something.\n' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(0), insert: pt('Something.\n') }], 'user')
   await doc.flush()
   assert.equal(existsSync(join(root, dayFile(DAY))), true)
 
   // …and removed again when emptied. Nothing is lost: every version is in the
   // repository.
-  await w.edit([{ from: bp(0), to: bp(w.text.length as number), insert: '' }], 'user')
+  await w.edit([{ from: wp(0), to: wp(w.text.length as number), insert: pt('') }], 'user')
   await doc.flush()
   assert.equal(existsSync(join(root, dayFile(DAY))), false)
 })

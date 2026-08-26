@@ -13,9 +13,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocumentService } from '../../src/main/document-service.ts'
-import type { BufferPosition , VersionId } from '../../src/shared/document-api.ts'
+import type { WindowPosition , VersionId } from '../../src/shared/document-api.ts'
+import { pt } from '../support/text.ts'
 
-const bp = (n: number): BufferPosition => n as BufferPosition
+const wp = (n: number): WindowPosition => n as WindowPosition
 const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
 
 async function service(t: TestContext, options = {}) {
@@ -46,7 +47,7 @@ async function type(svc: DocumentService, text: string): Promise<void> {
   const opened = await svc.openWindow({ first: info.today, last: info.today })
   await svc.edit({
     id: opened.id,
-    edits: [{ from: bp(opened.text.length), to: bp(opened.text.length), insert: text }],
+    edits: [{ from: wp(opened.text.length), to: wp(opened.text.length), insert: pt(text) }],
     origin: 'user',
     generation: opened.generation,
   })

@@ -11,10 +11,10 @@ import { test } from 'node:test'
 import { RemoteWindow } from '../../src/renderer/src/x/remote-window.ts'
 import { ProseMap, proseText, type Marker } from '../../src/shared/prose.ts'
 import type {
-  BufferPosition, DateKey, Document, Offset, ProseOffset, SegmentKey, SessionGeneration,
-  TypedSpan,
-} from '../../src/shared/document-api.ts'
+  WindowPosition, DateKey, Document, DocumentOffset, ProseOffset, SegmentKey, SessionGeneration,
+  TypedSpan, DocumentText } from '../../src/shared/document-api.ts'
 import type { WindowSnapshot, WindowId } from '../../src/shared/ipc.ts'
+import { rt } from '../support/text.ts'
 
 const DAY = '2026-03-14' as DateKey
 const START = '<!--tephra:tag-start Foo-->'
@@ -25,9 +25,9 @@ const END = '<!--tephra:tag-end Foo-->'
  * send for it — built through the same code main uses, so the fixture cannot
  * quietly disagree with the thing it is testing.
  */
-function fixture(raw: string) {
-  const at = (text: string): Offset => raw.indexOf(text) as Offset
-  const past = (text: string): Offset => (raw.indexOf(text) + text.length) as Offset
+function fixture(raw: DocumentText) {
+  const at = (text: string): DocumentOffset => raw.indexOf(text) as DocumentOffset
+  const past = (text: string): DocumentOffset => (raw.indexOf(text) + text.length) as DocumentOffset
   const markers: Marker[] = [
     ...(raw.includes(START) ? [{ from: at(START), to: past(START), width: 1 as const }] : []),
     ...(raw.includes(END) ? [{ from: at(END), to: past(END), width: 0 as const }] : []),
@@ -37,23 +37,23 @@ function fixture(raw: string) {
     id: 1 as WindowId,
     text: proseText(raw, map),
     span: {
-      begin: { segment: DAY as unknown as SegmentKey, offset: 0 as Offset, generation: 1 as SessionGeneration },
-      end: { segment: DAY as unknown as SegmentKey, offset: raw.length as Offset, generation: 1 as SessionGeneration },
+      begin: { segment: DAY as unknown as SegmentKey, offset: 0 as DocumentOffset, generation: 1 as SessionGeneration },
+      end: { segment: DAY as unknown as SegmentKey, offset: raw.length as DocumentOffset, generation: 1 as SessionGeneration },
     },
     generation: 1 as SessionGeneration,
     spans: [],
-    placement: [{ date: DAY, start: 0 as BufferPosition, length: raw.length, markers }],
+    placement: [{ date: DAY, start: 0 as WindowPosition, length: raw.length, markers }],
     boundaries: { earlier: false, later: false },
   }
   const window = new RemoteWindow({} as Document, snapshot)
   return { window, raw, map }
 }
 
-const BODY = `Every market ${START}participant has a finite${END} shock limit S(τ).\n`
+const BODY = rt(`Every market ${START}participant has a finite${END} shock limit S(τ).\n`)
 
-const at = (n: number) => ({ segment: DAY as unknown as SegmentKey, offset: n as Offset, generation: 1 as SessionGeneration })
+const at = (n: number) => ({ segment: DAY as unknown as SegmentKey, offset: n as DocumentOffset, generation: 1 as SessionGeneration })
 const SPAN: TypedSpan = { kind: 'tag', name: 'Foo', span: { begin: at(10), end: at(20) } }
-const PLACEMENT = [{ date: DAY, start: 0 as BufferPosition, length: BODY.length, markers: [] }]
+const PLACEMENT = [{ date: DAY, start: 0 as WindowPosition, length: BODY.length, markers: [] }]
 const EDGES = { earlier: false, later: false }
 
 test('a prose position becomes the RAW offset it stands for, not itself', () => {
@@ -62,7 +62,7 @@ test('a prose position becomes the RAW offset it stands for, not itself', () => 
   // markers 27 characters early, because the prose offset was handed to the
   // document as though it were a byte offset.
   const at = window.text.indexOf('finite shock limit')
-  const position = window.toDocument(at as BufferPosition)
+  const position = window.toDocument(at as WindowPosition)
   // Not a slice of eighteen: the range's end marker sits between "finite" and
   // " shock limit" in the bytes, which is exactly why prose and raw are
   // different coordinate spaces. What matters is that the offset lands on the
@@ -76,22 +76,22 @@ test('a prose position becomes the RAW offset it stands for, not itself', () => 
 test('every prose position survives the round trip', () => {
   const { window } = fixture(BODY)
   for (let i = 0; i <= window.text.length; i++) {
-    assert.equal(window.toBuffer(window.toDocument(i as BufferPosition)), i, `prose ${i}`)
+    assert.equal(window.toWindow(window.toDocument(i as WindowPosition)), i, `prose ${i}`)
   }
 })
 
 test('main and the renderer agree, position for position', () => {
   const { window, map } = fixture(BODY)
   for (let i = 0; i <= window.text.length; i++) {
-    const mine = window.toDocument(i as BufferPosition).offset as number
-    assert.equal(mine, map.toRaw(i as ProseOffset), `the two halves disagree at prose ${i}`)
+    const mine = window.toDocument(i as WindowPosition).offset as number
+    assert.equal(mine, map.toDocument(i as ProseOffset), `the two halves disagree at prose ${i}`)
   }
 })
 
 test('a body with no markers is unaffected', () => {
-  const { window, raw } = fixture('Nothing marked here at all.\n')
+  const { window, raw } = fixture(rt('Nothing marked here at all.\n'))
   assert.equal(window.text, raw)
-  assert.equal(window.toDocument(7 as BufferPosition).offset as number, 7)
+  assert.equal(window.toDocument(7 as WindowPosition).offset as number, 7)
 })
 
 test('when the spans change, whoever draws them is told', async () => {

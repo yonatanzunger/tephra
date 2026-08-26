@@ -1,5 +1,5 @@
 // The position algebra — one of only two places permitted to know that an
-// Offset is counted in UTF-16 code units (D24). The other is the window adapter.
+// DocumentOffset is counted in UTF-16 code units (D24). The other is the window adapter.
 //
 // Everything here is pure and synchronous. `advance` and `distance` are
 // deliberately absent: crossing a segment boundary needs content, so they live
@@ -8,11 +8,11 @@
 
 import type {
   DocumentPosition,
-  Offset,
+  DocumentOffset,
   SegmentKey,
   SessionGeneration,
   Span,
-  BufferPosition,
+  WindowPosition,
 } from './document-api.ts'
 
 /**
@@ -55,7 +55,7 @@ function splitsSurrogatePair(text: string, n: number): boolean {
  * between the halves of a pair produces a lone surrogate, which is not a
  * character, and the symptom appears far from the cause.
  */
-export function offsetOf(n: number, inText: string): Offset {
+export function offsetOf(n: number, inText: string): DocumentOffset {
   if (!Number.isInteger(n)) throw new RangeError(`offset must be an integer, got ${n}`)
   if (n < 0 || n > inText.length) {
     throw new RangeError(`offset ${n} is outside text of length ${inText.length}`)
@@ -63,18 +63,18 @@ export function offsetOf(n: number, inText: string): Offset {
   if (splitsSurrogatePair(inText, n)) {
     throw new RangeError(`offset ${n} falls between the halves of a surrogate pair`)
   }
-  return n as Offset
+  return n as DocumentOffset
 }
 
 /** The same invariant, for the window's own coordinate. */
-export function bufferPositionOf(n: number, inText: string): BufferPosition {
+export function windowPositionOf(n: number, inText: string): WindowPosition {
   offsetOf(n, inText) // identical validation; throws on the same conditions
-  return n as BufferPosition
+  return n as WindowPosition
 }
 
 export function positionOf(
   segment: SegmentKey,
-  offset: Offset,
+  offset: DocumentOffset,
   generation: SessionGeneration,
 ): DocumentPosition {
   return { segment, offset, generation }

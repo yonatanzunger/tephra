@@ -1,13 +1,13 @@
 // One segment of the stream: a day, loaded from its file.
 //
 // A segment owns the file's exact bytes and the body those bytes contain. An
-// Offset indexes the BODY, not the file — frontmatter is metadata X manages,
+// DocumentOffset indexes the BODY, not the file — frontmatter is metadata X manages,
 // not text the user is editing, and if offsets included it then editing a
 // keyword would silently move every position in the day.
 
-import type { DateKey, TypedSpan } from '../../shared/document-api.ts'
+import type { DateKey, DocumentText, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
-import { resolveAnchors, resolvePairs, resolveTags, scanMarkers, type RawMarker } from './markers.ts'
+import { resolveAnchors, resolvePairs, resolveTags, scanMarkers, type DocumentMarker } from './markers.ts'
 import { threadsIn } from './comments.ts'
 import { Prose, proseMarkers } from './prose.ts'
 
@@ -38,12 +38,12 @@ export class Segment {
   /** The file exactly as read. Never regenerated — spliced (format-spec). */
   #original: string
   #parsed: ParsedFile
-  #body: string
+  #body: DocumentText
   #dirty = false
   #diverged = false
 
   /** Lazily computed and dropped on every edit; scanning is cheap, staleness is not. */
-  #markers: readonly RawMarker[] | null = null
+  #markers: readonly DocumentMarker[] | null = null
   #prose: Prose | null = null
 
   private constructor(date: DateKey, rel: RelPath, original: string) {
@@ -51,7 +51,7 @@ export class Segment {
     this.rel = rel
     this.#original = original
     this.#parsed = parseFile(original)
-    this.#body = this.#parsed.body
+    this.#body = this.#parsed.body as DocumentText
   }
 
   static load(date: DateKey, rel: RelPath, fileText: string): Segment {
@@ -63,7 +63,7 @@ export class Segment {
     return new Segment(date, rel, header)
   }
 
-  get body(): string {
+  get body(): DocumentText {
     return this.#body
   }
 
@@ -147,7 +147,7 @@ export class Segment {
     return this.#parsed.frontmatter?.date ?? null
   }
 
-  setBody(body: string): void {
+  setBody(body: DocumentText): void {
     if (body === this.#body) return
     this.#body = body
     this.#dirty = true
@@ -201,18 +201,18 @@ export class Segment {
   adopt(fileText: string): void {
     this.#original = fileText
     this.#parsed = parseFile(fileText)
-    this.#body = this.#parsed.body
+    this.#body = this.#parsed.body as DocumentText
     this.#dirty = false
     this.#markers = null
     this.#prose = null
   }
 
   /** The markers in this body, cached beside the prose view. */
-  markers(): readonly RawMarker[] {
+  markers(): readonly DocumentMarker[] {
     return this.#scan()
   }
 
-  #scan(): readonly RawMarker[] {
+  #scan(): readonly DocumentMarker[] {
     this.#markers ??= scanMarkers(this.#body)
     return this.#markers
   }

@@ -24,8 +24,8 @@ export function tagExtents(docWindow: DocumentWindow): Extension {
     const length = view.state.doc.length
     const spans: { from: number; to: number; name: string }[] = []
     for (const span of docWindow.spans('tag')) {
-      const from = docWindow.toBuffer(span.span.begin)
-      const to = docWindow.toBuffer(span.span.end)
+      const from = docWindow.toWindow(span.span.begin)
+      const to = docWindow.toWindow(span.span.end)
       if (from === null || to === null) continue
       spans.push({
         from: Math.max(0, Math.min(from as number, length)),

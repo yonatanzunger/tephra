@@ -5,9 +5,9 @@
 // not import Node. If the two ever disagree, the length check in RemoteWindow
 // catches it on the very next edit rather than letting the buffers drift.
 
-import type { BufferEdit } from '../../../shared/document-api.ts'
+import type { WindowEdit, ProseText } from '../../../shared/document-api.ts'
 
-export function applyEdits(text: string, edits: readonly BufferEdit[]): string {
+export function applyEdits(text: ProseText, edits: readonly WindowEdit[]): ProseText {
   if (edits.length === 0) return text
   const sorted = [...edits].sort((a, b) => (a.from as number) - (b.from as number))
   const out: string[] = []
@@ -19,5 +19,5 @@ export function applyEdits(text: string, edits: readonly BufferEdit[]): string {
     cursor = to
   }
   out.push(text.slice(cursor))
-  return out.join('')
+  return out.join('') as ProseText
 }

@@ -14,7 +14,7 @@
 //    key order, quoting, spacing — and turns every save into a diff against
 //    itself. Invisible until the first sync conflict, and then permanent.
 
-import type { DateKey } from '../../shared/document-api.ts'
+import type { DateKey, DocumentText } from '../../shared/document-api.ts'
 import { asDateKey } from '../../shared/dates.ts'
 
 export interface Frontmatter {
@@ -34,8 +34,8 @@ export interface ParsedFile {
    * newline after the closing one. Empty range when there is no block.
    */
   readonly blockEnd: number
-  /** Everything after the frontmatter. This is what an Offset indexes. */
-  readonly body: string
+  /** Everything after the frontmatter. This is what a DocumentOffset indexes. */
+  readonly body: DocumentText
   /**
    * True when a frontmatter block is present but could not be parsed.
    *
@@ -60,7 +60,7 @@ const EMPTY: Frontmatter = { tephra: null, date: null, part: null, kind: null, e
  */
 export function parseFile(text: string): ParsedFile {
   if (!OPEN.test(text)) {
-    return { frontmatter: null, blockEnd: 0, body: text, unparseable: false }
+    return { frontmatter: null, blockEnd: 0, body: text as DocumentText, unparseable: false }
   }
 
   const firstLineEnd = text.indexOf('\n') + 1
@@ -80,14 +80,14 @@ export function parseFile(text: string): ParsedFile {
   // top of a document. Treating the whole file as an unterminated block would
   // hide all of its content.
   if (closeLine === -1) {
-    return { frontmatter: null, blockEnd: 0, body: text, unparseable: false }
+    return { frontmatter: null, blockEnd: 0, body: text as DocumentText, unparseable: false }
   }
 
   const blockLines = lines.slice(0, closeLine)
   let consumed = firstLineEnd
   for (let i = 0; i <= closeLine; i++) consumed += (lines[i] ?? '').length + 1
   const blockEnd = Math.min(consumed, text.length)
-  const body = text.slice(blockEnd)
+  const body = text.slice(blockEnd) as DocumentText
 
   const parsed = parseBlock(blockLines)
   if (parsed === null) {

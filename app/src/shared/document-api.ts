@@ -7,7 +7,123 @@
 // editor costs an adapter rather than a redesign.
 //
 // The pure position algebra that operates on these types lives in ./positions.ts,
-// which is the only other module permitted to know what unit an Offset is in.
+// which is the only other module permitted to know what unit an offset is in.
+//
+// ─── THE LAYERS ──────────────────────────────────────────────
+//
+// Text makes four stops between the disk and the screen, and each stop needs
+// its own kind of address. All of them are "a string and a number" at runtime,
+// which is exactly why each gets its own branded pair: the compiler, not the
+// reader's memory, is what keeps them apart, and every crossing is a named
+// function that will not accept the layer next door.
+//
+//   ┌─ 1. THE FILES — the wire format ─────────────────────────────────────────┐
+//   │   what      UTF-8 markdown, a file per day, long days split into         │
+//   │             parts. Readable and editable without this program (R26).     │
+//   │   class     `Notebook` (w/notebook.ts), built on a root directory.       │
+//   │   text      a plain `string`: ONE file, frontmatter included.            │
+//   │   address   `RelPath` + an offset into that file (w/layout.ts —          │
+//   │             `dayFile`, `parseDayFile`).                                  │
+//   └──────────────────────────────────────────────────────────────────────────┘
+//         ↕  `parseFile` / `spliceBody`  (main/x/frontmatter.ts), and `Segment`
+//            (main/x/segment.ts), which is where the crossing actually happens.
+//            TWO THINGS AT ONCE: the parts of a long day are joined, and the
+//            frontmatter is taken off — so one segment may be several files, and
+//            an offset here is not an offset there.
+//   ┌─ 2. THE DOCUMENT — the logical stream ───────────────────────────────────┐
+//   │   what      one quasi-infinite stream of days (D8), carrying markers,    │
+//   │             undo generations and everything durable. THE SOURCE OF       │
+//   │             TRUTH; every layer above it is a rendering.                  │
+//   │   class     `Document`, twice: `StreamDocument` (main, from a            │
+//   │             `Notebook`) and `RemoteDocument` (renderer, from a           │
+//   │             `DocumentInfo`, and it asks main to build the other one).    │
+//   │   text      `DocumentText`, A SEGMENT AT A TIME — markers and all.       │
+//   │             Not only prose that came back down: `importText` and the     │
+//   │             comment writer produce it directly.                          │
+//   │   address   `DocumentPosition` = SegmentKey + `DocumentOffset` +         │
+//   │             generation. Carried across an edit by `mapPosition`, and     │
+//   │             NEVER PERSISTED (D11) — saved cursors are (segment,          │
+//   │             offset), which is why they survive a restart.                │
+//   │   arithmetic  shared/positions.ts, which alone knows the unit.           │
+//   └──────────────────────────────────────────────────────────────────────────┘
+//         ↕  THE MARKER CROSSING, per segment: `proseText(text, map)` and
+//            `documentText(prose)` for the text; `ProseMap.toProse` and
+//            `ProseMap.toDocument` for the offsets that go with it
+//            (shared/prose.ts).
+//   ┌─ 2½. A SEGMENT'S PROSE — the halfway house ──────────────────────────────┐
+//   │   text      `ProseText`, one segment's worth (`Segment.prose`).          │
+//   │   address   SegmentKey + `ProseOffset`.                                  │
+//   │   It has a name because the two crossings around it are INDEPENDENT:     │
+//   │   markers are per segment, flattening is per window. Doing both in       │
+//   │   one subtraction is how tagging once wrote its markers a marker's       │
+//   │   width early, and how the underlines were drawn somewhere else again.   │
+//   └──────────────────────────────────────────────────────────────────────────┘
+//         ↕  THE FLATTENING, per window: `inWindow(start, local)` and
+//            `inSegment(at, start)` (shared/prose.ts). Placement — where each
+//            segment begins — is the parameter, and the window is what holds it.
+//   ┌─ 3. THE WINDOW — what a reader is looking at ────────────────────────────┐
+//   │   what      a loaded range of the document (D26), the text AS            │
+//   │             PRESENTED: marker syntax gone, handles standing in for it    │
+//   │             (D44). Rendering only; nothing here is saved, and it may     │
+//   │             move under the reader as growth brings earlier days in.      │
+//   │   class     `DocumentWindow`, twice again: `StreamWindow` (main) and     │
+//   │             `RemoteWindow` (renderer). Made by `Document.read(span)`.    │
+//   │   text      `ProseText`, the segments' prose joined.                     │
+//   │   address   `WindowPosition`, an offset into that text.                  │
+//   │   THREE THINGS TRAVEL, and only the first is text:                       │
+//   │     · the text      `ProseText`                                          │
+//   │     · the mapping   `ProseMap`, per segment, DELIBERATELY TEXTLESS —     │
+//   │                     just a raw length and each marker's width, so        │
+//   │                     both processes can build the same one                │
+//   │     · the meaning   `TypedSpan[]` from `spans()`, which is where a       │
+//   │                     tag's subject and a comment's id actually live       │
+//   │   The two copies are a CONTRACT, not a duplicate: `WindowSnapshot`       │
+//   │   and `WindowChangedMessage` are its wire format, the renderer edits     │
+//   │   synchronously and reconciles against main's acknowledged length,       │
+//   │   and a disagreement raises `DesyncError` rather than drifting.          │
+//   └──────────────────────────────────────────────────────────────────────────┘
+//         ↕  `bindEditor` (renderer/src/editor/bind.ts): `fromBuffer` on the way
+//            in, `applyFromDocument` on the way out.
+//   ┌─ 4. THE EDITOR — CodeMirror ─────────────────────────────────────────────┐
+//   │   text      `EditorState.doc` — the window's `ProseText`, verbatim.      │
+//   │   address   a plain number, EQUAL TO the `WindowPosition`. Not by        │
+//   │             definition: a compatibility property the adapter keeps       │
+//   │             (D22), so replacing the editor costs an adapter and not a    │
+//   │             redesign.                                                    │
+//   │   and its own, which no layer below shares:                              │
+//   │     · pixels, through `coordsAtPos` (measures the DOM) and               │
+//   │       `posAtCoords` (consults the height map) — two answers to one       │
+//   │       question, and where the last three selection bugs lived            │
+//   │     · things with no address at all below this line: the day seam,       │
+//   │       the comment cards, every block widget                              │
+//   │   The round trip through pixels is the identity only away from an        │
+//   │   atomic range, where every point inside a widget means one position.    │
+//   └──────────────────────────────────────────────────────────────────────────┘
+//
+// AND SIDEWAYS, off layer 2: HISTORY. A `VersionId` and a `RelPath` read
+// `DocumentText` straight out of git (main/x/history.ts) — no window, no
+// prose, no positions. The two version axes never meet (D33): a
+// SessionGeneration dies with the process, a VersionId outlives the program.
+//
+// ─── AND SO THE NAMES ────────────────────────────────────────
+//
+// A text type says which CONTENT it is. An offset type says which content it
+// indexes and at what SCOPE:
+//
+//                      document — markers present    prose — handles instead
+//    in one segment     `DocumentOffset`              `ProseOffset`
+//                         → `DocumentText`              → `ProseText`
+//    across a window    — never exists —              `WindowPosition`
+//                                                      → `ProseText`
+//
+// The empty cell is a design property rather than an omission: a window never
+// holds document text, because markers are not text (D44).
+//
+// `Position` versus `Offset` is the other half of it. A Position is a COMPLETE
+// address at its layer; an Offset is one component of one. The document's text
+// is a segment at a time, so its position carries a segment key beside its
+// offset — and a generation, because the document it addresses is changing.
+// The window is one flat text, so its position is a number and nothing else.
 
 // ─────────────────────────────────────────────────────────────
 // Identity and coordinates
@@ -30,7 +146,7 @@ export type DocumentId = string & { readonly [DocumentIdBrand]: void }
 // ─────────────────────────────────────────────────────────────
 // TWO VERSION AXES — never one axis at two resolutions (D33)
 //
-// These are as distinct as DocumentPosition and BufferPosition, and for the
+// These are as distinct as DocumentPosition and WindowPosition, and for the
 // same reason: conflating them is silent and expensive. Different underlying
 // primitives (number vs string) so a cast cannot bridge them, different owning
 // objects, no conversion function in either direction, and no method anywhere
@@ -61,7 +177,7 @@ export type SessionGeneration = number & { readonly [SessionGenerationBrand]: vo
  */
 export type VersionId = string & { readonly [VersionIdBrand]: void }
 
-declare const OffsetBrand: unique symbol
+declare const DocumentOffsetBrand: unique symbol
 
 /**
  * An opaque character offset (D24). Its unit is UTF-16 code units — chosen
@@ -78,14 +194,43 @@ declare const OffsetBrand: unique symbol
  * INVARIANT: no offset ever falls between the halves of a surrogate pair.
  * Asserted at construction, not discovered at a render.
  */
-export type Offset = number & { readonly [OffsetBrand]: void }
+export type DocumentOffset = number & { readonly [DocumentOffsetBrand]: void }
 
 /** The true position. NEVER PERSISTED (D11). */
 export interface DocumentPosition {
   readonly segment: SegmentKey // a DateKey in the stream; a constant elsewhere
-  readonly offset: Offset // within that segment's content
+  readonly offset: DocumentOffset // within that segment's content
   readonly generation: SessionGeneration
 }
+
+declare const DocumentTextBrand: unique symbol
+declare const ProseTextBrand: unique symbol
+
+/**
+ * A segment's content as the file holds it — markers and all.
+ *
+ * "As the file holds it" means the LOGICAL file, one layer up from the wire
+ * format: the characters between the frontmatter and the end, with the parts of
+ * a split day already joined and the encoding already undone. The notebook
+ * reads and writes UTF-8 and nothing above `w/` sees a byte; like every other
+ * string here this is UTF-16 in memory, so a length is a count of code units.
+ *
+ * **Branded for the same reason the offsets are.** A string does not say which
+ * layer it belongs to, and document text and prose are the same characters in
+ * every document that happens to contain no markers — which is most of them
+ * while a feature is being written. Two bugs came from exactly that: growth
+ * handed the editor a segment's BODY where prose was owed, and a change
+ * announcement handed it the document's payload. Both compiled, both looked
+ * right, and both put `<!--tephra:…-->` on screen.
+ *
+ * It reaches prose only through `proseText`, which needs the map; prose comes
+ * back only through `documentText`, which strips the handles that exist in the
+ * editor alone. There is no other way across, and that is the point.
+ */
+export type DocumentText = string & { readonly [DocumentTextBrand]: void }
+
+/** What a window holds, and the editor after it: marker syntax gone (D44). */
+export type ProseText = string & { readonly [ProseTextBrand]: void }
 
 declare const ProseOffsetBrand: unique symbol
 
@@ -93,32 +238,33 @@ declare const ProseOffsetBrand: unique symbol
  * An offset into ONE segment's prose — the text with marker syntax taken out
  * and handles standing in for it (D44).
  *
- * **A third coordinate space, and it needed a name.** `Offset` counts bytes in a
- * segment's body; `BufferPosition` counts prose characters across the whole
- * window; this counts prose characters within one segment. All three are
- * numbers, and for a body with no markers all three agree, which is exactly why
- * confusing them survives every test written against ordinary text.
+ * **A third coordinate space, and it needed a name.** `DocumentOffset` counts
+ * code units in one segment's document text; `WindowPosition` counts prose
+ * characters across a whole window; this counts prose characters within one
+ * segment. All three are numbers, and for a segment with no markers all three
+ * agree — which is exactly why confusing them survives every test written
+ * against ordinary text.
  *
  * It went wrong the moment there was a marker: `RemoteWindow.toDocument`
- * subtracted a segment start from a buffer position and returned the result as
- * an `Offset`, so tagging a phrase wrote its markers twenty-seven bytes early —
- * one marker's width — and the second tag of a paragraph landed inside the
- * first. The cast is what let it compile.
+ * subtracted a segment start from a window position and returned the result as
+ * a `DocumentOffset`, so tagging a phrase wrote its markers twenty-seven
+ * characters early — one marker's width — and the second tag of a paragraph
+ * landed inside the first. The cast is what let it compile.
  *
- * So the conversions are the only way across: `ProseMap.toRaw` will not accept
- * an `Offset`, and `inWindow` will not accept one either.
+ * So the conversions are the only way across: `ProseMap.toDocument` will not
+ * accept a `DocumentOffset`, and `inWindow` will not accept one either.
  */
 export type ProseOffset = number & { readonly [ProseOffsetBrand]: void }
 
-declare const BufferPositionBrand: unique symbol
+declare const WindowPositionBrand: unique symbol
 
 /** A rendering convenience: an offset inside one loaded window. NEVER PERSISTED. */
-export type BufferPosition = number & { readonly [BufferPositionBrand]: void }
+export type WindowPosition = number & { readonly [WindowPositionBrand]: void }
 
 /** INTERNAL ONLY — must never appear in a signature Z can reach. */
 export interface StoragePosition {
   readonly file: string
-  readonly offset: Offset
+  readonly offset: DocumentOffset
 }
 
 /** Half-open [begin, end). A zero-length span is a point. NEVER PERSISTED. */
@@ -175,7 +321,8 @@ export type TypedSpan =
 /** Empty span ⇒ insert. Empty payload ⇒ delete. */
 export interface Edit {
   readonly span: Span
-  readonly payload: string
+  /** RAW: this is going into the file, markers and all. */
+  readonly payload: DocumentText
 }
 
 /**
@@ -353,10 +500,11 @@ export interface Document {
 }
 
 /** An edit expressed in window coordinates — what an editor naturally produces. */
-export interface BufferEdit {
-  readonly from: BufferPosition
-  readonly to: BufferPosition // from === to ⇒ insert
-  readonly insert: string // '' ⇒ delete
+export interface WindowEdit {
+  readonly from: WindowPosition
+  readonly to: WindowPosition // from === to ⇒ insert
+  /** PROSE: this is going into the editor's buffer. '' ⇒ delete. */
+  readonly insert: ProseText // '' ⇒ delete
 }
 
 /**
@@ -375,7 +523,7 @@ export interface DocumentWindow {
   readonly generation: SessionGeneration
   /** What was actually served, after boundary widening. */
   readonly span: Span
-  readonly text: string
+  readonly text: ProseText
 
   // ── coordinates ────────────────────────────────────────────
   /**
@@ -383,8 +531,8 @@ export interface DocumentWindow {
    * of D24, since this is the boundary crossed on the hot path. The window is
    * one of only two places permitted to know that.
    */
-  toDocument(at: BufferPosition): DocumentPosition
-  toBuffer(at: DocumentPosition): BufferPosition | null // null if outside
+  toDocument(at: WindowPosition): DocumentPosition
+  toWindow(at: DocumentPosition): WindowPosition | null // null if outside
 
   // ── editing, in window coordinates ─────────────────────────
   /**
@@ -401,14 +549,14 @@ export interface DocumentWindow {
    * window originated. The editor has already applied them; re-applying is how
    * text gets duplicated.
    */
-  edit(edits: readonly BufferEdit[], origin?: EditOrigin): Promise<void>
+  edit(edits: readonly WindowEdit[], origin?: EditOrigin): Promise<void>
 
   // ── queries, synchronous because the region is loaded ──────
-  spansAt(at: BufferPosition): readonly TypedSpan[]
+  spansAt(at: WindowPosition): readonly TypedSpan[]
   spans(kind?: SpanKind): readonly TypedSpan[]
-  snap(from: BufferPosition, to: BufferPosition): { from: BufferPosition; to: BufferPosition }
-  advance(from: BufferPosition, chars: number): BufferPosition | null
-  distance(a: BufferPosition, b: BufferPosition): number
+  snap(from: WindowPosition, to: WindowPosition): { from: WindowPosition; to: WindowPosition }
+  advance(from: WindowPosition, chars: number): WindowPosition | null
+  distance(a: WindowPosition, b: WindowPosition): number
 
   // ── changes originating elsewhere ──────────────────────────
   /**
@@ -424,7 +572,7 @@ export interface DocumentWindow {
   onSpansChanged(handler: () => void): Unsubscribe
 
   /** Fires for external edits, sync pulls and undos that land inside this window. */
-  onChanged(handler: (edits: readonly BufferEdit[], origin: EditOrigin) => void): Unsubscribe
+  onChanged(handler: (edits: readonly WindowEdit[], origin: EditOrigin) => void): Unsubscribe
   /** The window's region moved or reloaded wholesale; rebind. */
   onReset(handler: () => void): Unsubscribe
 

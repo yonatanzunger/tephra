@@ -4,11 +4,11 @@ import {
   offsetOf, positionOf, comparePositions, spanOf, pointAt, isEmpty, contains,
   intersects, StalePositionError,
 } from '../../../src/shared/positions.ts'
-import type { SegmentKey, SessionGeneration, Offset } from '../../../src/shared/document-api.ts'
+import type { SegmentKey, SessionGeneration, DocumentOffset } from '../../../src/shared/document-api.ts'
 
 const seg = (s: string): SegmentKey => s as SegmentKey
 const gen = (n: number): SessionGeneration => n as SessionGeneration
-const at = (s: string, o: number, g = 1) => positionOf(seg(s), o as Offset, gen(g))
+const at = (s: string, o: number, g = 1) => positionOf(seg(s), o as DocumentOffset, gen(g))
 
 const PLAIN = 'hello world'
 const EMOJI = 'a😀b' // 'a' + surrogate pair (2 units) + 'b' = length 4
@@ -26,7 +26,7 @@ test('offsetOf rejects out-of-range and non-integer offsets', () => {
 })
 
 test('offsetOf refuses to split a surrogate pair', () => {
-  // 'a😀b' — units are [a][hi][lo][b]. Offset 2 lands mid-emoji.
+  // 'a😀b' — units are [a][hi][lo][b]. DocumentOffset 2 lands mid-emoji.
   assert.equal(EMOJI.length, 4)
   assert.equal(offsetOf(1, EMOJI), 1) // before the emoji
   assert.equal(offsetOf(3, EMOJI), 3) // after it

@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
+import { applyEdits } from './x/text-edits.ts'
 import type { StreamWindow } from './x/window.ts'
 
 /** Anything that can carry a pushed message to a renderer. */
@@ -367,7 +368,7 @@ export class DocumentService {
       if (segment.readOnly || segment.diverged) continue
       if (segment.length !== record.baseLen) continue // already on disk
       const body = segment.body
-      segment.setBody(body.slice(0, record.from) + record.insert + body.slice(record.to))
+      segment.setBody(applyEdits(body, [{ from: record.from, to: record.to, insert: record.insert }]))
       applied++
     }
 

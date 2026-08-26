@@ -1,4 +1,5 @@
 import { applyEdits, type TextEdit } from './text-edits.ts'
+import type { DocumentText } from '../../shared/document-api.ts'
 
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
@@ -37,7 +38,7 @@ export type MarkerKind =
   /** Identifies a thread block. Sits at the END of its byline, never the start. */
   | 'comment'
 
-export interface RawMarker {
+export interface DocumentMarker {
   readonly kind: MarkerKind
   readonly name: string
   /** Offsets into the body. For markers, the whole comment; for headings, the line. */
@@ -139,9 +140,9 @@ const inAny = (regions: readonly (readonly [number, number])[], at: number): boo
  * Markers are HTML comments — invisible in any renderer, greppable, hand-typable
  * and self-describing to a reader fifteen years from now (format-spec).
  */
-export function scanMarkers(body: string): readonly RawMarker[] {
+export function scanMarkers(body: string): readonly DocumentMarker[] {
   const code = codeRegions(body)
-  const out: RawMarker[] = []
+  const out: DocumentMarker[] = []
 
   MARKER.lastIndex = 0
   let m: RegExpExecArray | null
@@ -212,7 +213,7 @@ export interface ResolvedTag {
  * the very first paragraph of a body starting on a line break it does not mean.
  * `normalise` already trims on the way in; this makes the way out agree.
  */
-export function resolveTags(markers: readonly RawMarker[], body: string): readonly ResolvedTag[] {
+export function resolveTags(markers: readonly DocumentMarker[], body: string): readonly ResolvedTag[] {
   return resolvePairs(markers, body, 'tag-start', 'tag-end')
 }
 
@@ -225,12 +226,12 @@ export function resolveTags(markers: readonly RawMarker[], body: string): readon
  * because two comments on one passage have different ids.
  */
 export function resolvePairs(
-  markers: readonly RawMarker[],
+  markers: readonly DocumentMarker[],
   body: string,
   startKind: MarkerKind,
   endKind: MarkerKind,
 ): readonly ResolvedTag[] {
-  const open = new Map<string, RawMarker>()
+  const open = new Map<string, DocumentMarker>()
   const out: ResolvedTag[] = []
 
   for (const marker of markers) {
@@ -268,8 +269,8 @@ function trimmed(
 }
 
 /** Anchor names are unique within a file; the first wins (format-spec). */
-export function resolveAnchors(markers: readonly RawMarker[]): ReadonlyMap<string, RawMarker> {
-  const out = new Map<string, RawMarker>()
+export function resolveAnchors(markers: readonly DocumentMarker[]): ReadonlyMap<string, DocumentMarker> {
+  const out = new Map<string, DocumentMarker>()
   for (const m of markers) {
     if (m.kind !== 'anchor') continue
     if (!out.has(m.name)) out.set(m.name, m)
@@ -308,21 +309,21 @@ export function resolveAnchors(markers: readonly RawMarker[]): ReadonlyMap<strin
  * after a fenced block.
  */
 export function placeMarker(
-  body: string,
+  body: DocumentText,
   offset: number,
   marker: string,
-): { readonly at: number; readonly text: string } {
+): { readonly at: number; readonly text: DocumentText } {
   const at = Math.max(0, Math.min(offset, body.length))
   const startsLine = at === 0 || body[at - 1] === '\n'
   const contentFollows = at < body.length && body[at] !== '\n'
 
-  if (!startsLine || !contentFollows) return { at, text: marker }
+  if (!startsLine || !contentFollows) return { at, text: marker as DocumentText }
   // Nothing before it to hide behind, or a previous line whose meaning is its
   // exact contents: give it a line of its own. That is safe here precisely
   // because both cases sit at a block boundary, so there is no paragraph open
   // to be split.
-  if (at === 0 || !canAppendTo(previousLine(body, at))) return { at, text: `${marker}\n` }
-  return { at: at - 1, text: marker }
+  if (at === 0 || !canAppendTo(previousLine(body, at))) return { at, text: `${marker}\n` as DocumentText }
+  return { at: at - 1, text: marker as DocumentText }
 }
 
 // ── writing tags ─────────────────────────────────────────────
@@ -366,7 +367,7 @@ export interface TagOp {
  * coordinate system to get wrong. The caller pays one replacement spanning the
  * changed region, on an operation that happens once per menu invocation.
  */
-export function retagBody(body: string, ops: readonly TagOp[]): string {
+export function retagBody(body: DocumentText, ops: readonly TagOp[]): DocumentText {
   const keys = new Set(ops.map(o => subjectKey(o.subject)))
   const all = scanMarkers(body)
   const involved = all.filter(
@@ -396,7 +397,7 @@ export function retagBody(body: string, ops: readonly TagOp[]): string {
     // Capitalisation the user already chose is not overwritten by a later
     // typing of the same subject: subjects compare case-insensitively but are
     // stored as typed, and the earlier typing is the one already on the page.
-    const name = mine.length > 0 ? (mine[0] as RawMarker).name : op.subject.trim().replace(/\s+/g, ' ')
+    const name = mine.length > 0 ? (mine[0] as DocumentMarker).name : op.subject.trim().replace(/\s+/g, ' ')
 
     const existing = resolveTags(mine, body).map(t => ({
       from: project(t.from),
@@ -418,21 +419,21 @@ export function retagBody(body: string, ops: readonly TagOp[]): string {
   // untouched. Ties keep the order they were generated in, which for one
   // subject is document order.
   inserts.sort((a, b) => a.at - b.at)
-  let out = clean
+  let out: string = clean
   for (let i = inserts.length - 1; i >= 0; i--) {
     const insert = inserts[i] as { at: number; text: string }
     out = out.slice(0, insert.at) + insert.text + out.slice(insert.at)
   }
-  return out
+  return out as DocumentText
 }
 
 /** The single-subject case, which is what tagging and untagging are. */
 export function tagBody(
-  body: string,
+  body: DocumentText,
   subject: string,
   range: { readonly from: number; readonly to: number },
   op: 'add' | 'remove',
-): string {
+): DocumentText {
   return retagBody(body, [{ subject, range, op }])
 }
 
@@ -447,11 +448,11 @@ const clamp = (offset: number, length: number): number => Math.max(0, Math.min(o
  * behind widgets and a selection may quietly contain one.
  */
 function placed(
-  body: string,
-  markers: readonly RawMarker[],
+  body: DocumentText,
+  markers: readonly DocumentMarker[],
   at: number,
   text: string,
-): { at: number; text: string } {
+): { at: number; text: DocumentText } {
   let where = at
   for (const m of markers) {
     if (where > m.from && where < m.to) where = m.to
@@ -469,9 +470,9 @@ function placed(
  * body is given its own line by `placeMarker` and there is nowhere else to put
  * it.
  */
-export function markerRemoval(body: string, m: RawMarker): TextEdit {
+export function markerRemoval(body: DocumentText, m: DocumentMarker): TextEdit<DocumentText> {
   const ownsLine = (m.from === 0 || body[m.from - 1] === '\n') && body[m.to] === '\n'
-  return { from: m.from, to: ownsLine ? m.to + 1 : m.to, insert: '' }
+  return { from: m.from, to: ownsLine ? m.to + 1 : m.to, insert: '' as DocumentText }
 }
 
 /** Sorted, merged where only whitespace separates them, trimmed to real text. */

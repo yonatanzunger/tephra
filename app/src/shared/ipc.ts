@@ -7,11 +7,11 @@
 // smuggle a live object across a boundary it cannot survive.
 
 import type {
-  BufferEdit, DateKey, DocumentChange, DocumentMeta, EditOrigin, SessionGeneration,
+  WindowEdit, DateKey, DocumentChange, DocumentMeta, EditOrigin, SessionGeneration,
   Span, SpanKind, TypedSpan, DocumentPosition,
 } from './document-api.ts'
 import type { Marker } from './prose.ts'
-import type { BufferPosition } from './document-api.ts'
+import type { WindowPosition, ProseText } from './document-api.ts'
 
 /** Windows are addressed by handle; the objects themselves never cross. */
 export type WindowId = number
@@ -83,7 +83,7 @@ export interface DocumentInfo {
 /** Everything the renderer needs to serve the synchronous half of the API. */
 export interface WindowSnapshot {
   readonly id: WindowId
-  readonly text: string
+  readonly text: ProseText
   readonly span: Span
   readonly generation: SessionGeneration
   readonly spans: readonly TypedSpan[]
@@ -91,7 +91,7 @@ export interface WindowSnapshot {
   /**
    * Where each segment sits, and what its markers are.
    *
-   * `start` is a PROSE offset and `length` is the segment's raw length; the
+   * `start` is a PROSE offset and `length` is the segment's document length; the
    * markers are what lets the renderer build the same prose↔raw map main has
    * (D44). Sending them is what stops there being two implementations of one
    * mapping — the first version omitted them, and tag underlines were drawn at
@@ -100,7 +100,7 @@ export interface WindowSnapshot {
   readonly placement: readonly {
     readonly date: DateKey
     /** Where this segment's prose begins in the window's buffer. */
-    readonly start: BufferPosition
+    readonly start: WindowPosition
     readonly length: number
     readonly markers: readonly Marker[]
   }[]
@@ -129,10 +129,10 @@ export interface ChangeAck {
 
 export interface WindowChangedMessage {
   readonly id: WindowId
-  readonly edits: readonly BufferEdit[]
+  readonly edits: readonly WindowEdit[]
   readonly origin: EditOrigin
   readonly generation: SessionGeneration
-  readonly text: string
+  readonly text: ProseText
   readonly spans: readonly TypedSpan[]
   readonly placement: WindowSnapshot['placement']
   readonly boundaries: Boundaries
@@ -145,7 +145,7 @@ export interface ReadRequest {
 
 export interface EditRequest {
   readonly id: WindowId
-  readonly edits: readonly BufferEdit[]
+  readonly edits: readonly WindowEdit[]
   readonly origin: EditOrigin
   /** What the renderer believed when it composed these edits. */
   readonly generation: SessionGeneration
