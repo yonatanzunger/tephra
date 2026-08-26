@@ -188,3 +188,32 @@ A third renderer — an export, a mobile view, a filtered view — is then a
 - **Does the screen policy follow the width automatically** — the reserved
   gutter is D42's, and a narrow window has nowhere to put a rail — or is it a
   setting a person chooses once?
+
+## The fifth kind, when it comes
+
+**A footnote is not a comment**, and the difference is authorship: a footnote is
+the document author writing more of the document, a comment is commentary about
+it (D47's distinction, one level up). They differ in almost nothing else — both
+anchor to a point or a range, both carry markdown, both move through an edit the
+same way — so a footnote is a fifth `Annotation`, not a second mechanism.
+
+What it buys immediately is the combination the union was shaped for: **notes at
+the foot of the page and commentary in the margin, in one print.** That is
+already expressible — `{ footnote: 'foot', comment: 'margin' }` — because
+treatments are per kind. Adding the kind is an entry in the union, a case in
+`proseOf`, and a field in `Presentation`; nothing else moves.
+
+Its treatments would not be a comment's: `absent | foot | endOfSection | margin`
+(a sidenote is a respectable footnote), and **not `inline`** — a footnote drawn
+inline is just text, which is what the author would have written instead.
+
+The open part is the encoding, and it is a real fork:
+
+- **GFM's `[^1]` and its definition.** Readable as a footnote by every markdown
+  renderer that supports them, which is the R26 argument that made comment
+  bodies visible content rather than HTML comments. Costs a parser extension —
+  `@lezer/markdown`'s GFM has Table, TaskList, Strikethrough and Autolink, and
+  no footnotes — and a rule about WHERE the definition lives in a day file.
+- **A marker pair, as comments have.** Consistent with D47, degradation rules
+  already written, no parser work — and an HTML comment where a reader of the
+  raw file would expect to see the note.
