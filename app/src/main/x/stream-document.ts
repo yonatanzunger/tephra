@@ -161,12 +161,7 @@ export class StreamDocument implements Document {
     if (loading !== undefined) return loading
 
     const load = (async (): Promise<Segment> => {
-      const rel = dayFile(date)
-      const text = await this.#notebook.read(rel)
-      const segment =
-        text === null
-          ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'stream')))
-          : Segment.load(date, rel, text + (await this.#laterParts(date)))
+      const segment = await this.#read(date)
       this.#segments.set(date, segment)
       return segment
     })()
@@ -177,6 +172,31 @@ export class StreamDocument implements Document {
     } finally {
       this.#loading.delete(date)
     }
+  }
+
+  /** Read a day off disk, parts and all. The one implementation of that. */
+  async #read(date: DateKey): Promise<Segment> {
+    const rel = dayFile(date)
+    const text = await this.#notebook.read(rel)
+    return text === null
+      ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'stream')))
+      : Segment.load(date, rel, text + (await this.#laterParts(date)))
+  }
+
+  /**
+   * The spans of one day — **from memory if it is loaded, from disk if not, and
+   * without keeping what it had to read** (D52).
+   *
+   * This is the rule that keeps the index honest, in one method. A day the
+   * editor is holding answers for itself, including edits made thirty seconds
+   * ago that have not reached the file; every other day is read, scanned and
+   * dropped. Asking `segment()` instead would have been one line and would have
+   * loaded the corpus into memory to build a list of subjects.
+   */
+  async scan(date: DateKey): Promise<readonly ScannedSpan[]> {
+    const held = this.#segments.get(date)
+    if (held !== undefined) return held.spans()
+    return (await this.#read(date)).spans()
   }
 
   /** Every date with a file on disk, ascending. A scan; never on the hot path. */

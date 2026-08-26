@@ -1,0 +1,139 @@
+// The corpus index (D52), which is a cache and must behave like one.
+//
+// The interesting claims are not "it can count tags". They are the three rules
+// that make a cache safe to have at all: a loaded day answers for itself, a
+// file that changed is rescanned, and deleting the whole thing costs nothing
+// but time.
+
+import { test, type TestContext } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Notebook } from '../../src/main/w/notebook.ts'
+import { StreamDocument } from '../../src/main/x/stream-document.ts'
+import { StreamIndex } from '../../src/main/x/index.ts'
+import { dayFile, indexFile, type RelPath } from '../../src/main/w/layout.ts'
+import type { DateKey } from '../../src/shared/document-api.ts'
+import { rt } from '../support/text.ts'
+
+const d = (s: string): DateKey => s as DateKey
+const TAG = (s: string, text: string): string =>
+  `<!--tephra:tag-start ${s}-->${text}<!--tephra:tag-end ${s}-->`
+
+async function corpus(t: TestContext, days: readonly [string, string][], notes: Record<string, string> = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'tephra-idx-'))
+  for (const [date, body] of days) {
+    await mkdir(join(root, 'stream', date.slice(0, 4), date.slice(5, 7)), { recursive: true })
+    await writeFile(join(root, dayFile(d(date))), `---\ntephra: 1\ndate: ${date}\n---\n${body}`)
+  }
+  for (const [name, body] of Object.entries(notes)) {
+    await mkdir(join(root, 'notes'), { recursive: true })
+    await writeFile(join(root, 'notes', name), `---\ntephra: 1\nkind: note\n---\n${body}`)
+  }
+  const notebook = await Notebook.open({ root, lock: false, watch: false })
+  t.after(() => notebook.close())
+  const doc = new StreamDocument(notebook)
+  return { root, notebook, doc, index: new StreamIndex(notebook, doc) }
+}
+
+test('subjects come back with their counts and where they first appear', async t => {
+  const { index } = await corpus(t, [
+    ['2026-03-01', `A ${TAG('House Deal', 'first mention')} here.\n`],
+    ['2026-03-02', `And ${TAG('House Deal', 'another')} plus ${TAG('Physics', 'one more')}.\n`],
+  ])
+  const subjects = await index.subjects()
+  assert.deepEqual(subjects.map(s => `${s.subject}:${s.count}`), ['House Deal:2', 'Physics:1'])
+  assert.equal(subjects[0]?.first.date, '2026-03-01')
+})
+
+test('the outline nests headings under their day, by the ranges they already have', async t => {
+  const { index } = await corpus(t, [
+    ['2026-03-01', '# Chapter\n\na\n\n## Section\n\nb\n\n# Next\n\nc\n'],
+  ])
+  const [day] = await index.outline()
+  assert.equal(day?.title, '2026-03-01')
+  assert.deepEqual(day?.children.map(h => h.title), ['Chapter', 'Next'])
+  assert.deepEqual(day?.children[0]?.children.map(h => h.title), ['Section'])
+})
+
+test('notes are in the corpus too, so a bookmark in one is findable', async t => {
+  const { index } = await corpus(
+    t,
+    [['2026-03-01', 'A day.\n']],
+    { 'the-note.md': 'A note with <!--tephra:mark somewhere-->a mark in it.\n' },
+  )
+  assert.deepEqual(
+    (await index.bookmarks()).map(b => `${b.name} in ${b.at.file}`),
+    ['somewhere in notes/the-note.md'],
+  )
+})
+
+test('THE RULE: a loaded day answers for itself, edits and all', async t => {
+  // A subject applied thirty seconds ago and not yet flushed must be in the
+  // list of subjects. Otherwise the sidebar lags the file writer, which reads
+  // as a bug in tagging rather than as a stale cache.
+  const { doc, index } = await corpus(t, [['2026-03-01', 'Nothing tagged yet.\n']])
+  assert.deepEqual(await index.subjects(), [])
+
+  const at = doc.positionAt(d('2026-03-01'), 0)
+  await doc.replace([{ span: { begin: at, end: at }, payload: rt(TAG('Fresh', 'just now')) }], 'user')
+
+  assert.deepEqual((await index.subjects()).map(s => s.subject), ['Fresh'], 'from memory, not from the file')
+})
+
+test('a file that changed behind the cache is rescanned', async t => {
+  const { root, index } = await corpus(t, [['2026-03-01', `${TAG('Before', 'x')}\n`]])
+  assert.deepEqual((await index.subjects()).map(s => s.subject), ['Before'])
+
+  // A hand-edit, or another machine's sync: the stamp moves, and the entry
+  // stops being trusted.
+  await writeFile(
+    join(root, dayFile(d('2026-03-01'))),
+    `---\ntephra: 1\ndate: 2026-03-01\n---\n${TAG('After', 'a longer body now')}\n`,
+  )
+  assert.deepEqual((await index.subjects()).map(s => s.subject), ['After'])
+})
+
+test('THE POINT: deleting the whole index costs time and nothing else', async t => {
+  const { root, index, notebook } = await corpus(t, [['2026-03-01', `${TAG('Kept', 'x')}\n`]])
+  await index.rebuild()
+  assert.equal(await notebook.has(indexFile('stream/2026/03' as RelPath)), true)
+
+  await rm(join(root, '.tephra', 'index'), { recursive: true, force: true })
+  await index.clear()
+  assert.deepEqual((await index.subjects()).map(s => s.subject), ['Kept'], 'still answers')
+})
+
+test('a rebuild writes the cache, and verify finds a cache that has drifted', async t => {
+  const { root, index } = await corpus(t, [['2026-03-01', `${TAG('Real', 'x')}\n`]])
+  await index.rebuild()
+  assert.deepEqual(await index.verify(), [], 'freshly built, nothing disagrees')
+
+  // Tamper with the cache directly, the way a corrupt or truncated file would.
+  await writeFile(
+    join(root, indexFile('stream/2026/03' as RelPath)),
+    JSON.stringify({ '2026-03-01.md': { stamp: { size: 1, mtime: 2 }, payload: [] } }),
+  )
+  assert.deepEqual(await index.verify(), ['stream/2026/03/2026-03-01.md'])
+})
+
+test('a day whose file is gone leaves nothing behind', async t => {
+  const { root, index } = await corpus(t, [
+    ['2026-03-01', `${TAG('Stays', 'x')}\n`],
+    ['2026-03-02', `${TAG('Goes', 'y')}\n`],
+  ])
+  assert.equal((await index.subjects()).length, 2)
+  await rm(join(root, dayFile(d('2026-03-02'))))
+  assert.deepEqual((await index.subjects()).map(s => s.subject), ['Stays'])
+})
+
+test('occurrences are what a row traverses, in corpus order', async t => {
+  const { index } = await corpus(t, [
+    ['2026-03-01', `${TAG('Subject', 'one')}\n`],
+    ['2026-03-02', `${TAG('Subject', 'two')} and ${TAG('Subject', 'three')}\n`],
+  ])
+  const found = await index.occurrences({ kind: 'tag', subject: 'Subject' })
+  assert.equal(found.length, 3)
+  assert.deepEqual(found.map(f => f.date), ['2026-03-01', '2026-03-02', '2026-03-02'])
+})

@@ -1,5 +1,6 @@
 import { applyEdits, type TextEdit } from './text-edits.ts'
 import type { DocumentText, TypedSpan } from '../../shared/document-api.ts'
+import { threadsIn } from './comments.ts'
 
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
@@ -563,4 +564,56 @@ export interface ScannedSpan {
   readonly resolved?: boolean
   readonly from: number
   readonly to: number
+}
+
+/**
+ * Every span in a body except the one that says what the body IS.
+ *
+ * **Any markdown file can be put through this**, which is what the index needs:
+ * a note, a fileset and a day all carry headings, bookmarks, tags and comment
+ * anchors, and only a day also carries a date. So the whole-body span belongs
+ * to `Segment` and everything below belongs here, where it can be reached
+ * without loading a document to hold it.
+ *
+ * Takes the marker scan rather than doing one, because its only caller that has
+ * a body usually has the scan too, and walking the string twice for the same
+ * answer is the failure this codebase keeps meeting.
+ */
+export function scanSpans(body: DocumentText, markers: readonly DocumentMarker[]): readonly ScannedSpan[] {
+  const out: ScannedSpan[] = []
+
+  // **A heading is a RANGE: its section, not its line** (D51). It runs to the
+  // next heading of equal or greater precedence, or to the end of the body —
+  // which is what makes days and headings one containment tree, and what lets
+  // the sidebar highlight a section exactly as it highlights a subject.
+  //
+  // The heading's own text is `name`, so nothing is lost by the range being the
+  // larger thing; what would be lost the other way is any way to say where the
+  // section ENDS, which no other span could supply.
+  const headings = markers.filter(m => m.kind === 'heading')
+  headings.forEach((m, i) => {
+    const next = headings.slice(i + 1).find(other => other.level <= m.level)
+    out.push({ kind: 'heading', name: m.name, level: m.level, from: m.from, to: next?.from ?? body.length })
+  })
+
+  for (const m of markers) {
+    // Zero-length: an anchor is a point that travels with the text (D20).
+    if (m.kind === 'anchor') out.push({ kind: 'anchor', name: m.name, level: 0, from: m.from, to: m.from })
+  }
+
+  for (const t of resolveTags(markers, body)) {
+    out.push({ kind: 'tag', name: t.name, level: 0, from: t.from, to: t.to })
+  }
+
+  // Comment anchors pair exactly as tags do — a named start, a named end,
+  // strictly alternating — so the same resolver does them, degradation rules
+  // included. Whether a thread is resolved lives in its first block.
+  const resolved = new Set(
+    threadsIn(body).filter(thread => thread.resolved).map(thread => thread.id as string),
+  )
+  for (const c of resolvePairs(markers, body, 'comment-start', 'comment-end')) {
+    out.push({ kind: 'comment', name: c.name, level: 0, resolved: resolved.has(c.name), from: c.from, to: c.to })
+  }
+
+  return out.sort((a, b) => a.from - b.from || a.to - b.to)
 }

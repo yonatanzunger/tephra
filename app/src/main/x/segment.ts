@@ -8,7 +8,7 @@
 import type { DateKey, DocumentText, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
 import {
-  resolveAnchors, resolvePairs, resolveTags, scanMarkers,
+  resolveAnchors, scanMarkers, scanSpans,
   type DocumentMarker, type ScannedSpan,
 } from './markers.ts'
 import { threadsIn } from './comments.ts'
@@ -214,62 +214,19 @@ export class Segment {
     return this.#markers
   }
 
-  /** Every span in this segment, in body coordinates. */
+  /**
+   * Every span in this segment, in body coordinates.
+   *
+   * The whole-body `date` span is the SEGMENT's contribution — a day covers
+   * itself, and that is what makes the outline a tree (D51). Everything else
+   * comes from the shared scan, which any markdown file can be put through
+   * whether or not it is a day.
+   */
   spans(): readonly ScannedSpan[] {
-    const markers = this.#scan()
-    const out: ScannedSpan[] = []
-
-    out.push({ kind: 'date', name: this.date, level: 0, from: 0, to: this.#body.length })
-
-    // **A heading is a RANGE: its section, not its line** (D51). It runs to the
-    // next heading of equal or greater precedence, or to the end of the day —
-    // which is what makes days and headings one containment tree, and what lets
-    // the sidebar highlight a section exactly as it highlights a subject.
-    //
-    // The heading's own text is `name`, so nothing is lost by the range being
-    // the larger thing; what would be lost the other way is any way to say
-    // where the section ENDS, which no other span could supply.
-    const headings = markers.filter(m => m.kind === 'heading')
-    headings.forEach((m, i) => {
-      const next = headings.slice(i + 1).find(other => other.level <= m.level)
-      out.push({
-        kind: 'heading',
-        name: m.name,
-        level: m.level,
-        from: m.from,
-        to: next?.from ?? this.#body.length,
-      })
-    })
-
-    for (const m of markers) {
-      if (m.kind === 'anchor') {
-        // Zero-length: an anchor is a point that travels with the text (D20).
-        out.push({ kind: 'anchor', name: m.name, level: 0, from: m.from, to: m.from })
-      }
-    }
-
-    for (const t of resolveTags(markers, this.#body)) {
-      out.push({ kind: 'tag', name: t.name, level: 0, from: t.from, to: t.to })
-    }
-
-    // Comment anchors pair exactly as tags do — a named start, a named end,
-    // strictly alternating — so the same resolver does them, degradation rules
-    // included. Whether a thread is resolved lives in its first block.
-    const resolved = new Set(
-      threadsIn(this.#body).filter(thread => thread.resolved).map(thread => thread.id as string),
-    )
-    for (const c of resolvePairs(markers, this.#body, 'comment-start', 'comment-end')) {
-      out.push({
-        kind: 'comment',
-        name: c.name,
-        level: 0,
-        resolved: resolved.has(c.name),
-        from: c.from,
-        to: c.to,
-      })
-    }
-
-    return out.sort((a, b) => a.from - b.from || a.to - b.to)
+    return [
+      { kind: 'date', name: this.date, level: 0, from: 0, to: this.#body.length },
+      ...scanSpans(this.#body, this.#scan()),
+    ]
   }
 
   anchorAt(name: string): number | null {
