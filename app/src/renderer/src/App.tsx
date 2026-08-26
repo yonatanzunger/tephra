@@ -20,7 +20,27 @@ import { createPortal } from 'react-dom'
 import type { CommentThread } from '../../shared/comments.ts'
 import type { CommentAnchor } from './editor/comment-anchors.ts'
 import type { MarkInfo } from './editor/range-commands.ts'
-import { printPage, printRangePage, rangeTitle, PAPER_CLEAN, PAPER_NOTES, PRINT_CSS } from './print/page.ts'
+import {
+  printPage, printRangePage, rangeTitle, needsPages,
+  PAPER_CLEAN, PAPER_FOOTNOTES, PAPER_MARGIN, PAPER_NOTES, PRINT_CSS,
+} from './print/page.ts'
+import type { AnnotationChoice } from './frame/DateRange'
+import type { Presentation } from '../../shared/presentation.ts'
+
+/**
+ * What the dialog's four words mean, in one place (D50, Q13).
+ *
+ * Four rather than sixteen: the policy can express more than this, and until
+ * someone has printed enough pages to know which combinations they want twice,
+ * offering all of them would be a control panel in a dialog that asks one
+ * question.
+ */
+const POLICIES: Record<AnnotationChoice, Presentation> = {
+  clean: PAPER_CLEAN,
+  notes: PAPER_NOTES,
+  footnotes: PAPER_FOOTNOTES,
+  margin: PAPER_MARGIN,
+}
 import { markdownFromHtml } from './import/html.ts'
 import { destination } from './editor/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
@@ -206,9 +226,11 @@ export function App(): React.JSX.Element {
                       setError('Nothing was written in those days.')
                       return
                     }
+                    const how = POLICIES[annotations]
                     const ok = await window.tephra.doc.print({
-                      ...printRangePage(days, rangeTitle(days), annotations === 'notes' ? PAPER_NOTES : PAPER_CLEAN),
+                      ...printRangePage(days, rangeTitle(days), how),
                       css: PRINT_CSS,
+                      paginate: needsPages(how),
                       // Relative links resolve from a day directory, and every
                       // day in the stream sits at the same depth — so the first
                       // day of the range is as good a base as any (Spike B).

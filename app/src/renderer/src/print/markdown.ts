@@ -17,26 +17,58 @@ import { HANDLE } from '../../../shared/document-api.ts'
 
 const md = parser.configure(GFM)
 
-export function toHtml(source: string): string {
-  // Handles are the editor's, not the document's (D44). On paper a marker is
-  // nothing at all: the passage is what was written, and the apparatus that
-  // says which subjects it carries is not part of it.
+/**
+ * Something drawn at a position in the prose, rather than written there.
+ *
+ * A tag's underline, a footnote's number, a note in the margin: the printer
+ * decides these from the annotations and the policy (D50), and they have to
+ * land at an OFFSET in the text — which only this file knows how to reach,
+ * because between the prose and the output there is a parse, an escape, and a
+ * set of marks that are not printed.
+ *
+ * `order` breaks ties at one offset: a range that closes there comes before a
+ * range that opens there, or the two nest wrongly.
+ */
+export interface Cue {
+  readonly at: number
+  readonly html: string
+  readonly order?: number
+}
+
+export function toHtml(source: string, cues: readonly Cue[] = []): string {
+  // Handles are the editor's, not the document's (D44) — but they are also
+  // where annotations are anchored, so removing them MOVES every cue after
+  // each one. The shift is computed here, once, rather than being a thing
+  // every caller has to know about prose that has already been through a
+  // parser.
   const src = source.split(HANDLE).join('')
+  const shifted = shift(source, cues)
   const tree = md.parse(src)
   const out: string[] = []
   for (let child = tree.topNode.firstChild; child !== null; child = child.nextSibling) {
-    out.push(block(child, src))
+    out.push(block(child, src, shifted))
   }
-  return out.join('\n')
+  const trailing = shifted.filter(c => c.at >= src.length)
+  return out.join('\n') + trailing.map(c => c.html).join('')
 }
 
-function block(node: SyntaxNode, src: string): string {
+/** Cue offsets, moved from prose coordinates into handle-free ones. */
+function shift(source: string, cues: readonly Cue[]): readonly Cue[] {
+  if (cues.length === 0) return cues
+  const handles: number[] = []
+  for (let i = source.indexOf(HANDLE); i !== -1; i = source.indexOf(HANDLE, i + 1)) handles.push(i)
+  return [...cues]
+    .map(cue => ({ ...cue, at: cue.at - handles.filter(h => h < cue.at).length }))
+    .sort((a, b) => a.at - b.at || (a.order ?? 0) - (b.order ?? 0))
+}
+
+function block(node: SyntaxNode, src: string, cues: readonly Cue[]): string {
   const name = node.name
 
   const heading = /^(?:ATX|Setext)Heading(\d)$/.exec(name)
   if (heading !== null) {
     const level = heading[1] as string
-    return `<h${level}>${inline(node, src)}</h${level}>`
+    return `<h${level}>${inline(node, src, cues)}</h${level}>`
   }
 
   switch (name) {
@@ -46,21 +78,21 @@ function block(node: SyntaxNode, src: string): string {
       // which is a block and must not be wrapped in a <p>.
       const display = /^\$\$([\s\S]+)\$\$$/.exec(text)
       if (display !== null) return math(display[1] as string, true)
-      return `<p>${inline(node, src)}</p>`
+      return `<p>${inline(node, src, cues)}</p>`
     }
     case 'BulletList':
-      return `<ul>${items(node, src)}</ul>`
+      return `<ul>${items(node, src, cues)}</ul>`
     case 'OrderedList':
-      return `<ol>${items(node, src)}</ol>`
+      return `<ol>${items(node, src, cues)}</ol>`
     case 'Blockquote':
-      return `<blockquote>${children(node, src)}</blockquote>`
+      return `<blockquote>${children(node, src, cues)}</blockquote>`
     case 'FencedCode':
     case 'CodeBlock':
       return `<pre><code>${escape(codeText(node, src))}</code></pre>`
     case 'HorizontalRule':
       return '<hr>'
     case 'Table':
-      return table(node, src)
+      return table(node, src, cues)
     // A comment prints as nothing, which is what it is in every renderer —
     // and Tephra's own markers are comments.
     case 'Comment':
@@ -76,19 +108,19 @@ function block(node: SyntaxNode, src: string): string {
     case 'HTMLBlock':
       return isComment(src.slice(node.from, node.to)) ? '' : `<p>${escape(src.slice(node.from, node.to))}</p>`
     default:
-      return children(node, src)
+      return children(node, src, cues)
   }
 }
 
-const children = (node: SyntaxNode, src: string): string => {
+const children = (node: SyntaxNode, src: string, cues: readonly Cue[]): string => {
   const out: string[] = []
   for (let child = node.firstChild; child !== null; child = child.nextSibling) {
-    out.push(block(child, src))
+    out.push(block(child, src, cues))
   }
   return out.join('\n')
 }
 
-function items(node: SyntaxNode, src: string): string {
+function items(node: SyntaxNode, src: string, cues: readonly Cue[]): string {
   const out: string[] = []
   for (let item = node.firstChild; item !== null; item = item.nextSibling) {
     if (item.name !== 'ListItem') continue
@@ -96,14 +128,14 @@ function items(node: SyntaxNode, src: string): string {
     const inner: string[] = []
     for (let child = item.firstChild; child !== null; child = child.nextSibling) {
       if (child.name === 'ListMark') continue
-      inner.push(child.name === 'Paragraph' ? inline(child, src) : block(child, src))
+      inner.push(child.name === 'Paragraph' ? inline(child, src, cues) : block(child, src, cues))
     }
     out.push(`<li>${inner.join('\n')}</li>`)
   }
   return out.join('\n')
 }
 
-function table(node: SyntaxNode, src: string): string {
+function table(node: SyntaxNode, src: string, cues: readonly Cue[]): string {
   const head: string[] = []
   const body: string[] = []
   for (let row = node.firstChild; row !== null; row = row.nextSibling) {
@@ -113,7 +145,7 @@ function table(node: SyntaxNode, src: string): string {
     for (let cell = row.firstChild; cell !== null; cell = cell.nextSibling) {
       if (cell.name !== 'TableCell') continue
       const tag = header ? 'th' : 'td'
-      cells.push(`<${tag}>${inline(cell, src)}</${tag}>`)
+      cells.push(`<${tag}>${inline(cell, src, cues)}</${tag}>`)
     }
     if (cells.length === 0) continue
     ;(header ? head : body).push(`<tr>${cells.join('')}</tr>`)
@@ -122,7 +154,7 @@ function table(node: SyntaxNode, src: string): string {
 }
 
 /** Everything inside a block, with marks removed and constructs rendered. */
-function inline(node: SyntaxNode, src: string): string {
+function inline(node: SyntaxNode, src: string, cues: readonly Cue[]): string {
   const out: string[] = []
   let cursor = node.from
   // Only the children that are constructs; the gaps between them are text.
@@ -130,38 +162,38 @@ function inline(node: SyntaxNode, src: string): string {
     // The gap BEFORE a child is text, whether or not the child itself is a
     // delimiter. Skipping marks before emitting the gap swallowed the word
     // between them and printed `<strong></strong>`.
-    if (child.from > cursor) out.push(text(src.slice(cursor, child.from)))
+    if (child.from > cursor) out.push(text(src, cursor, child.from, cues))
     // Every delimiter, not a list of three: `**` is an EmphasisMark, and
     // missing it printed `<strong>**bold**</strong>`.
     if (child.name.endsWith('Mark')) {
       cursor = Math.max(cursor, child.to)
       continue
     }
-    out.push(construct(child, src))
+    out.push(construct(child, src, cues))
     cursor = child.to
   }
-  if (cursor < node.to) out.push(text(src.slice(cursor, node.to)))
+  if (cursor < node.to) out.push(text(src, cursor, node.to, cues))
   return out.join('').trim()
 }
 
-function construct(node: SyntaxNode, src: string): string {
+function construct(node: SyntaxNode, src: string, cues: readonly Cue[]): string {
   switch (node.name) {
     case 'StrongEmphasis':
-      return `<strong>${inline(node, src)}</strong>`
+      return `<strong>${inline(node, src, cues)}</strong>`
     case 'Emphasis':
-      return `<em>${inline(node, src)}</em>`
+      return `<em>${inline(node, src, cues)}</em>`
     case 'Strikethrough':
-      return `<del>${inline(node, src)}</del>`
+      return `<del>${inline(node, src, cues)}</del>`
     case 'InlineCode':
       return `<code>${escape(stripMarks(node, src))}</code>`
     case 'Image': {
       const url = childText(node, 'URL', src)
-      const alt = between(node, src, 'LinkMark', 'LinkMark')
+      const alt = between(node, src, 'LinkMark', 'LinkMark', cues)
       return `<img src="${escape(url)}" alt="${escape(alt)}">`
     }
     case 'Link': {
       const url = childText(node, 'URL', src)
-      return `<a href="${escape(url)}">${between(node, src, 'LinkMark', 'LinkMark')}</a>`
+      return `<a href="${escape(url)}">${between(node, src, 'LinkMark', 'LinkMark', cues)}</a>`
     }
     case 'Comment':
       return ''
@@ -170,12 +202,32 @@ function construct(node: SyntaxNode, src: string): string {
     case 'Escape':
       return escape(src.slice(node.from + 1, node.to))
     default:
-      return text(src.slice(node.from, node.to))
+      return text(src, node.from, node.to, cues)
   }
 }
 
-/** Plain text, escaped, with inline math rendered where it appears. */
-function text(raw: string): string {
+/**
+ * Plain text, escaped, with inline math rendered and any cues dropped in.
+ *
+ * **The one place an offset in the source and a position in the output are the
+ * same thing**, which is why the cues are spliced here and nowhere else. Above
+ * this the text has been through a parser; below it, it has been escaped.
+ */
+function text(src: string, from: number, to: number, cues: readonly Cue[]): string {
+  const out: string[] = []
+  const here = cues.filter(c => c.at >= from && c.at < to)
+  let cursor = from
+  for (const cue of here) {
+    out.push(escaped(src.slice(cursor, cue.at)))
+    out.push(cue.html)
+    cursor = cue.at
+  }
+  out.push(escaped(src.slice(cursor, to)))
+  return out.join('')
+}
+
+/** Escaped, with inline math rendered where it appears. */
+function escaped(raw: string): string {
   const out: string[] = []
   let cursor = 0
   const re = /(?<!\$)\$([^$\n]+?)\$(?!\$)/g
@@ -231,13 +283,13 @@ function stripMarks(node: SyntaxNode, src: string): string {
 }
 
 /** What sits between the first and second marks — a link or image's label. */
-function between(node: SyntaxNode, src: string, first: string, second: string): string {
+function between(node: SyntaxNode, src: string, first: string, second: string, cues: readonly Cue[]): string {
   const opening = node.getChild(first)
   if (opening === null) return ''
   let closing = opening.nextSibling
   while (closing !== null && closing.name !== second) closing = closing.nextSibling
   if (closing === null) return ''
-  return text(src.slice(opening.to, closing.from))
+  return text(src, opening.to, closing.from, cues)
 }
 
 const isComment = (s: string): boolean => /^<!--[\s\S]*-->$/.test(s.trim())

@@ -29,11 +29,13 @@ export interface DateRangeRequest {
  * know which combinations they ever want twice. Until then: the words, or the
  * words and what was said about them.
  */
-export type AnnotationChoice = 'clean' | 'notes'
+export type AnnotationChoice = 'clean' | 'notes' | 'footnotes' | 'margin'
 
 const CHOICES: readonly { readonly id: AnnotationChoice; readonly label: string }[] = [
   { id: 'clean', label: 'Just the text' },
-  { id: 'notes', label: 'With notes at the end of each day' },
+  { id: 'notes', label: 'Notes at the end of each day' },
+  { id: 'footnotes', label: 'Footnotes, and tags in the text' },
+  { id: 'margin', label: 'Everything in the margin' },
 ]
 
 interface Preset {

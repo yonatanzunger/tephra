@@ -1562,3 +1562,50 @@ Tenth in the instruments list, and a new failure mode among them: not filtered,
 not perturbing, not lying about what it found — **fabricating an input the real
 world cannot produce.** The lesson for the next synthetic event: a real one
 carries fields nobody thinks about, and the defaults are not neutral.
+
+## Printing the apparatus: three traps, one instrument
+
+D50's paper renderer draws annotations at offsets in the text — a tag's
+underline, a note in the margin, a footnote's content. Three things went wrong,
+and the acceptance check caught the one that mattered.
+
+### A cue lands inside a paragraph, so it must be inline — and so must its content
+
+The footnote was emitted as `<span class="footnote"><div class="note-body">…`
+and paged.js moved an EMPTY element to the foot of the page. Nothing had gone
+wrong in paged.js. **`<div>` inside `<p>` is not an error the browser reports:**
+the parser closes the paragraph, re-parents the content after it, and leaves the
+span empty — so the markup that was checked in the test string was not the DOM
+that existed at render time.
+
+The rule is now in the code beside the cues: everything injected at an offset is
+an inline element containing inline content, and a note's markdown has its block
+wrappers stripped (`unwrap`) rather than being rendered differently. Emphasis,
+code and links survive; paragraphs cannot, and a footnote is a sentence anyway.
+
+The same fault was latent in the margin treatment — `<aside>` inside `<p>` — and
+was fixed the same way: a `<span class="margin">` with `display: block`, since
+display is a style and not a parse.
+
+### paged.js runs itself, and running it again paginates its own output
+
+The polyfill paginates on load. Calling `PagedPolyfill.preview()` afterwards to
+have something to await ran it a second time over its own page boxes: pages
+existed (so a check for pages passed) and the footnotes had been flattened back
+into the flow. `window.PagedConfig = { auto: false }` before the script, then one
+run we start and can wait for.
+
+### The check that found it was the one that asked for the outcome
+
+`pagedPages >= 1` passed throughout all of this and meant nothing. What found
+both faults was asking whether **the note reached the foot of a page and had the
+right words in it** — and then, when it failed, a probe that reported where the
+note actually was (`pagedjs_footnote_inner_content`, empty) rather than only that
+it was not where it should be. Eleventh in the instruments list, and the lesson
+is the one from the day seam: assert the property, not the machinery.
+
+### And a small one, twice in an hour
+
+`PRINT_CSS` is a template literal, and a backtick in a CSS COMMENT ends it. The
+error then lands on a line of perfectly good CSS several lines further down.
+There is now a warning where the literal opens.

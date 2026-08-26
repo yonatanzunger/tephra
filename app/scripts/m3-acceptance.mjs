@@ -97,8 +97,15 @@ console.log('— printing —')
     '\n\n', // opened, never written in — must not become a page of nothing
     'Three days ago, the earliest thing written.\n',
   ])
-  const r = report(await launch('printdoc', root))
+  const out = await launch('printdoc', root)
+  const r = report(out)
   const pdf = await stat(join(root, '.tephra', 'print.pdf')).catch(() => null)
+  const paged = /VERIFY-MAIN pagedPages=(\d+)/.exec(out)?.[1] ?? '0'
+  const feet = /footnoteAreas=(\d+)/.exec(out)?.[1] ?? '0'
+  const sample = /sample=("(?:[^"\\]|\\.)*")/.exec(out)?.[1] ?? '""'
+  // The whole probe line, so a failure here says what paged.js actually did
+  // rather than only that it did not do the right thing.
+  const probe = /VERIFY-MAIN paged.*/.exec(out)?.[0] ?? 'no probe'
 
   check('Cmd+P is on the File menu and reaches the renderer', r.menuItemFound === true)
   check('it asks which days rather than printing twenty years', r.dialogShown === true)
@@ -114,8 +121,18 @@ console.log('— printing —')
   )
   check(
     'the annotation policy is a question the dialog asks (D50)',
-    Array.isArray(r.choices) && r.choices.length === 2 && r.notesChosen === true,
+    Array.isArray(r.choices) && r.choices.length === 4 && r.notesChosen === true,
     JSON.stringify(r.choices),
+  )
+  check(
+    'a footnote print is paginated, because a footnote needs a page',
+    Number(paged) >= 1,
+    `${paged} pages, policy ${r.policyChosen}`,
+  )
+  check(
+    'and the note actually reached the foot of one',
+    Number(feet) >= 1 && /Worth checking/.test(sample),
+    probe,
   )
   check('a PDF was produced', pdf !== null && pdf.size > 1000, pdf ? `${pdf.size} bytes` : 'no file')
   check('the dialog got out of the way', r.dialogClosed === true)

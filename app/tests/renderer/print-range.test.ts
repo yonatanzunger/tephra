@@ -6,7 +6,9 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { printRangePage, PAPER_NOTES, rangeTitle, readable } from '../../src/renderer/src/print/page.ts'
+import {
+  printRangePage, PAPER_INLINE_TAGS, PAPER_MARGIN, PAPER_NOTES, rangeTitle, readable,
+} from '../../src/renderer/src/print/page.ts'
 import type { DayProse } from '../../src/shared/ipc.ts'
 import type { DateKey, ProseOffset, ProseText } from '../../src/shared/document-api.ts'
 import type { Annotation } from '../../src/shared/prose.ts'
@@ -114,4 +116,56 @@ test('notes are numbered in reading order, not in the order they were found', ()
   const first = html.indexOf('Earlier.')
   const second = html.indexOf('Later.')
   assert.ok(first > 0 && first < second, 'the note about the first words comes first')
+})
+
+// ── the treatments that draw at the text (D50) ──────────────────────────────
+
+test('a tag inline is an underline with its subject named once', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'A tagged phrase here.\n', [
+      { kind: 'tag', at: at(2, 15), subject: 'House Deal' },
+    ])],
+    'x',
+    PAPER_INLINE_TAGS,
+  )
+  assert.match(html, /<span class="tag"><span class="tag-name">House Deal<\/span>tagged phrase<\/span>/)
+})
+
+test('the same tag in the margin puts the subject there instead', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'A tagged phrase here.\n', [
+      { kind: 'tag', at: at(2, 15), subject: 'House Deal' },
+    ])],
+    'x',
+    PAPER_MARGIN,
+  )
+  assert.match(html, /<span class="margin tag-margin">House Deal<\/span>/)
+  assert.doesNotMatch(html, /tag-name/, 'and not in the text as well')
+  assert.match(html, /class="has-margin"/, 'the page gives up the room for it')
+})
+
+test('a bookmark reaches paper at all, which it did not before', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'A marked spot here.\n', [{ kind: 'anchor', at: at(2, 2), name: 'the spot' }])],
+    'x',
+    PAPER_MARGIN,
+  )
+  assert.match(html, /<span class="margin anchor">✳ the spot<\/span>/)
+})
+
+test('a footnote leaves a number where the passage ends', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'A remarked-on phrase here.\n', [
+      { kind: 'comment', at: at(2, 20), thread: thread('k1', 'Y', 'Check this.') },
+    ])],
+    'x',
+    PAPER_NOTES,
+  )
+  assert.match(html, /<sup class="cue">1<\/sup>/)
+  assert.match(html, /class="notes"/, 'and the note itself closes the day')
+})
+
+test('a clean print reserves no margin it is not going to use', () => {
+  const { html } = printRangePage([day('2026-03-01', 'Nothing annotated.\n')], 'x')
+  assert.doesNotMatch(html, /has-margin/)
 })

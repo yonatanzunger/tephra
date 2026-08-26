@@ -6,9 +6,10 @@
 // theme: black on white, a printer's measure, and margins the page setup can
 // still argue with.
 
-import { toHtml } from './markdown.ts'
+import { toHtml, type Cue } from './markdown.ts'
 import type { DayProse } from '../../../shared/ipc.ts'
 import { stripHandles, type Prose } from '../../../shared/prose.ts'
+import type { CommentThread } from '../../../shared/comments.ts'
 import { CLEAN, place, PAPER_SURFACE, type Placed, type Presentation } from '../../../shared/presentation.ts'
 import type { ProseOffset } from '../../../shared/document-api.ts'
 
@@ -35,6 +36,17 @@ export function printPage(markdown: string, title: string): { html: string; titl
  */
 export const PAPER_CLEAN: Presentation = { ...CLEAN, date: 'seam' }
 export const PAPER_NOTES: Presentation = { ...PAPER_CLEAN, comment: 'endOfSection' }
+/** The apparatus in the margin, the way a marked-up manuscript carries it. */
+export const PAPER_MARGIN: Presentation = {
+  ...PAPER_CLEAN, anchor: 'margin', tag: 'margin', comment: 'margin',
+}
+/** Tagged ranges shown in the text itself, for reading rather than for working. */
+export const PAPER_INLINE_TAGS: Presentation = { ...PAPER_NOTES, tag: 'inline' }
+/** Real footnotes, at the foot of the page the passage is on. Needs paged.js. */
+export const PAPER_FOOTNOTES: Presentation = { ...PAPER_CLEAN, tag: 'inline', comment: 'footnote' }
+
+/** Whether a presentation needs the document broken into pages first. */
+export const needsPages = (how: Presentation): boolean => how.comment === 'footnote'
 
 /**
  * A run of days, each under its date, drawn according to a policy.
@@ -62,10 +74,90 @@ export function printRangePage(
       const heading = placed.some(p => p.annotation.kind === 'date' && p.slot !== 'none')
         ? `<h2 class="date">${readable(day.date, sameYear)}</h2>\n`
         : ''
-      return `<section class="day">${heading}${toHtml(prose.text)}${notes(prose, placed)}</section>`
+      const body = toHtml(prose.text, cues(placed))
+      return `<section class="day">${heading}${body}${notes(prose, placed)}</section>`
     })
     .join('\n')
-  return { html, title }
+  // The right margin is only reserved when something is going to be put in it:
+  // a clean print should use the whole measure the page setup allows.
+  const wide = html.includes('class="margin')
+  return { html: wide ? `<div class="has-margin">${html}</div>` : html, title }
+}
+
+/**
+ * What gets drawn AT the text: underlines, labels, marks and margin notes.
+ *
+ * **Every one of these is a pair of offsets and some HTML**, which is the whole
+ * benefit of the annotations being one list (D50) — four kinds and four
+ * treatments come out of one loop, and adding a fifth is an entry rather than a
+ * pass over the document.
+ *
+ * A range needs two cues, and the closing one is ordered ahead of any opening
+ * one at the same offset so that overlapping tags nest rather than interleave.
+ *
+ * **Everything emitted here is inline, and contains only inline content.** A
+ * cue lands INSIDE a paragraph, and `<div>` or `<p>` inside a `<p>` is not an
+ * error the browser reports — it silently closes the paragraph and re-parents
+ * the content, which left the footnote element empty and its text loose in the
+ * page. paged.js then dutifully moved an empty element to the foot. Spans, and
+ * markdown rendered without its block wrappers.
+ */
+function cues(placed: readonly Placed<ProseOffset>[]): readonly Cue[] {
+  const out: Cue[] = []
+  for (const { annotation, slot, cue } of placed) {
+    const from = annotation.at.from as number
+    const to = annotation.at.to as number
+
+    if (annotation.kind === 'tag' && slot === 'flow') {
+      // Underlined, with the subject named once where it starts. On paper
+      // there is no hover and no colour, so a range with no label is a mark
+      // whose meaning has been left behind on the screen.
+      out.push({ at: from, html: `<span class="tag"><span class="tag-name">${escape(annotation.subject)}</span>`, order: 1 })
+      out.push({ at: to, html: '</span>', order: -1 })
+    } else if (annotation.kind === 'tag' && slot === 'margin') {
+      out.push({ at: from, html: `<span class="tag">`, order: 1 })
+      out.push({ at: to, html: `</span><span class="margin tag-margin">${escape(annotation.subject)}</span>`, order: -1 })
+    } else if (annotation.kind === 'anchor' && slot === 'margin') {
+      out.push({ at: from, html: `<span class="margin anchor">✳ ${escape(annotation.name)}</span>` })
+    } else if (annotation.kind === 'comment' && slot === 'margin') {
+      out.push({ at: to, html: `<span class="margin note">${inlineMessages(annotation.thread)}</span>`, order: -1 })
+    } else if (annotation.kind === 'comment' && slot === 'foot') {
+      // **The note is emitted where its anchor is, and floated away by CSS.**
+      // That is how paged.js is told which page it belongs to: `float:
+      // footnote` moves an element to the foot of whatever page it ended up
+      // on, and it can only know that if the element was in the flow first.
+      // The number is the counter's, not ours.
+      out.push({ at: to, html: `<span class="footnote">${inlineMessages(annotation.thread)}</span>`, order: -1 })
+    } else if (annotation.kind === 'comment' && slot === 'section') {
+      // The number stands where the passage ends, and the note closes the day.
+      out.push({ at: to, html: `<sup class="cue">${cue ?? ''}</sup>`, order: -1 })
+    }
+  }
+  return out
+}
+
+/**
+ * A thread with no block elements in it, for the slots that sit inside a
+ * paragraph — a footnote, or a note in the margin.
+ *
+ * Markdown's own block wrappers are stripped rather than the markdown being
+ * rendered differently: a note is a sentence or two, and its emphasis, code and
+ * links should survive even though its paragraphs cannot.
+ */
+function inlineMessages(thread: CommentThread): string {
+  return thread.messages
+    .map(m => `<b>${escape(m.author)}</b> ${unwrap(toHtml(m.body))}`)
+    .join(' · ')
+}
+
+const unwrap = (html: string): string =>
+  html.replace(/<\/?(?:p|div|section|blockquote|ul|ol|li|h[1-6])[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** A thread as paper sees it: who said it, and what they said. */
+function messages(thread: CommentThread): string {
+  return thread.messages
+    .map(m => `<div class="note-body"><b>${escape(m.author)}</b> ${toHtml(m.body)}</div>`)
+    .join('')
 }
 
 /**
@@ -83,12 +175,7 @@ function notes(prose: Prose<ProseOffset>, placed: readonly Placed<ProseOffset>[]
   const items = closing
     .map(p => {
       const about = quote(prose.text.slice(p.annotation.at.from, p.annotation.at.to))
-      const body =
-        p.annotation.kind === 'comment'
-          ? p.annotation.thread.messages
-              .map(m => `<div class="note-body"><b>${escape(m.author)}</b> ${toHtml(m.body)}</div>`)
-              .join('')
-          : ''
+      const body = p.annotation.kind === 'comment' ? messages(p.annotation.thread) : ''
       return `<li value="${p.cue ?? ''}"><q>${escape(about)}</q>${body}</li>`
     })
     .join('\n')
@@ -131,7 +218,13 @@ export function readable(date: string, sameYear: boolean): string {
   return at.toLocaleDateString([], parts)
 }
 
-/** The whole document, assembled in main where the base URL is known. */
+/**
+ * The whole document, assembled in main where the base URL is known.
+ *
+ * **No backticks below, not even in a comment.** This is a template literal, so
+ * one ends the stylesheet in the middle and the error lands on a line of CSS
+ * that is perfectly fine. It has happened twice.
+ */
 export const PRINT_CSS = `
   @page { margin: 20mm 18mm; }
   html { font-size: 11pt; }
@@ -167,6 +260,38 @@ export const PRINT_CSS = `
      it is set in the sans face the running header uses and ruled off, and it
      never separates from the day it belongs to. */
   .day + .day { margin-top: 2em; }
+  /* ── the apparatus ───────────────────────────────────────────────────────
+     A marked-up manuscript, not a screenshot of one: paper has no colour to
+     spend, no hover, and a margin the page can actually give up. */
+  main { position: relative; }
+  .tag { border-bottom: .5pt dotted #666; }
+  .tag-name { font: 7.5pt/1 -apple-system, system-ui, sans-serif; letter-spacing: .06em;
+              text-transform: uppercase; color: #666; vertical-align: .5em;
+              margin-right: .15em; white-space: nowrap; }
+  .cue { font-size: .7em; color: #444; }
+  .cue::before { content: '['; } .cue::after { content: ']'; }
+  /* A span, because this lives inside a paragraph; block display is a style,
+     not a parse. */
+  .margin {
+    display: block; float: right; clear: right; width: 11em; margin-right: -13.5em;
+    font: 8pt/1.35 -apple-system, system-ui, sans-serif; color: #444;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .margin.tag-margin { text-transform: uppercase; letter-spacing: .06em; font-size: 7.5pt; color: #666; }
+  .margin.anchor { color: #666; }
+  /* Margin notes need the margin, and only when there are margin notes. */
+  .has-margin { margin-right: 13.5em; }
+
+  /* Footnotes, which exist only once paged.js has made pages to put them on.
+     The area is styled by ITS OWN class rather than through a nested at-rule
+     inside @page: that form is parsed by paged.js's own CSS parser, and a
+     stylesheet it cannot read is a stylesheet it ignores — including the float
+     line that makes footnotes happen at all. */
+  .footnote { float: footnote; font-size: .85em; }
+  .footnote p { margin: 0; display: inline; }
+  .pagedjs_footnote_area { border-top: .5pt solid #999; padding-top: .3em; margin-top: .6em; }
+  .pagedjs_footnote_area .footnote { font-size: .8em; }
+
   .notes { margin: 1.4em 0 0; padding-top: .6em; border-top: .5pt solid #ccc;
            break-inside: avoid; page-break-inside: avoid; }
   .notes h3 { font: 8.5pt/1.4 -apple-system, system-ui, sans-serif; letter-spacing: .08em;

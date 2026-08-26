@@ -844,10 +844,16 @@ export async function runVerify(scene: string): Promise<void> {
       // now: the same days, printed twice, differ by this one choice.
       const choices = [...(dialog?.querySelectorAll('.range-choice') ?? [])].map(c => c.textContent)
       say('choices', choices)
-      const notes = dialog?.querySelectorAll('.range-choice input')[1] as HTMLInputElement | undefined
-      notes?.click()
+      // Footnotes, which is the choice that has to paginate: paged.js has to
+      // run, find pages, and put each note on the one its anchor fell on.
+      const wanted = process.env.TEPHRA_PRINT_POLICY ?? 'footnotes'
+      const inputs = [...(dialog?.querySelectorAll('.range-choice input') ?? [])] as HTMLInputElement[]
+      const index = choices.findIndex(c => (c ?? '').toLowerCase().includes(wanted === 'footnotes' ? 'footnote' : wanted))
+      const chosen = inputs[index < 0 ? 1 : index]
+      chosen?.click()
       await settle(150)
-      say('notesChosen', notes?.checked === true)
+      say('policyChosen', choices[index < 0 ? 1 : index] ?? '')
+      say('notesChosen', chosen?.checked === true)
 
       const print = [...(dialog?.querySelectorAll('.prompt-actions button') ?? [])].find(
         b => b.textContent === 'Print',

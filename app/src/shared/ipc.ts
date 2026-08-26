@@ -202,6 +202,14 @@ export interface DayProse {
 }
 
 export interface PrintJob {
+  /**
+   * Whether this document needs to be broken into pages before it is printed.
+   *
+   * Only a footnote needs it — it has to know which page its anchor fell on —
+   * and it costs a megabyte of pagination and a second of work, so it is asked
+   * for rather than assumed (D50).
+   */
+  readonly paginate?: boolean
   readonly html: string
   readonly css: string
   readonly title: string

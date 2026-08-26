@@ -30,6 +30,7 @@
     "codemirror": "^6.0.2",
     "isomorphic-git": "^1.41.8",
     "katex": "^0.18.4",
+    "pagedjs": "^0.4.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "turndown": "^7.2.4",
