@@ -805,6 +805,40 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(1500)
     }
 
+    if (scene === 'printdoc') {
+      // ⌘P, which for the stream means "which days?" first. The claims: the
+      // dialog appears, a preset fills it in, the days that come back are the
+      // ones that were WRITTEN in, and a PDF exists at the end of it.
+      say('menuItemFound', await window.tephra.clickMenu('Print…'))
+      await settle(500)
+
+      const dialog = document.querySelector('.prompt.range')
+      say('dialogShown', dialog !== null)
+      say('presets', [...(dialog?.querySelectorAll('.range-presets button') ?? [])].map(b => b.textContent))
+
+      // "Past month" rather than typing dates: it is the path a person takes,
+      // and it exercises the extent the dialog was handed.
+      const preset = [...(dialog?.querySelectorAll('.range-presets button') ?? [])].find(
+        b => b.textContent === 'Past month',
+      ) as HTMLElement | undefined
+      preset?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+      await settle(200)
+      const fields = [...(dialog?.querySelectorAll('.range-fields input') ?? [])] as HTMLInputElement[]
+      say('range', fields.map(f => f.value))
+      say('count', dialog?.querySelector('.range-count')?.textContent ?? '')
+
+      const print = [...(dialog?.querySelectorAll('.prompt-actions button') ?? [])].find(
+        b => b.textContent === 'Print',
+      ) as HTMLElement | undefined
+      say('printFound', print !== undefined)
+      print?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
+
+      await settle(4000)
+      say('dialogClosed', document.querySelector('.prompt.range') === null)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(1500)
+    }
+
     if (scene === 'markpanel') {
       const click = (index: number): boolean => {
         const marks = document.querySelectorAll('.tx-handle')

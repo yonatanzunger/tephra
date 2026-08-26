@@ -13,13 +13,14 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
+import { DateRange, type DateRangeRequest } from './frame/DateRange'
 import { MarkPanel } from './frame/MarkPanel'
 import { Rail } from './frame/Rail'
 import { createPortal } from 'react-dom'
 import type { CommentThread } from '../../shared/comments.ts'
 import type { CommentAnchor } from './editor/comment-anchors.ts'
 import type { MarkInfo } from './editor/range-commands.ts'
-import { printPage, PRINT_CSS } from './print/page.ts'
+import { printPage, printRangePage, rangeTitle, PRINT_CSS } from './print/page.ts'
 import { markdownFromHtml } from './import/html.ts'
 import { destination } from './editor/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
@@ -36,6 +37,7 @@ export function App(): React.JSX.Element {
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
+  const [range, setRange] = useState<DateRangeRequest | null>(null)
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
@@ -183,6 +185,40 @@ export function App(): React.JSX.Element {
                 ? { content: board.text, ext: 'txt' }
                 : { content: board.html, ext: 'html' }
             await window.tephra.doc.importText(at, text, original)
+          })
+          .catch(fail)
+      } else if (command === 'printDocument') {
+        // The extent is asked for HERE rather than held in state: it grows as
+        // the day goes on, and a dialog offering "everything" that stops at
+        // whatever was true when the app opened would quietly omit today.
+        void window.tephra.doc
+          .extent()
+          .then(extent => {
+            setRange({
+              title: 'Print which days',
+              submitLabel: 'Print',
+              extent,
+              onSubmit: (from, to) => {
+                void window.tephra.doc
+                  .proseIn(from, to)
+                  .then(async days => {
+                    if (days.length === 0) {
+                      setError('Nothing was written in those days.')
+                      return
+                    }
+                    const ok = await window.tephra.doc.print({
+                      ...printRangePage(days, rangeTitle(days)),
+                      css: PRINT_CSS,
+                      // Relative links resolve from a day directory, and every
+                      // day in the stream sits at the same depth — so the first
+                      // day of the range is as good a base as any (Spike B).
+                      segment: days[0]!.date,
+                    })
+                    if (!ok) setError('Those days could not be prepared for printing.')
+                  })
+                  .catch(fail)
+              },
+            })
           })
           .catch(fail)
       } else if (command === 'undo') void revealing(doc.undo())
@@ -547,6 +583,7 @@ export function App(): React.JSX.Element {
           />
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
+        {range !== null && <DateRange request={range} onClose={() => setRange(null)} />}
         {railHost !== null &&
           createPortal(
             <Rail

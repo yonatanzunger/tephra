@@ -25,6 +25,8 @@ import {
   thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
 } from './comments.ts'
 import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
+import type { DayProse } from '../../shared/ipc.ts'
+import { stripHandles } from '../../shared/prose.ts'
 import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
 
@@ -262,6 +264,32 @@ export class StreamDocument implements Document {
     total += hi.offset as number
     const sign = lo === a ? 1 : -1
     return total * sign
+  }
+
+  /**
+   * The prose of every day in a range, oldest first, blank days left out.
+   *
+   * **Prose, not the document's text** (D44): this is what leaves the app — for
+   * paper today, for an export tomorrow — and marker syntax is bookkeeping that
+   * no reader of a printed page has any use for. Handles go too; they stand in
+   * for a mark on screen and there is nothing for them to stand in for here.
+   *
+   * **A day with nothing in it is omitted rather than printed empty.** The
+   * stream files a day whenever the app is opened, so a range of a fortnight
+   * routinely contains days that were never written in, and printing those
+   * would be a page of dates with nothing under them.
+   */
+  async proseIn(from: DateKey, to: DateKey): Promise<readonly DayProse[]> {
+    const [first, last] = compareDateKeys(from, to) <= 0 ? [from, to] : [to, from]
+    const out: DayProse[] = []
+    for (const date of await this.dates()) {
+      if (compareDateKeys(date, first) < 0 || compareDateKeys(date, last) > 0) continue
+      const segment = await this.segment(date)
+      const text = stripHandles(segment.prose.text)
+      if (text.trim() === '') continue
+      out.push({ date, text })
+    }
+    return out
   }
 
   // ── spans ──────────────────────────────────────────────────

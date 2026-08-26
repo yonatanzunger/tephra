@@ -86,6 +86,20 @@ export function installMenu(): void {
       ],
     },
     {
+      // **`Cmd+P` prints the document, where every other program puts it.**
+      // For the stream that cannot mean "all of it" — all of it is twenty
+      // years — so it asks which days first. Printing a selection is the
+      // range operation, on `Cmd+Shift+P`, and lives in the Range menu.
+      label: 'File',
+      submenu: [
+        {
+          label: 'Print…',
+          accelerator: 'CmdOrCtrl+P',
+          click: () => send(CHANNEL.menuCommand, 'printDocument'),
+        },
+      ],
+    },
+    {
       label: 'Edit',
       submenu: [
         // Undo and Redo are OURS, not the standard roles. Undo here is

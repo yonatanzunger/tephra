@@ -203,6 +203,20 @@ body {
 .prompt-actions .link { color: rgb(var(--text-muted)); background: none; border: 0; }
 .prompt-actions .link:hover { color: rgb(var(--text)); }
 
+/* ── the date range, which is the same dialog asking a two-part question ── */
+.range-presets { display: flex; flex-wrap: wrap; gap: .35rem; }
+.range-presets button {
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  color: rgb(var(--text)); background: rgb(var(--text) / .05);
+  border: 1px solid rgb(var(--border)); border-radius: 999px; padding: .2rem .7rem;
+}
+.range-presets button:hover { background: rgb(var(--accent) / .12); border-color: rgb(var(--accent) / .5); }
+.range-presets button:focus-visible { outline: 2px solid rgb(var(--accent) / .5); outline-offset: 1px; }
+.range-fields { display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: .4rem .5rem; }
+.range-fields label { margin: 0; }
+.range-fields input { font-size: 13px; padding: .25rem .4rem; }
+.range-count { margin: 0; font-size: 12px; color: rgb(var(--text-muted)); }
+
 /* ── format notes ─────────────────────────────────────────────────────────
    Not a warning. Every anomaly listed has already been handled safely, so the
    surface uses the tone of a note: no red, no triangle, no badge demanding to

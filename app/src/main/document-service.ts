@@ -12,7 +12,7 @@
 // document would be reordered relative to what the typist saw.
 
 import type { Anomaly } from '../shared/anomalies.ts'
-import { CHANNEL, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
+import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
@@ -471,6 +471,11 @@ export class DocumentService {
 
   async versions(limit = 50): Promise<readonly Version[]> {
     return (await this.history?.versions(limit)) ?? []
+  }
+
+  /** Every written day in a range, as prose — what printing and export read. */
+  async proseIn(from: DateKey, to: DateKey): Promise<readonly DayProse[]> {
+    return this.#doc.proseIn(from, to)
   }
 
   async readDay(version: VersionId, date: DateKey): Promise<string | null> {

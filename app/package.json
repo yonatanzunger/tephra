@@ -14,7 +14,8 @@
     "scratch": "./run.sh --scratch",
     "m1": "npm run build && node scripts/m1-acceptance.mjs",
     "package": "npm run build && node scripts/package.mjs",
-    "m2": "npm run build && node scripts/m2-acceptance.mjs"
+    "m2": "npm run build && node scripts/m2-acceptance.mjs",
+    "m3": "npm run build && node scripts/m3-acceptance.mjs"
   },
   "type": "module",
   "dependencies": {

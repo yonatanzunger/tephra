@@ -1,0 +1,148 @@
+// Asking which days to print.
+//
+// **"The whole document" is not a thing the stream has.** Every other program's
+// Cmd+P means "all of it", and here all of it is twenty years — so the question
+// the dialog has to ask is *which days*, and dates are the axis the stream is
+// organised on (D8).
+//
+// The presets are the answer most of the time. A range typed by hand is the
+// exception, so the fields are there and small, and the presets are what the
+// eye lands on first.
+
+import { useEffect, useRef, useState } from 'react'
+import { addDays, dateKeyAt, daysBetween } from '../../../shared/dates.ts'
+import type { DateKey } from '../../../shared/document-api.ts'
+
+export interface DateRangeRequest {
+  readonly title: string
+  readonly submitLabel: string
+  /** What the notebook actually holds, so the presets cannot ask for more. */
+  readonly extent: { readonly first: DateKey; readonly last: DateKey } | null
+  readonly onSubmit: (from: DateKey, to: DateKey) => void
+}
+
+interface Preset {
+  readonly label: string
+  readonly of: (today: DateKey, extent: { first: DateKey; last: DateKey } | null) => [DateKey, DateKey]
+}
+
+/**
+ * **The week runs back seven days rather than to Monday.** A journal is read
+ * backwards from now — "what have I been doing" — and a Monday boundary makes
+ * the answer on a Monday morning be "almost nothing".
+ */
+const PRESETS: readonly Preset[] = [
+  { label: 'Today', of: today => [today, today] },
+  { label: 'Past week', of: today => [addDays(today, -6), today] },
+  { label: 'Past month', of: today => [addDays(today, -29), today] },
+  {
+    label: 'Everything',
+    of: (today, extent) => (extent === null ? [today, today] : [extent.first, extent.last]),
+  },
+]
+
+export function DateRange({
+  request,
+  onClose,
+}: {
+  request: DateRangeRequest
+  onClose: () => void
+}): React.JSX.Element {
+  const today = dateKeyAt()
+  const [from, setFrom] = useState<DateKey>(today)
+  const [to, setTo] = useState<DateKey>(today)
+  const first = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    first.current?.focus()
+  }, [])
+
+  const span = daysBetween(from, to) + 1
+  const backwards = span <= 0
+
+  const submit = (): void => {
+    if (backwards) return
+    request.onSubmit(from, to)
+    onClose()
+  }
+
+  const keys = (e: React.KeyboardEvent): void => {
+    // Both stop here rather than reaching the editor underneath, which would
+    // otherwise take a newline into the document this is about.
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      submit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+  }
+
+  return (
+    <div className="prompt-scrim" onMouseDown={onClose}>
+      <div
+        className="prompt range"
+        role="dialog"
+        aria-label={request.title}
+        onMouseDown={e => e.stopPropagation()}
+        onKeyDown={keys}
+      >
+        <label>{request.title}</label>
+
+        <div className="range-presets">
+          {PRESETS.map((preset, i) => (
+            <button
+              key={preset.label}
+              type="button"
+              ref={i === 0 ? first : null}
+              onClick={() => {
+                const [a, b] = preset.of(today, request.extent)
+                setFrom(a)
+                setTo(b)
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="range-fields">
+          <label htmlFor="range-from">From</label>
+          <input
+            id="range-from"
+            type="date"
+            value={from}
+            max={to}
+            onChange={e => setFrom((e.target.value || today) as DateKey)}
+          />
+          <label htmlFor="range-to">To</label>
+          <input
+            id="range-to"
+            type="date"
+            value={to}
+            min={from}
+            onChange={e => setTo((e.target.value || today) as DateKey)}
+          />
+        </div>
+
+        {/* Calendar days, not written days: knowing how many were written means
+            reading them, and the count is here to stop someone printing a
+            decade by accident rather than to be precise. */}
+        <p className="range-count">
+          {backwards ? 'That range runs backwards.' : `${span} ${span === 1 ? 'day' : 'days'}`}
+        </p>
+
+        <div className="prompt-actions">
+          <button type="button" onClick={submit} disabled={backwards}>
+            {request.submitLabel}
+          </button>
+          <button type="button" className="link" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

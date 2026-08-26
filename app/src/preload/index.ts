@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
-import type { Clipboard, PrintJob } from '../shared/ipc.ts'
+import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
@@ -86,6 +86,9 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.renameTag, span, from, to),
     removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
     print: (request: PrintJob): Promise<boolean> => ipcRenderer.invoke(CHANNEL.print, request),
+    /** Every written day in a range, as prose: what the whole-document print reads. */
+    proseIn: (from: DateKey, to: DateKey): Promise<readonly DayProse[]> =>
+      ipcRenderer.invoke(CHANNEL.proseIn, from, to),
 
     /** Store the original untouched and put a copy at this point (R28, D47). */
     importText: (

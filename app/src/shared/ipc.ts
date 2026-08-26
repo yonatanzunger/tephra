@@ -33,6 +33,7 @@ export const CHANNEL = {
   renameTag: 'tephra:doc:renameTag',
   removeAnchor: 'tephra:doc:removeAnchor',
   print: 'tephra:doc:print',
+  proseIn: 'tephra:doc:proseIn',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
   readClipboard: 'tephra:readClipboard',
@@ -180,6 +181,12 @@ export type { DocumentPosition }
  * the notebook is. Spike B's fourth trap: without one, printing through a temp
  * file makes every relative image silently 404.
  */
+/** One day's prose, on its way out of the app — to paper now, to an export later. */
+export interface DayProse {
+  readonly date: DateKey
+  readonly text: string
+}
+
 export interface PrintJob {
   readonly html: string
   readonly css: string

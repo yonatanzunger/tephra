@@ -5,7 +5,7 @@ import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type S
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
-import type { Clipboard, PrintJob } from '../shared/ipc.ts'
+import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
@@ -42,6 +42,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   )
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
+  ipcMain.handle(CHANNEL.proseIn, (_e, from: DateKey, to: DateKey) => service.proseIn(from, to))
   /**
    * Import whatever is on the clipboard.
    *
