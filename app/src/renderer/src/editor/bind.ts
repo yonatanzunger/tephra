@@ -19,6 +19,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
+import { listIndent } from './lists.ts'
 import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
 import { fromBuffer } from '../../../shared/prose.ts'
 import { widgetExtensions } from './widgets.ts'
@@ -82,6 +83,7 @@ export function bindEditor(options: BindOptions): Binding {
         // morning, and with no gutter, no caret cue and no chrome it renders as
         // a blank rectangle — indistinguishable from the app having failed.
         placeholder('Nothing here yet. Start typing.'),
+        listIndent(),
         vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         markdown(),
