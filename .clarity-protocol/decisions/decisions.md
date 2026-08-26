@@ -99,7 +99,7 @@
 **Date:** 2026-08-12
 **Status:** decided
 
-**Decision.** Tags, bookmarks and dates are represented in the markdown itself. Any index over them is **derived, machine-local, never synced, and disposable** — rebuildable from scratch at any time and never authoritative. **In v1 there is no index at all**; enumeration is by scan.
+**Decision.** *(Timing revised by D52: the index arrived in M3, because the sidebar could not work without it. The reasoning below stands.)*  Tags, bookmarks and dates are represented in the markdown itself. Any index over them is **derived, machine-local, never synced, and disposable** — rebuildable from scratch at any time and never authoritative. **In v1 there is no index at all**; enumeration is by scan.
 
 **Why.** An index inside the synced directory is a second source of truth: it becomes a merge problem, it diverges between devices, and it goes stale whenever a file is hand-edited — which this design assumes will happen (hand-editing is a feature). Portal reached the same conclusion twice independently, refusing an index for FileSet search and for bookmarks, and settling on "enumerate by scan in v1."
 
@@ -1655,3 +1655,116 @@ treatment drops belongs in the design, not in the discovery on paper.**
 `solution/document-api.md` (the window's three parallel values), 
 `solution/comments.md` (the rail as a comment-specific mechanism),
 `solution/marker-roadmap.md` (tags as an inline-only treatment).
+
+---
+
+## D51: Every row in the sidebar names a set of places, and clicking one goes to the next
+
+**Date:** 2026-08-26
+**Status:** decided
+**Detail:** `solution/navigation.md`
+**Builds on:** D10 (sections), D11 (reference by identity), D50 (annotations)
+
+**Decision.** The left nav is a list of rows, and **a row names a set of places
+in the corpus. Clicking it goes to the next one, wrapping.** A bookmark's set has
+one element; a day's has one; a heading's has one; a subject's has as many as it
+has been applied to. There is no second interaction and no row where a click
+means something other than *take me there*.
+
+A set with more than one element earns **apparatus, not a different verb**: the
+active row shows `3 of 7`, gets `◂ ▸`, and marks its occurrences in the scroll
+track. Clicking it again is `▸`. **At most one row is active**, and it owns all
+three of those.
+
+**Headings become ranges** — to the next heading of equal or greater precedence,
+or the end of the day — which makes days and headings one containment tree and
+lets the outline highlight a section exactly as a subject does. That is a change
+to `Segment.spans()`, not a new mechanism.
+
+**The built-in sections are Outline, Subjects, Bookmarks and Comments**, plus
+`Where you are`: the annotations covering the caret, which `spansAt` already
+answers and which is the line a person looks at most.
+
+### Why one verb, and what the first draft got wrong
+
+The first draft had clicking a PLACE go to it and clicking a SET reveal
+controls. It fails the plainest test there is: **a person cannot tell, before
+clicking, which kind of row they are looking at.** Counting instead of branching
+removes the distinction from the interaction and leaves it where it belongs — in
+what the row shows about itself.
+
+### What this makes pinning
+
+A **`Reference` is an annotation's identity without its location** — D11 as a
+type. A curated section is an ordered list of references, which is what D10
+already said a fileset index is; and **a pinned row and a built-in row are the
+same row**, because both resolve into a set of places and both have the one verb.
+Pinning becomes copying a reference into a list: no new rendering, no second
+interaction, no second code path to keep in step.
+
+### Left to use rather than to argument
+
+The order subjects are listed in, how much outline is open by default, and what
+the view filter offers are all **late-bound on purpose** (`navigation.md`). Each
+is a guess until there is a sidebar over a real corpus, and a wrong guess in a
+decision record is harder to undo than a wrong default in a component.
+
+---
+
+## D52: The corpus has a span index; it is a cache of the scan, and never a source of truth
+
+**Date:** 2026-08-26
+**Status:** decided
+**Revises:** D7 (an index was a v3 concern)
+**Detail:** `solution/navigation.md`
+
+**Decision.** A machine-local **index of spans over the whole corpus**, so that
+corpus-wide questions stop being answered by loading every segment. It is
+**keyed by file and mirrors the corpus's directory tree — one index file per
+directory** — with `size` and `mtime` as the staleness check, so verifying it is
+one `stat` per file and no reads.
+
+**It is a cache. Deleting `.tephra/index` must cost nothing but time**, and that
+is the test the implementation has to pass. The files are authoritative (D23,
+Q2); any disagreement is settled by rescanning.
+
+**It indexes spans, not text.** Retrieval (M4) wants a text index, which is a
+different structure with different tradeoffs; building one here because we happen
+to be walking the files would be the fancy answer to a problem nobody has yet.
+
+### Why now, when D7 said v3
+
+**The sidebar is the first feature that cannot work without it.**
+`Document.spans()` answers about the corpus by loading every segment and
+scanning it — instant at a fortnight, a gigabyte through memory at twenty years
+(D8's measured scale). D7's estimate was not wrong about when scanning stops
+being instant; it was wrong about which feature would arrive first.
+
+### The two rules that keep it honest
+
+- **A loaded segment answers for itself; the index answers for everything else**,
+  and the document prefers memory. Without this the sidebar lags the flush, and a
+  subject applied thirty seconds ago is missing from the list of subjects — which
+  reads as a bug in tagging rather than as a stale cache.
+- **`Segment.spans()` always scans**, and is what the builder calls. So no caller
+  ever asks the document to please not use its cache: the layer that has no cache
+  is the layer the builder talks to. A consistency check is a different question
+  and gets its own name, `verify()`.
+
+### One entry point for repair
+
+`rebuild(under?)` builds from a fresh scan and swaps it in, a directory at a time,
+each written to a temporary file and renamed over its predecessor. Because every
+entry carries its own stamp, **a half-finished rebuild is incomplete and never
+wrong** — which is what makes it safe to run in the background at any moment: on
+open, on a timer, after a history restore (D32 rewrites whole days), after crash
+recovery, when a month fails to parse, and when a person asks. **A cache with no
+visible repair becomes folklore.**
+
+It is chunked and yields, because the writing path may not stutter (R1.1), and it
+skips days that are loaded and dirty, which answer from memory anyway.
+
+### What this makes stale
+
+`solution/document-api.md` (`spans()` is no longer a scan), 
+`decisions.md` D7 (the timing, not the reasoning).
