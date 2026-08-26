@@ -827,6 +827,15 @@ export async function runVerify(scene: string): Promise<void> {
       say('range', fields.map(f => f.value))
       say('count', dialog?.querySelector('.range-count')?.textContent ?? '')
 
+      // The annotation policy (D50), which is what the dialog is really for
+      // now: the same days, printed twice, differ by this one choice.
+      const choices = [...(dialog?.querySelectorAll('.range-choice') ?? [])].map(c => c.textContent)
+      say('choices', choices)
+      const notes = dialog?.querySelectorAll('.range-choice input')[1] as HTMLInputElement | undefined
+      notes?.click()
+      await settle(150)
+      say('notesChosen', notes?.checked === true)
+
       const print = [...(dialog?.querySelectorAll('.prompt-actions button') ?? [])].find(
         b => b.textContent === 'Print',
       ) as HTMLElement | undefined

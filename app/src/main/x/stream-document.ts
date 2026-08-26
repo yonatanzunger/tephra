@@ -16,17 +16,17 @@ import type { Notebook } from '../w/notebook.ts'
 import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
 import { createHash } from 'node:crypto'
 import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
-import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody } from './markers.ts'
+import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody, type ScannedSpan } from './markers.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import type { RestoreReport } from '../../shared/history-api.ts'
-import { Segment, type ScannedSpan } from './segment.ts'
+import { Segment } from './segment.ts'
 import {
   anchorComment, at, author, insertBlock, insertBlockAt, renderBlock, restate, scanThreadBlocks, splice,
   thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
 } from './comments.ts'
 import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
 import type { DayProse } from '../../shared/ipc.ts'
-import { stripHandles } from '../../shared/prose.ts'
+import { stripHandles, toWire } from '../../shared/prose.ts'
 import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
 import { StreamWindow } from './window.ts'
 
@@ -269,10 +269,10 @@ export class StreamDocument implements Document {
   /**
    * The prose of every day in a range, oldest first, blank days left out.
    *
-   * **Prose, not the document's text** (D44): this is what leaves the app — for
-   * paper today, for an export tomorrow — and marker syntax is bookkeeping that
-   * no reader of a printed page has any use for. Handles go too; they stand in
-   * for a mark on screen and there is nothing for them to stand in for here.
+   * **The whole prose, annotations included** (D50). What a printer does with a
+   * tag or a comment is its policy — clean, in the margin, as a note — and this
+   * is the layer that would have to be changed to allow any of them if it
+   * handed over text alone. It did, for one day, which is what D50 is about.
    *
    * **A day with nothing in it is omitted rather than printed empty.** The
    * stream files a day whenever the app is opened, so a range of a fortnight
@@ -285,9 +285,8 @@ export class StreamDocument implements Document {
     for (const date of await this.dates()) {
       if (compareDateKeys(date, first) < 0 || compareDateKeys(date, last) > 0) continue
       const segment = await this.segment(date)
-      const text = stripHandles(segment.prose.text)
-      if (text.trim() === '') continue
-      out.push({ date, text })
+      if (stripHandles(segment.prose.text).trim() === '') continue
+      out.push({ date, prose: toWire(segment.prose, segment.length) })
     }
     return out
   }

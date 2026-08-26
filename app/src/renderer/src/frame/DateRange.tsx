@@ -18,8 +18,23 @@ export interface DateRangeRequest {
   readonly submitLabel: string
   /** What the notebook actually holds, so the presets cannot ask for more. */
   readonly extent: { readonly first: DateKey; readonly last: DateKey } | null
-  readonly onSubmit: (from: DateKey, to: DateKey) => void
+  readonly onSubmit: (from: DateKey, to: DateKey, annotations: AnnotationChoice) => void
 }
+
+/**
+ * **Two choices, because Q13 is open and this is how it gets answered.**
+ *
+ * The policy underneath has four fields and a dozen states (D50); the dialog
+ * has no business asking about them until someone has printed enough pages to
+ * know which combinations they ever want twice. Until then: the words, or the
+ * words and what was said about them.
+ */
+export type AnnotationChoice = 'clean' | 'notes'
+
+const CHOICES: readonly { readonly id: AnnotationChoice; readonly label: string }[] = [
+  { id: 'clean', label: 'Just the text' },
+  { id: 'notes', label: 'With notes at the end of each day' },
+]
 
 interface Preset {
   readonly label: string
@@ -51,6 +66,7 @@ export function DateRange({
   const today = dateKeyAt()
   const [from, setFrom] = useState<DateKey>(today)
   const [to, setTo] = useState<DateKey>(today)
+  const [annotations, setAnnotations] = useState<AnnotationChoice>('clean')
   const first = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -62,7 +78,7 @@ export function DateRange({
 
   const submit = (): void => {
     if (backwards) return
-    request.onSubmit(from, to)
+    request.onSubmit(from, to, annotations)
     onClose()
   }
 
@@ -133,6 +149,20 @@ export function DateRange({
         <p className="range-count">
           {backwards ? 'That range runs backwards.' : `${span} ${span === 1 ? 'day' : 'days'}`}
         </p>
+
+        <div className="range-choices">
+          {CHOICES.map(choice => (
+            <label key={choice.id} className="range-choice">
+              <input
+                type="radio"
+                name="range-annotations"
+                checked={annotations === choice.id}
+                onChange={() => setAnnotations(choice.id)}
+              />
+              {choice.label}
+            </label>
+          ))}
+        </div>
 
         <div className="prompt-actions">
           <button type="button" onClick={submit} disabled={backwards}>

@@ -1,5 +1,5 @@
 import { applyEdits, type TextEdit } from './text-edits.ts'
-import type { DocumentText } from '../../shared/document-api.ts'
+import type { DocumentText, TypedSpan } from '../../shared/document-api.ts'
 
 // Scanning a segment's body for the spans the API exposes: headings, anchors
 // and tags.
@@ -548,4 +548,19 @@ function canAppendTo(line: string): boolean {
   return true
 }
 
-
+/**
+ * One span as a scan found it: a kind, a name, and a range in the DOCUMENT's
+ * own offsets.
+ *
+ * Lives here rather than on `Segment` because this is where scanning lives, and
+ * because `proseOf` needs it to build a day's annotations — a segment importing
+ * prose importing a segment is a cycle no one needs to think about.
+ */
+export interface ScannedSpan {
+  readonly kind: TypedSpan['kind']
+  readonly name: string
+  readonly level: number
+  readonly resolved?: boolean
+  readonly from: number
+  readonly to: number
+}

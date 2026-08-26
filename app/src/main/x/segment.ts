@@ -5,11 +5,14 @@
 // not text the user is editing, and if offsets included it then editing a
 // keyword would silently move every position in the day.
 
-import type { DateKey, DocumentText, TypedSpan } from '../../shared/document-api.ts'
+import type { DateKey, DocumentText, ProseOffset, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
-import { resolveAnchors, resolvePairs, resolveTags, scanMarkers, type DocumentMarker } from './markers.ts'
+import {
+  resolveAnchors, resolvePairs, resolveTags, scanMarkers,
+  type DocumentMarker, type ScannedSpan,
+} from './markers.ts'
 import { threadsIn } from './comments.ts'
-import { Prose, proseMarkers } from './prose.ts'
+import { proseOf, proseMarkers, type Prose } from './prose.ts'
 
 /**
  * A span as the scanner produces it: body offsets, not document positions.
@@ -17,14 +20,6 @@ import { Prose, proseMarkers } from './prose.ts'
  * `resolved` is a comment's, and is absent everywhere else rather than false
  * everywhere else — a heading is not an unresolved anything.
  */
-export interface ScannedSpan {
-  readonly kind: TypedSpan['kind']
-  readonly name: string
-  readonly level: number
-  readonly resolved?: boolean
-  readonly from: number
-  readonly to: number
-}
 import { findAnomalies } from './anomalies.ts'
 import { splitBody, SPLIT_THRESHOLD } from './split.ts'
 import { dayFile } from '../w/layout.ts'
@@ -44,7 +39,7 @@ export class Segment {
 
   /** Lazily computed and dropped on every edit; scanning is cheap, staleness is not. */
   #markers: readonly DocumentMarker[] | null = null
-  #prose: Prose | null = null
+  #prose: Prose<ProseOffset> | null = null
 
   private constructor(date: DateKey, rel: RelPath, original: string) {
     this.date = date
@@ -107,8 +102,10 @@ export class Segment {
    * Cached beside the marker scan and invalidated with it, because the two are
    * derived from the same walk of the same string.
    */
-  get prose(): Prose {
-    if (this.#prose === null) this.#prose = Prose.of(this.#body, proseMarkers(this.#body))
+  get prose(): Prose<ProseOffset> {
+    if (this.#prose === null) {
+      this.#prose = proseOf(this.#body, proseMarkers(this.#body), this.spans(), threadsIn(this.#body))
+    }
     return this.#prose
   }
 

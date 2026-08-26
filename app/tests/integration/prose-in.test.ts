@@ -13,6 +13,7 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/stream-document.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
 import type { DateKey } from '../../src/shared/document-api.ts'
+import { stripHandles } from '../../src/shared/prose.ts'
 
 const d = (s: string): DateKey => s as DateKey
 
@@ -66,9 +67,14 @@ test('THE POINT: markers do not come out, in either form', async t => {
     ],
   ])
   const [day] = await doc.proseIn(d('2026-03-01'), d('2026-03-01'))
-  assert.equal(day?.text, 'A tagged phrase here.\nAnd a bookmark.\n')
-  assert.doesNotMatch(day?.text ?? '', /tephra:/)
-  assert.doesNotMatch(day?.text ?? '', /￼/)
+  // The TEXT still carries handles — they are what a mark is anchored to, and
+  // dropping them is the printer's business now, not the document's (D50).
+  assert.doesNotMatch(day?.prose.text ?? '', /tephra:/)
+  assert.equal(stripHandles(day?.prose.text ?? ''), 'A tagged phrase here.\nAnd a bookmark.\n')
+
+  // And the annotations came with it, which is the point of the shape.
+  const kinds = (day?.prose.annotations ?? []).map(a => a.kind).sort()
+  assert.deepEqual(kinds, ['anchor', 'date', 'tag'])
 })
 
 test('a day nobody wrote in is left out, rather than printed empty', async t => {

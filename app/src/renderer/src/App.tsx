@@ -20,7 +20,7 @@ import { createPortal } from 'react-dom'
 import type { CommentThread } from '../../shared/comments.ts'
 import type { CommentAnchor } from './editor/comment-anchors.ts'
 import type { MarkInfo } from './editor/range-commands.ts'
-import { printPage, printRangePage, rangeTitle, PRINT_CSS } from './print/page.ts'
+import { printPage, printRangePage, rangeTitle, PAPER_CLEAN, PAPER_NOTES, PRINT_CSS } from './print/page.ts'
 import { markdownFromHtml } from './import/html.ts'
 import { destination } from './editor/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
@@ -198,7 +198,7 @@ export function App(): React.JSX.Element {
               title: 'Print which days',
               submitLabel: 'Print',
               extent,
-              onSubmit: (from, to) => {
+              onSubmit: (from, to, annotations) => {
                 void window.tephra.doc
                   .proseIn(from, to)
                   .then(async days => {
@@ -207,7 +207,7 @@ export function App(): React.JSX.Element {
                       return
                     }
                     const ok = await window.tephra.doc.print({
-                      ...printRangePage(days, rangeTitle(days)),
+                      ...printRangePage(days, rangeTitle(days), annotations === 'notes' ? PAPER_NOTES : PAPER_CLEAN),
                       css: PRINT_CSS,
                       // Relative links resolve from a day directory, and every
                       // day in the stream sits at the same depth — so the first

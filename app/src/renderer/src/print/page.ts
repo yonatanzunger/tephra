@@ -8,6 +8,9 @@
 
 import { toHtml } from './markdown.ts'
 import type { DayProse } from '../../../shared/ipc.ts'
+import { fromWire, stripHandles, type Prose } from '../../../shared/prose.ts'
+import { CLEAN, place, PAPER_SURFACE, type Placed, type Presentation } from '../../../shared/presentation.ts'
+import type { ProseOffset } from '../../../shared/document-api.ts'
 
 /**
  * A passage rendered for paper.
@@ -22,7 +25,19 @@ export function printPage(markdown: string, title: string): { html: string; titl
 }
 
 /**
- * A run of days, each under its date.
+ * What paper can draw TODAY.
+ *
+ * The policy type (D50) is complete — margins, page footnotes, running heads —
+ * and this renderer is not: those need annotated markdown (to splice a cue into
+ * the text where its anchor is) and paged.js (to know where the pages break).
+ * Naming the two presentations that work is how the gap stays visible instead
+ * of becoming a treatment that silently draws nothing.
+ */
+export const PAPER_CLEAN: Presentation = { ...CLEAN, date: 'seam' }
+export const PAPER_NOTES: Presentation = { ...PAPER_CLEAN, comment: 'endOfSection' }
+
+/**
+ * A run of days, each under its date, drawn according to a policy.
  *
  * **The date is a heading the printer adds, not markdown put through the
  * parser.** A `## 24 August` inserted into the text would compete with the
@@ -34,13 +49,60 @@ export function printPage(markdown: string, title: string): { html: string; titl
  * Blank days never arrive here; `proseIn` leaves them out (D8's stream files a
  * day whenever the app opens, so a fortnight is full of them).
  */
-export function printRangePage(days: readonly DayProse[], title: string): { html: string; title: string } {
+export function printRangePage(
+  days: readonly DayProse[],
+  title: string,
+  how: Presentation = PAPER_CLEAN,
+): { html: string; title: string } {
   const sameYear = new Set(days.map(d => d.date.slice(0, 4))).size === 1
   const html = days
-    .map(day => `<section class="day"><h2 class="date">${readable(day.date, sameYear)}</h2>\n${toHtml(day.text)}</section>`)
+    .map(day => {
+      const prose = fromWire(day.prose)
+      const placed = place(prose, how, PAPER_SURFACE)
+      const heading = placed.some(p => p.annotation.kind === 'date' && p.slot !== 'none')
+        ? `<h2 class="date">${readable(day.date, sameYear)}</h2>\n`
+        : ''
+      return `<section class="day">${heading}${toHtml(prose.text)}${notes(prose, placed)}</section>`
+    })
     .join('\n')
   return { html, title }
 }
+
+/**
+ * The notes closing a day — the on-screen cousin of a footnote, on paper
+ * because paper cannot do the real thing yet (D50).
+ *
+ * **Each note quotes what it is about.** A note at the end of a day is a long
+ * way from the sentence it was written about, and without the quotation it is a
+ * remark about nothing. The quotation is what a cue in the margin would have
+ * bought, at the cost of some ink.
+ */
+function notes(prose: Prose<ProseOffset>, placed: readonly Placed<ProseOffset>[]): string {
+  const closing = placed.filter(p => p.slot === 'section')
+  if (closing.length === 0) return ''
+  const items = closing
+    .map(p => {
+      const about = quote(prose.text.slice(p.annotation.at.from, p.annotation.at.to))
+      const body =
+        p.annotation.kind === 'comment'
+          ? p.annotation.thread.messages
+              .map(m => `<div class="note-body"><b>${escape(m.author)}</b> ${toHtml(m.body)}</div>`)
+              .join('')
+          : ''
+      return `<li value="${p.cue ?? ''}"><q>${escape(about)}</q>${body}</li>`
+    })
+    .join('\n')
+  return `\n<section class="notes"><h3>Notes</h3><ol>${items}</ol></section>`
+}
+
+/** Enough of the passage to recognise it, and not a paragraph of it. */
+function quote(text: string, limit = 90): string {
+  const clean = stripHandles(text).replace(/\s+/g, ' ').trim()
+  return clean.length <= limit ? clean : `${clean.slice(0, limit - 1)}…`
+}
+
+const escape = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
  * What the printed run is called, in the running header and the window title.
@@ -105,6 +167,17 @@ export const PRINT_CSS = `
      it is set in the sans face the running header uses and ruled off, and it
      never separates from the day it belongs to. */
   .day + .day { margin-top: 2em; }
+  .notes { margin: 1.4em 0 0; padding-top: .6em; border-top: .5pt solid #ccc;
+           break-inside: avoid; page-break-inside: avoid; }
+  .notes h3 { font: 8.5pt/1.4 -apple-system, system-ui, sans-serif; letter-spacing: .08em;
+              text-transform: uppercase; color: #555; margin: 0 0 .5em; }
+  .notes ol { margin: 0; padding-left: 1.4em; font-size: .92em; }
+  .notes li { margin: 0 0 .5em; }
+  .notes q { color: #555; }
+  .notes q::before { content: '“'; } .notes q::after { content: '”'; }
+  .note-body { margin: .15em 0 0; }
+  .note-body p { margin: 0 0 .3em; }
+
   .day .date {
     font: 8.5pt/1.4 -apple-system, system-ui, sans-serif; letter-spacing: .08em;
     text-transform: uppercase; color: #555; margin: 0 0 .9em;

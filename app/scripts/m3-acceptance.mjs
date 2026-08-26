@@ -91,7 +91,9 @@ console.log('— printing —')
 {
   const root = await week([
     'Today, which is the last day of the range.\n',
-    'Yesterday, with a <!--tephra:tag-start Subject-->tagged phrase<!--tephra:tag-end Subject--> in it.\n',
+    'Yesterday, with a <!--tephra:tag-start Subject-->tagged phrase<!--tephra:tag-end Subject--> in it.\n' +
+      '\n<!--tephra:comment-start k3f9-->A sentence somebody remarked on<!--tephra:comment-end k3f9-->.\n' +
+      '\n> **Yonatan** 2026-08-25T14:02 <!--tephra:comment k3f9-->\n> Worth checking this.\n',
     '\n\n', // opened, never written in — must not become a page of nothing
     'Three days ago, the earliest thing written.\n',
   ])
@@ -109,6 +111,11 @@ console.log('— printing —')
     'a preset fills both ends of the range',
     Array.isArray(r.range) && r.range.length === 2 && r.range[1] === DAY && r.range[0] < r.range[1],
     `${JSON.stringify(r.range)} count=${r.count}`,
+  )
+  check(
+    'the annotation policy is a question the dialog asks (D50)',
+    Array.isArray(r.choices) && r.choices.length === 2 && r.notesChosen === true,
+    JSON.stringify(r.choices),
   )
   check('a PDF was produced', pdf !== null && pdf.size > 1000, pdf ? `${pdf.size} bytes` : 'no file')
   check('the dialog got out of the way', r.dialogClosed === true)

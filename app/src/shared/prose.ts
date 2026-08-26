@@ -13,6 +13,7 @@
 import {
   HANDLE, type WindowPosition, type DocumentOffset, type ProseOffset, type ProseText, type DocumentText,
 } from './document-api.ts'
+import type { CommentThread } from './comments.ts'
 
 export { HANDLE }
 
@@ -219,3 +220,110 @@ export const stripHandles = (text: string): string => text.split(HANDLE).join(''
  * these two.
  */
 export const documentText = (prose: string): DocumentText => stripHandles(prose) as DocumentText
+
+// ─────────────────────────────────────────────────────────────
+// Prose: the document AS DISPLAYED (D50)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * The two coordinate systems prose is addressed in, and never a third.
+ *
+ * A segment's prose is measured in `ProseOffset`, a window's in
+ * `WindowPosition` (D48). Everything below is generic over which, so the same
+ * value serves a day on its way to a printer and a region on its way to the
+ * editor — with the compiler refusing to mix them.
+ */
+export type Anchored = ProseOffset | WindowPosition
+
+export interface Anchor<At extends Anchored> {
+  readonly from: At
+  readonly to: At // from === to for a point, as everywhere else
+}
+
+/**
+ * Everything the document holds that is not its text.
+ *
+ * **One union rather than four parallel mechanisms.** A day, a heading, a
+ * bookmark, a tagged range and a comment thread differ in what they carry and
+ * in how they are drawn, and in nothing else: they are anchored the same way,
+ * they move through an edit the same way, and — the point of the exercise —
+ * something has to choose where to put each of them, by the same rules.
+ *
+ * The discriminants are `SpanKind`'s, deliberately: the document API already
+ * has a vocabulary for these, and a second one would be two names for one
+ * thing (D50).
+ *
+ * **An annotation exists only in prose coordinates.** In the document's own
+ * offsets this same fact is a `TypedSpan`, and a second representation of one
+ * layer's facts is precisely what D48 is for. The translation happens inside
+ * `proseOf`, where the map is, and nothing outside it can name the halfway
+ * state.
+ */
+export type Annotation<At extends Anchored> =
+  | { readonly kind: 'date'; readonly at: Anchor<At>; readonly date: string }
+  | { readonly kind: 'heading'; readonly at: Anchor<At>; readonly text: string; readonly level: number }
+  | { readonly kind: 'anchor'; readonly at: Anchor<At>; readonly name: string }
+  | { readonly kind: 'tag'; readonly at: Anchor<At>; readonly subject: string }
+  | { readonly kind: 'comment'; readonly at: Anchor<At>; readonly thread: CommentThread }
+
+export type AnnotationKind = Annotation<ProseOffset>['kind']
+
+/**
+ * The document as displayed: the text, the map back to the file, and everything
+ * anchored into it.
+ *
+ * **Plain data, with no methods on purpose.** This crosses a process boundary
+ * and goes to a printer; the arithmetic lives on `map`, which is a value both
+ * sides build for themselves from the same markers.
+ */
+export interface Prose<At extends Anchored> {
+  readonly text: ProseText
+  readonly map: ProseMap
+  readonly annotations: readonly Annotation<At>[]
+}
+
+/**
+ * Prose on its way across a process boundary.
+ *
+ * **The map is rebuilt on the far side, never sent.** `ProseMap` is a class,
+ * and structured clone keeps an object's fields while dropping its prototype —
+ * so a cloned map arrives as data with no methods, which fails at the first
+ * conversion rather than at the boundary. Sending the markers instead is what
+ * the window snapshot already does, for the same reason and with the same
+ * guarantee: both sides compute one mapping from one input (D44).
+ */
+export interface ProseWire<At extends Anchored> {
+  readonly text: ProseText
+  /** The document text this was made from — what the map is built against. */
+  readonly documentLength: number
+  readonly markers: readonly Marker[]
+  readonly annotations: readonly Annotation<At>[]
+}
+
+export function toWire<At extends Anchored>(prose: Prose<At>, documentLength: number): ProseWire<At> {
+  return {
+    text: prose.text,
+    documentLength,
+    markers: prose.map.markers,
+    annotations: prose.annotations,
+  }
+}
+
+export function fromWire<At extends Anchored>(wire: ProseWire<At>): Prose<At> {
+  return {
+    text: wire.text,
+    map: ProseMap.of(wire.documentLength, wire.markers),
+    annotations: wire.annotations,
+  }
+}
+
+/** Shift a segment's annotations into the window that segment sits in. */
+export function inWindowProse(
+  annotations: readonly Annotation<ProseOffset>[],
+  start: WindowPosition,
+): readonly Annotation<WindowPosition>[] {
+  return annotations.map(a => ({
+    ...a,
+    at: { from: inWindow(start, a.at.from), to: inWindow(start, a.at.to) },
+  }))
+}

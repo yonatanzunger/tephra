@@ -101,14 +101,14 @@ export class StreamWindow implements DocumentWindow {
     if (placed === null) return this.#doc.positionAt('' as DateKey, 0)
     return this.#doc.positionAt(
       placed.segment.date,
-      placed.segment.prose.toDocument(inSegment(offset as WindowPosition, placed.start)),
+      placed.segment.prose.map.toDocument(inSegment(offset as WindowPosition, placed.start)),
     )
   }
 
   toWindow(at: DocumentPosition): WindowPosition | null {
     for (const placed of this.#placed) {
       if (placed.segment.date === at.segment) {
-        return inWindow(placed.start, placed.segment.prose.toProse(at.offset))
+        return inWindow(placed.start, placed.segment.prose.map.toProse(at.offset))
       }
     }
     return null
@@ -156,7 +156,7 @@ export class StreamWindow implements DocumentWindow {
         // Leftmost, which is the trailing-boundary rule: text typed at the end
         // of a tagged range lands INSIDE it, so continuing a tagged sentence
         // keeps the subject (D44).
-        const local = placed.segment.prose.toDocument(inSegment(from as WindowPosition, placed.start))
+        const local = placed.segment.prose.map.toDocument(inSegment(from as WindowPosition, placed.start))
         out.push({
           span: {
             begin: this.#doc.positionAt(placed.segment.date, local),
@@ -184,8 +184,8 @@ export class StreamWindow implements DocumentWindow {
         // tag everything after it. Handles are deliberately NOT carved out:
         // deleting one means "remove this tag", which X turns into the removal
         // of both markers (D44).
-        const prose = placed.segment.prose
-        for (const piece of prose.carve(prose.toDocument(localFrom), prose.toDocument(localTo))) {
+        const { map } = placed.segment.prose
+        for (const piece of map.carve(map.toDocument(localFrom), map.toDocument(localTo))) {
           // The inserted text goes to the first piece of the first touched
           // segment; everything after it only loses text.
           const payload = payloadPlaced ? ('' as DocumentText) : documentText(insert)
@@ -460,7 +460,7 @@ export class StreamWindow implements DocumentWindow {
       date: p.segment.date,
       start: p.start,
       length: p.segment.length,
-      markers: p.segment.prose.markers,
+      markers: p.segment.prose.map.markers,
     }))
   }
 

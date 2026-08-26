@@ -6,11 +6,35 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { printRangePage, rangeTitle, readable } from '../../src/renderer/src/print/page.ts'
+import { printRangePage, PAPER_NOTES, rangeTitle, readable } from '../../src/renderer/src/print/page.ts'
 import type { DayProse } from '../../src/shared/ipc.ts'
-import type { DateKey } from '../../src/shared/document-api.ts'
+import type { DateKey, ProseOffset, ProseText } from '../../src/shared/document-api.ts'
+import type { Annotation } from '../../src/shared/prose.ts'
+import type { CommentThread, CommentId } from '../../src/shared/comments.ts'
 
-const day = (date: string, text: string): DayProse => ({ date: date as DateKey, text })
+const at = (from: number, to: number): { from: ProseOffset; to: ProseOffset } =>
+  ({ from: from as ProseOffset, to: to as ProseOffset })
+
+const day = (
+  date: string,
+  text: string,
+  annotations: readonly Annotation<ProseOffset>[] = [],
+): DayProse => ({
+  date: date as DateKey,
+  prose: {
+    text: text as ProseText,
+    documentLength: text.length,
+    markers: [],
+    annotations: [{ kind: 'date', at: at(0, text.length), date }, ...annotations],
+  },
+})
+
+const thread = (id: string, author: string, body: string): CommentThread => ({
+  id: id as CommentId,
+  resolved: false,
+  assignee: null,
+  messages: [{ author, at: '2026-03-01T10:00', body, reactions: {}, unknown: [] }],
+})
 
 // Dates are formatted in the reader's locale, so these assert what is IN the
 // label rather than the order the label puts it in.
@@ -45,4 +69,51 @@ test('the title says what is on the pages, not what was asked for', () => {
     rangeTitle([day('2026-03-01', 'a'), day('2026-03-04', 'b')]),
     `${readable('2026-03-01', true)} – ${readable('2026-03-04', false)}`,
   )
+})
+
+// ── the policy, which is the point of D50 ───────────────────────────────────
+
+test('clean is clean: an annotated day prints as the words alone', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'A tagged phrase here.\n', [
+      { kind: 'tag', at: at(2, 15), subject: 'Subject' },
+      { kind: 'comment', at: at(2, 15), thread: thread('k1', 'Y', 'A remark.') },
+    ])],
+    'x',
+  )
+  assert.doesNotMatch(html, /Subject/)
+  assert.doesNotMatch(html, /A remark/)
+  assert.doesNotMatch(html, /class="notes"/)
+})
+
+test('the same day, one policy later, closes with its notes', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'A tagged phrase here.\n', [
+      { kind: 'tag', at: at(2, 15), subject: 'Subject' },
+      { kind: 'comment', at: at(2, 15), thread: thread('k1', 'Yonatan', 'A remark.') },
+    ])],
+    'x',
+    PAPER_NOTES,
+  )
+  assert.match(html, /class="notes"/)
+  assert.match(html, /<q>tagged phrase<\/q>/, 'a note quotes what it is about')
+  assert.match(html, /<b>Yonatan<\/b>/)
+  assert.match(html, /A remark\./)
+  // The tag is not a note: this policy says comments close the day and tags are
+  // absent, and a renderer that drew both would be ignoring the policy.
+  assert.doesNotMatch(html, /Subject/)
+})
+
+test('notes are numbered in reading order, not in the order they were found', () => {
+  const { html } = printRangePage(
+    [day('2026-03-01', 'One two three four five six seven.\n', [
+      { kind: 'comment', at: at(20, 24), thread: thread('late', 'Y', 'Later.') },
+      { kind: 'comment', at: at(0, 3), thread: thread('early', 'Y', 'Earlier.') },
+    ])],
+    'x',
+    PAPER_NOTES,
+  )
+  const first = html.indexOf('Earlier.')
+  const second = html.indexOf('Later.')
+  assert.ok(first > 0 && first < second, 'the note about the first words comes first')
 })

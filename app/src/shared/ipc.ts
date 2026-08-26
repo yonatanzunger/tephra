@@ -10,8 +10,8 @@ import type {
   WindowEdit, DateKey, DocumentChange, DocumentMeta, EditOrigin, SessionGeneration,
   Span, SpanKind, TypedSpan, DocumentPosition,
 } from './document-api.ts'
-import type { Marker } from './prose.ts'
-import type { WindowPosition, ProseText } from './document-api.ts'
+import type { Marker, ProseWire } from './prose.ts'
+import type { WindowPosition, ProseOffset, ProseText } from './document-api.ts'
 
 /** Windows are addressed by handle; the objects themselves never cross. */
 export type WindowId = number
@@ -181,10 +181,16 @@ export type { DocumentPosition }
  * the notebook is. Spike B's fourth trap: without one, printing through a temp
  * file makes every relative image silently 404.
  */
-/** One day's prose, on its way out of the app — to paper now, to an export later. */
+/**
+ * One day on its way out of the app — to paper now, to an export later.
+ *
+ * The whole prose (D50), not just its text: what a renderer does with the
+ * annotations is its own policy, and a shape that dropped them here would make
+ * "clean" the only thing anything outside the editor could ever print.
+ */
 export interface DayProse {
   readonly date: DateKey
-  readonly text: string
+  readonly prose: ProseWire<ProseOffset>
 }
 
 export interface PrintJob {

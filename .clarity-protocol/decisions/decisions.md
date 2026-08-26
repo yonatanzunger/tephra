@@ -1561,3 +1561,75 @@ disagreement introduced deliberately.
 Neither is a bug in the editor. Both are the consequence of treating a layer's
 geometry as if it were the layer below's coordinates — D48 applied to pixels,
 where the compiler cannot help because pixels are not our type to brand.
+
+---
+
+## D50: Prose is the document as displayed — text, mapping and annotations, with one presentation policy over it
+
+**Date:** 2026-08-26
+**Status:** decided
+**Constrains:** Q11; raises Q13 and Q14
+**Detail:** `solution/prose.md`
+
+**Decision.** **`Prose` is one value: the text a person sees, the map that
+relates it to the document's text, and every annotation anchored into it.** The
+annotations are a single union — a day, a heading, a bookmark, a tagged range, a
+comment thread — carrying their payloads, in prose coordinates, generic over
+which prose (`Prose<ProseOffset>` for a segment, `Prose<WindowPosition>` for a
+window). `ProseMap` becomes the offset table inside it rather than the noun.
+
+**How it is drawn is a policy, not a feature.** A `Presentation` names a
+treatment per kind — a day is `absent | seam | pageHeader`, a comment is
+`absent | inline | margin | footnote | endOfSection` — and `place(prose, how)`
+turns annotations into slots. **Screen and paper share the placement and not the
+drawing**, which is the right seam: a CodeMirror decoration and an `<aside>`
+have nothing in common, but *which annotations go in the margin, which become
+notes, and how notes are numbered* is one decision.
+
+### The evidence, which was already written down
+
+The layer map in `document-api.ts` says of a window: **"THREE THINGS TRAVEL, and
+only the first is text"** — text, mapping, meaning. Three values, assembled
+together everywhere, meaningful apart nowhere. That is an unnamed struct, and
+the cost arrived the first time something outside the editor asked for the
+document: `proseIn`, written for printing, drops every annotation, because
+dropping them was the only thing the shape allowed.
+
+### What it unifies that had drifted apart
+
+Comments have a rail, tags have an underline, days have a block widget, and none
+of that was decided — three mechanisms grew a fortnight apart. Under one policy,
+**desktop and mobile are the same renderer with different defaults** (D42's
+reserved gutter is what a margin treatment needs; Q10's mobile arrangement is
+the inline one), and printing is that same policy with a third default.
+
+### Two mechanisms this settles
+
+- **Footnotes in print use `paged.js`.** Chromium's print path has no CSS
+  footnotes, and a note at the foot of *the page its anchor fell on* requires
+  knowing where pages break. It is confined to the print path — the editor never
+  loads it.
+- **The on-screen cousin of a footnote is `endOfSection`**, notes closing the
+  day. A scrolling document has no page to sit at the foot of, so a screen asked
+  for `foot` falls back to it. Endnotes for a whole document are not on the list.
+
+### What is genuinely hard, and stays hard
+
+Margin annotations collide and need the rail's stacking rather than a second
+implementation of it; a tag in the margin is a RANGE and needs a rule with an
+extent, not a note aligned to a line; and no treatment carries every payload — a
+thread in a footnote cannot show its reactions or its assignee. **What a
+treatment drops belongs in the design, not in the discovery on paper.**
+
+### Reconsideration triggers
+
+- **If paged.js proves heavier than footnotes are worth**, `endOfSection` is
+  already the fallback and the policy needs no change.
+- **If a fifth annotation kind does not fit the union**, the union is wrong
+  rather than the kind, and this is the moment to find out.
+
+### What this makes stale
+
+`solution/document-api.md` (the window's three parallel values), 
+`solution/comments.md` (the rail as a comment-specific mechanism),
+`solution/marker-roadmap.md` (tags as an inline-only treatment).

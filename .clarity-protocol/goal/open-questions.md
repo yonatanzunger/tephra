@@ -621,3 +621,45 @@ works at all — **scoped to where?** A rule excluding a subject from Tephra is
 viable only if the thinking has somewhere else to happen. If it does not, the
 rule is self-censorship wearing a policy hat, and that is the failure this whole
 question exists to avoid.
+
+---
+
+## Q13: What does the print dialog ask about annotations?
+
+**Raised by D50.** Printing now has a policy rather than a behaviour, and the
+dialog has to collect it without becoming a control panel.
+
+**A preset** — "as on screen", "clean", "with notes" — is one click and covers
+what a person actually wants most days, at the cost of not being able to say
+"the tags but not the comments".
+
+**Four switches** is exact and honest about what the renderer can do. It is also
+sixteen states to have opinions about, in a dialog that until this week asked
+one question.
+
+**A preset with a disclosure** is the usual compromise and the usual outcome:
+the disclosure is opened once out of curiosity and never again.
+
+**To be decided by experiment**, once both renderers exist and there is
+something to print. The thing to watch for is which combinations are ever chosen
+twice — a switch nobody moves is a preset with extra steps.
+
+---
+
+## Q14: Does the screen's presentation follow the width, or is it chosen?
+
+**Raised by D50.** A margin treatment needs a margin: D42 reserves the gutter,
+but a narrow window has nowhere to put a rail, and the mobile arrangement (Q10)
+is the inline one for exactly that reason.
+
+**Automatic** means the annotations move as the window is resized — which is
+correct and may also be startling, since a comment a person put in the margin
+appears in the text when they drag a corner.
+
+**A setting** means it is stable and predictable, and that someone who narrows
+the window gets a rail crushed into four columns until they go and change it.
+
+The likely answer is automatic with a floor — inline below the width where a
+rail stops working — but the floor is a measurement rather than a guess, and it
+wants a real notebook on a real screen to find. Related to Q11, which asks the
+same question about revealing markup.

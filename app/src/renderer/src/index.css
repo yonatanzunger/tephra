@@ -216,6 +216,11 @@ body {
 .range-fields label { margin: 0; }
 .range-fields input { font-size: 13px; padding: .25rem .4rem; }
 .range-count { margin: 0; font-size: 12px; color: rgb(var(--text-muted)); }
+.range-choices { display: flex; flex-direction: column; gap: .2rem; }
+.range-choice { display: flex; align-items: center; gap: .4rem; margin: 0;
+  font-size: 12.5px; letter-spacing: normal; text-transform: none;
+  color: rgb(var(--text)); cursor: pointer; }
+.range-choice input { margin: 0; }
 
 /* ── format notes ─────────────────────────────────────────────────────────
    Not a warning. Every anomaly listed has already been handled safely, so the
