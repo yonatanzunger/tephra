@@ -867,6 +867,67 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(1500)
     }
 
+    if (scene === 'sidebar') {
+      // The sidebar over a real corpus: sections with counts, and the one verb
+      // (D51) — clicking a subject goes to its next occurrence, every time.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-section').length < 4) {
+        await settle(200)
+        waited += 200
+      }
+
+      // The head carries a caret and a count as well as a title; the title is
+      // what is left when its element children are taken out.
+      const titleOf = (head: Element | null): string =>
+        [...(head?.childNodes ?? [])]
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent ?? '')
+          .join('')
+          .trim()
+      const sections = [...document.querySelectorAll('.nav-section')].map(el => ({
+        title: titleOf(el.querySelector('.nav-head')),
+        count: el.querySelector('.nav-head .nav-count')?.textContent ?? '',
+        rows: el.querySelectorAll('.nav-row').length,
+      }))
+      say('sections', sections)
+
+      // Open every section, so the rows exist to be clicked.
+      for (const head of [...document.querySelectorAll('.nav-head')]) {
+        if (head.getAttribute('aria-expanded') === 'false') {
+          (head as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+        }
+      }
+      await settle(400)
+
+      const rowsIn = (title: string): HTMLElement[] => {
+        const section = [...document.querySelectorAll('.nav-section')].find(el =>
+          (el.querySelector('.nav-head')?.textContent ?? '').includes(title),
+        )
+        return [...(section?.querySelectorAll('.nav-row') ?? [])] as HTMLElement[]
+      }
+
+      say('subjectRows', rowsIn('Subjects').map(r => r.textContent?.trim() ?? ''))
+      say('bookmarkRows', rowsIn('Bookmarks').map(r => r.textContent?.trim() ?? ''))
+      say('outlineRows', rowsIn('Outline').map(r => r.textContent?.trim() ?? ''))
+
+      // THE ONE VERB. A subject used three times, clicked three times: the
+      // caret should land somewhere different each time, and come back round.
+      const subject = rowsIn('Subjects').find(r => (r.textContent ?? '').includes('Recurring'))
+      const seen: number[] = []
+      for (let i = 0; i < 4; i++) {
+        subject?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+        await settle(700)
+        seen.push(view.state.selection.main.head)
+      }
+      say('caretsAfterClicks', seen)
+      say('distinctPlaces', new Set(seen.slice(0, 3)).size)
+      say('wrappedAround', seen[3] === seen[0])
+      say('counterShown', document.querySelector('.nav-row-wrap.active .nav-count')?.textContent ?? '')
+      say('steppersShown', document.querySelectorAll('.nav-steps button').length)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'markpanel') {
       const click = (index: number): boolean => {
         const marks = document.querySelectorAll('.tx-handle')

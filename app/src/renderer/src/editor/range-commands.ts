@@ -173,4 +173,14 @@ export interface EditorHandle {
    * which a bespoke document operation would get for free.
    */
   wrapSelection(before: string, after: string): void
+  /**
+   * Put the caret at a place in the buffer and show it.
+   *
+   * **Centred, not merely scrolled to.** A jump that lands on the last visible
+   * line is technically a success and reads as a failure: the sentence you were
+   * sent to is at the edge of the screen with nothing after it. Centring is
+   * also what `scrollIntoView` can do across regions that have not been
+   * rendered, which a jump across a month always is.
+   */
+  revealAt(at: number): void
 }

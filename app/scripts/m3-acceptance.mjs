@@ -139,6 +139,59 @@ console.log('— printing —')
   check('and nothing errored on the way', r.appError === 'none')
 }
 
+// ── 2. the sidebar ──────────────────────────────────────────────────────────
+//
+// Not "a list appears". The claims are D51's: the sections are built from the
+// corpus rather than from the loaded window, and every row has the SAME verb —
+// clicking a subject that occurs three times visits three places and comes back
+// round to the first.
+console.log('\n— the sidebar —')
+{
+  const TAG = (s, text) => `<!--tephra:tag-start ${s}-->${text}<!--tephra:tag-end ${s}-->`
+  const root = await week([
+    `Today.\n\n## A heading today\n\nWith ${TAG('Recurring', 'the third mention')} in it.\n`,
+    `Yesterday, with ${TAG('Recurring', 'a second mention')} and <!--tephra:mark the-spot-->a bookmark.\n`,
+    '\n\n',
+    `The earliest day, where ${TAG('Recurring', 'it first came up')} — and ${TAG('Once', 'something else')}.\n`,
+  ])
+  const r = report(await launch('sidebar', root))
+
+  const sections = Array.isArray(r.sections) ? r.sections.map(s => s.title) : []
+  check(
+    'the sections are the built-in ones (D51)',
+    sections.join('|') === 'Outline|Subjects|Bookmarks|Comments',
+    JSON.stringify(r.sections),
+  )
+  check(
+    'subjects come from the whole corpus, not the loaded window',
+    Array.isArray(r.subjectRows) && r.subjectRows.length === 2 &&
+      r.subjectRows.some(t => t.includes('Recurring') && t.includes('3')),
+    JSON.stringify(r.subjectRows),
+  )
+  check(
+    'a bookmark in an earlier day is listed',
+    Array.isArray(r.bookmarkRows) && r.bookmarkRows.some(t => t.includes('the-spot')),
+    JSON.stringify(r.bookmarkRows),
+  )
+  check(
+    'the outline holds the days, with headings under them',
+    Array.isArray(r.outlineRows) && r.outlineRows.some(t => t.includes('A heading today')),
+    JSON.stringify(r.outlineRows),
+  )
+  check(
+    'THE ONE VERB: clicking a subject visits each of its places',
+    r.distinctPlaces === 3,
+    `carets ${JSON.stringify(r.caretsAfterClicks)}`,
+  )
+  check('and comes back round rather than stopping', r.wrappedAround === true)
+  check(
+    'the active row says where in the set you are',
+    typeof r.counterShown === 'string' && /\d+ of 3/.test(r.counterShown) && r.steppersShown === 2,
+    `${r.counterShown} · ${r.steppersShown} steppers`,
+  )
+  check('and nothing errored on the way', r.appError === 'none')
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

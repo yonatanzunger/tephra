@@ -7,6 +7,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
 import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
+import type {
+  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
+} from '../shared/nav-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
@@ -65,6 +68,24 @@ const tephra = {
     ipcRenderer.invoke('tephra:verify:clipboard', next),
   /** Self-check only; the handler exists only when TEPHRA_VERIFY is set. */
   clickMenu: (label: string): Promise<boolean> => ipcRenderer.invoke('tephra:verify:menu', label),
+
+  /**
+   * The sidebar's half of the world (D51): what the corpus contains, and where.
+   *
+   * Its own namespace rather than more of `doc`, because these are questions
+   * about the CORPUS — a bookmark in a note is a legitimate answer, and no
+   * document is holding that note open.
+   */
+  nav: {
+    subjects: (): Promise<readonly Subject[]> => ipcRenderer.invoke(CHANNEL.navSubjects),
+    bookmarks: (): Promise<readonly { name: string; at: Located }[]> =>
+      ipcRenderer.invoke(CHANNEL.navBookmarks),
+    outline: (): Promise<readonly OutlineNode[]> => ipcRenderer.invoke(CHANNEL.navOutline),
+    threads: (): Promise<readonly ThreadRow[]> => ipcRenderer.invoke(CHANNEL.navThreads),
+    occurrences: (reference: Reference): Promise<readonly Located[]> =>
+      ipcRenderer.invoke(CHANNEL.navOccurrences, reference),
+    status: (): Promise<IndexStatus> => ipcRenderer.invoke(CHANNEL.navStatus),
+  },
 
   doc: {
     open: (): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open),

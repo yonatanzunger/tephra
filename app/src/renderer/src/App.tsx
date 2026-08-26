@@ -1,7 +1,7 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { WindowPosition, DateKey, DocumentChange, DocumentPosition, SegmentKey } from '../../shared/document-api.ts'
+import type { WindowPosition, DateKey, DocumentChange, DocumentPosition, SegmentKey , SessionGeneration } from '../../shared/document-api.ts'
 import { defaultUiState, type UiState } from '../../shared/ui-state.ts'
 import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
@@ -13,6 +13,7 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
+import type { Located } from '../../shared/nav-api.ts'
 import { DateRange, type DateRangeRequest } from './frame/DateRange'
 import { MarkPanel } from './frame/MarkPanel'
 import { Rail } from './frame/Rail'
@@ -58,6 +59,8 @@ export function App(): React.JSX.Element {
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
+  /** Bumped when the document changes, so the sidebar re-asks the index. */
+  const [navGeneration, setNavGeneration] = useState(0)
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
@@ -425,6 +428,43 @@ export function App(): React.JSX.Element {
     return docWindow?.onSpansChanged(refreshComments)
   }, [doc, docWindow, refreshComments])
 
+  // The sidebar follows the document too, and for the same reason: a subject
+  // applied a moment ago belongs in the list of subjects. The index answers
+  // from the loaded segment (D52), so this is a re-ask rather than a rescan.
+  useEffect(() => {
+    if (doc === null) return
+    const bump = (): void => setNavGeneration(n => n + 1)
+    bump()
+    return docWindow?.onSpansChanged(bump)
+  }, [doc, docWindow])
+
+  /**
+   * The sidebar's one verb, arriving here because it needs both halves: the
+   * PANE to load the region the place is in, and the EDITOR to put the caret
+   * there once it is loaded (D51).
+   *
+   * A place already on screen skips the load — jumping to where you already are
+   * would throw away the scroll position for nothing.
+   */
+  const goToLocated = useCallback(
+    async (at: Located): Promise<void> => {
+      if (at.date === null || pane === null || doc === null) return // notes wait for M3.4
+      const where = (generation: SessionGeneration): DocumentPosition => ({
+        segment: at.date as unknown as SegmentKey,
+        offset: at.from as never,
+        generation,
+      })
+      const held = pane.window
+      if (held === null || held.toWindow(where(held.generation)) === null) {
+        await pane.goTo({ kind: 'span', doc: doc.id, span: { begin: where(doc.generation), end: where(doc.generation) } })
+      }
+      const now = pane.window
+      const buffer = now === null ? null : now.toWindow(where(now.generation))
+      if (buffer !== null) editorRef.current?.revealAt(buffer as number)
+    },
+    [doc, pane],
+  )
+
 
   // The mark someone clicked, and what it stands for. Null when nothing is open.
   const [mark, setMark] = useState<MarkInfo | null>(null)
@@ -549,8 +589,8 @@ export function App(): React.JSX.Element {
           <Nav
             today={doc?.today ?? null}
             here={location?.kind === 'date' ? location.date : null}
-            extent={extent}
-            onGoTo={date => void pane?.goTo({ kind: 'date', date })}
+            generation={navGeneration}
+            onGo={at => void goToLocated(at)}
           />
         }
         stream={

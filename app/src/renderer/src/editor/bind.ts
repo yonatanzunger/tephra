@@ -60,6 +60,8 @@ export interface Binding {
   selection(): Selection
   /** Put text around the selection, as ordinary typing would. */
   wrapSelection(before: string, after: string): void
+  /** Put the caret at a buffer position and centre it. */
+  revealAt(at: number): void
   setVim(on: boolean): void
   setTypography(t: Typography): void
   destroy(): void
@@ -178,6 +180,18 @@ export function bindEditor(options: BindOptions): Binding {
         })),
         { userEvent: 'input' },
       )
+      view.focus()
+    },
+    revealAt(at: number): void {
+      const where = Math.max(0, Math.min(at, view.state.doc.length))
+      view.dispatch({
+        selection: { anchor: where },
+        // Centred, and through `scrollIntoView` rather than by measuring: a jump
+        // across a month lands outside the rendered range, where `coordsAtPos`
+        // answers null and any measurement of our own is a guess (see the
+        // landing notes).
+        effects: EditorView.scrollIntoView(where, { y: 'center' }),
+      })
       view.focus()
     },
     setVim(on: boolean): void {

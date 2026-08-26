@@ -34,6 +34,14 @@ export const CHANNEL = {
   removeAnchor: 'tephra:doc:removeAnchor',
   print: 'tephra:doc:print',
   proseIn: 'tephra:doc:proseIn',
+
+  /** The sidebar's questions, answered by the corpus index (D51, D52). */
+  navSubjects: 'tephra:nav:subjects',
+  navBookmarks: 'tephra:nav:bookmarks',
+  navOutline: 'tephra:nav:outline',
+  navThreads: 'tephra:nav:threads',
+  navOccurrences: 'tephra:nav:occurrences',
+  navStatus: 'tephra:nav:status',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
   readClipboard: 'tephra:readClipboard',

@@ -18,49 +18,11 @@ import { scanMarkers, scanSpans, type ScannedSpan } from './markers.ts'
 import { parseFile } from './frontmatter.ts'
 import type { StreamDocument } from './stream-document.ts'
 import type { DateKey } from '../../shared/document-api.ts'
+import type {
+  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
+} from '../../shared/nav-api.ts'
 
-/** Where something is: the file it is in, and the offsets within that file's body. */
-export interface Located {
-  readonly file: RelPath
-  /** The day, when the file is one. Null for notes and filesets. */
-  readonly date: DateKey | null
-  readonly from: number
-  readonly to: number
-}
-
-/**
- * A row's identity, with no position in it (D11, D51).
- *
- * This is what a pinned entry stores and what `occurrences` resolves. It is an
- * annotation's identity without its location, which is why a curated row and a
- * built-in row are the same row.
- */
-export type Reference =
-  | { readonly kind: 'anchor'; readonly name: string }
-  | { readonly kind: 'tag'; readonly subject: string }
-  | { readonly kind: 'date'; readonly date: DateKey }
-  | { readonly kind: 'heading'; readonly text: string }
-  | { readonly kind: 'file'; readonly path: RelPath }
-
-export interface Subject {
-  readonly subject: string
-  readonly count: number
-  readonly first: Located
-}
-
-export interface OutlineNode {
-  readonly at: Located
-  readonly title: string
-  readonly level: number
-  readonly children: readonly OutlineNode[]
-}
-
-export interface IndexStatus {
-  /** Files whose spans are known: either cached and fresh, or scanned. */
-  readonly known: number
-  readonly total: number
-  readonly building: boolean
-}
+export type { IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow }
 
 /** What one file contributes. The unit of both the cache and the sweep. */
 interface Scanned {
@@ -151,8 +113,8 @@ export class StreamIndex {
   }
 
   /** Comment anchors, open first. The bodies live in the document (D47). */
-  async threads(): Promise<readonly { id: string; resolved: boolean; at: Located }[]> {
-    const out: { id: string; resolved: boolean; at: Located }[] = []
+  async threads(): Promise<readonly ThreadRow[]> {
+    const out: ThreadRow[] = []
     for (const { file, date, spans } of await this.#all()) {
       for (const span of spans) {
         if (span.kind !== 'comment') continue

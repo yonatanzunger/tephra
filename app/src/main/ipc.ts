@@ -6,6 +6,7 @@ import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
 import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
+import type { Reference } from '../shared/nav-api.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
@@ -43,6 +44,17 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
   ipcMain.handle(CHANNEL.proseIn, (_e, from: DateKey, to: DateKey) => service.proseIn(from, to))
+
+  // The sidebar. Every one of these is a question about the whole corpus, which
+  // is why they go through the index rather than through the document (D52).
+  ipcMain.handle(CHANNEL.navSubjects, () => service.index.subjects())
+  ipcMain.handle(CHANNEL.navBookmarks, () => service.index.bookmarks())
+  ipcMain.handle(CHANNEL.navOutline, () => service.index.outline())
+  ipcMain.handle(CHANNEL.navThreads, () => service.index.threads())
+  ipcMain.handle(CHANNEL.navOccurrences, (_e, reference: Reference) =>
+    service.index.occurrences(reference),
+  )
+  ipcMain.handle(CHANNEL.navStatus, () => service.index.status())
   /**
    * Import whatever is on the clipboard.
    *
