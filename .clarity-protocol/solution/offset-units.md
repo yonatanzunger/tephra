@@ -1,12 +1,12 @@
 # Offset units — options and analysis
 
-**Resolved as D24: opaque `Offset`, unit UTF-16 code units.** Kept for its reasoning, and for the runner-up's revisit condition.
+**Resolved as D24: opaque `DocumentOffset`, unit UTF-16 code units.** Kept for its reasoning, and for the runner-up's revisit condition. The type was called `Offset` when this was written; D48 renamed it, along with `BufferPosition` → `WindowPosition`.
 
 ## Where offsets actually appear
 
 | Position | Consumer | Native unit of that consumer |
 |---|---|---|
-| `BufferPosition` | CodeMirror, in a loaded window | UTF-16 code units |
+| `WindowPosition` | CodeMirror, in a loaded window | UTF-16 code units |
 | `DocumentPosition.offset` | The API surface; spans; journal records | none — ours to choose |
 | `StoragePosition.offset` | Locating a date's content within files | none — ours to choose |
 | File I/O | Reading and writing files | UTF-8 bytes |
@@ -59,16 +59,16 @@ The one genuinely different shape, and it deserves consideration rather than dis
 - **Against:** a three-component position with lexicographic comparison, in an API where two-component positions were already the compromise. Line indices still shift when lines are added or removed, so it reduces rather than removes invalidation. And the locality argument is largely already won by the date partition — a single date holds roughly 1500 lines, so offsets within it are small numbers that shift rarely.
 - **Verdict:** the merge alignment is a real argument and the only one that would justify the complexity. It is worth revisiting if the format spec finds that merge wants line addresses anyway.
 
-### 7. Opaque `Offset` — orthogonal to all of the above
+### 7. Opaque `DocumentOffset` — orthogonal to all of the above
 
-Make `Offset` a branded type with no public arithmetic: callers get spans from the API (`snap`, `read`, search results, selections) and combine them through Document helpers rather than doing sums.
+Make `DocumentOffset` a branded type with no public arithmetic: callers get spans from the API (`snap`, `read`, search results, selections) and combine them through Document helpers rather than doing sums.
 
 - **For:** the unit becomes reversible. Given how much of this design has been revised under new information — twice today by a single fact — buying reversibility on a decision with no strong winner is worth something.
 - **Against:** manual arithmetic is occasionally natural and would need helpers. Probably a small cost, since callers rarely construct offsets from nothing.
 
 ## Resolution — D24
 
-**Option 1, with option 7 layered over it: UTF-16 code units, behind an opaque `Offset` type.**
+**Option 1, with option 7 layered over it: UTF-16 code units, behind an opaque `DocumentOffset` type.**
 
 The two reframing facts remove the objections that made bytes attractive — nothing durable records an offset, and the storage boundary takes no offsets — while the hot-path argument for UTF-16 stands unopposed. Opacity keeps the door open at very low cost.
 

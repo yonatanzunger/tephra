@@ -405,7 +405,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 **Resolves:** the open sub-question in D20
 **Detail:** `solution/offset-units.md`, `solution/document-api.md`
 
-**Decision.** `Offset` is an opaque branded type whose unit is **UTF-16 code units**. Arithmetic on two Offsets yields a plain number that cannot be assigned back without a deliberate cast, so accidental unit-dependence is a type error. Only two places may know the unit: the **window adapter** and the **position algebra**. Bytes appear only in file I/O, which takes no offsets at all.
+**Decision.** `DocumentOffset` — named `Offset` until D48 — is an opaque branded type whose unit is **UTF-16 code units**. Arithmetic on two of them yields a plain number that cannot be assigned back without a deliberate cast, so accidental unit-dependence is a type error. Only two places may know the unit: the **window adapter** and the **position algebra**. Bytes appear only in file I/O, which takes no offsets at all.
 
 **Two facts reframed the question and removed most of the case for bytes.**
 - **Nothing durable holds an offset**, by D11 — bookmarks and tags are markers in the text, section entries reference names, links resolve by lookup. The only serialised offsets are inside the journal, a transient write-ahead log written and read by one build of one app. And the usual objection is slightly mis-stated: we never write UTF-16 *as an encoding*. The journal is UTF-8 JSON containing integers whose semantics happen to be a count of code units.
@@ -747,7 +747,7 @@ is currently unscheduled (`milestones.md`).
 
 **Why the rename, and why `DocumentWindow` specifically.** The bare name `Window` collided three ways: a loaded region, an **OS window** (D10's "current window or a new window"), and a UI area. And there is a hard technical reason beyond readability — **`Window` is a DOM global in TypeScript's `lib.dom`**, so a bare `Window` type in a renderer process is a live footgun rather than merely a vague name. `DocumentWindow` is qualified and unambiguous. `Region` was considered and rejected as too vague to guess from.
 
-**The position type is `BufferPosition`, not `DocumentWindowPosition`.** `WindowPosition` was rejected for a concrete reason: in an Electron codebase it reads as *screen coordinates*, which is an active hazard rather than an ambiguity. "Buffer" is the standard term for loaded editor text and cannot be misread that way; `DocumentWindowPosition` is merely long. The full set reads `DocumentPosition` (logical), `BufferPosition` (loaded), `StoragePosition` (internal), `DocumentWindow` (the region), `Pane` (navigation).
+**The position type is `BufferPosition`, not `DocumentWindowPosition`.** *(Reversed by D48, which renamed it `WindowPosition` after all — see there for why the hazard below stopped applying.)* `WindowPosition` was rejected for a concrete reason: in an Electron codebase it reads as *screen coordinates*, which is an active hazard rather than an ambiguity. "Buffer" is the standard term for loaded editor text and cannot be misread that way; `DocumentWindowPosition` is merely long. The full set reads `DocumentPosition` (logical), `BufferPosition` (loaded), `StoragePosition` (internal), `DocumentWindow` (the region), `Pane` (navigation).
 
 **The point of the class: Q7's four options become a policy object, not four implementations.**
 
@@ -1002,9 +1002,9 @@ of a tagged range are drawn from those spans. The file is unchanged — markers
 are still HTML comments in the text, exactly as format-spec describes.
 
 **Why, having tried the other thing first.** Markers were widgets over their own
-raw bytes, revealed when the caret came near. That produced, in order of
+document text, revealed when the caret came near. That produced, in order of
 discovery: a line that reflowed by twenty-five characters every time the caret
-passed a tag, which is D42's guarantee broken inside the line; raw comment
+passed a tag, which is D42's guarantee broken inside the line; comment
 syntax on screen at exactly the moment a tag was applied, since the selection is
 by definition touching it; markers carried into the clipboard by an ordinary
 copy, where pasting one produced an unmatched `tag-start` that swallows the rest
@@ -1495,6 +1495,28 @@ A brand makes literals inconvenient: a test that wants document text must say
 so, and `tests/support/text.ts` exists for exactly that. That inconvenience is
 the mechanism working — the place where a plain string becomes a layer's value
 is a claim, and the rule forces it to be written down where someone can check it.
+
+### What it reverses, deliberately
+
+**D39 rejected `WindowPosition`** on the ground that in an Electron codebase it
+reads as *screen coordinates* — an active hazard, not a mere ambiguity — and
+chose `BufferPosition` because "buffer" is the standard word for loaded editor
+text. That reasoning was sound when the layers were three deep and unnamed. Two
+things changed it:
+
+- **"Buffer" turned out to name the layer above, not this one.** The editor's
+  buffer is CodeMirror's, and once the editor became a layer with coordinates of
+  its own — pixels, a height map, widgets with no address below — using its word
+  for the window's coordinate was the exact confusion this rule exists to stop.
+- **The screen-coordinate hazard never materialised, and now cannot.** The OS
+  window appears in this codebase only as Electron's `BrowserWindow`, in main,
+  and nothing anywhere carries a screen position as a type. The layer map at the
+  top of `document-api.ts` says what "window" means here, in the one place a
+  reader looks it up.
+
+If the hazard ever does appear — a saved window geometry, a multi-monitor
+placement — the answer is to name that type after the screen, not to give this
+one the editor's word back.
 
 ### The rule generalises past text
 

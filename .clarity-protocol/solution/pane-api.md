@@ -12,9 +12,11 @@ It also holds state a window has no business holding: where the user is *in user
 
 The bare name `Window` collided three ways: a loaded region, an **OS window** (D10's "current window or a new window"), and a UI area. Worse, **`Window` is a DOM global in TypeScript's `lib.dom`** — a bare `Window` type in a renderer process is a live footgun, not merely a vague name.
 
-So: **`DocumentWindow`**, qualified and unambiguous, and **`BufferPosition`** for an offset into its text. `WindowPosition` was rejected for a concrete reason — in an Electron codebase it reads as *screen coordinates*, which is an active hazard rather than an ambiguity. "Buffer" is the standard term for loaded editor text and cannot be misread that way.
+So: **`DocumentWindow`**, qualified and unambiguous, and — as D35 and D39 settled it — **`BufferPosition`** for an offset into its text. `WindowPosition` was rejected then for a concrete reason: in an Electron codebase it reads as *screen coordinates*, which is an active hazard rather than an ambiguity, where "buffer" is the standard term for loaded editor text and cannot be misread that way.
 
-The full set now reads: `DocumentPosition` (logical), `BufferPosition` (loaded), `StoragePosition` (internal), `DocumentWindow` (the region), `Pane` (navigation).
+**D48 reversed that half of it.** Once the editor became a layer with coordinates of its own, "buffer" was the layer above's word for this layer's coordinate, and the screen-coordinate hazard had never materialised — the OS window appears only as Electron's `BrowserWindow`, in main. The type is `WindowPosition`; the reasoning is in D48, and the layer map is at the top of `src/shared/document-api.ts`.
+
+The full set now reads: `DocumentPosition` (logical), `WindowPosition` (loaded), `ProseOffset` (the crossing between them), `StoragePosition` (internal), `DocumentWindow` (the region), `Pane` (navigation).
 
 ## The four options are a policy object, not four implementations
 
@@ -94,7 +96,7 @@ export interface Pane {
    * the auto-extend mechanism, and inverting it — having the Pane observe the
    * editor — would make X depend on Z.
    */
-  viewportChanged(visible: { from: BufferPosition; to: BufferPosition }): void
+  viewportChanged(visible: { from: WindowPosition; to: WindowPosition }): void
 
   policy: ExtentPolicy                     // mutable; that is the point
 

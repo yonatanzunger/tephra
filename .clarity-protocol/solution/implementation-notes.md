@@ -4,6 +4,8 @@ Everything captured so far that is a *build-time* obligation rather than a desig
 
 **Every entry states the failure it prevents.** A rule without a reason gets removed as an oddity by whoever reads the code next, and that person is you in eight months.
 
+**Type names are the current ones** (D48 renamed `Offset` → `DocumentOffset`, `BufferPosition` → `WindowPosition`, `RawText` → `DocumentText`). Quoted code is left exactly as it was when it was wrong, so a snippet below may name a type that no longer exists — which is the point of quoting it.
+
 ---
 
 ## 1. Invariants that fail silently
@@ -106,7 +108,7 @@ Both of these are implemented and tested; they are here because the tests
 encode *a* reading of the right answer, and only real writing will say whether
 it was the right one.
 
-- **Offsets near a segment boundary.** A buffer position on a day boundary is
+- **DocumentOffsets near a segment boundary.** A buffer position on a day boundary is
   both the end of one day and the start of the next. It resolves to the LATER
   day, because a day body ends with a newline and that offset therefore renders
   at the first column of the next day — text typed there must land in the file
@@ -226,7 +228,7 @@ and the natural response is to press it again, silently unwinding more work in a
 file you are not looking at.
 
 Fixed by inspecting the change undo returns and navigating to its segment when
-the current window does not cover it. `toBuffer` already returns null for a
+the current window does not cover it. `toWindow` already returns null for a
 segment outside the window, so the containment test needed no new API. Verified
 through the real menu path, which is the only path a person has — calling
 `doc.undo()` directly would have bypassed the code under test.
@@ -681,8 +683,8 @@ it. The test failure was the design being pointed out, not an obstacle to it.
 Markers left the buffer (D44) and both faults that followed were invisible to
 the test suite. Both were caught by looking at the screen.
 
-**The renderer had a second copy of the mapping.** `StreamWindow.toBuffer`
-learned the prose↔raw arithmetic; `RemoteWindow.toBuffer` — the renderer's half
+**The renderer had a second copy of the mapping.** `StreamWindow.toWindow`
+learned the prose↔raw arithmetic; `RemoteWindow.toWindow` — the renderer's half
 of the same object (D37) — went on adding a raw offset to a prose start. Every
 test passed, because the tests exercise main. On screen, tag underlines simply
 never appeared.
@@ -742,7 +744,7 @@ carried a handle, and `RemoteWindow.toDocument` was still returning
 offset: (offset - p.start) as Offset
 ```
 
-`offset - p.start` is a prose offset within the segment. `Offset` counts bytes.
+`offset - p.start` is a prose offset within the segment. `DocumentOffset` counts code units of document text.
 **They are equal for every body with no markers in it**, which is why the whole
 suite passed and why the fault appeared only on the second tag.
 
@@ -752,12 +754,12 @@ There are THREE coordinate spaces here, not two, and only two had names:
 
 | | counts | named |
 |---|---|---|
-| `Offset` | bytes within one segment's body | was |
-| `BufferPosition` | prose characters across the window | was |
+| `DocumentOffset` | code units within one segment's document text | was |
+| `WindowPosition` | prose characters across the window | was |
 | `ProseOffset` | prose characters within one segment | **was not** |
 
-The unnamed one is where the bug lived. It now has a brand, `ProseMap.toRaw`
-will not accept an `Offset`, and the two additions that cross between window and
+The unnamed one is where the bug lived. It now has a brand, `ProseMap.toDocument`
+will not accept an `DocumentOffset`, and the two additions that cross between window and
 segment are named functions — `inWindow`, `inSegment` — rather than a `+` that
 looks innocent. The cast that produced the bug no longer compiles.
 
@@ -792,7 +794,7 @@ test used days with no markers in them.
 
 ### The class, not the instance
 
-This is the third time raw bytes reached a prose buffer since markers left it
+This is the third time document text reached a prose buffer since markers left it
 (D44): `documentChanged` handed over the document's raw payloads, `RemoteWindow`
 recomputed the mapping without eliding, and now `extend` inserted bodies. Each
 looked like a different bug. They are one: **anything that puts text into the
@@ -1278,7 +1280,7 @@ old code first.
 M0 and M1 each ended with an acceptance run, and M2's eight feature bullets were
 finished without one. That was not bookkeeping: **the three worst faults of this
 milestone were all invisible to `npm test`** — the segment cache race, `extend`
-handing the editor raw bytes, and comment spans arriving labelled as tags. Each
+handing the editor document text, and comment spans arriving labelled as tags. Each
 needed a real window to appear, and each was found by hand.
 
 Six launches, each against its own fresh notebook so scenes cannot contaminate

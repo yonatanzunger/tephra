@@ -444,10 +444,10 @@ export class StreamWindow implements DocumentWindow {
    * find is a race, and a `console.log` on the path was enough to make it stop
    * happening.
    */
-  diagnose(): readonly { date: string; raw: number; prose: number; same: boolean }[] {
+  diagnose(): readonly { date: string; document: number; prose: number; same: boolean }[] {
     return this.#placed.map(p => ({
       date: p.segment.date as string,
-      raw: p.segment.length,
+      document: p.segment.length,
       prose: p.segment.prose.text.length,
       // The identity that matters: is the object this window rebuilds from the
       // same one the document mutates?

@@ -12,14 +12,14 @@ spends it. M2's remaining bullets resume afterwards.
    start or end of a body, and a round trip through every offset of a body that
    has several.
 2. **`Segment` reports its markers with widths.** It already scans them.
-3. **`StreamWindow` maps through.** `text` is prose; `toDocument`/`toBuffer`
+3. **`StreamWindow` maps through.** `text` is prose; `toDocument`/`toWindow`
    cross the two coordinate systems; `spans()` reports prose positions.
 4. **Edits.** An edit that removes a handle becomes `untag` / `removeAnchor`
    (D44). An edit that would otherwise delete a boundary marker is split around
    it, so no ordinary edit can orphan one. A tag whose content is left empty is
    dropped, which is `normalise`'s existing rule.
 5. **The concealment path in `widgets.ts` goes away.** There is nothing left to
-   conceal: no `TEPHRA_MARKER` regex, no `MarkerWidget` over raw bytes.
+   conceal: no `TEPHRA_MARKER` regex, no `MarkerWidget` over document text.
 6. **Tests that would have caught the four bugs D44 lists**, plus cursor restore
    across a marker and a copy that cannot carry one.
 
