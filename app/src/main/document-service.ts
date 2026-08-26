@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
+import { StreamIndex } from './x/index.ts'
 import { applyEdits } from './x/text-edits.ts'
 import type { StreamWindow } from './x/window.ts'
 
@@ -93,6 +94,7 @@ export interface ServiceOptions {
 
 export class DocumentService {
   readonly #doc: StreamDocument
+  readonly #index: StreamIndex
   readonly #windows = new Map<WindowId, StreamWindow>()
   #nextId: WindowId = 1
 
@@ -131,6 +133,11 @@ export class DocumentService {
   constructor(notebook: Notebook, options: ServiceOptions = {}) {
     this.#notebook = notebook
     this.#doc = new StreamDocument(notebook)
+    // The two point at each other by construction order: the index reads days
+    // through the document so a loaded one answers from memory, and the
+    // document answers corpus-wide questions through the index (D52).
+    this.#index = new StreamIndex(notebook, this.#doc)
+    this.#doc.attachIndex(this.#index)
     this.#wal = new Wal(notebook)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
@@ -471,6 +478,11 @@ export class DocumentService {
 
   async versions(limit = 50): Promise<readonly Version[]> {
     return (await this.history?.versions(limit)) ?? []
+  }
+
+  /** The corpus index (D52) — what the sidebar asks, and what repairs it. */
+  get index(): StreamIndex {
+    return this.#index
   }
 
   /** Every written day in a range, as prose — what printing and export read. */

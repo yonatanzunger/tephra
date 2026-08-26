@@ -166,6 +166,24 @@ export class StreamIndex {
     return out.sort((a, b) => Number(a.resolved) - Number(b.resolved))
   }
 
+  /**
+   * Every span of a kind, with where it is — what `Document.spans()` is built on.
+   *
+   * The document maps the stream's share of these into `TypedSpan`s with real
+   * positions; the rest belong to files no document is holding open, and are
+   * the sidebar's business rather than the document's.
+   */
+  async spansOf(kind?: ScannedSpan['kind']): Promise<readonly { at: Located; span: ScannedSpan }[]> {
+    const out: { at: Located; span: ScannedSpan }[] = []
+    for (const { file, date, spans } of await this.#all()) {
+      for (const span of spans) {
+        if (kind !== undefined && span.kind !== kind) continue
+        out.push({ at: { file, date, from: span.from, to: span.to }, span })
+      }
+    }
+    return out
+  }
+
   /** Every place a reference resolves to, in corpus order. */
   async occurrences(reference: Reference): Promise<readonly Located[]> {
     const out: Located[] = []

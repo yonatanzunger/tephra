@@ -137,3 +137,34 @@ test('occurrences are what a row traverses, in corpus order', async t => {
   assert.equal(found.length, 3)
   assert.deepEqual(found.map(f => f.date), ['2026-03-01', '2026-03-02', '2026-03-02'])
 })
+
+test('THE EQUIVALENCE: the document says the same thing with the index and without', async t => {
+  // The index is a cache, so the only defensible test of it is that it changes
+  // nothing except how long the answer takes. Both paths, one corpus, compared
+  // span for span.
+  const { doc, index } = await corpus(t, [
+    ['2026-03-01', `# Chapter\n\nA ${TAG('Subject', 'phrase')} and <!--tephra:mark spot-->a mark.\n`],
+    ['2026-03-02', `## Section\n\nMore ${TAG('Subject', 'text')} here.\n`],
+  ])
+
+  const slow = await doc.spans()
+  doc.attachIndex(index)
+  const fast = await doc.spans()
+
+  assert.deepEqual(fast, slow)
+  assert.ok(slow.length >= 6, `six spans at least, got ${slow.length}`)
+})
+
+test('and the index does not need the corpus to be the stream', async t => {
+  const { doc, index } = await corpus(
+    t,
+    [['2026-03-01', `${TAG('Shared', 'a')}\n`]],
+    { 'note.md': `${TAG('Shared', 'b')}\n` },
+  )
+  doc.attachIndex(index)
+
+  // The document speaks for the stream; the index speaks for the corpus. A
+  // note's spans have no DocumentPosition, so they are the sidebar's business.
+  assert.equal((await doc.spans('tag')).length, 1)
+  assert.equal((await index.occurrences({ kind: 'tag', subject: 'Shared' })).length, 2)
+})

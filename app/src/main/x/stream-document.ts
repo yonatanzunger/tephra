@@ -20,6 +20,17 @@ import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody, type Scanne
 import type { Anomaly } from '../../shared/anomalies.ts'
 import type { RestoreReport } from '../../shared/history-api.ts'
 import { Segment } from './segment.ts'
+
+/**
+ * What the document needs from an index, and nothing more.
+ *
+ * Declared here rather than imported so the dependency points one way at the
+ * type level too: `x/index.ts` imports the document, and the document knows
+ * only this much about it.
+ */
+export interface SpanIndex {
+  spansOf(kind?: SpanKind): Promise<readonly { at: { date: DateKey | null }; span: ScannedSpan }[]>
+}
 import {
   anchorComment, at, author, insertBlock, insertBlockAt, renderBlock, restate, scanThreadBlocks, splice,
   thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
@@ -92,6 +103,8 @@ export class StreamDocument implements Document {
   readonly #undo: HistoryEntry[] = []
   readonly #redo: HistoryEntry[] = []
   #lastUserEditAt = 0
+
+  #index: SpanIndex | null = null
 
   readonly #changeHandlers = new Set<(c: DocumentChange) => void>()
   readonly #journalHandlers = new Set<
@@ -313,7 +326,28 @@ export class StreamDocument implements Document {
 
   // ── spans ──────────────────────────────────────────────────
 
+  /**
+   * Every span in the stream, from the index when there is one.
+   *
+   * **The fallback is not a nicety.** Without an index this loads every segment
+   * and scans it — which is what it always did, and is correct at any size and
+   * unaffordable at twenty years (D52). Keeping the slow path means the
+   * document works with no cache at all, which is what makes the cache safe to
+   * delete, and it is what the tests below the service level still use.
+   */
   async spans(kind?: SpanKind): Promise<readonly TypedSpan[]> {
+    const index = this.#index
+    if (index !== null) {
+      const out: TypedSpan[] = []
+      for (const { at, span } of await index.spansOf(kind)) {
+        // The corpus is wider than the stream: a note's spans have no
+        // DocumentPosition to be given, because no document is holding it open.
+        if (at.date === null) continue
+        out.push(this.#typed(at.date, span))
+      }
+      return out
+    }
+
     const out: TypedSpan[] = []
     for (const date of await this.dates()) {
       const segment = await this.segment(date)
@@ -323,6 +357,22 @@ export class StreamDocument implements Document {
       }
     }
     return out
+  }
+
+  /**
+   * Attach the corpus index (D52).
+   *
+   * **The two point at each other, on purpose and in one direction each.** The
+   * index asks the document for a day, so that a loaded one answers from memory;
+   * the document asks the index for the corpus, so that a list of subjects is
+   * not a gigabyte of segments. Nothing loops: the index calls `scan()`, never
+   * `spans()`, and `scan()` consults no cache.
+   *
+   * Set by whoever owns both — the service — rather than constructed here, so
+   * that a document can exist without one and say so by working slowly.
+   */
+  attachIndex(index: SpanIndex): void {
+    this.#index = index
   }
 
   async spansAt(at: DocumentPosition): Promise<readonly TypedSpan[]> {
