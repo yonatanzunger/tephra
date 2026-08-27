@@ -255,6 +255,92 @@ The two remaining pieces are then the fileset index FORMAT (markdown, so it is
 readable and hand-editable — R20–R22, R26) and the gesture that adds to it.
 Neither needs the sidebar to change shape.
 
+## Curated sections, which the format already half-describes
+
+`format-spec.md` settled most of this in the v1 draft: a section is a fileset at
+`sections/<name>.fileset.md`, its frontmatter says `kind: fileset`, its entries
+are an ordered markdown list, **the entry type is inferred from the link target**
+so there is no type field to keep consistent, and the text after the link is a
+human-authored summary that regeneration must never clobber (R20).
+
+```markdown
+---
+tephra: 1
+kind: fileset
+title: House deal
+---
+
+- [Mortgage contact](tephra:mark/mortgage%20contact) — call before Thursday
+- [Offer letter](../docs/offer.pdf)
+- [The listing](https://example.com/…)
+```
+
+What D51 adds is that **a row is a row**, so the same list has to be able to
+name the things the built-in sections name.
+
+### The URI namespace
+
+One host per kind, and the kinds are `Reference`'s:
+
+| Entry | Written as | Resolves by |
+|---|---|---|
+| bookmark | `tephra:mark/mortgage%20contact` | name, first in date order (D11) |
+| subject | `tephra:tag/House%20Deal` | every range carrying it |
+| day | `tephra:day/2026-08-24` | the date |
+| section | `tephra:section/house-deal` | the fileset of that name |
+| file | `../notes/titration.md` | a relative path |
+| URL | `https://example.com/…` | the browser |
+| other document | `../docs/offer.pdf` | OS intent |
+
+**The two that are paths stay paths**, and only the things that resolve by
+identity take the scheme — which is what makes a section file still useful in
+any other markdown tool: three of six entry kinds are ordinary links, and the
+other three read as what they are even when they do not resolve.
+
+`tephra:` is already registered (`main/scheme.ts`) and the renderer already
+intercepts link clicks, so nothing here needs a new registration. The app itself
+lives at `tephra://app`, an authority form; references are path-only, so the two
+namespaces cannot collide.
+
+### A fileset of filesets
+
+**The nav's top level is itself a section**, `sections/index.fileset.md`, whose
+entries are mostly `tephra:section/…` references in the order they should
+appear. That gives the panel one file to read with an explicit order in it —
+which is the whole argument D10 made for membership-in-a-fileset over
+pinning-as-a-property.
+
+**It also dissolves the separate "default section".** D10 said the default
+section always exists and holds the pins; under this shape the top-level list IS
+where a pin goes when nobody says where, because an entry may be any reference
+and not only a section. One file, one order, no distinguished second file whose
+only job is to be the place things land.
+
+Recursion is real — a section may name a section — so the panel renders a tree.
+Two rules keep that finite: a section already open on the path renders as a
+plain entry rather than expanding again, and depth is capped at three, which is
+deeper than anyone has yet wanted.
+
+### A broken entry stays visible
+
+A bookmark whose anchor was deleted, a file that moved, a URL that died: the
+corpus is hand-editable and syncs between machines, so all three are ORDINARY.
+The row renders dimmed with *not found* beside it, and never disappears —
+**hiding it would make a hand-edit look like data loss**, and the entry is also
+the only remaining record of what was meant.
+
+### Pinning is an ordinary edit
+
+The gesture takes the row's `Reference` and appends `- [Label](uri)` to a
+section file. Which means it is **a text edit to a markdown document**: undoable
+by the ordinary undo, versioned by the ordinary commit, hand-editable
+afterwards, and requiring no new storage of any kind. The label defaults to the
+reference's own name and is the part that survives when a target moves.
+
+The remaining question is where the gesture puts things when the person does not
+say: the top-level list is the answer above, and a `Pin to…` that offers the
+existing sections is the fuller one.
+
 ## Deliberately late-bound
 
 These are settled by USING it, not by arguing about it now. Each one is cheap to

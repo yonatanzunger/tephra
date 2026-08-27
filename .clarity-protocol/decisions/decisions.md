@@ -133,7 +133,7 @@
 **Date:** 2026-08-12
 **Status:** decided
 
-**Decision.** The left nav is a list of **sections**, each an expando, each one a fileset. Expanding shows its entries; clicking an entry goes to it, in the current window or a new one. An entry is one of four things: a **bookmark** (jump to a place in a file), a **file** (jump to its start), a **URL** (open in the browser), or a **document Tephra does not handle**, such as a PDF (open by OS intent). **The default section always exists** and holds the pinned items at the top.
+**Decision.** *(The default section is amended by D53: it dissolves into the top-level list, `sections/_index.fileset.md`.)* The left nav is a list of **sections**, each an expando, each one a fileset. Expanding shows its entries; clicking an entry goes to it, in the current window or a new one. An entry is one of four things: a **bookmark** (jump to a place in a file), a **file** (jump to its start), a **URL** (open in the browser), or a **document Tephra does not handle**, such as a PDF (open by OS intent). **The default section always exists** and holds the pinned items at the top.
 
 **Why this beats "pinning is a property."** Both were on the table. Membership in a distinguished fileset wins on two counts. It is **one file to read** rather than a flag scattered across the corpus that must be discovered by scan — and it therefore has an **explicit order**, which a scan-derived pin list does not, and which a navigation panel needs. The earlier objection that the events calendar is a table rather than a collection of pointers dissolves: the calendar is a *file entry within* a section, not a section.
 
@@ -1768,3 +1768,69 @@ skips days that are loaded and dirty, which answer from memory anyway.
 
 `solution/document-api.md` (`spans()` is no longer a scan), 
 `decisions.md` D7 (the timing, not the reasoning).
+
+---
+
+## D53: A curated section is a fileset of typed references, and the nav's top level is one of them
+
+**Date:** 2026-08-26
+**Status:** decided
+**Amends:** D10 (the default section dissolves into the top-level list)
+**Detail:** `solution/navigation.md`, `solution/format-spec.md`
+
+**Decision.** A section is a fileset at `sections/<name>.fileset.md`, exactly as
+the v1 format draft describes it: frontmatter says `kind: fileset`, the entries
+are an ordered markdown list, **the entry's type is inferred from its link
+target**, and the trailing text is a human-authored summary regeneration must
+never clobber (R20). Three things are settled on top of that:
+
+**One URI host per reference kind** — `tephra:mark/…`, `tephra:tag/…`,
+`tephra:day/…`, `tephra:section/…` — while **the entries that are paths stay
+paths**. Only what resolves by identity (D11) takes the scheme. Three of the six
+kinds are therefore ordinary markdown links, and the other three read as what
+they are even in a tool that cannot follow them, which is R26 applied to the one
+file whose whole content is references.
+
+**The nav's top level is `sections/_index.fileset.md`**, a fileset whose entries
+are mostly other filesets, in the order the panel shows them. The leading
+underscore is a collision guard rather than a convention: a person may
+reasonably name a section "index".
+
+**Pinning is an ordinary edit.** The gesture appends `- [Label](uri)` to a
+section file — so it is undoable by the ordinary undo, versioned by the ordinary
+commit, hand-editable afterwards, and requires no new storage of any kind. The
+label defaults to the reference's own name and is what survives when a target
+moves.
+
+### What it amends in D10
+
+D10 said **the default section always exists and holds the pins**. Under this
+shape the top-level list IS that place: an entry may be any reference and not
+only a section, so a pin with no stated destination lands there. **One file, one
+order, and no distinguished second file whose only job is to be where things
+go.** D10's reasoning is untouched — membership in a fileset beats a flag
+scattered through the corpus, because it is one file to read and it has an
+explicit order — this is that argument applied once more, to the list of lists.
+
+### Why a curated row costs no new rendering
+
+A `Reference` is an annotation's identity without its location (D51), and a
+built-in row already resolves one into a set of places. A curated entry is the
+same reference written down, so **a pinned row and a built-in row are the same
+row**: same verb, same steppers, same scroll-track marks. What the format adds
+is a label and a summary, which are the two things a person wants to write and
+the index cannot know.
+
+### Two rules that keep it finite and honest
+
+- **A broken entry stays visible**, dimmed and marked *not found*. The corpus is
+  hand-edited and synced, so a dangling reference is ordinary rather than
+  exceptional — and hiding it would make an edit look like data loss, when the
+  entry is the only remaining record of what was meant.
+- **Recursion is capped**: a section already open above renders as a plain entry
+  rather than expanding again, and depth stops at three.
+
+### What this makes stale
+
+`solution/format-spec.md` (amended in place — the URI table, `_index`, two
+degradation rows), `decisions.md` D10 (the default section).

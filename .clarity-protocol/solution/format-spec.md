@@ -1,6 +1,8 @@
 # The wire format
 
 > **Locked as the v1 draft, 2026-08-12.** Changes from here need a decision record, not an edit. Build-time obligations live in `implementation-notes.md`.
+>
+> **Amended by D44/D47** (marker verbs: comment anchors and thread blocks) and **D53** (the reference URI namespace, and `sections/_index.fileset.md` as the nav's top level).
 
 A storable state adequate to the Document API (D18). Everything here exists because the API exposes a fact that must survive a restart; nothing here exists for its own sake.
 
@@ -13,6 +15,7 @@ notebook/
   stream/2026/03/2026-03-14.md          day file
   stream/2026/03/2026-03-14.2.md        part 2, if that day was split
   notes/titration-curves.md             branched documents, pinned lists
+  sections/_index.fileset.md            the nav's top level: a fileset of filesets (D53)
   sections/house-deal.fileset.md        nav sections (D10)
   attachments/2026/03/2026-03-14-plot-a1b2c3.png
   .tephra/                              journal, index, caches — MACHINE-LOCAL, NEVER SYNCED
@@ -113,7 +116,42 @@ title: House deal
 - [The listing](https://example.com/…)
 ```
 
-**Entry type is inferred from the link target**, so there is no type field to keep consistent: a `tephra:mark/…` URI is a bookmark, a relative path is a file, an `http(s)` URL opens in the browser, and a non-markdown file goes to the OS. **The trailing text after the link is the summary** — human-authored, and the place regeneration must never clobber (R20). v1 uses only title and target; the summary has a home from day one because coverage cannot be backfilled.
+**Entry type is inferred from the link target**, so there is no type field to keep consistent. **The trailing text after the link is the summary** — human-authored, and the place regeneration must never clobber (R20). v1 uses only title and target; the summary has a home from day one because coverage cannot be backfilled.
+
+### The reference URIs (D53)
+
+One host per kind, and the kinds are the sidebar's (D51) — a curated row and a
+built-in row are the same row, so a section has to be able to name what the
+built-in sections name.
+
+| Entry | Written as | Resolves by |
+|---|---|---|
+| bookmark | `tephra:mark/mortgage%20contact` | name, first in date order (D11) |
+| subject | `tephra:tag/House%20Deal` | every range carrying it |
+| day | `tephra:day/2026-08-24` | the date |
+| section | `tephra:section/house-deal` | the fileset of that name |
+| file | `../notes/titration.md` | a relative path |
+| URL | `https://example.com/…` | the browser |
+| other document | `../docs/offer.pdf` | OS intent |
+
+**The two that are paths stay paths.** Only the things that resolve by identity
+take the scheme, which is what keeps a section file useful in any other markdown
+tool: three of the six kinds are ordinary links, and the other three read as
+what they are even where they do not resolve.
+
+The app itself is served from `tephra://app` — an authority form — and
+references are path-only, so the two namespaces cannot collide.
+
+### `_index.fileset.md` — the nav's top level
+
+`sections/_index.fileset.md` is an ordinary fileset whose entries are mostly
+`tephra:section/…` references, in the order the panel should show them. It is
+one file to read with an explicit order in it, which is the argument D10 made
+for membership over flags — and **it is also where a pin goes when nobody says
+where**, which is why there is no separate default-section file (D53 amends D10).
+
+The leading underscore is a collision guard, not a convention: a person may
+reasonably name a section "index".
 
 ## `.tephra/` — machine-local state
 
@@ -162,6 +200,8 @@ Every one of these is **reported, never silent**, and none of them loses content
 | **Malformed YAML** | Treated as absent — and **the file is never rewritten.** Never overwrite what you could not parse |
 | Unknown frontmatter keys | Preserved verbatim |
 | CRLF, missing trailing newline | Accepted on read; normalised only on lines actually edited |
+| A section entry that resolves to nothing | Shown, dimmed, marked *not found* — **never hidden**. The corpus is hand-edited and synced, so a dangling reference is ordinary; hiding it makes an edit look like data loss, and the entry is the only record of what was meant (D53) |
+| A section naming a section that is already open above it | Rendered as a plain entry rather than expanded again; depth is capped at three (D53) |
 
 ## Two things that will bite if left implicit
 
@@ -179,7 +219,8 @@ Every one of these is **reported, never silent**, and none of them loses content
 | Headings | ordinary markdown |
 | `DocumentMeta.kind` | filename suffix + `kind` |
 | Branch origin | *nothing* — the link in the stream carries it (D27) |
-| Section entries (D10) | markdown links; type from target |
+| Section entries (D10) | markdown links; type from target; `tephra:` URIs for what resolves by identity (D53) |
+| The nav's order (D10) | `sections/_index.fileset.md`, in file order (D53) |
 | Fileset summaries (R20) | trailing text after each link |
 | Images | relative links to `attachments/` |
 
