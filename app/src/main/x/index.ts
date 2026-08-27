@@ -47,7 +47,7 @@ const isPayload = (value: unknown): value is Payload =>
 
 export class StreamIndex {
   readonly #notebook: Notebook
-  readonly #doc: StreamDocument
+  readonly #stream: () => Promise<StreamDocument>
   readonly #store: IndexStore<Payload>
 
   /** Everything known, by file. Rebuilt lazily; never the authority. */
@@ -55,9 +55,9 @@ export class StreamIndex {
   #status: IndexStatus = { known: 0, total: 0, building: false }
   #sweeping: Promise<void> | null = null
 
-  constructor(notebook: Notebook, doc: StreamDocument) {
+  constructor(notebook: Notebook, stream: () => Promise<StreamDocument>) {
     this.#notebook = notebook
-    this.#doc = doc
+    this.#stream = stream
     this.#store = new IndexStore(notebook)
   }
 
@@ -282,12 +282,12 @@ export class StreamIndex {
         for (const file of files.filter(f => dirOf(f) === dir)) {
           const stamp = await this.#stampOf(file)
           const held = cached.get(nameOf(file))
-          const loaded = this.#loadedDate(file)
+          const loaded = await this.#loadedDate(file)
 
           // A loaded day answers for itself, whatever the cache believes: it may
           // hold edits that have not reached the file at all.
           if (loaded !== null) {
-            this.#known.set(file, { file, date: loaded, ...(await this.#doc.scan(loaded)) })
+            this.#known.set(file, { file, date: loaded, ...(await (await this.#stream()).scan(loaded)) })
           } else if (
             held !== undefined && stamp !== null && same(held.stamp, stamp) && isPayload(held.payload)
           ) {
@@ -315,10 +315,10 @@ export class StreamIndex {
   }
 
   /** The day a file belongs to, if the editor is holding it. */
-  #loadedDate(file: RelPath): DateKey | null {
+  async #loadedDate(file: RelPath): Promise<DateKey | null> {
     const date = dateOf(file)
     if (date === null) return null
-    return this.#doc.heldSegment(date) === null ? null : date
+    return (await this.#stream()).heldSegment(date) === null ? null : date
   }
 
   async #stampOf(file: RelPath): Promise<{ size: number; mtime: number } | null> {
@@ -339,7 +339,7 @@ export class StreamIndex {
       // Later parts belong to their day's first file, which has already covered
       // them; indexing them separately would double every span in a long day.
       if (parseDayFile(file)?.part !== 1) return null
-      return { file, date, ...(await this.#doc.scan(date)) }
+      return { file, date, ...(await (await this.#stream()).scan(date)) }
     }
     const text = await this.#notebook.read(file)
     if (text === null) return null

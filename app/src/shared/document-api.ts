@@ -394,6 +394,13 @@ export interface StreamDocumentApi extends Document {
 /** The narrowing, in one place rather than as a cast at each call site. */
 export const isStream = (doc: Document): doc is StreamDocumentApi => doc.meta.kind === 'stream'
 
+/** One edit as the journal sees it: a span in a segment, and what replaced it. */
+export interface JournalEdit {
+  readonly from: number
+  readonly to: number
+  readonly insert: DocumentText
+}
+
 export type Unsubscribe = () => void
 
 /** Surfaced, never auto-resolved (D12). */
@@ -519,6 +526,7 @@ export interface Document {
   // ── change feed ────────────────────────────────────────────
   onChanged(handler: (change: DocumentChange) => void): Unsubscribe
   onDiverged(handler: (d: Divergence) => void): Unsubscribe
+
 
   /** Carry a held position across a change. Null if the text it named is gone. */
   mapPosition(at: DocumentPosition, through: DocumentChange): DocumentPosition | null

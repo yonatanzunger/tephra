@@ -12,6 +12,7 @@
 // document would be reordered relative to what the typist saw.
 
 import type { Anomaly } from '../shared/anomalies.ts'
+import type { Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
@@ -27,6 +28,7 @@ import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
 import { StreamIndex } from './x/index.ts'
+import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
 import { Filesets } from './x/fileset.ts'
 import { applyEdits } from './x/text-edits.ts'
 import type { StreamWindow } from './x/window.ts'
@@ -94,10 +96,32 @@ export interface ServiceOptions {
 }
 
 export class DocumentService {
-  readonly #doc: StreamDocument
+  readonly #corpus: Corpus
+  /**
+   * The stream, borrowed once and held for as long as the service lives.
+   *
+   * **Held because it is watched, not instead of borrowing it.** The service is
+   * what keeps the stream open — every window over it, the write tiers, the
+   * journal — so it takes a watch at construction and the Corpus may never let
+   * go of it. The borrow below is how it gets the reference the first time; the
+   * watch is what makes keeping it safe (D54).
+   *
+   * A promise rather than a value because opening is asynchronous in general,
+   * even where this kind's construction is not. Documents OTHER than this one
+   * are borrowed per operation and tracked by nobody, which is MC3 onward.
+   */
+  readonly #stream: Promise<StreamDocument>
   readonly #index: StreamIndex
   readonly #filesets: Filesets
-  readonly #windows = new Map<WindowId, StreamWindow>()
+  /**
+   * The windows, and what keeps each one's document open.
+   *
+   * **A window holds its document directly**, so the Corpus must know a window
+   * exists or it could let go of a document something is still pointing at.
+   * That is what `watch` is for, and why the release is kept beside the window
+   * rather than being derivable: it ends when the window does (D54).
+   */
+  readonly #windows = new Map<WindowId, { window: StreamWindow; release: Unsubscribe }>()
   #nextId: WindowId = 1
 
   /** The serial queue. Every mutation chains onto it; reads do not need to. */
@@ -134,12 +158,17 @@ export class DocumentService {
 
   constructor(notebook: Notebook, options: ServiceOptions = {}) {
     this.#notebook = notebook
-    this.#doc = new StreamDocument(notebook)
+    this.#corpus = new Corpus(notebook)
+    this.#corpus.watch(STREAM_ID) // the stream is open for as long as the app is
+    this.#stream = this.#corpus.use(STREAM_ID, async doc => doc as StreamDocument)
     // The two point at each other by construction order: the index reads days
     // through the document so a loaded one answers from memory, and the
     // document answers corpus-wide questions through the index (D52).
-    this.#index = new StreamIndex(notebook, this.#doc)
-    this.#doc.attachIndex(this.#index)
+    // The index is handed a way to REACH the stream rather than the stream
+    // itself: opening is asynchronous in general, and a constructor cannot wait.
+    // In MC3 this becomes the Corpus, and the closure goes away.
+    this.#index = new StreamIndex(notebook, () => this.#stream)
+    void this.#stream.then(doc => doc.attachIndex(this.#index))
     this.#filesets = new Filesets(notebook)
     this.#wal = new Wal(notebook)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
@@ -154,7 +183,10 @@ export class DocumentService {
     // is right there at the moment of the change.
     // Into the log before the file tier gets to it: that gap is the whole
     // reason the log exists.
-    this.#doc.onJournal((date, baseLen, edits) => {
+    // Through the Corpus rather than from a document: with documents opening
+    // and being let go, a subscription against one of them has no lifetime to
+    // live in (D54). The id says which document an edit belongs to.
+    this.#corpus.onJournal((_id, date, baseLen, edits) => {
       for (const edit of edits) {
         this.#walPending.push({
           date: date as string,
@@ -167,7 +199,7 @@ export class DocumentService {
       this.#scheduleWal()
     })
 
-    this.#doc.onChanged(change => {
+    this.#corpus.onChanged((_id, change) => {
       // An external change must not colour OUR commit message. Measured before
       // this guard existed: a hand-edit set the headline, and the next commit
       // triggered by typing quoted text its author never wrote.
@@ -184,7 +216,7 @@ export class DocumentService {
     // layer exists to avoid.
     notebook.onExternalChange(changes => {
       void this.#serial(async () => {
-        for (const change of changes) await this.#doc.externalChanged(change.rel)
+        for (const change of changes) await (await this.#stream).externalChanged(change.rel)
 
         // **What the document did not take, the sidebar still needs.** A day
         // file becomes a DocumentChange and travels the ordinary way; a section
@@ -202,7 +234,7 @@ export class DocumentService {
       })
     })
 
-    this.#doc.onDiverged(divergence => {
+    this.#corpus.onDiverged((_id, divergence) => {
       for (const sink of this.#sinks) sink.send(CHANNEL.diverged, divergence)
     })
   }
@@ -222,8 +254,9 @@ export class DocumentService {
     await this.#notebook.write(LOCAL.uiState, JSON.stringify(state, null, 2) + '\n')
   }
 
-  get document(): StreamDocument {
-    return this.#doc
+  /** The stream itself, for the few callers that legitimately want it. */
+  document(): Promise<StreamDocument> {
+    return this.#stream
   }
 
   /** Run `work` after everything already queued, and before anything queued later. */
@@ -240,21 +273,21 @@ export class DocumentService {
 
   async info(): Promise<DocumentInfo> {
     return {
-      meta: this.#doc.meta,
-      generation: this.#doc.generation,
+      meta: (await this.#stream).meta,
+      generation: (await this.#stream).generation,
       today: StreamDocument.today(),
-      extent: await this.#doc.extent(),
+      extent: await (await this.#stream).extent(),
     }
   }
 
   async openWindow(request: ReadRequest): Promise<WindowSnapshot> {
-    const window = (await this.#doc.read({
-      begin: this.#doc.positionAt(request.first, 0),
-      end: this.#doc.positionAt(request.last, 0),
+    const window = (await (await this.#stream).read({
+      begin: (await this.#stream).positionAt(request.first, 0),
+      end: (await this.#stream).positionAt(request.last, 0),
     })) as StreamWindow
 
     const id = this.#nextId++
-    this.#windows.set(id, window)
+    this.#windows.set(id, { window, release: this.#corpus.watch(STREAM_ID) })
     window.onChanged((edits, origin) => {
       this.#broadcast({
         id,
@@ -286,7 +319,7 @@ export class DocumentService {
   /** Growing the region is a mutation, so it queues with the edits. */
   async extend(request: ExtendRequest): Promise<void> {
     await this.#serial(async () => {
-      const window = this.#windows.get(request.id)
+      const window = this.#windows.get(request.id)?.window
       if (window === undefined) throw new Error(`no such window ${request.id}`)
       await window.extend(request.direction, request.chars)
     })
@@ -294,7 +327,7 @@ export class DocumentService {
 
   async edit(request: EditRequest): Promise<EditAck> {
     return this.#serial(async () => {
-      const window = this.#windows.get(request.id)
+      const window = this.#windows.get(request.id)?.window
       if (window === undefined) throw new Error(`no such window ${request.id}`)
       await window.edit(request.edits, request.origin)
       this.#scheduleFlush()
@@ -314,36 +347,36 @@ export class DocumentService {
 
   /** Self-check only. What every open window is holding, and whether it agrees. */
   diagnose(): unknown {
-    return [...this.#windows.entries()].map(([id, window]) => ({
+    return [...this.#windows.entries()].map(([id, { window }]) => ({
       id,
       text: window.text.length,
       segments: window.diagnose(),
     }))
   }
 
-  anomalies(): readonly Anomaly[] {
-    return this.#doc.anomalies()
+  async anomalies(): Promise<readonly Anomaly[]> {
+    return (await this.#stream).anomalies()
   }
 
   async undo(): Promise<ChangeAck> {
     return this.#serial(async () => {
-      const change = await this.#doc.undo()
+      const change = await (await this.#stream).undo()
       this.#scheduleFlush()
-      return { change, generation: this.#doc.generation }
+      return { change, generation: (await this.#stream).generation }
     })
   }
 
   async redo(): Promise<ChangeAck> {
     return this.#serial(async () => {
-      const change = await this.#doc.redo()
+      const change = await (await this.#stream).redo()
       this.#scheduleFlush()
-      return { change, generation: this.#doc.generation }
+      return { change, generation: (await this.#stream).generation }
     })
   }
 
   async flush(): Promise<void> {
     this.#cancelFlush()
-    const written = await this.#serial(() => this.#doc.writeDirty())
+    const written = await this.#serial(async () => (await this.#stream).writeDirty())
     // ORDER MATTERS: files first, then the log. A crash between the two replays
     // edits the files already contain, which is exactly what `baseLen` makes
     // harmless. The other order would lose them outright.
@@ -383,7 +416,7 @@ export class DocumentService {
 
     let applied = 0
     for (const record of records) {
-      const segment = await this.#doc.segment(record.date as DateKey)
+      const segment = await (await this.#stream).segment(record.date as DateKey)
       if (segment.readOnly || segment.diverged) continue
       if (segment.length !== record.baseLen) continue // already on disk
       const body = segment.body
@@ -504,7 +537,7 @@ export class DocumentService {
 
   /** Every written day in a range, as prose — what printing and export read. */
   async proseIn(from: DateKey, to: DateKey): Promise<readonly DayProse[]> {
-    return this.#doc.proseIn(from, to)
+    return (await this.#stream).proseIn(from, to)
   }
 
   async readDay(version: VersionId, date: DateKey): Promise<string | null> {
@@ -523,7 +556,8 @@ export class DocumentService {
   async restore(version: VersionId): Promise<RestoreReport> {
     const history = this.history
     if (history === null) throw new Error('this notebook has no history to restore from')
-    const report = await this.#serial(() => history.restore(version, this.#doc))
+    const stream = await this.#stream
+    const report = await this.#serial(() => history.restore(version, stream))
     this.#unsavedWork = true
     await this.flush()
     await this.#repo?.save(`Restored to ${version.slice(0, 7)}`)
@@ -568,17 +602,22 @@ export class DocumentService {
   }
 
   releaseWindow(id: WindowId): void {
-    this.#windows.get(id)?.release()
+    const held = this.#windows.get(id)
+    held?.window.release()
+    // And tell the Corpus that one fewer thing is pointing at the document. The
+    // stream stays open regardless — the service watches it too — but for every
+    // other document this is what "closed" means.
+    held?.release()
     this.#windows.delete(id)
   }
 
   async spans(request: SpansRequest): Promise<readonly TypedSpan[]> {
-    return request.kind === undefined ? this.#doc.spans() : this.#doc.spans(request.kind)
+    return request.kind === undefined ? (await this.#stream).spans() : (await this.#stream).spans(request.kind)
   }
 
   /** Bookmark a point (R11's degenerate range). Serial, like every mutation. */
   async setAnchor(at: DocumentPosition, name: string): Promise<void> {
-    await this.#serial(() => this.#doc.setAnchor(at, name))
+    await this.#serial(async () => (await this.#stream).setAnchor(at, name))
     this.#touched()
   }
 
@@ -589,12 +628,12 @@ export class DocumentService {
    * with opposite signs — see `StreamDocument.#retag`.
    */
   async tag(span: Span, subject: string): Promise<void> {
-    await this.#serial(() => this.#doc.tag(span, subject))
+    await this.#serial(async () => (await this.#stream).tag(span, subject))
     this.#touched()
   }
 
   async untag(span: Span, subject: string): Promise<void> {
-    await this.#serial(() => this.#doc.untag(span, subject))
+    await this.#serial(async () => (await this.#stream).untag(span, subject))
     this.#touched()
   }
 
@@ -604,7 +643,7 @@ export class DocumentService {
    * sitting in memory is the one window where the two disagree (D13).
    */
   async branch(span: Span, name: string): Promise<DocumentId> {
-    const id = await this.#serial(() => this.#doc.branch(span, name))
+    const id = await this.#serial(async () => (await this.#stream).branch(span, name))
     // Not `#touched()`: the branched file is already on disk, so the window
     // where the two halves disagree is closed now rather than in a second (D13).
     this.#unsavedWork = true
@@ -636,12 +675,12 @@ export class DocumentService {
 
   /** Change what one span is tagged as. Not a corpus-wide rename (D44). */
   async renameTag(span: Span, from: string, to: string): Promise<void> {
-    await this.#serial(() => this.#doc.renameTag(span, from, to))
+    await this.#serial(async () => (await this.#stream).renameTag(span, from, to))
     this.#touched()
   }
 
   async removeAnchor(name: string): Promise<void> {
-    await this.#serial(() => this.#doc.removeAnchor(name))
+    await this.#serial(async () => (await this.#stream).removeAnchor(name))
     this.#touched()
   }
 
@@ -650,43 +689,43 @@ export class DocumentService {
   // Serial like every mutation, and flushed on the ordinary schedule. Reading
   // is not serialised: a thread list is derived from bodies already in memory.
 
-  comments(): Promise<readonly CommentThread[]> {
-    return this.#doc.comments()
+  async comments(): Promise<readonly CommentThread[]> {
+    return (await this.#stream).comments()
   }
 
   async startComment(span: Span, body: string): Promise<CommentId> {
-    const id = await this.#serial(() => this.#doc.startComment(span, body))
+    const id = await this.#serial(async () => (await this.#stream).startComment(span, body))
     this.#touched()
     return id
   }
 
   async addComment(id: CommentId, body: string): Promise<void> {
-    await this.#serial(() => this.#doc.addComment(id, body))
+    await this.#serial(async () => (await this.#stream).addComment(id, body))
     this.#touched()
   }
 
   async editComment(id: CommentId, index: number, body: string): Promise<void> {
-    await this.#serial(() => this.#doc.editComment(id, index, body))
+    await this.#serial(async () => (await this.#stream).editComment(id, index, body))
     this.#touched()
   }
 
   async deleteComment(id: CommentId, index: number): Promise<void> {
-    await this.#serial(() => this.#doc.deleteComment(id, index))
+    await this.#serial(async () => (await this.#stream).deleteComment(id, index))
     this.#touched()
   }
 
   async setCommentResolved(id: CommentId, resolved: boolean): Promise<void> {
-    await this.#serial(() => this.#doc.setCommentResolved(id, resolved))
+    await this.#serial(async () => (await this.#stream).setCommentResolved(id, resolved))
     this.#touched()
   }
 
   async setCommentAssignee(id: CommentId, to: string | null): Promise<void> {
-    await this.#serial(() => this.#doc.setCommentAssignee(id, to))
+    await this.#serial(async () => (await this.#stream).setCommentAssignee(id, to))
     this.#touched()
   }
 
   async reactToComment(id: CommentId, index: number, emoji: string, on: boolean): Promise<void> {
-    await this.#serial(() => this.#doc.reactToComment(id, index, emoji, on))
+    await this.#serial(async () => (await this.#stream).reactToComment(id, index, emoji, on))
     this.#touched()
   }
 
@@ -719,17 +758,17 @@ export class DocumentService {
     text: string,
     original: { readonly content: string; readonly ext: string },
   ): Promise<string> {
-    const rel = await this.#serial(() => this.#doc.importText(at, text, original))
+    const rel = await this.#serial(async () => (await this.#stream).importText(at, text, original))
     this.#touched()
     return rel
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
-    return this.#doc.resolveAnchor(name)
+    return (await this.#stream).resolveAnchor(name)
   }
 
   async extent(): Promise<{ readonly first: DateKey; readonly last: DateKey } | null> {
-    return this.#doc.extent()
+    return (await this.#stream).extent()
   }
 
   // ── pushing to the renderer ────────────────────────────────

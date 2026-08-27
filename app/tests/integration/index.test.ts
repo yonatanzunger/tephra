@@ -34,7 +34,7 @@ async function corpus(t: TestContext, days: readonly [string, string][], notes: 
   const notebook = await Notebook.open({ root, lock: false, watch: false })
   t.after(() => notebook.close())
   const doc = new StreamDocument(notebook)
-  return { root, notebook, doc, index: new StreamIndex(notebook, doc) }
+  return { root, notebook, doc, index: new StreamIndex(notebook, async () => doc) }
 }
 
 test('subjects come back with their counts and where they first appear', async t => {
