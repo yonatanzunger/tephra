@@ -75,7 +75,9 @@ body {
 
 .frame-nav-slot {
   min-width: 0;
-  overflow-y: auto;
+  /* The panel manages its own scrolling now: the sections scroll and the
+     status line at the foot stays put. */
+  overflow: hidden;
   background: rgb(var(--surface-ground));
   border-right: 1px solid rgb(var(--border));
 }
@@ -140,7 +142,9 @@ body {
 }
 
 /* ── nav ──────────────────────────────────────────────────────────────── */
-.frame-nav { padding: 1rem 0 1.5rem; font-size: 13px; }
+/* A column: the sections scroll, the "where you are" line does not. */
+.frame-nav { display: flex; flex-direction: column; height: 100%; font-size: 13px; }
+.nav-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 1rem 0 1rem; }
 .nav-section { margin-bottom: .2rem; }
 /* **Legibility, and where it went wrong.** `--text-muted` is the theme's
    authored FAINT colour, chosen against the paper for things that should
@@ -168,6 +172,30 @@ body {
 }
 .nav-dates button:hover { background: rgb(var(--surface-muted)); color: rgb(var(--text)); }
 .nav-dates button.here { background: rgb(var(--accent) / .16); color: rgb(var(--text-heading)); }
+
+/* ── where you are ────────────────────────────────────────────────────────
+   The annotations covering the caret. It sits above the sections because it
+   is about NOW rather than about the corpus, and because it is what a person
+   glances at to answer "what am I in the middle of". */
+.nav-here {
+  flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem;
+  margin: 0; padding: .55rem 1.1rem .7rem;
+  border-top: 1px solid rgb(var(--border));
+  background: rgb(var(--surface-ground));
+  /* It may grow, but not without limit: a passage under six subjects should
+     not take the panel. */
+  max-height: 30%; overflow-y: auto;
+  font-size: 11.5px; line-height: 1.5; color: rgb(var(--text));
+}
+.nav-here-empty { color: rgb(var(--text-muted)); font-style: italic; }
+.nav-here-day { font-weight: 600; font-variant-numeric: tabular-nums; }
+.nav-here-sep { color: rgb(var(--text-muted)); padding-right: .25rem; }
+.nav-here-part { color: rgb(var(--text) / .85); }
+.nav-here-tags { display: flex; flex-wrap: wrap; gap: .2rem; width: 100%; }
+.nav-here-tag {
+  font-size: 10.5px; padding: 0 .35rem; border-radius: 999px;
+  color: rgb(var(--text)); background: rgb(var(--tag) / .3);
+}
 
 /* ── rows: one verb, and apparatus for the sets (D51) ─────────────────────
    Every row is a button that goes somewhere. The count is what tells a reader,

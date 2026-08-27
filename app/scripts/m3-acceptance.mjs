@@ -233,6 +233,23 @@ console.log('\n— the sidebar —')
       r.trackColour === String(r.tagColourInText),
     `track ${r.trackColour} · text ${r.tagColourInText}`,
   )
+  check(
+    'the foot of the panel says where the caret is: day, heading, subject',
+    /26 Aug/.test(String(r.whereDay)) &&
+      Array.isArray(r.whereHeadings) && r.whereHeadings.includes('A heading today') &&
+      Array.isArray(r.whereTags) && r.whereTags.includes('Recurring'),
+    `${r.whereDay} › ${JSON.stringify(r.whereHeadings)} · ${JSON.stringify(r.whereTags)}`,
+  )
+  check(
+    'and filling it moves nothing above it',
+    typeof r.rowsMoved === 'number' && r.rowsMoved < 1,
+    `rows moved ${r.rowsMoved}px`,
+  )
+  check(
+    'and it empties when the caret is in plain text',
+    Array.isArray(r.whereTagsAway) && r.whereTagsAway.length === 0 && r.whereHeadingsAway === 0,
+    `${JSON.stringify(r.whereTagsAway)} · ${r.whereHeadingsAway} headings`,
+  )
   check('and nothing errored on the way', r.appError === 'none')
 }
 

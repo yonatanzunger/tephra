@@ -17,9 +17,18 @@ import type {
   IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
 } from '../../../shared/nav-api.ts'
 
+/** What the caret is inside, in the order a person would say it. */
+export interface Where {
+  readonly date: string | null
+  readonly headings: readonly string[]
+  readonly subjects: readonly string[]
+}
+
 export interface NavProps {
   readonly today: DateKey | null
   readonly here: DateKey | null
+  /** Day, heading chain and subjects around the caret (D51). */
+  readonly where: Where
   /** Bumped when the document changes, so the sections re-ask. */
   readonly generation: number
   readonly onGo: (at: Located) => void
@@ -59,7 +68,7 @@ interface Row {
 const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
-export function Nav({ today, here, generation, onGo, onActive }: NavProps): React.JSX.Element {
+export function Nav({ today, here, where, generation, onGo, onActive }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
   /** Which days have their headings out. Today's, to begin with. */
@@ -164,6 +173,7 @@ export function Nav({ today, here, generation, onGo, onActive }: NavProps): Reac
 
   return (
     <nav className="frame-nav" aria-label="Sections">
+      <div className="nav-scroll">
       <Section id="timeline" title="Timeline" count={outline.length} open={open.has('timeline')} onToggle={toggle}>
         {/* Newest first: "the most recent five" is what a person means by
             recent, and it puts today where the hand already is. */}
@@ -220,11 +230,44 @@ export function Nav({ today, here, generation, onGo, onActive }: NavProps): Reac
         ))}
       </Section>
 
-      {/* Absence that explains itself, as this panel has done since M0. */}
-      {status !== null && status.building && (
-        <p className="nav-absent">Still looking through {status.total} files ({status.known} so far).</p>
-      )}
-      <p className="nav-absent">Filesets and pinned sections are next.</p>
+        {/* Absence that explains itself, as this panel has done since M0. */}
+        {status !== null && status.building && (
+          <p className="nav-absent">Still looking through {status.total} files ({status.known} so far).</p>
+        )}
+        <p className="nav-absent">Filesets and pinned sections are next.</p>
+      </div>
+
+      {/* **Where you are — at the FOOT, and that is a layout decision.** The
+          annotations covering the caret are already in the window's prose
+          (D50), so this line costs nothing to compute; what it did cost was a
+          jump. Above the sections, a second line of subject chips pushed every
+          row down while someone was reading them, which is the reflow this
+          project has ruled out everywhere else (D42). Pinned to the bottom, it
+          grows into space that belongs to nobody. */}
+      <div className="nav-here" aria-live="polite">
+        {where.date === null ? (
+          <span className="nav-here-empty">Nowhere in particular</span>
+        ) : (
+          <>
+            <span className="nav-here-day">{shortDate(where.date as DateKey)}</span>
+            {where.headings.map(h => (
+              <span key={h} className="nav-here-part">
+                <span className="nav-here-sep" aria-hidden="true">›</span>
+                {h}
+              </span>
+            ))}
+            {where.subjects.length > 0 && (
+              <span className="nav-here-tags">
+                {where.subjects.map(s => (
+                  <span key={s} className="nav-here-tag" style={{ '--tag': `var(--tag-${tagSlot(s)})` } as React.CSSProperties}>
+                    {s}
+                  </span>
+                ))}
+              </span>
+            )}
+          </>
+        )}
+      </div>
     </nav>
   )
 }

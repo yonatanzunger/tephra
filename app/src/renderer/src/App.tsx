@@ -1,7 +1,9 @@
 // The application shell. Chrome only — the editing surface owns its own DOM.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { WindowPosition, DateKey, DocumentChange, DocumentPosition, SegmentKey , SessionGeneration } from '../../shared/document-api.ts'
+import type {
+  WindowPosition, DateKey, DocumentChange, DocumentPosition, DocumentWindow, SegmentKey, SessionGeneration,
+} from '../../shared/document-api.ts'
 import { defaultUiState, type UiState } from '../../shared/ui-state.ts'
 import { RemoteDocument } from './x/remote-document'
 import { Pane } from './pane/pane'
@@ -48,6 +50,40 @@ import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
 import { ThemePanel } from './theme/ThemePanel'
+
+/** What the caret is inside, in the order a person would say it. */
+export interface Where {
+  readonly date: string | null
+  readonly headings: readonly string[]
+  readonly subjects: readonly string[]
+}
+
+const EMPTY_WHERE: Where = { date: null, headings: [], subjects: [] }
+const keyOf = (w: Where): string => `${w.date}|${w.headings.join('>')}|${w.subjects.join(',')}`
+
+/**
+ * The annotations covering a position (D50, D51).
+ *
+ * **Read off the window's prose rather than asked of the index**: this runs on
+ * every keystroke, the answer is about the place the caret already is, and the
+ * window is holding exactly that. The index is for the corpus; this is for
+ * here.
+ */
+function covering(w: DocumentWindow | null, at: DocumentPosition): Where {
+  if (w === null) return EMPTY_WHERE
+  const buffer = w.toWindow(at)
+  if (buffer === null) return EMPTY_WHERE
+  const inside = w.prose.annotations.filter(a => a.at.from <= buffer && buffer <= a.at.to)
+  return {
+    date: inside.find(a => a.kind === 'date')?.date ?? null,
+    // Outermost first, which is the order a heading chain is spoken in.
+    headings: inside
+      .filter(a => a.kind === 'heading')
+      .sort((a, b) => a.level - b.level)
+      .map(a => a.text),
+    subjects: inside.filter(a => a.kind === 'tag').map(a => a.subject),
+  }
+}
 
 export function App(): React.JSX.Element {
   const [doc, setDoc] = useState<RemoteDocument | null>(null)
@@ -528,11 +564,20 @@ export function App(): React.JSX.Element {
   // How to ask the editor what is selected, for as long as one is mounted.
   const editorRef = useRef<EditorHandle | null>(null)
 
+  /** Day, heading chain and subjects around the caret — the sidebar's top line. */
+  const [where, setWhere] = useState<Where>(EMPTY_WHERE)
+
   const cursorRef = useRef<UiState['cursor']>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onCursor = useCallback(
     (at: DocumentPosition) => {
       cursorRef.current = { segment: at.segment as string as never, offset: at.offset as number }
+      setWhere(previous => {
+        const next = covering(pane?.window ?? null, at)
+        // Compared before it is set: this runs on every keystroke, and a new
+        // object each time would redraw the panel while someone is typing.
+        return keyOf(next) === keyOf(previous) ? previous : next
+      })
       if (saveTimer.current !== null) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
         void window.tephra.doc.saveUiState({
@@ -637,6 +682,7 @@ export function App(): React.JSX.Element {
             today={doc?.today ?? null}
             here={location?.kind === 'date' ? location.date : null}
             generation={navGeneration}
+            where={where}
             onGo={at => void goToLocated(at)}
             onActive={(places, current, slot) => setTrack({ places, current, slot })}
           />

@@ -957,6 +957,29 @@ export async function runVerify(scene: string): Promise<void> {
       )
       say('trackBeyond', [...document.querySelectorAll('.tx-track-beyond')].map(e => e.textContent))
       say('steppersShown', document.querySelectorAll('.nav-steps button').length)
+      // Where you are: put the caret inside the tagged phrase under today's
+      // heading, read the line back — and check that filling it moved nothing
+      // above it, which is why it sits at the foot (D42's no-reflow rule).
+      const all = view.state.doc.toString()
+      const inside = all.indexOf('the third mention')
+      view.dispatch({ selection: { anchor: inside + 4 } })
+      await settle(500)
+      const firstRowBefore = document.querySelector('.nav-row')?.getBoundingClientRect().top ?? -1
+      const here = document.querySelector('.nav-here')
+      say('whereDay', here?.querySelector('.nav-here-day')?.textContent ?? '')
+      say('whereHeadings', [...(here?.querySelectorAll('.nav-here-part') ?? [])].map(e => e.textContent?.replace('›', '').trim()))
+      say('whereTags', [...(here?.querySelectorAll('.nav-here-tag') ?? [])].map(e => e.textContent))
+      say('rowsMoved', Math.abs((document.querySelector('.nav-row')?.getBoundingClientRect().top ?? -1) - firstRowBefore))
+
+      // And out of everything: the line has to empty as well as fill.
+      const plain = all.indexOf('Five days ago')
+      if (plain >= 0) {
+        view.dispatch({ selection: { anchor: plain + 2 } })
+        await settle(400)
+        say('whereTagsAway', [...document.querySelectorAll('.nav-here-tag')].map(e => e.textContent))
+        say('whereHeadingsAway', document.querySelectorAll('.nav-here-part').length)
+      }
+
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
     }
