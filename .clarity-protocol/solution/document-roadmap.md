@@ -114,9 +114,12 @@ be lost.*
     the write tiers through the service.
 15. **New: a borrow under load.** Twenty concurrent borrows of one id, with
     edits interleaved, ending with one document and no lost edit.
-16. **New: eviction does not lose text.** Fill the cache past its bound with
-    clean documents while one is dirty; the dirty one is still there and still
-    dirty.
+16. **Eviction under pressure**, as far as one kind allows: a borrow survives
+    ten sweeps at a cache bound of zero, a borrow that THROWS still releases,
+    and a dirty document is still held at a bound of one. **The multi-document
+    version — cycling clean documents through a bounded cache while one is dirty
+    — moves to MC3**, because it needs a second kind to be openable and writing
+    it against one document would be testing the test.
 17. `m0`, `m1`, `m2`, `m3`.
 
 ### What MC2 does NOT do

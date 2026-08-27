@@ -186,3 +186,60 @@ test('and a read borrow leaves nothing to flush', async t => {
   await c.use(STREAM_ID, async doc => doc, { mode: 'read', retain: false })
   assert.deepEqual(await c.flushAll(), [])
 })
+
+// ── under load, which is where a cache stops being obvious (MC2d) ──────────
+
+test('twenty borrows racing, with edits among them, leave one document', async t => {
+  // Not an ordering test — ordering is the service's serial queue (D20). What
+  // this asks is the Corpus's own promise: however many callers arrive at once
+  // and whatever they do, there is ONE document and it stays valid throughout.
+  const { corpus: c } = await corpus(t, { cache: 1 })
+  const seen: unknown[] = []
+
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      c.use(STREAM_ID, async doc => {
+        seen.push(doc)
+        if (i % 5 === 0) await scribble(doc)
+        // Yield, so every borrow is genuinely interleaved with the others at an
+        // await rather than running to completion in turn.
+        await new Promise(resolve => setImmediate(resolve))
+      }),
+    ),
+  )
+
+  // **What is claimed is identity, not timing.** A borrow that ran before the
+  // first edit landed sees a clean document, and is right to — the Corpus
+  // promises one object, and the serial queue promises order (D20). Asserting
+  // dirtiness mid-flight would be testing the queue through the wrong object.
+  assert.equal(new Set(seen).size, 1, 'one document, twenty borrows')
+  await c.use(STREAM_ID, async doc => {
+    assert.equal(doc, seen[0], 'and the same one afterwards')
+    assert.equal(doc.isDirty, true, 'carrying every edit those borrows made')
+  })
+  assert.equal(c.held().length, 1, 'still held, because it is dirty')
+})
+
+test('eviction pressure during a borrow cannot take the document away', async t => {
+  const { corpus: c } = await corpus(t, { cache: 0 })
+  await c.use(STREAM_ID, async held => {
+    // Every one of these ends with an eviction sweep, at a cache bound of zero.
+    await Promise.all(Array.from({ length: 10 }, () => c.use(STREAM_ID, async doc => {
+      assert.equal(doc, held)
+    })))
+    assert.equal(held.meta.kind, 'stream', 'still usable after ten sweeps')
+  })
+  assert.deepEqual(c.held(), [], 'and let go the moment nothing is using it')
+})
+
+test('a borrow that throws still releases the document', async t => {
+  // `finally`, not a happy path — a document held by a failed operation would
+  // be held forever, which is the leak the scoped form exists to prevent.
+  const { corpus: c } = await corpus(t, { cache: 0 })
+  await assert.rejects(() =>
+    c.use(STREAM_ID, async () => {
+      throw new Error('the work went wrong')
+    }),
+  )
+  assert.deepEqual(c.held(), [], 'released anyway')
+})
