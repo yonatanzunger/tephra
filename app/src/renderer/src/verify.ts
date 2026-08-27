@@ -984,6 +984,51 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'sections') {
+      // The curated half (D53): a fileset of filesets, read off disk, rendered
+      // above the built-ins, with every entry kind resolving the way the format
+      // says it does.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-section').length < 5) {
+        await settle(200)
+        waited += 200
+      }
+
+      const titleOf = (head: Element | null): string =>
+        [...(head?.childNodes ?? [])]
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent ?? '')
+          .join('')
+          .trim()
+      say('sections', [...document.querySelectorAll('.nav-section')].map(el =>
+        titleOf(el.querySelector('.nav-head'))))
+
+      const curated = [...document.querySelectorAll('.nav-section')][0]
+      const rows = [...(curated?.querySelectorAll('.nav-row') ?? [])] as HTMLElement[]
+      say('curatedRows', rows.map(r => r.textContent?.trim() ?? ''))
+      say('summaries', [...(curated?.querySelectorAll('.nav-detail') ?? [])].map(e => e.textContent))
+      say('missing', [...(curated?.querySelectorAll('.nav-missing') ?? [])].map(e => e.textContent))
+      say('nested', (curated?.querySelectorAll('.nav-row-wrap[style*="0.85rem"]') ?? []).length)
+
+      // A pinned subject is the SAME ROW as the built-in one: same verb, same
+      // steppers, same marks. Clicking it goes to the subject's first place.
+      const pinned = rows.find(r => (r.textContent ?? '').includes('What keeps coming up'))
+      pinned?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(800)
+      say('caretAfterPinned', view.state.selection.main.head)
+      say('marksAfterPinned', document.querySelectorAll('.tx-track-mark').length)
+
+      // A section is a container: its caret discloses, the way a day's does.
+      const caret = curated?.querySelector('.nav-caret') as HTMLElement | null
+      say('rowsBeforeCollapse', rows.length)
+      caret?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(300)
+      say('rowsAfterCollapse', (curated?.querySelectorAll('.nav-row') ?? []).length)
+
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'markpanel') {
       const click = (index: number): boolean => {
         const marks = document.querySelectorAll('.tx-handle')

@@ -87,6 +87,9 @@ const tephra = {
     status: (): Promise<IndexStatus> => ipcRenderer.invoke(CHANNEL.navStatus),
     /** The curated half: sections, resolved into a tree (D53). */
     sections: (): Promise<SectionTree> => ipcRenderer.invoke(CHANNEL.navSections),
+    /** Follow a reference that leaves the app: a URL, or a file the OS owns. */
+    open: (reference: Reference): Promise<'opened' | 'missing' | 'unsupported'> =>
+      ipcRenderer.invoke(CHANNEL.navOpen, reference),
     /** Something changed on disk that no window is holding open (D53). */
     onCorpusChanged(handler: Handler<readonly string[]>): () => void {
       const listener = (_e: unknown, paths: readonly string[]): void => handler(paths)

@@ -43,6 +43,7 @@ export const CHANNEL = {
   navOccurrences: 'tephra:nav:occurrences',
   navStatus: 'tephra:nav:status',
   navSections: 'tephra:nav:sections',
+  navOpen: 'tephra:nav:open',
   /**
    * A corpus file changed on disk that no document is holding open.
    *

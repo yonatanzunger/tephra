@@ -15,7 +15,7 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
-import type { Located } from '../../shared/nav-api.ts'
+import type { Located, Reference } from '../../shared/nav-api.ts'
 import { DateRange, type DateRangeRequest } from './frame/DateRange'
 import { MarkPanel } from './frame/MarkPanel'
 import { Rail } from './frame/Rail'
@@ -50,6 +50,26 @@ import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
 import { ThemePanel } from './theme/ThemePanel'
+
+/** A reference in words, for the one place a person is told about a failure. */
+function describe(target: Reference): string {
+  switch (target.kind) {
+    case 'url':
+      return target.href
+    case 'file':
+      return target.path
+    case 'section':
+      return `the section “${target.name}”`
+    case 'anchor':
+      return `the bookmark “${target.name}”`
+    case 'tag':
+      return `the subject “${target.subject}”`
+    case 'date':
+      return target.date
+    case 'heading':
+      return `“${target.text}”`
+  }
+}
 
 /** What the caret is inside, in the order a person would say it. */
 export interface Where {
@@ -689,6 +709,16 @@ export function App(): React.JSX.Element {
             where={where}
             onGo={at => void goToLocated(at)}
             onActive={(places, current, slot) => setTrack({ places, current, slot })}
+            onUnavailable={(target, why) =>
+              setError(
+                why === 'missing'
+                  ? `That is not there any more: ${describe(target)}`
+                  : // Named rather than shrugged at: the gesture is right and the
+                    // capability is not built, which is a different thing from a
+                    // broken link (D53).
+                    `Opening ${describe(target)} arrives with documents beyond the stream.`,
+              )
+            }
           />
         }
         stream={

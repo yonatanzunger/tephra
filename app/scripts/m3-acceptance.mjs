@@ -253,6 +253,71 @@ console.log('\n— the sidebar —')
   check('and nothing errored on the way', r.appError === 'none')
 }
 
+// ── 3. curated sections ─────────────────────────────────────────────────────
+//
+// D53's claims, over a real sections/ tree: the top level is a fileset of
+// filesets, every entry kind is written the way the format says, an entry that
+// resolves to nothing is still an entry, and a pinned row is the SAME row as a
+// built-in one.
+console.log('\n— curated sections —')
+{
+  const TAG = (s, text) => `<!--tephra:tag-start ${s}-->${text}<!--tephra:tag-end ${s}-->`
+  const root = await week([
+    `Today, with ${TAG('Recurring', 'the second mention')} of it.\n`,
+    `Yesterday, where ${TAG('Recurring', 'it first came up')}, and <!--tephra:mark the-spot-->a mark.\n`,
+  ])
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(
+    join(root, 'sections', '_index.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: My sections\n---\n' +
+      '- [The house](tephra:section/house) — everything about the move\n' +
+      '- [What keeps coming up](tephra:tag/Recurring)\n' +
+      '- [A section that went away](tephra:section/gone)\n',
+  )
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n' +
+      'What I am tracking about the move.\n\n' +
+      '- [That marked spot](tephra:mark/the-spot)\n' +
+      '- [The listing](https://example.com/listing) — asking price is optimistic\n',
+  )
+  const r = report(await launch('sections', root))
+
+  check(
+    'the curated sections come first, above the built-ins (D51)',
+    Array.isArray(r.sections) && r.sections[0] === 'My sections' && r.sections[1] === 'Timeline',
+    JSON.stringify(r.sections),
+  )
+  check(
+    'a fileset of filesets, with the nested one expanded',
+    Array.isArray(r.curatedRows) && r.curatedRows.some(t => t.includes('The house')) &&
+      r.curatedRows.some(t => t.includes('That marked spot')) && r.nested >= 2,
+    `${JSON.stringify(r.curatedRows)} · ${r.nested} nested`,
+  )
+  check(
+    'the summary after the link is shown, and is the words a person wrote (R20)',
+    Array.isArray(r.summaries) && r.summaries.includes('everything about the move') &&
+      r.summaries.includes('asking price is optimistic'),
+    JSON.stringify(r.summaries),
+  )
+  check(
+    'an entry that resolves to nothing is still an entry, and says so (D53)',
+    Array.isArray(r.missing) && r.missing.length === 1 && r.missing[0] === 'not found',
+    JSON.stringify(r.missing),
+  )
+  check(
+    'a pinned subject is the same row as a built-in one: same verb, same marks',
+    r.caretAfterPinned > 0 && r.marksAfterPinned === 2,
+    `caret ${r.caretAfterPinned}, ${r.marksAfterPinned} track marks`,
+  )
+  check(
+    'and a section is a container its caret discloses',
+    r.rowsAfterCollapse < r.rowsBeforeCollapse,
+    `${r.rowsBeforeCollapse} → ${r.rowsAfterCollapse} rows`,
+  )
+  check('and nothing errored on the way', r.appError === 'none')
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

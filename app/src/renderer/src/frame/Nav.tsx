@@ -38,6 +38,8 @@ export interface NavProps {
    * The sidebar knows the set; only the editor knows where a place sits on the
    * page. This is the seam between those two facts (D51).
    */
+  /** A destination that could not be reached, and why. */
+  readonly onUnavailable: (target: Reference, why: 'missing' | 'unsupported') => void
   readonly onActive: (
     places: readonly Located[],
     current: number,
@@ -68,7 +70,9 @@ interface Row {
 const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
-export function Nav({ today, here, where, generation, onGo, onActive }: NavProps): React.JSX.Element {
+export function Nav({
+  today, here, where, generation, onGo, onActive, onUnavailable,
+}: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
   /** Which days have their headings out. Today's, to begin with. */
@@ -121,6 +125,14 @@ export function Nav({ today, here, where, generation, onGo, onActive }: NavProps
    */
   const go = useCallback(
     async (row: Row): Promise<void> => {
+      // **Some destinations are not in the corpus.** A URL is the browser's and
+      // a PDF is the OS's (D10), so "take me there" leaves the app rather than
+      // moving the caret — the same verb, a different there.
+      if (row.reference.kind === 'url' || row.reference.kind === 'file') {
+        const how = await window.tephra.nav.open(row.reference)
+        if (how !== 'opened') onUnavailable(row.reference, how)
+        return
+      }
       const places =
         active?.key === row.key ? active.places : await window.tephra.nav.occurrences(row.reference)
       if (places.length === 0) return
@@ -129,7 +141,7 @@ export function Nav({ today, here, where, generation, onGo, onActive }: NavProps
       onActive(places, next, slotOf(row.reference))
       onGo(places[next] as Located)
     },
-    [active, onGo, onActive],
+    [active, onGo, onActive, onUnavailable],
   )
 
   const step = useCallback(
@@ -311,6 +323,9 @@ function CuratedRows({
   active: { key: string; places: readonly Located[]; at: number } | null
   onGo: (row: Row) => void
 }): React.JSX.Element {
+  // Open by default: a section someone curated is one they want to see.
+  const [open, setOpen] = useState(true)
+  const onToggle = (): void => setOpen(was => !was)
   const row: Row = {
     key: `pin:${entry.target.kind}:${entry.label}`,
     label: entry.label,
@@ -325,9 +340,15 @@ function CuratedRows({
         style={{ paddingLeft: `${depth * 0.85}rem` }}
       >
         {entry.target.kind === 'section' && (
-          <span className="nav-caret" aria-hidden="true">
-            ▾
-          </span>
+          <button
+            type="button"
+            className="nav-caret"
+            aria-expanded={open}
+            aria-label={open ? `Collapse ${entry.label}` : `Expand ${entry.label}`}
+            onClick={onToggle}
+          >
+            {open ? '▾' : '▸'}
+          </button>
         )}
         <button
           type="button"
@@ -340,7 +361,7 @@ function CuratedRows({
           {entry.missing && <span className="nav-count nav-missing">not found</span>}
         </button>
       </div>
-      {entry.children?.entries.map((child, i) => (
+      {open && entry.children?.entries.map((child, i) => (
         <CuratedRows
           key={`${child.label}:${i}`}
           entry={child}

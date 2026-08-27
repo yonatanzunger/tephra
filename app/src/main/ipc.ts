@@ -56,6 +56,32 @@ export function registerDocumentIpc(service: DocumentService): void {
   )
   ipcMain.handle(CHANNEL.navStatus, () => service.index.status())
   ipcMain.handle(CHANNEL.navSections, () => service.sections.tree())
+
+  /**
+   * Follow a reference that leaves the app (D10's third and fourth kinds).
+   *
+   * **Split the same way link-following is**: the service says where it points,
+   * which is a question about the notebook; the shell opens it, which is
+   * Electron's. A reference the app should handle ITSELF — a bookmark, a
+   * subject, a day — never arrives here, because going there is navigation and
+   * not opening.
+   */
+  ipcMain.handle(CHANNEL.navOpen, async (_e, reference: Reference): Promise<string> => {
+    if (reference.kind === 'url') {
+      await shell.openExternal(reference.href)
+      return 'opened'
+    }
+    if (reference.kind !== 'file') return 'unsupported'
+
+    const at = await service.linkTarget(reference.path)
+    if (at === null) return 'missing'
+    // A markdown file in the corpus is a DOCUMENT, and opening one in the
+    // editor waits on documents other than the stream (D27, M3.4). Handing it
+    // to the OS instead would open it in some other editor, which is a
+    // different act wearing the same gesture.
+    if (at.endsWith('.md')) return 'unsupported'
+    return (await shell.openPath(at)) === '' ? 'opened' : 'missing'
+  })
   /**
    * Import whatever is on the clipboard.
    *
