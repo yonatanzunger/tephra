@@ -144,9 +144,17 @@ export class DocumentService {
   /** Whether anything outside the app changed since the last version. */
   #sawExternal = false
 
-  readonly #wal: Wal
+  /**
+   * One log per document (D32, D54).
+   *
+   * `walFile(docId)` has always taken an id and has only ever been given
+   * `'stream'`. Making it real here rather than when the second writable kind
+   * arrives means a pin's durability is not a thing anybody has to remember to
+   * add.
+   */
+  readonly #wals = new Map<DocumentId, Wal>()
   readonly #walBatchMs: number
-  #walPending: WalRecord[] = []
+  readonly #walPending = new Map<DocumentId, WalRecord[]>()
   #walTimer: ReturnType<typeof setTimeout> | null = null
 
   /** Dates touched since the last version, for its reason. */
@@ -170,7 +178,6 @@ export class DocumentService {
     this.#index = new StreamIndex(notebook, () => this.#stream)
     void this.#stream.then(doc => doc.attachIndex(this.#index))
     this.#filesets = new Filesets(notebook)
-    this.#wal = new Wal(notebook)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
     this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
@@ -186,16 +193,19 @@ export class DocumentService {
     // Through the Corpus rather than from a document: with documents opening
     // and being let go, a subscription against one of them has no lifetime to
     // live in (D54). The id says which document an edit belongs to.
-    this.#corpus.onJournal((_id, date, baseLen, edits) => {
+    this.#corpus.onJournal((id, segment, baseLen, edits) => {
+      const pending = this.#walPending.get(id) ?? []
       for (const edit of edits) {
-        this.#walPending.push({
-          date: date as string,
+        pending.push({
+          doc: id as string,
+          date: segment as string,
           baseLen,
           from: edit.from,
           to: edit.to,
           insert: edit.insert,
         })
       }
+      this.#walPending.set(id, pending)
       this.#scheduleWal()
     })
 
@@ -376,14 +386,16 @@ export class DocumentService {
 
   async flush(): Promise<void> {
     this.#cancelFlush()
-    const written = await this.#serial(async () => (await this.#stream).writeDirty())
+    // Everything with unsaved work, not only the stream: the tiers are the
+    // corpus's, not one document's (D54, MC2c).
+    const written = await this.#serial(() => this.#corpus.flushAll())
     // ORDER MATTERS: files first, then the log. A crash between the two replays
     // edits the files already contain, which is exactly what `baseLen` makes
     // harmless. The other order would lose them outright.
     if (this.#walTimer !== null) clearTimeout(this.#walTimer)
     this.#walTimer = null
-    this.#walPending = []
-    await this.#wal.clear()
+    this.#walPending.clear()
+    for (const wal of this.#wals.values()) await wal.clear()
     if (written.length > 0) {
       this.#versionable()
     }
@@ -391,13 +403,23 @@ export class DocumentService {
 
   // ── the write-ahead log (D32) ────────────────────────────────
 
+  /** The log for one document, made on first use. */
+  #walFor(id: DocumentId): Wal {
+    const held = this.#wals.get(id)
+    if (held !== undefined) return held
+    const made = new Wal(this.#notebook, id as string)
+    this.#wals.set(id, made)
+    return made
+  }
+
   #scheduleWal(): void {
     if (this.#walTimer !== null) return
     this.#walTimer = setTimeout(() => {
       this.#walTimer = null
-      const batch = this.#walPending
-      this.#walPending = []
-      void this.#wal.append(batch)
+      for (const [id, batch] of [...this.#walPending]) {
+        this.#walPending.delete(id)
+        void this.#walFor(id).append(batch)
+      }
     }, this.#walBatchMs)
   }
 
@@ -411,11 +433,15 @@ export class DocumentService {
    * actually got to rather than refusing wholesale.
    */
   async recover(): Promise<number> {
-    const records = await this.#wal.read()
+    // One log per document, so recovery asks each of them. Only the stream is
+    // writable today; a record naming anything else is from a build that could
+    // write more, and is skipped rather than guessed at.
+    const records = await this.#walFor(STREAM_ID).read()
     if (records.length === 0) return 0
 
     let applied = 0
     for (const record of records) {
+      if (record.doc !== (STREAM_ID as string)) continue
       const segment = await (await this.#stream).segment(record.date as DateKey)
       if (segment.readOnly || segment.diverged) continue
       if (segment.length !== record.baseLen) continue // already on disk
@@ -425,7 +451,7 @@ export class DocumentService {
     }
 
     if (applied > 0) await this.flush()
-    else await this.#wal.clear()
+    else await this.#walFor(STREAM_ID).clear()
     return applied
   }
 

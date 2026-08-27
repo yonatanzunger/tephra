@@ -26,7 +26,16 @@ import type { RelPath } from './layout.ts'
 import { walFile } from './layout.ts'
 
 export interface WalRecord {
-  /** The day the edit belongs to. */
+  /**
+   * Which document the edit belongs to (D54).
+   *
+   * **Written into the record rather than inferred from the log's filename.**
+   * A log is named by slugging the document id, and slugging is not reversible
+   * — `notes/a.md` and `notes-a.md` slug alike — so recovery reads the id it
+   * was given instead of guessing at one.
+   */
+  readonly doc: string
+  /** The segment the edit belongs to: a day in the stream, `content` elsewhere. */
   readonly date: string
   /** Offsets within that day's body, before the edit. */
   readonly from: number
@@ -98,6 +107,7 @@ function isRecord(value: unknown): value is WalRecord {
   if (typeof value !== 'object' || value === null) return false
   const r = value as Partial<WalRecord>
   return (
+    typeof r.doc === 'string' &&
     typeof r.date === 'string' &&
     typeof r.from === 'number' &&
     typeof r.to === 'number' &&

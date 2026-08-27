@@ -148,6 +148,15 @@ imports `w/notebook.ts`, asserted over the import graph the way
 allowlist, so adding a kind cannot require editing the test. Three violations of
 that earlier rule got through comments; this one starts as a test.
 
+**And the same test catches the ambient DOM types.** Electron's own type
+definitions pull the DOM into scope in the MAIN process, so `Document`, `Window`
+and `File` are all silently bound there — `corpus.ts` lost an hour to a bare
+`Document` resolving to the browser's and complaining about `createElement`
+several lines later. The rule is one line: a main-side file that names one of
+those must import it. (Renaming ours to `File` was considered and rejected:
+`File` is a DOM global too, and X's object is a DOCUMENT — W has the files, and
+the whole point of `Corpus` is that the two are not the same thing.)
+
 **The two exceptions are named in the test itself**: machinery (`.tephra/` state
 — the index cache, the WAL, the lock) and the version store, which `History`
 reaches for the log and for commits. Anything that writes corpus CONTENT still

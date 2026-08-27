@@ -168,6 +168,29 @@ export class Corpus {
     return this.#notebook.has(id as string as RelPath)
   }
 
+  /**
+   * Write every open document that has unsaved edits.
+   *
+   * **The commit tier's obligation, and the reason it cannot be one document's
+   * job.** A version is corpus-wide (D32): it commits whatever the files hold,
+   * so anything still in memory when it runs is a change the history misses.
+   * With one document that was "flush the stream"; with several it is this, and
+   * the difference bites the first time a pin is a document edit (D54).
+   *
+   * Returns the files written, which is what the version tier uses to decide
+   * whether there is anything to commit at all.
+   */
+  async flushAll(): Promise<readonly RelPath[]> {
+    const written: RelPath[] = []
+    for (const opening of [...this.#opened.values()]) {
+      // An opening that failed is not a document with unsaved work in it.
+      const doc = await opening.catch(() => null)
+      if (doc === null || !doc.isDirty) continue
+      written.push(...(await doc.writeDirty()))
+    }
+    return written
+  }
+
   // ── what documents say, said once for all of them ──────────
 
   onChanged(handler: (id: DocumentId, change: DocumentChange) => void): Unsubscribe {

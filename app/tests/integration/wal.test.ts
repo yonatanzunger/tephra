@@ -134,3 +134,22 @@ test('an empty log costs nothing at startup', async t => {
   const { svc } = await session(t, root)
   assert.equal(await svc.recover(), 0)
 })
+
+test('the log says which document each record belongs to (D54)', async t => {
+  // The log is named by slugging the document id, and slugging is not
+  // reversible — so recovery reads the id from the RECORD rather than guessing
+  // at it from the filename. Only the stream is writable today; what this
+  // proves is that a record can say otherwise when one is not.
+  const root = await mkdtemp(join(tmpdir(), 'tephra-wal-'))
+  const { svc } = await session(t, root)
+  const date = await type(svc, 'journalled\n')
+  await wait(80) // past the log's batching window
+
+  const log = await readFile(join(root, walFile('stream')), 'utf8')
+  const [first] = log
+    .trim()
+    .split('\n')
+    .map(line => JSON.parse(line) as { doc: string; date: string })
+  assert.equal(first?.doc, 'stream', 'the record names its document')
+  assert.equal(first?.date, date, 'and its segment within it')
+})

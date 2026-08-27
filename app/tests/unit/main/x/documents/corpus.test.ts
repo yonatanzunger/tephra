@@ -157,3 +157,32 @@ test('a kind that is not built yet says so, rather than half-working', async t =
     /not built yet/,
   )
 })
+
+// ── the tiers are the corpus's, not one document's (MC2c) ──────────────────
+
+test('flushAll writes what is dirty, and nothing that is not', async t => {
+  const { corpus: c, notebook } = await corpus(t)
+  assert.deepEqual(await c.flushAll(), [], 'nothing open, nothing written')
+
+  await c.use(STREAM_ID, scribble)
+  const written = await c.flushAll()
+  assert.equal(written.length, 1, `one day written, got ${written.join(', ')}`)
+  assert.match((await notebook.read(dayFile(DAY))) ?? '', /^x/m)
+
+  assert.deepEqual(await c.flushAll(), [], 'and again writes nothing, because nothing is dirty')
+})
+
+test('a document that failed to open is not unsaved work', async t => {
+  // `flushAll` iterates what has been opened, and an opening that rejected is
+  // in that map until it is evicted. Asking it whether it is dirty would throw
+  // inside the commit path, which is the worst place to find out.
+  const { corpus: c } = await corpus(t)
+  await assert.rejects(() => c.use('notes/a-note.md' as DocumentId, async doc => doc))
+  assert.deepEqual(await c.flushAll(), [])
+})
+
+test('and a read borrow leaves nothing to flush', async t => {
+  const { corpus: c } = await corpus(t)
+  await c.use(STREAM_ID, async doc => doc, { mode: 'read', retain: false })
+  assert.deepEqual(await c.flushAll(), [])
+})
