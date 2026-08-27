@@ -8,7 +8,7 @@ import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
 import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
 import type {
-  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
+  IndexStatus, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow,
 } from '../shared/nav-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
@@ -85,6 +85,8 @@ const tephra = {
     occurrences: (reference: Reference): Promise<readonly Located[]> =>
       ipcRenderer.invoke(CHANNEL.navOccurrences, reference),
     status: (): Promise<IndexStatus> => ipcRenderer.invoke(CHANNEL.navStatus),
+    /** The curated half: sections, resolved into a tree (D53). */
+    sections: (): Promise<SectionTree> => ipcRenderer.invoke(CHANNEL.navSections),
   },
 
   doc: {

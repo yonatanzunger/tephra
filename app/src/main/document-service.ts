@@ -27,6 +27,7 @@ import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { StreamDocument } from './x/stream-document.ts'
 import { StreamIndex } from './x/index.ts'
+import { Filesets } from './x/fileset.ts'
 import { applyEdits } from './x/text-edits.ts'
 import type { StreamWindow } from './x/window.ts'
 
@@ -95,6 +96,7 @@ export interface ServiceOptions {
 export class DocumentService {
   readonly #doc: StreamDocument
   readonly #index: StreamIndex
+  readonly #filesets: Filesets
   readonly #windows = new Map<WindowId, StreamWindow>()
   #nextId: WindowId = 1
 
@@ -138,6 +140,7 @@ export class DocumentService {
     // document answers corpus-wide questions through the index (D52).
     this.#index = new StreamIndex(notebook, this.#doc)
     this.#doc.attachIndex(this.#index)
+    this.#filesets = new Filesets(notebook)
     this.#wal = new Wal(notebook)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
@@ -478,6 +481,11 @@ export class DocumentService {
 
   async versions(limit = 50): Promise<readonly Version[]> {
     return (await this.history?.versions(limit)) ?? []
+  }
+
+  /** The curated sections (D53) — the hand-made half of the sidebar. */
+  get sections(): Filesets {
+    return this.#filesets
   }
 
   /** The corpus index (D52) — what the sidebar asks, and what repairs it. */

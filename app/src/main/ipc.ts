@@ -55,6 +55,7 @@ export function registerDocumentIpc(service: DocumentService): void {
     service.index.occurrences(reference),
   )
   ipcMain.handle(CHANNEL.navStatus, () => service.index.status())
+  ipcMain.handle(CHANNEL.navSections, () => service.sections.tree())
   /**
    * Import whatever is on the clipboard.
    *

@@ -258,6 +258,9 @@ body {
   color: rgb(var(--text-muted)); white-space: nowrap;
 }
 .nav-head .nav-count { font-weight: 400; letter-spacing: 0; }
+.nav-row-wrap.missing .nav-row { color: rgb(var(--text) / .5); }
+.nav-missing { font-style: italic; opacity: .8; }
+
 .nav-steps { display: flex; gap: .1rem; padding-right: .5rem; }
 .nav-steps button {
   font: inherit; font-size: 11px; line-height: 1; cursor: pointer;

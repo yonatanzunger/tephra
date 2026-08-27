@@ -31,6 +31,10 @@ export type Reference =
   | { readonly kind: 'date'; readonly date: DateKey }
   | { readonly kind: 'heading'; readonly text: string }
   | { readonly kind: 'file'; readonly path: NotebookPath }
+  /** A curated section, which is a fileset by name (D53). */
+  | { readonly kind: 'section'; readonly name: string }
+  /** Somewhere else entirely: the browser's problem, not the corpus's. */
+  | { readonly kind: 'url'; readonly href: string }
 
 export interface Subject {
   readonly subject: string
@@ -56,4 +60,31 @@ export interface IndexStatus {
   readonly known: number
   readonly total: number
   readonly building: boolean
+}
+
+// ── curated sections (D53) ───────────────────────────────────
+
+/** One line of a fileset: what it points at, what it is called, what it is for. */
+export interface SectionRow {
+  readonly label: string
+  /** The human-authored text after the link. Never regenerated (R20). */
+  readonly summary: string | null
+  readonly target: Reference
+  /** A section entry's contents, once resolved. Null when it is not one. */
+  readonly children: SectionTree | null
+  /**
+   * The target does not exist.
+   *
+   * **Shown anyway** (D53): the corpus is hand-edited and synced, so a dangling
+   * reference is ordinary — and the entry is the only remaining record of what
+   * was meant.
+   */
+  readonly missing: boolean
+}
+
+export interface SectionTree {
+  readonly title: string
+  /** Null when the fileset itself is missing. */
+  readonly path: NotebookPath | null
+  readonly entries: readonly SectionRow[]
 }

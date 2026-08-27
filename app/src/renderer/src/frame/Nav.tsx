@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { DateKey } from '../../../shared/document-api.ts'
 import { tagSlot } from '../../../shared/tags.ts'
 import type {
-  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
+  IndexStatus, Located, OutlineNode, Reference, SectionRow, SectionTree, Subject, ThreadRow,
 } from '../../../shared/nav-api.ts'
 
 /** What the caret is inside, in the order a person would say it. */
@@ -69,7 +69,7 @@ const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
 export function Nav({ today, here, where, generation, onGo, onActive }: NavProps): React.JSX.Element {
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['timeline']))
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
   /** Which days have their headings out. Today's, to begin with. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
@@ -78,6 +78,7 @@ export function Nav({ today, here, where, generation, onGo, onActive }: NavProps
   const [bookmarks, setBookmarks] = useState<readonly { name: string; at: Located }[]>([])
   const [threads, setThreads] = useState<readonly ThreadRow[]>([])
   const [status, setStatus] = useState<IndexStatus | null>(null)
+  const [sections, setSections] = useState<SectionTree | null>(null)
 
   // The active row, and how far through its set we are. One at a time: it owns
   // the steppers, and it is what "next" is relative to.
@@ -88,14 +89,16 @@ export function Nav({ today, here, where, generation, onGo, onActive }: NavProps
   useEffect(() => {
     let cancelled = false
     const load = async (): Promise<void> => {
-      const [o, s, b, t, st] = await Promise.all([
+      const [o, s, b, t, st, sec] = await Promise.all([
         window.tephra.nav.outline(),
         window.tephra.nav.subjects(),
         window.tephra.nav.bookmarks(),
         window.tephra.nav.threads(),
         window.tephra.nav.status(),
+        window.tephra.nav.sections(),
       ])
       if (cancelled) return
+      setSections(sec)
       setOutline(o)
       setExpanded(previous => (previous.size === 0 && today !== null ? new Set([today]) : previous))
       setSubjects(s)
@@ -174,6 +177,23 @@ export function Nav({ today, here, where, generation, onGo, onActive }: NavProps
   return (
     <nav className="frame-nav" aria-label="Sections">
       <div className="nav-scroll">
+        {/* **Curated first, derived below** (D51). What someone put here on
+            purpose outranks what the corpus happens to contain — and both are
+            the same row, so this costs a list and no new machinery (D53). */}
+        {sections !== null && sections.entries.length > 0 && (
+          <Section
+            id="sections"
+            title={sections.title === '_index' ? 'Sections' : sections.title}
+            count={sections.entries.length}
+            open={open.has('sections')}
+            onToggle={toggle}
+          >
+            {sections.entries.map((entry, i) => (
+              <CuratedRows key={`${entry.label}:${i}`} entry={entry} depth={0} active={active} onGo={go} />
+            ))}
+          </Section>
+        )}
+
       <Section id="timeline" title="Timeline" count={outline.length} open={open.has('timeline')} onToggle={toggle}>
         {/* Newest first: "the most recent five" is what a person means by
             recent, and it puts today where the hand already is. */}
@@ -269,6 +289,67 @@ export function Nav({ today, here, where, generation, onGo, onActive }: NavProps
         )}
       </div>
     </nav>
+  )
+}
+
+/**
+ * A curated entry, and its section's entries when it is one (D53).
+ *
+ * **The same row as everywhere else.** A pinned subject has the same verb, the
+ * same steppers and the same scroll-track marks as the one in the Subjects
+ * list, because both are a `Reference` — the only things the curated form adds
+ * are a label somebody chose and a summary nothing regenerates.
+ */
+function CuratedRows({
+  entry,
+  depth,
+  active,
+  onGo,
+}: {
+  entry: SectionRow
+  depth: number
+  active: { key: string; places: readonly Located[]; at: number } | null
+  onGo: (row: Row) => void
+}): React.JSX.Element {
+  const row: Row = {
+    key: `pin:${entry.target.kind}:${entry.label}`,
+    label: entry.label,
+    ...(entry.summary === null ? {} : { detail: entry.summary }),
+    reference: entry.target,
+    count: 1,
+  }
+  return (
+    <>
+      <div
+        className={`nav-row-wrap${entry.missing ? ' missing' : ''}`}
+        style={{ paddingLeft: `${depth * 0.85}rem` }}
+      >
+        {entry.target.kind === 'section' && (
+          <span className="nav-caret" aria-hidden="true">
+            ▾
+          </span>
+        )}
+        <button
+          type="button"
+          className={`nav-row${active?.key === row.key ? ' active' : ''}`}
+          onClick={() => void onGo(row)}
+        >
+          <span className="nav-label">{row.label}</span>
+          {entry.summary !== null && <span className="nav-detail">{entry.summary}</span>}
+          {/* Never hidden, and it says why it is dim (D53). */}
+          {entry.missing && <span className="nav-count nav-missing">not found</span>}
+        </button>
+      </div>
+      {entry.children?.entries.map((child, i) => (
+        <CuratedRows
+          key={`${child.label}:${i}`}
+          entry={child}
+          depth={depth + 1}
+          active={active}
+          onGo={onGo}
+        />
+      ))}
+    </>
   )
 }
 

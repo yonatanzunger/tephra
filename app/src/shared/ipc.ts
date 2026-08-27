@@ -42,6 +42,7 @@ export const CHANNEL = {
   navThreads: 'tephra:nav:threads',
   navOccurrences: 'tephra:nav:occurrences',
   navStatus: 'tephra:nav:status',
+  navSections: 'tephra:nav:sections',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
   readClipboard: 'tephra:readClipboard',
