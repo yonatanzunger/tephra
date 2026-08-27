@@ -29,12 +29,26 @@ interface Scanned {
   readonly file: RelPath
   readonly date: DateKey | null
   readonly spans: readonly ScannedSpan[]
+  readonly blank: boolean
 }
+
+/**
+ * The cached shape, and its guard.
+ *
+ * The store keeps payloads opaque, so recognising a payload from an older shape
+ * is this file's job — and the answer is the one D52 chose: **a shape it does
+ * not recognise is a cache it throws away**, rescanned on the spot. That is
+ * what a cache with no versioning and no migration has to do to stay honest.
+ */
+type Payload = { readonly spans: readonly ScannedSpan[]; readonly blank: boolean }
+const isPayload = (value: unknown): value is Payload =>
+  typeof value === 'object' && value !== null &&
+  Array.isArray((value as Payload).spans) && typeof (value as Payload).blank === 'boolean'
 
 export class StreamIndex {
   readonly #notebook: Notebook
   readonly #doc: StreamDocument
-  readonly #store: IndexStore<readonly ScannedSpan[]>
+  readonly #store: IndexStore<Payload>
 
   /** Everything known, by file. Rebuilt lazily; never the authority. */
   #known = new Map<RelPath, Scanned>()
@@ -89,7 +103,13 @@ export class StreamIndex {
    */
   async outline(): Promise<readonly OutlineNode[]> {
     const out: OutlineNode[] = []
-    for (const { file, date, spans } of await this.#all()) {
+    const all = await this.#all()
+    // **A day nobody wrote in is not in the timeline — unless it is the latest
+    // one**, which is where you are about to write. Exactly the rule the day
+    // seam already uses on screen (`days.ts`), because it is the same question.
+    const latest = all.filter(f => f.date !== null).at(-1)?.file
+    for (const { file, date, spans, blank } of all) {
+      if (blank && date !== null && file !== latest) continue
       const day = spans.find(s => s.kind === 'date')
       const headings = spans.filter(s => s.kind === 'heading')
       const nodes = nest(headings.map(h => ({
@@ -180,7 +200,7 @@ export class StreamIndex {
    */
   async rebuild(under: RelPath = ''): Promise<{ files: number }> {
     const files = (await this.#notebook.list(under)).filter(rel => rel.endsWith('.md'))
-    const byDir = new Map<RelPath, Map<string, Cached<readonly ScannedSpan[]>>>()
+    const byDir = new Map<RelPath, Map<string, Cached<Payload>>>()
     let done = 0
 
     this.#status = { ...this.#status, building: true, total: files.length }
@@ -194,7 +214,7 @@ export class StreamIndex {
         if (stamp !== null) {
           const dir = dirOf(file)
           const entries = byDir.get(dir) ?? new Map()
-          entries.set(nameOf(file), { stamp, payload: scanned.spans })
+          entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank } })
           byDir.set(dir, entries)
         }
         done += 1
@@ -216,7 +236,8 @@ export class StreamIndex {
       const cached = (await this.#store.read(dirOf(file))).get(nameOf(file))
       const fresh = await this.#scan(file)
       if (fresh === null) continue
-      if (JSON.stringify(cached?.payload ?? null) !== JSON.stringify(fresh.spans)) wrong.push(file)
+      const payload = { spans: fresh.spans, blank: fresh.blank }
+      if (JSON.stringify(cached?.payload ?? null) !== JSON.stringify(payload)) wrong.push(file)
     }
     return wrong
   }
@@ -251,7 +272,7 @@ export class StreamIndex {
 
   async #sweep(): Promise<void> {
     const files = (await this.#notebook.list('')).filter(rel => rel.endsWith('.md'))
-    const dirty = new Map<RelPath, Map<string, Cached<readonly ScannedSpan[]>>>()
+    const dirty = new Map<RelPath, Map<string, Cached<Payload>>>()
     this.#status = { ...this.#status, total: files.length, building: true }
     let known = 0
 
@@ -266,16 +287,18 @@ export class StreamIndex {
           // A loaded day answers for itself, whatever the cache believes: it may
           // hold edits that have not reached the file at all.
           if (loaded !== null) {
-            this.#known.set(file, { file, date: loaded, spans: await this.#doc.scan(loaded) })
-          } else if (held !== undefined && stamp !== null && same(held.stamp, stamp)) {
-            this.#known.set(file, { file, date: dateOf(file), spans: held.payload })
+            this.#known.set(file, { file, date: loaded, ...(await this.#doc.scan(loaded)) })
+          } else if (
+            held !== undefined && stamp !== null && same(held.stamp, stamp) && isPayload(held.payload)
+          ) {
+            this.#known.set(file, { file, date: dateOf(file), ...held.payload })
           } else {
             const scanned = await this.#scan(file)
             if (scanned === null) continue
             this.#known.set(file, scanned)
             if (stamp !== null) {
               const entries = dirty.get(dir) ?? new Map(cached)
-              entries.set(nameOf(file), { stamp, payload: scanned.spans })
+              entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank } })
               dirty.set(dir, entries)
             }
           }
@@ -316,12 +339,12 @@ export class StreamIndex {
       // Later parts belong to their day's first file, which has already covered
       // them; indexing them separately would double every span in a long day.
       if (parseDayFile(file)?.part !== 1) return null
-      return { file, date, spans: await this.#doc.scan(date) }
+      return { file, date, ...(await this.#doc.scan(date)) }
     }
     const text = await this.#notebook.read(file)
     if (text === null) return null
     const body = parseFile(text).body
-    return { file, date: null, spans: scanSpans(body, scanMarkers(body)) }
+    return { file, date: null, spans: scanSpans(body, scanMarkers(body)), blank: body.trim() === '' }
   }
 }
 

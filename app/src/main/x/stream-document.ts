@@ -31,6 +31,18 @@ import { Segment } from './segment.ts'
 export interface SpanIndex {
   spansOf(kind?: SpanKind): Promise<readonly { at: { date: DateKey | null }; span: ScannedSpan }[]>
 }
+
+/** What one file contributes to the index: its spans, and whether it is empty. */
+export interface FileScan {
+  readonly spans: readonly ScannedSpan[]
+  /**
+   * **Nothing written in it, which is not the same as not existing.** The
+   * stream files a day whenever the app is opened (D8), so a fortnight of
+   * ordinary use leaves days that were never typed in — and a timeline listing
+   * them is a list of dates with nothing behind them.
+   */
+  readonly blank: boolean
+}
 import {
   anchorComment, at, author, insertBlock, insertBlockAt, renderBlock, restate, scanThreadBlocks, splice,
   thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
@@ -206,10 +218,9 @@ export class StreamDocument implements Document {
    * dropped. Asking `segment()` instead would have been one line and would have
    * loaded the corpus into memory to build a list of subjects.
    */
-  async scan(date: DateKey): Promise<readonly ScannedSpan[]> {
-    const held = this.#segments.get(date)
-    if (held !== undefined) return held.spans()
-    return (await this.#read(date)).spans()
+  async scan(date: DateKey): Promise<{ spans: readonly ScannedSpan[]; blank: boolean }> {
+    const segment = this.#segments.get(date) ?? (await this.#read(date))
+    return { spans: segment.spans(), blank: segment.body.trim() === '' }
   }
 
   /** Every date with a file on disk, ascending. A scan; never on the hot path. */

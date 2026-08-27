@@ -908,7 +908,26 @@ export async function runVerify(scene: string): Promise<void> {
 
       say('subjectRows', rowsIn('Subjects').map(r => r.textContent?.trim() ?? ''))
       say('bookmarkRows', rowsIn('Bookmarks').map(r => r.textContent?.trim() ?? ''))
-      say('outlineRows', rowsIn('Outline').map(r => r.textContent?.trim() ?? ''))
+      say('timelineRows', rowsIn('Timeline').map(r => r.textContent?.trim() ?? ''))
+
+      // The limit, and the way past it. A journal of twenty years cannot show
+      // every day, and a list that grows without asking is the failure mode.
+      const more = document.querySelector('.nav-more') as HTMLElement | null
+      say('moreLabel', more?.textContent?.trim() ?? 'none')
+      more?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(300)
+      say('rowsAfterMore', rowsIn('Timeline').length)
+
+      // A day collapses. The caret is a separate control from the row, so the
+      // row's verb stays "go there" (D51).
+      const carets = [...document.querySelectorAll('.nav-caret')] as HTMLElement[]
+      const open = carets.find(c => c.getAttribute('aria-expanded') === 'true')
+      say('headingsWhileOpen', rowsIn('Timeline').filter(r => r.className.includes('nav-nested')).length)
+      open?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(300)
+      say('headingsWhenCollapsed', rowsIn('Timeline').filter(r => r.className.includes('nav-nested')).length)
+      open?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(300)
 
       // THE ONE VERB. A subject used three times, clicked three times: the
       // caret should land somewhere different each time, and come back round.

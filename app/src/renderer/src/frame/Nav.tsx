@@ -35,8 +35,22 @@ interface Row {
   readonly depth?: number
 }
 
+/**
+ * How many days the timeline shows before you ask for more.
+ *
+ * **Five, and then fifteen at a time.** A journal of twenty years has seven
+ * thousand days in it; a list that shows all of them is not a list. Five is
+ * about what a person is working within, and the tranche after it is large
+ * enough that asking twice is rare.
+ */
+const FIRST_DAYS = 5
+const MORE_DAYS = 15
+
 export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Element {
-  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['outline']))
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['timeline']))
+  const [shown, setShown] = useState(FIRST_DAYS)
+  /** Which days have their headings out. Today's, to begin with. */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const [outline, setOutline] = useState<readonly OutlineNode[]>([])
   const [subjects, setSubjects] = useState<readonly Subject[]>([])
   const [bookmarks, setBookmarks] = useState<readonly { name: string; at: Located }[]>([])
@@ -59,6 +73,7 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
       ])
       if (cancelled) return
       setOutline(o)
+      setExpanded(previous => (previous.size === 0 && today !== null ? new Set([today]) : previous))
       setSubjects(s)
       setBookmarks(b)
       setThreads(t)
@@ -68,7 +83,7 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
     return () => {
       cancelled = true
     }
-  }, [generation])
+  }, [generation, today])
 
   /**
    * The one verb.
@@ -132,10 +147,42 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
 
   return (
     <nav className="frame-nav" aria-label="Sections">
-      <Section id="outline" title="Outline" count={outline.length} open={open.has('outline')} onToggle={toggle}>
-        {outline.map(day => (
-          <OutlineRows key={day.at.file} node={day} depth={0} active={active?.key ?? null} onGo={go} today={today} here={here} />
+      <Section id="timeline" title="Timeline" count={outline.length} open={open.has('timeline')} onToggle={toggle}>
+        {/* Newest first: "the most recent five" is what a person means by
+            recent, and it puts today where the hand already is. */}
+        {[...outline].reverse().slice(0, shown).map(day => (
+          <DayRows
+            key={day.at.file}
+            node={day}
+            active={active?.key ?? null}
+            onGo={go}
+            today={today}
+            here={here}
+            open={expanded.has(day.title)}
+            onToggle={() =>
+              setExpanded(previous => {
+                const next = new Set(previous)
+                if (next.has(day.title)) next.delete(day.title)
+                else next.add(day.title)
+                return next
+              })
+            }
+          />
         ))}
+        {outline.length > shown && (
+          <button
+            type="button"
+            className="nav-more"
+            onClick={() => setShown(n => Math.min(n + MORE_DAYS, outline.length))}
+          >
+            {outline.length - shown} earlier {outline.length - shown === 1 ? 'day' : 'days'} ▾
+          </button>
+        )}
+        {shown > FIRST_DAYS && (
+          <button type="button" className="nav-more" onClick={() => setShown(FIRST_DAYS)}>
+            Show fewer ▴
+          </button>
+        )}
       </Section>
 
       <Section id="subjects" title="Subjects" count={rows.subjects.length} open={open.has('subjects')} onToggle={toggle}>
@@ -165,29 +212,90 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
   )
 }
 
-/** A day and its headings, nested by the ranges they already have (D51). */
-function OutlineRows({
+/**
+ * A day, its disclosure caret, and its headings when they are out (D51).
+ *
+ * **The caret is a separate control from the row.** The row's verb is *go
+ * there*, the same as every other row's; opening a day to see its headings is
+ * a different act, and putting both on one button would be the two-verb
+ * confusion the whole design exists to avoid.
+ */
+function DayRows({
   node,
-  depth,
   active,
   onGo,
   today,
   here,
+  open,
+  onToggle,
+}: {
+  node: OutlineNode
+  active: string | null
+  onGo: (row: Row) => void
+  today: DateKey | null
+  here: DateKey | null
+  open: boolean
+  onToggle: () => void
+}): React.JSX.Element {
+  const row: Row = {
+    key: `date:${node.title}`,
+    label: shortDate(node.title as DateKey),
+    reference: { kind: 'date', date: node.title as DateKey },
+    count: 1,
+  }
+  return (
+    <>
+      <div className={`nav-row-wrap${node.title === here ? ' here' : ''}`}>
+        {/* A day with nothing under it gets SPACE, not a disabled control. A
+            dot that cannot be clicked teaches people to distrust the ones that
+            can. */}
+        {node.children.length === 0 ? (
+          <span className="nav-caret nav-caret-empty" aria-hidden="true" />
+        ) : (
+          <button
+            type="button"
+            className="nav-caret"
+            aria-expanded={open}
+            aria-label={open ? `Collapse ${node.title}` : `Expand ${node.title}`}
+            onClick={onToggle}
+          >
+            {open ? '▾' : '▸'}
+          </button>
+        )}
+        <button
+          type="button"
+          className={`nav-row${active === row.key ? ' active' : ''}`}
+          aria-current={node.title === here ? 'page' : undefined}
+          onClick={() => onGo(row)}
+        >
+          <span className="nav-label">{row.label}</span>
+          {node.title === today && <span className="nav-detail">today</span>}
+          {node.children.length > 0 && <span className="nav-count">{node.children.length}</span>}
+        </button>
+      </div>
+      {open && node.children.map(child => (
+        <HeadingRows key={`${child.at.file}:${child.at.from}`} node={child} depth={1} active={active} onGo={onGo} />
+      ))}
+    </>
+  )
+}
+
+/** A heading and whatever is nested under it, by the ranges they already have. */
+function HeadingRows({
+  node,
+  depth,
+  active,
+  onGo,
 }: {
   node: OutlineNode
   depth: number
   active: string | null
   onGo: (row: Row) => void
-  today: DateKey | null
-  here: DateKey | null
 }): React.JSX.Element {
-  const isDay = node.level === 0
   const row: Row = {
-    key: isDay ? `date:${node.title}` : `heading:${node.title}`,
-    label: isDay ? shortDate(node.title as DateKey) : node.title,
-    reference: isDay
-      ? { kind: 'date', date: node.title as DateKey }
-      : { kind: 'heading', text: node.title },
+    key: `heading:${node.title}`,
+    label: node.title,
+    reference: { kind: 'heading', text: node.title },
     count: 1,
     depth,
   }
@@ -195,24 +303,14 @@ function OutlineRows({
     <>
       <button
         type="button"
-        className={`nav-row${active === row.key ? ' active' : ''}${node.title === here ? ' here' : ''}`}
-        style={{ paddingLeft: `${0.6 + depth * 0.75}rem` }}
-        aria-current={node.title === here ? 'page' : undefined}
+        className={`nav-row nav-nested${active === row.key ? ' active' : ''}`}
+        style={{ paddingLeft: `${2.5 + (depth - 1) * 0.85}rem` }}
         onClick={() => onGo(row)}
       >
         <span className="nav-label">{row.label}</span>
-        {isDay && node.title === today && <span className="nav-detail">today</span>}
       </button>
       {node.children.map(child => (
-        <OutlineRows
-          key={`${child.at.file}:${child.at.from}`}
-          node={child}
-          depth={depth + 1}
-          active={active}
-          onGo={onGo}
-          today={today}
-          here={here}
-        />
+        <HeadingRows key={`${child.at.file}:${child.at.from}`} node={child} depth={depth + 1} active={active} onGo={onGo} />
       ))}
     </>
   )

@@ -237,6 +237,14 @@ putting the commentary somewhere else to look at.
 - Jump to a bookmark, a file, a URL, an external document by OS intent
 - Pinned lists and the events calendar, which are markdown files rather than
   features (R18, R19)
+- **Themes gain colour, and the chrome gets designed.** Themes are typography
+  only today (D41): a theme names faces, sizes and measures, and the six
+  palette colours behind `themeTokens` are not authored per theme at all. The
+  sidebar is what made this pressing — it is the first surface that is mostly
+  chrome rather than mostly text, and the default palette reads as grey on grey
+  there. Three parts: colour schemes in the theme format, at least one good
+  light and one good dark, and a pass over the menus' layout and grouping now
+  that there are enough commands for the arrangement to matter.
 
 ## M4 — retrieval
 

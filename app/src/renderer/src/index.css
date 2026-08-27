@@ -142,14 +142,22 @@ body {
 /* ── nav ──────────────────────────────────────────────────────────────── */
 .frame-nav { padding: 1rem 0 1.5rem; font-size: 13px; }
 .nav-section { margin-bottom: .2rem; }
+/* **Legibility, and where it went wrong.** `--text-muted` is the theme's
+   authored FAINT colour, chosen against the paper for things that should
+   recede inside a line of prose. The nav is not prose: it is a panel of
+   primary controls, and it sits on `--surface-ground`, which is already
+   darkened — so faint-on-ground lost contrast twice and read as grey on grey.
+   Rows are body text here. Only the secondary parts — counts, "today", a
+   date beside a name — are allowed to be quiet. */
 .nav-head {
   display: flex; align-items: center; gap: .45rem; width: 100%;
-  font: inherit; font-size: 10.5px; letter-spacing: .11em; text-transform: uppercase;
-  color: rgb(var(--text-muted)); background: none; border: 0;
-  padding: .5rem 1.1rem .35rem; cursor: pointer; text-align: left;
+  font: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .11em;
+  text-transform: uppercase;
+  color: rgb(var(--text-heading)); background: none; border: 0;
+  padding: .55rem 1.1rem .35rem; cursor: pointer; text-align: left;
 }
-.nav-head .caret { font-size: 9px; opacity: .7; }
-.nav-head:hover { color: rgb(var(--text)); }
+.nav-head .caret { font-size: 15px; line-height: 1; color: rgb(var(--text-muted)); }
+.nav-head:hover, .nav-head:hover .caret { color: rgb(var(--accent)); }
 .nav-head:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: -2px; }
 
 .nav-dates { display: flex; flex-wrap: wrap; gap: .2rem; padding: 0 .8rem; }
@@ -164,26 +172,61 @@ body {
 /* ── rows: one verb, and apparatus for the sets (D51) ─────────────────────
    Every row is a button that goes somewhere. The count is what tells a reader,
    before clicking, that this row has more than one somewhere in it. */
-.nav-row-wrap { display: flex; align-items: center; }
+/* **A row is a stripe, not a word.** The clickable region runs the full width
+   of the panel: a heading shorter than the sidebar left the rest of its line
+   dead, which makes a list feel unreliable to click at. */
+.nav-row-wrap { display: flex; align-items: center; width: 100%; }
 .nav-row {
-  display: flex; align-items: baseline; gap: .4rem; flex: 1; min-width: 0;
-  font: inherit; font-size: 12.5px; text-align: left;
-  color: rgb(var(--text-muted)); background: none; border: 0;
-  padding: .18rem 1.1rem .18rem .6rem; cursor: pointer;
-  border-left: 2px solid transparent;
+  display: flex; align-items: baseline; gap: .4rem; flex: 1; width: 100%;
+  min-width: 0; box-sizing: border-box;
+  font: inherit; font-size: 13px; text-align: left;
+  color: rgb(var(--text)); background: none; border: 0;
+  /* Indented past the section's own caret, so a day's name begins at least
+     where the section's title does — the panel reads as a hierarchy rather
+     than as two competing ones. */
+  padding: .22rem 1.1rem .22rem 1.9rem;
+  cursor: pointer; border-left: 2px solid transparent;
 }
-.nav-row:hover { background: rgb(var(--surface-muted)); color: rgb(var(--text)); }
+.nav-row-wrap .nav-row { padding-left: .35rem; }
+.nav-row:hover { background: rgb(var(--surface-muted)); color: rgb(var(--text-heading)); }
 .nav-row:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: -2px; }
-.nav-row.here, .nav-row-wrap.active .nav-row {
+.nav-row-wrap.here .nav-row, .nav-row-wrap.active .nav-row {
   color: rgb(var(--text-heading)); border-left-color: rgb(var(--accent));
+  background: rgb(var(--accent) / .10);
 }
-.nav-row.active { color: rgb(var(--text-heading)); border-left-color: rgb(var(--accent)); }
+.nav-row.active {
+  color: rgb(var(--text-heading)); border-left-color: rgb(var(--accent));
+  background: rgb(var(--accent) / .10);
+}
 .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-detail { font-size: 11px; opacity: .65; font-variant-numeric: tabular-nums; }
+.nav-detail { font-size: 11px; color: rgb(var(--text-muted)); font-variant-numeric: tabular-nums; }
+/* A nested heading is subordinate to its day, and says so by weight rather
+   than by fading — a heading you cannot read is not a smaller heading. */
+.nav-nested { font-size: 12.5px; color: rgb(var(--text) / .82); }
+.nav-nested:hover { color: rgb(var(--text-heading)); }
+/* The same triangle the section heads use, at the same indent, so the two
+   levels of disclosure read as one idea at two depths. */
+.nav-caret {
+  flex: none; width: 1.7rem; box-sizing: border-box;
+  font: inherit; font-size: 15px; line-height: 1; text-align: right; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none; border: 0;
+  padding: .1rem .25rem .1rem 0; margin-left: 1.1rem;
+}
+.nav-caret:hover { color: rgb(var(--accent)); }
+.nav-caret-empty { cursor: default; }
+.nav-more {
+  display: block; width: 100%; text-align: left;
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none; border: 0;
+  padding: .3rem 1.1rem .3rem 1.9rem;
+}
+.nav-more:hover { background: rgb(var(--surface-muted)); }
+.nav-more:hover { color: rgb(var(--accent)); }
 .nav-count {
   margin-left: auto; font-size: 10.5px; font-variant-numeric: tabular-nums;
-  color: rgb(var(--text-muted)); opacity: .8; white-space: nowrap;
+  color: rgb(var(--text-muted)); white-space: nowrap;
 }
+.nav-head .nav-count { font-weight: 400; letter-spacing: 0; }
 .nav-steps { display: flex; gap: .1rem; padding-right: .5rem; }
 .nav-steps button {
   font: inherit; font-size: 11px; line-height: 1; cursor: pointer;

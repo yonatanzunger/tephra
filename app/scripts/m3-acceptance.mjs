@@ -148,18 +148,24 @@ console.log('— printing —')
 console.log('\n— the sidebar —')
 {
   const TAG = (s, text) => `<!--tephra:tag-start ${s}-->${text}<!--tephra:tag-end ${s}-->`
+  // Eight days, so the timeline has to leave some out — the limit is part of
+  // the design, not an accident of the fixture.
   const root = await week([
     `Today.\n\n## A heading today\n\nWith ${TAG('Recurring', 'the third mention')} in it.\n`,
     `Yesterday, with ${TAG('Recurring', 'a second mention')} and <!--tephra:mark the-spot-->a bookmark.\n`,
     '\n\n',
-    `The earliest day, where ${TAG('Recurring', 'it first came up')} — and ${TAG('Once', 'something else')}.\n`,
+    `The earliest shown day, where ${TAG('Recurring', 'it first came up')} — and ${TAG('Once', 'something else')}.\n`,
+    'Four days ago.\n',
+    'Five days ago.\n',
+    'Six days ago.\n',
+    'Seven days ago, which the timeline has to leave out at first.\n',
   ])
   const r = report(await launch('sidebar', root))
 
   const sections = Array.isArray(r.sections) ? r.sections.map(s => s.title) : []
   check(
     'the sections are the built-in ones (D51)',
-    sections.join('|') === 'Outline|Subjects|Bookmarks|Comments',
+    sections.join('|') === 'Timeline|Subjects|Bookmarks|Comments',
     JSON.stringify(r.sections),
   )
   check(
@@ -174,9 +180,26 @@ console.log('\n— the sidebar —')
     JSON.stringify(r.bookmarkRows),
   )
   check(
-    'the outline holds the days, with headings under them',
-    Array.isArray(r.outlineRows) && r.outlineRows.some(t => t.includes('A heading today')),
-    JSON.stringify(r.outlineRows),
+    'the timeline holds the days, with headings under the open one',
+    Array.isArray(r.timelineRows) && r.timelineRows.some(t => t.includes('A heading today')),
+    JSON.stringify(r.timelineRows),
+  )
+  check(
+    'it shows the recent five and offers the rest',
+    Array.isArray(r.timelineRows) && r.timelineRows.filter(t => /^\d+ \w{3}/.test(t)).length === 5 &&
+      /2 earlier days/.test(String(r.moreLabel)),
+    `${JSON.stringify(r.timelineRows)} · ${r.moreLabel}`,
+  )
+  check(
+    'a day nobody wrote in is not a row (D8 files one whenever the app opens)',
+    Array.isArray(r.timelineRows) && !r.timelineRows.some(t => t.startsWith('24 Aug')),
+    JSON.stringify(r.timelineRows),
+  )
+  check('and asking for more gets them', r.rowsAfterMore > r.timelineRows.length, `${r.rowsAfterMore} rows`)
+  check(
+    'a day collapses without the row losing its verb',
+    r.headingsWhileOpen >= 1 && r.headingsWhenCollapsed === 0,
+    `${r.headingsWhileOpen} → ${r.headingsWhenCollapsed}`,
   )
   check(
     'THE ONE VERB: clicking a subject visits each of its places',
