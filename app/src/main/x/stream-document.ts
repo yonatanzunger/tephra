@@ -8,7 +8,7 @@
 import type {
   DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
   DocumentWindow, Edit, EditOrigin, DocumentOffset, SegmentKey, SessionGeneration, Span,
-  SpanKind, TypedSpan, Unsubscribe, VersionId, Divergence, DocumentText,
+  SpanKind, StreamDocumentApi, TypedSpan, Unsubscribe, VersionId, Divergence, DocumentText,
 } from '../../shared/document-api.ts'
 import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../shared/positions.ts'
@@ -102,9 +102,9 @@ const GROUPING_WINDOW_MS = 1_500
 /** Enough parts to cover any real day; the split threshold is 1 MB (D20). */
 const MAX_PARTS = 64
 
-export class StreamDocument implements Document {
+export class StreamDocument implements StreamDocumentApi {
   readonly id = 'stream' as DocumentId
-  readonly meta: DocumentMeta = { kind: 'stream' }
+  readonly meta: DocumentMeta & { readonly kind: 'stream' } = { kind: 'stream' }
 
   readonly #notebook: Notebook
   readonly #segments = new Map<DateKey, Segment>()
@@ -404,8 +404,9 @@ export class StreamDocument implements Document {
     return null
   }
 
-  dateAt(at: DocumentPosition): DateKey | null {
-    // Synchronous, because in the stream the segment IS the date (D27).
+  dateAt(at: DocumentPosition): DateKey {
+    // Synchronous, because in the stream the segment IS the date (D27). No null
+    // case: a position in a stream is in a day, and this is a stream (D54).
     return at.segment as DateKey
   }
 

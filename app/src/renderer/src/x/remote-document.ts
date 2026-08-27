@@ -7,15 +7,15 @@
 import type {
   DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
   DocumentWindow, Edit, EditOrigin, SegmentKey, SessionGeneration, Span, SpanKind,
-  TypedSpan, Unsubscribe, Divergence,
+  StreamDocumentApi, TypedSpan, Unsubscribe, Divergence,
 } from '../../../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../../../shared/comments.ts'
 import type { DocumentInfo } from '../../../shared/ipc.ts'
 import { RemoteWindow } from './remote-window.ts'
 
-export class RemoteDocument implements Document {
+export class RemoteDocument implements StreamDocumentApi {
   readonly id = 'stream' as DocumentId
-  readonly meta: DocumentMeta
+  readonly meta: DocumentMeta & { readonly kind: 'stream' }
   #generation: SessionGeneration
   #today: DateKey
 
@@ -34,7 +34,10 @@ export class RemoteDocument implements Document {
   #waiters: { generation: SessionGeneration; resolve: () => void }[] = []
 
   private constructor(info: DocumentInfo) {
-    this.meta = info.meta
+    // The stream is what `doc.open()` opens; when this class learns to open
+    // others (MC5) the kind decides which implementation is built, and this
+    // narrowing moves there rather than being asserted here.
+    this.meta = { ...info.meta, kind: 'stream' }
     this.#generation = info.generation
     this.#today = info.today
   }
@@ -183,7 +186,7 @@ export class RemoteDocument implements Document {
     return window.tephra.doc.extent()
   }
 
-  dateAt(at: DocumentPosition): DateKey | null {
+  dateAt(at: DocumentPosition): DateKey {
     return at.segment as DateKey
   }
 

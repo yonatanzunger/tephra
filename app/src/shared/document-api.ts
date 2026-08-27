@@ -132,6 +132,16 @@
 declare const SegmentKeyBrand: unique symbol
 
 /**
+ * The segment of a document that has only one (D27, D54).
+ *
+ * A note, a fileset, a branched passage: their content is not divided, so the
+ * first component of a position carries no information and is this constant
+ * rather than a different arbitrary string per kind. Said once here instead of
+ * in every implementation that would otherwise choose its own.
+ */
+export const ONLY_SEGMENT = 'content' as SegmentKey
+
+/**
  * The first component of a position: which segment of the document it is in.
  * The stream's segments are dates; every other document has exactly one (D27).
  */
@@ -357,6 +367,33 @@ export interface DocumentMeta {
    */
 }
 
+/**
+ * What a STREAM can answer, beyond what every document can (D54).
+ *
+ * **These were on `Document` and are day-shaped.** A fileset has no extent in
+ * dates and no date at a position; implementing them meant returning null
+ * forever, which is a type saying "not applicable" in the one vocabulary that
+ * cannot say it. A caller that wants them is asking a stream a stream question
+ * and can say so — `isStream()` is how.
+ */
+export interface StreamDocumentApi extends Document {
+  readonly meta: DocumentMeta & { readonly kind: 'stream' }
+
+  /** The first and last days that exist, or null for a notebook with none. */
+  extent(): Promise<{ readonly first: DateKey; readonly last: DateKey } | null>
+
+  /**
+   * Synchronous, because the segment IS the date in the stream (D27).
+   *
+   * There is no null case any more: a position in a stream is in a day, and a
+   * position in something else never reaches here.
+   */
+  dateAt(at: DocumentPosition): DateKey
+}
+
+/** The narrowing, in one place rather than as a cast at each call site. */
+export const isStream = (doc: Document): doc is StreamDocumentApi => doc.meta.kind === 'stream'
+
 export type Unsubscribe = () => void
 
 /** Surfaced, never auto-resolved (D12). */
@@ -388,8 +425,6 @@ export interface Document {
   /** Boundary widening without loading text — the widget layer needs this constantly. */
   snap(span: Span): Promise<Span>
 
-  extent(): Promise<{ readonly first: DateKey; readonly last: DateKey } | null>
-
   /** The unloaded counterparts of DocumentWindow.advance/distance. */
   advance(from: DocumentPosition, chars: number): Promise<DocumentPosition | null>
   distance(a: DocumentPosition, b: DocumentPosition): Promise<number | null>
@@ -398,12 +433,6 @@ export interface Document {
   spans(kind?: SpanKind): Promise<readonly TypedSpan[]>
   spansAt(at: DocumentPosition): Promise<readonly TypedSpan[]>
   resolveAnchor(name: string): Promise<DocumentPosition | null>
-  /**
-   * Synchronous, because the segment IS the date in the stream. Null for
-   * documents that are not in the stream — date totality is a property of the
-   * stream, not of every document (D27).
-   */
-  dateAt(at: DocumentPosition): DateKey | null
 
   // ── writing: document space only ───────────────────────────
   /**
