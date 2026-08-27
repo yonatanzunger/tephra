@@ -4,7 +4,7 @@
 // The layout is from format-spec.md. Year/month nesting keeps any directory
 // under ~31 entries; twenty years is roughly 5 000 day files.
 
-import type { DateKey } from '../../shared/document-api.ts'
+import type { DateKey, DocumentKind } from '../../shared/document-api.ts'
 import { asDateKey } from '../../shared/dates.ts'
 
 import { join, relative, resolve, sep } from 'node:path'
@@ -170,6 +170,26 @@ export function slug(name: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80)
   return s === '' ? 'untitled' : s
+}
+
+/**
+ * What kind of document a path holds (D3, D54).
+ *
+ * **The filename declares the type**, mirrored in frontmatter but not decided
+ * by it: a name is what you have before you have opened anything, which is what
+ * enumeration needs. Anything under `stream/` belongs to the one stream
+ * document rather than being a document of its own.
+ *
+ * Null means **not a document at all** — an attachment, a theme, machinery —
+ * which is a different answer from "a document of some kind I do not know", and
+ * the reason this returns a nullable rather than a fallback kind.
+ */
+export function kindOf(rel: RelPath): DocumentKind | null {
+  if (rel === STREAM_DIR || rel.startsWith(`${STREAM_DIR}/`)) return 'stream'
+  if (rel.endsWith('.fileset.md')) return 'fileset'
+  if (rel.endsWith('.todo.md')) return 'todo'
+  if (rel.endsWith('.md')) return 'markdown'
+  return null // not a document at all: an attachment, a theme, machinery
 }
 
 /** Where a theme lives. The filename is the theme's identity (D41). */

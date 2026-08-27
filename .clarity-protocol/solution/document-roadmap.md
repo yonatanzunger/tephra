@@ -38,40 +38,102 @@ targets and the service's IPC, all of which know they are talking to the stream.
 
 ## MC2 — `Corpus`: borrowing, and who hears about changes
 
+The meaty one, so it lands in four pieces. **Each piece ends with every suite
+green**; nothing below is a state the app cannot run in.
+
 **Where it goes.** `main/x/documents/` — the floor of X, holding the `Corpus`
 and, from MC3, the kinds. Nothing else in `x/` may see the corpus's file system,
 and a directory says so better than a rule does (`architecture.md`, invariant 2).
 
-**What changes.** `main/x/documents/corpus.ts` arrives with `use(id, work, how?)`, `list`,
-`exists`, `create`, `rename`, `remove`. It owns the `Notebook`, opens documents
-by id, dedupes concurrent opens **by caching the opening rather than the opened**
-(the segment-cache race, which this shape inherits), and keeps a bounded LRU that
-never evicts what is dirty or what a window points at. Borrows carry
-`{ mode, retain }`.
+### MC2a — the object, used by nothing
 
-**The part that is not obvious.** A document's events — journal, divergence,
-change — are subscribed once today, at service construction, against one
-document. With N documents opened and evicted, subscription cannot be per
-lifetime; the Corpus aggregates them and re-emits with the document's id, so the
-service subscribes once to the Corpus instead.
+1. **`x/documents/corpus.ts`.** `use(id, work, how?)`, `list(kind?)`,
+   `exists(id)`. `create`, `rename` and `remove` wait for MC3, when there is a
+   kind that can be created.
+2. **Opening is a factory keyed by kind.** One entry for now — `'stream'` — and
+   an explicit throw for the rest, so MC3 adds a line rather than finding a
+   place.
+3. **Dedupe the OPENING, not the opened.** The map holds
+   `Promise<Document>`, because two borrows racing on a cold id must not both
+   construct one. This is the segment-cache race, and it arrives here by the
+   same shape it did there.
+4. **The cache.** Bounded LRU. **Never evict what is dirty; never evict what a
+   window is pointed at.** `retain: false` never enters it at all.
+5. **`mode: 'read'` refuses edits** — a document borrowed for a scan cannot
+   dirty anything, so a batch pass has no flush obligation on its way out.
+6. **Unit tests**, and these are the phase's real deliverable: one object per id;
+   concurrent cold borrows yielding one instance; `retain: false` leaving the
+   cache untouched; a dirty document surviving eviction pressure; a borrow that
+   outlives an eviction attempt still valid; `mode: 'read'` refusing `replace`.
 
-**And the commit path moves here, not to MC7.** "Flush before you commit" is a
-single document's rule today. The moment a SECOND document can be dirty — MC4,
-where a pin becomes a document edit — a commit that flushed only the stream
-would capture a file without the edit sitting in memory beside it. That is M1's
-whole subject arriving through a side door, so the Corpus learns
-`flushAll()` as it is built and the version tier calls it. The restore half
-waits (MC7); it has nothing to go stale until a window holds a document.
+*Green because nothing calls it yet.*
 
-**Proved by.** Corpus unit tests: same object for one id, concurrent opens
-yielding one instance, `retain: false` leaving no trace, dirty never evicted, a
-borrow outliving an eviction attempt. Then the whole suite, with the service
-using `corpus.use('stream', …)` everywhere it used `#doc`.
+### MC2b — the service borrows, and hears through the Corpus
 
-**Risk:** the highest of the milestone. Mitigation: the stream stays the only
-kind, so behaviour cannot change — only the path to it.
+7. **Windows are what "open" means, so the Corpus must know about them.**
+   `watch(id)` returns an unwatch; the service calls it when a window opens and
+   releases it when the window does. `StreamWindow` holds its document directly,
+   so this is not bookkeeping for its own sake — it is what makes that reference
+   safe.
+8. **Event aggregation, which cannot wait for a later phase.** The service
+   subscribes to `onJournal`, `onChanged` and `onDiverged` **once at
+   construction, against one document**. With documents opening and being
+   evicted, that subscription has no lifetime to live in — so the Corpus
+   subscribes when it opens, unsubscribes when it evicts, and re-emits with the
+   document's id. The service subscribes once, to the Corpus.
+9. **`#windows` learns which document each window belongs to**, so a change
+   reaches the windows over THAT document and no others.
+10. **The 37 `#doc.` call sites become borrows**, through one `#stream(work)`
+    helper. Mechanical, compiler-guided, one pass.
 
----
+*Green because behaviour is unchanged: the stream is still the only kind, and
+only the path to it moved.*
+
+### MC2c — the tiers, and the commit that must not be early
+
+11. **`flushAll()`**: every open dirty document writes. The file tier calls it
+    instead of `#doc.writeDirty()`.
+12. **The version tier calls `flushAll()` before it commits.** This is the piece
+    that cannot wait for MC7: the moment a SECOND document can be dirty — MC4,
+    where a pin becomes a document edit — a commit that flushed only the stream
+    would capture a file without the edit sitting in memory beside it. That is
+    M1's subject arriving through a side door.
+13. **The WAL becomes per document.** `walFile(docId)` already takes an id and
+    has only ever been given `'stream'`; the journal handler now knows which
+    document an edit belongs to, so it routes to that document's log. Doing it
+    here rather than at MC4 avoids a scramble when the second writable kind
+    arrives.
+
+*Green: `m1` is the proof, since it is the suite that asks whether anything can
+be lost.*
+
+### MC2d — proving it
+
+14. **The existing suites are the regression net** — `document-service.test.ts`
+    and `document.test.ts` in particular, which drive the ordering guarantee and
+    the write tiers through the service.
+15. **New: a borrow under load.** Twenty concurrent borrows of one id, with
+    edits interleaved, ending with one document and no lost edit.
+16. **New: eviction does not lose text.** Fill the cache past its bound with
+    clean documents while one is dirty; the dirty one is still there and still
+    dirty.
+17. `m0`, `m1`, `m2`, `m3`.
+
+### What MC2 does NOT do
+
+No new kinds (MC3), no renderer changes (MC5), no `ui-state` changes (MC6), and
+no restore behaviour (MC7). If a step here seems to need one of those, the
+sequencing is wrong and it is worth stopping to say so.
+
+### The risks, and what each one is mitigated by
+
+| Risk | Mitigation |
+|---|---|
+| The 37 call sites hide a behaviour change | The stream stays the only kind, so any behaviour change is a bug rather than a design choice — and the suites already cover ordering, tiers and recovery |
+| A window outliving its document | `watch(id)` is taken when the window opens, not when it is used; the never-evict rule does the rest |
+| Two borrows constructing one document | The map holds the promise, not the result. Named in MC2a because we have paid for this exact race once |
+| A commit landing between an edit and its flush | `flushAll()` before commit, in MC2c rather than MC7 |
+| The eviction bound being wrong | Start large enough that eviction never fires in ordinary use, and let MC3's sweep — which retains nothing — be what proves the bound is not load-bearing |
 
 ## MC3 — The markdown kind, and the readers that stop reading files
 
