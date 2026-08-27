@@ -43,6 +43,15 @@ export const CHANNEL = {
   navOccurrences: 'tephra:nav:occurrences',
   navStatus: 'tephra:nav:status',
   navSections: 'tephra:nav:sections',
+  /**
+   * A corpus file changed on disk that no document is holding open.
+   *
+   * Day files announce themselves as ordinary changes (D45); a section file, a
+   * note or a fileset edited by hand or arriving from sync has no window to
+   * announce it, and the sidebar would otherwise go on showing what it read
+   * when it started.
+   */
+  corpusChanged: 'tephra:doc:corpusChanged',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
   readClipboard: 'tephra:readClipboard',

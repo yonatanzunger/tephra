@@ -478,6 +478,10 @@ export function App(): React.JSX.Element {
     return docWindow?.onSpansChanged(bump)
   }, [doc, docWindow])
 
+  // And a file nobody has open — a section edited by hand, a note arriving from
+  // sync — announces itself directly, because there is no window to do it (D53).
+  useEffect(() => window.tephra.nav.onCorpusChanged(() => setNavGeneration(n => n + 1)), [])
+
   /**
    * The active set, drawn down the scroll track.
    *

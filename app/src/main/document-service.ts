@@ -21,7 +21,7 @@ import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
-import { resolveInsideNotebook, type RelPath } from './w/layout.ts'
+import { parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
 import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
@@ -185,6 +185,15 @@ export class DocumentService {
     notebook.onExternalChange(changes => {
       void this.#serial(async () => {
         for (const change of changes) await this.#doc.externalChanged(change.rel)
+
+        // **What the document did not take, the sidebar still needs.** A day
+        // file becomes a DocumentChange and travels the ordinary way; a section
+        // file edited by hand is a change to something no window is holding, so
+        // it is announced as itself and whoever cares re-asks (D53).
+        const elsewhere = changes.map(c => c.rel).filter(rel => parseDayFile(rel) === null)
+        if (elsewhere.length > 0) {
+          for (const sink of this.#sinks) sink.send(CHANNEL.corpusChanged, elsewhere)
+        }
         // Nothing to collect: the commit scans for itself. All that is needed
         // is that a commit becomes worth scheduling, and that the message
         // admits the notebook was edited from outside.
