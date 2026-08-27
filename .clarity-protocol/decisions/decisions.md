@@ -1834,3 +1834,180 @@ the index cannot know.
 
 `solution/format-spec.md` (amended in place — the URI table, `_index`, two
 degradation rows), `decisions.md` D10 (the default section).
+
+---
+
+## D54: Documents come in kinds, windows are views of them, and every write goes through the document
+
+**Date:** 2026-08-27
+**Status:** decided
+**Implements:** D10's "in the current window or a new one"
+**Detail:** `solution/file-documents.md`
+
+**Decision.** **A document has a KIND, and the stream is one of them.** "An
+infinite stream chopped into days" is a file format sitting beside plain
+markdown and the fileset, not a privileged thing — `DocumentMeta.kind`, which
+the format already declares by filename suffix and mirrors in frontmatter (D3),
+is what says which. `Document` is what every kind can answer; what a kind can do
+beyond that lives on the kind:
+
+| Kind | Adds beyond `Document` |
+|---|---|
+| markdown | nothing |
+| fileset | `entries`, `pin`, `unpin`, `reorder`, `remove` |
+| stream | `today`, `dates`, `extent`, `dateAt`, growth |
+
+**An `AppWindow` is a view onto a document**, several may look at one, and
+**main is the synchroniser**: one representation there, N in the front ends,
+which is D37 restated for the plural case. Naming is deliberate — `Window` is a
+DOM global (D35) and `WindowId` already means a loaded region, so a third
+meaning of one word is a coordinate bug waiting to be written.
+
+**Every write goes through the document, and main acquires it.** A front end
+asking to pin does not write a file; it asks main, which gets the document — the
+one already open, or one opened for the purpose — and edits it. **Any other
+arrangement puts two writers on one file**, which works until the day somebody
+has that fileset open in a window.
+
+### Three properties, and the test they give
+
+1. one representation in main, N in the front ends, main as synchroniser;
+2. a window is a view of a document, and nothing else;
+3. **a new kind changes the verbs and nothing else.**
+
+The third is the design's own test, and it is worth applying before the code
+rather than after: **if adding a kind would need a new registry, a second
+synchroniser, or a window that is not a view of a document, this shape is
+wrong.** A PDF kind would have its own verbs and would still be one authority
+with N views.
+
+### What it fixes that is already broken
+
+- **`extent()` and `dateAt()` are day-shaped and live on the shared interface.**
+  A fileset implements them by returning null forever, which is a type saying
+  "not applicable" in the one vocabulary that cannot say it. They move to the
+  stream.
+- **`pin` and `unpin` write files behind the document layer's back**, so D53's
+  claim that a pin is undoable by the ordinary undo is false. As fileset verbs
+  they become ordinary `replace` calls and inherit undo, the write tiers, the
+  WAL, divergence and versioning without new machinery.
+- **`Reference{kind:'file'}` cannot be followed.** The sidebar names documents
+  it has no way to open.
+
+### One access path, and no second answerer
+
+**X reaches a document only through the table, and a file only through a
+document.** No "unless it is not open" clause: opening is cheap, so there is
+nothing for a second path to do. The version of this rule with a hole in it —
+*an open document answers for itself; the disk answers otherwise* — is two
+implementations of one question, and the hedge is where they drift.
+
+Three things follow:
+
+- **Eviction stops being optional.** A corpus sweep borrows seven thousand
+  documents through the table, so the table must let go: never what is dirty,
+  never what a window is pointed at, otherwise least-recently-used within a
+  bound. The memory ceiling becomes the cache's size rather than the corpus's.
+- **The index stops being a peer of documents.** Today `Document.spans()`
+  consults the index while the index reads days through the document — two
+  arrows in opposite directions. Now a document answers about ITSELF from its
+  own segments and never consults a cache, and the index answers about the
+  CORPUS from a cache it refreshes by borrowing. Neither needs to know the other
+  exists.
+- **The repository manages the table, not only the files.** A commit flushes
+  every dirty document first, because the table knows which those are; a restore
+  reloads the documents it rewrote, because a restore that left a stale document
+  in memory is a version that took and was then overwritten by a buffer.
+
+### Two file systems, which is the pattern underneath all of this
+
+**W has a file system and X has a different one.** W's files are bytes in a
+store — stat, read, write, watch, commit, restore — and X's are *logical
+documents*, borrowed rather than opened, returning an object that speaks its
+kind's language. The map between them is deliberately not one-to-one: a logical
+document may be one physical file (a note), many (the stream's days and their
+split parts), or **none at all** (a filtered view, a saved query, a day
+navigated to and never written in).
+
+An X file system that returned byte handles would be W with extra steps. What
+makes it X is that what comes back knows its own kind. This is written up at the
+front of `architecture.md`, where it should have been from the start.
+
+### X has a floor, and it is a directory
+
+`x/documents/` holds the `Corpus` and the per-kind implementations, and is the
+only X code permitted to see the corpus's file system. Everything else in `x/`
+is built on documents. **Not `X1`/`X2`** — those name a position rather than a
+thing, and this project has twice paid for a name that did not say what it was.
+Enforced by a test over the import graph, which needs no allowlist and survives
+new kinds.
+
+Two exceptions, named in the test: **machinery** (`.tephra/` — the index cache,
+the WAL, the lock) is not corpus content and never becomes a document; and the
+**version store** is a different W service that `History` legitimately reaches
+for the log and for commits — while anything writing corpus CONTENT still goes
+back through a document.
+
+### A kind arrives in four parts, in four predictable places
+
+`shared/kinds/<kind>.ts` (the API), `main/x/documents/kinds/<kind>.ts` (the real
+implementation), `renderer/src/x/kinds/<kind>.ts` (the IPC forwarder),
+`renderer/src/editor/kinds/<Kind>.tsx` (the surface), plus one registry line per
+process. **Adding a kind should be adding files, never finding them.**
+
+**Split by process first, kind second.** All four files in one directory reads
+better and would let main-only code into the renderer bundle by an
+ordinary-looking import — this project has broken three suites exactly that way
+and keeps a test whose only job is to catch it. The process boundary stays
+physical; the kind axis lives inside it.
+
+### The `Corpus`: the file system as X is allowed to see it
+
+One structure underneath, and it is not merely a table of open documents — it is
+**W's whole surface, presented to X as documents**: borrowing, listing,
+existence, creation, renaming, removal. `Notebook` becomes reachable only from
+here, which is the layering W/X was drawn for and which every X object taking a
+`Notebook` in its constructor has quietly violated.
+
+**Not called `Repository`**: that names the version store already (D32, D43),
+and a third meaning of one word is how the coordinate bugs started. `Corpus` is
+what the design documents have always called the body of text, and this is its
+face.
+
+`use(id, work, how?)` — **two callers asking for one id get the same object, and
+it stays valid while the work runs.**
+
+**A borrow declares what kind of access it is**: `{ mode: 'read' | 'write',
+retain: boolean }`. This is what storage systems learned about buffer caches —
+a batch pass and an interactive open want opposite things from a cache, and only
+the caller knows which it is. **The index sweeping the corpus borrows
+`{ mode: 'read', retain: false }`**, so it cannot displace the documents a
+person has open, however large the corpus grows. Interactive is the default,
+because the safe answer should be what you get by not thinking.
+
+**A scoped borrow, not a handle to keep.** The alternative — a front end opening
+a handle per window and closing it later — makes correctness depend on a message
+arriving, and **a close dropped on its way to main is a document held forever**.
+A borrow cannot leak: it ends when the work does, returned or thrown. Main takes
+one per operation and lets it go before answering the IPC, so a lost message
+costs nothing.
+
+**What keeps a document alive is the table, not the borrows.** A `Document`
+holds what no file holds — the undo stack, the generation, unflushed edits, its
+place in the WAL — so releasing it because the last borrow ended would discard
+all of that silently. The table keeps what it opens and may evict only what is
+clean, unwatched, and holding no history a window could still reach. **Evicting
+nothing is a correct implementation**, and the one to start from. Flushing
+before evicting is not optional.
+
+**And it must cache the OPENING, not only the opened.** One event loop means
+"simultaneous" is two async operations interleaving at an await — which is
+precisely how the segment cache once did check-then-act and raced two reads of
+one day. `use` has the same shape and inherits the same bug written the obvious
+way.
+
+### What this makes stale
+
+`solution/document-api.md` (`extent` and `dateAt` on the common interface),
+`shared/ui-state.ts` (one location and cursor becomes a SET of windows),
+`decisions.md` D53 (pinning becomes a document edit, as it claimed to be).

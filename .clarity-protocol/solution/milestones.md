@@ -222,6 +222,13 @@ putting the commentary somewhere else to look at.
   paths and enough to answer Q9 by living with it. `.docx` follows; `.pdf` is v2,
   because extraction is its own problem and not this one
 
+## MC — documents, kinds and windows
+
+**Inserted into M3, and its own milestone** (D54, `document-roadmap.md`): the
+Document API grows kinds, the `Corpus` becomes X's file system, and windows
+become views of documents. M3's remaining bullets all open or write documents,
+so they resume on top of it rather than being built twice.
+
 ## M3 — navigation and filesets
 
 - **Print the whole document**, on `Cmd+P` where every other application puts

@@ -21,6 +21,87 @@ Three layers, explicit in the code rather than implied by convention.
 
 **This is not a stylistic preference here, because the most alarming finding Portal produced was a layering violation.** A widget that opened its file during view construction re-read constantly and lost edit state on reparenting — which is R1.2, *no state is ever at risk*, failing at the framework level rather than in application logic. Model construction being separate from view construction is the same rule as Z never reaching into W.
 
+## Two file systems, and the map between them
+
+**This is the pattern the whole design rests on, and it belongs at the front
+rather than being discovered on the way** (added 2026-08-27, D54).
+
+There are two file systems here, not one:
+
+| | **W's** | **X's** |
+|---|---|---|
+| What a "file" is | bytes in a store — local disk now, a git object store beside it, a sync peer later | a **logical document** |
+| What you get back | a path and a way to read and write bytes | a **`Document` subclass**, speaking that kind's own language |
+| Primitives | stat, read, write, watch, commit, restore | borrow, list, create, rename, remove |
+| Named | `Notebook` and `Repository` | **`Corpus`** |
+
+**The map between them is not one-to-one, and that is the point.** One logical
+document may be:
+
+- **one physical file** — a note, a fileset;
+- **many** — the stream, whose days are files and whose long days are split into
+  parts (D8, D20), all of it invisible above the storage layer;
+- **none at all** — a document that exists only as a computation. A filtered
+  view (`goal/scope.md`), a saved query, or a day that has been navigated to and
+  never written in, are all documents with nothing on disk yet or ever.
+
+An X-layer file system that handed back byte handles would be W with extra
+steps. What makes it the X layer is that **what comes back is an object that
+knows its own kind**: a stream answers about days, a fileset about entries, a
+markdown file about neither, and all three answer about text, positions and
+edits.
+
+## The invariant stack
+
+Three rules, each one a floor the layer above stands on. Stated together because
+they are one idea at three depths, and because **two of them can be asserted by
+a test rather than remembered** — this codebase has already learned that a
+comment saying "do not import Electron here" does not prevent the third
+violation (`tests/unit/main/no-electron.test.ts`).
+
+**1. The front end touches files only as documents.**
+A window hosts a pointer to a `Document`; an editor is chosen by that document's
+kind; nothing in the renderer reads or writes a path. *Enforced by:* the
+renderer has no filesystem to reach — the process boundary does it for us — plus
+the kind registry, which makes "which editor" a lookup rather than a decision
+anyone makes twice.
+
+**2. X touches corpus content only through documents, and gets documents only
+from the `Corpus`.** Indexing, history, filesets, search: all of them ask a
+document.
+
+**X has a floor, and it is a directory rather than a rule to remember.**
+`x/documents/` holds the `Corpus` and the per-kind implementations, and is the
+only X code permitted to see the corpus's file system; everything else in `x/`
+is built on documents. *Enforced by:* a test over the import graph — nothing
+outside `x/documents/` imports `w/notebook.ts` — which needs no allowlist and
+stays true as kinds are added.
+
+**Not called X1 and X2.** Those name a position rather than a thing, and this
+project has twice paid for a name that did not say what it was (D35's `Window`,
+D48's coordinates). The floor is *the documents*; what stands on it is
+everything else.
+
+**Two exceptions, both narrow and both named:**
+
+- **Machinery is not corpus content.** The index's cache, the WAL and the lock
+  are `.tephra/` state that never becomes a document, and the code that owns
+  them talks to W directly. Written down that is three things; left implicit it
+  is however many places somebody found it convenient.
+- **The version store is a different W service.** `History` legitimately reaches
+  `Repository` to read the log and to commit — that is not the corpus's file
+  system, and no document could answer it. **But anything that writes corpus
+  CONTENT goes back through documents**, which is exactly why a restore reloads
+  what it rewrote (D54) rather than checking files out from under an open
+  buffer.
+
+**3. The lower part of X reaches W through a narrow, named set of paths.**
+Today that is `Notebook` (files) and `Repository` (versions). The eventual shape
+is a W-level analogue of the `Corpus` — one object that IS the file system, with
+the same two-guarantee discipline — at which point invariant 3 becomes as
+checkable as invariant 2. *Enforced by:* nothing yet, which is why it is written
+down as a direction rather than as a rule.
+
 ## The X objects
 
 | Object | Exposes | Its storage implementation handles |
@@ -32,7 +113,34 @@ Three layers, explicit in the code rather than implied by convention.
 | **Search** | One query mechanism over tags, dates and text (D9), returning ranges | v1 scans through the Document API; later maintains an index, fed by Document's change events |
 | **Range** | A selection, and the operations on it: tag, bookmark, print, branch | Transient — a *persisted* range is inline markup, never offsets (D11) |
 
-**Document is one interface with two storage implementations** — segmented and single-file. That is a good fit for D8: the stream's day-file split genuinely becomes invisible above the storage layer, which is what makes "the notebook is one document" true in code rather than only in description.
+**Document is one interface with one implementation per KIND** (D54) — markdown,
+fileset, stream, and whatever arrives later. That is a good fit for D8: the
+stream's day-file split genuinely becomes invisible above the storage layer,
+which is what makes "the notebook is one document" true in code rather than only
+in description.
+
+## A kind arrives in four parts, in four predictable places
+
+Kinds are the axis this design expects to grow along, so the four artifacts each
+one needs have fixed homes. **Adding a kind should be adding files, never
+finding them.**
+
+| Part | Where | What it is |
+|---|---|---|
+| **the API** | `shared/kinds/<kind>.ts` | what this kind adds beyond `Document`, as types both processes share |
+| **the implementation** | `main/x/kinds/<kind>.ts` | the real one: reaches W through the `Corpus`, owns the file's parsing and writing |
+| **the forwarder** | `renderer/src/x/kinds/<kind>.ts` | the same API over IPC, holding whatever must be answered synchronously (D37) |
+| **the surface** | `renderer/src/editor/kinds/<Kind>.tsx` | how it is edited and shown; markdown is the default, and a kind opts out |
+
+Plus **one line in each process's registry** — kind → implementation, kind →
+surface — so the lookup is data rather than a switch that someone forgets.
+
+**Split by process first, kind second, and not the other way around.** Putting
+all four files for a kind in one directory reads better and would let main-only
+code into the renderer bundle by an ordinary-looking import: this project has
+had three test suites broken exactly that way, and keeps a test whose only job
+is to catch it (`tests/unit/main/no-electron.test.ts`). The process boundary
+stays physical; the kind axis lives inside it.
 
 ## Six rules that keep the layering honest
 
