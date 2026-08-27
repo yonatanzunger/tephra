@@ -61,6 +61,10 @@ export function App(): React.JSX.Element {
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
   const [navGeneration, setNavGeneration] = useState(0)
+  /** The active row's set, in corpus terms, until the editor can place it. */
+  const [track, setTrack] = useState<
+    { places: readonly Located[]; current: number; slot: number | null } | null
+  >(null)
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
@@ -439,6 +443,49 @@ export function App(): React.JSX.Element {
   }, [doc, docWindow])
 
   /**
+   * The active set, drawn down the scroll track.
+   *
+   * **Recomputed when the window moves**, not only when the row changes: growth
+   * brings earlier days in behind the reader, and an occurrence that was
+   * "somewhere earlier" a moment ago is now a place on this page. Marks that
+   * did not follow that would be quietly wrong in the direction people notice.
+   */
+  useEffect(() => {
+    const editor = editorRef.current
+    if (editor === null || editor === undefined) return
+    if (track === null) {
+      editor.showTrackMarks({ places: [], current: -1, beyond: { earlier: 0, later: 0 }, slot: null })
+      return
+    }
+    const w = pane?.window ?? null
+    const places: { from: number; to: number }[] = []
+    let currentIn = -1
+    let earlier = 0
+    let later = 0
+    const at2 = (date: string, offset: number): WindowPosition | null =>
+      w === null
+        ? null
+        : w.toWindow({ segment: date as unknown as SegmentKey, offset: offset as never, generation: w.generation })
+    track.places.forEach((at, i) => {
+      const buffer = at.date === null ? null : at2(at.date, at.from)
+      if (buffer === null) {
+        // Outside the loaded region. Which SIDE it is on is what the edge marks
+        // report, and the window's own span is what says.
+        const before = w === null || at.date === null || at.date < (w.span.begin.segment as string)
+        if (before) earlier += 1
+        else later += 1
+        return
+      }
+      if (i === track.current) currentIn = places.length
+      // The END of the range too: the mark's height is the passage's height,
+      // and a range that leaves the window is clamped by the window's own end.
+      const end = at.date === null ? null : at2(at.date, at.to)
+      places.push({ from: buffer as number, to: (end ?? buffer) as number })
+    })
+    editor.showTrackMarks({ places, current: currentIn, beyond: { earlier, later }, slot: track.slot })
+  }, [track, pane, docWindow, navGeneration])
+
+  /**
    * The sidebar's one verb, arriving here because it needs both halves: the
    * PANE to load the region the place is in, and the EDITOR to put the caret
    * there once it is loaded (D51).
@@ -591,6 +638,7 @@ export function App(): React.JSX.Element {
             here={location?.kind === 'date' ? location.date : null}
             generation={navGeneration}
             onGo={at => void goToLocated(at)}
+            onActive={(places, current, slot) => setTrack({ places, current, slot })}
           />
         }
         stream={

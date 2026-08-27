@@ -942,6 +942,20 @@ export async function runVerify(scene: string): Promise<void> {
       say('distinctPlaces', new Set(seen.slice(0, 3)).size)
       say('wrappedAround', seen[3] === seen[0])
       say('counterShown', document.querySelector('.nav-row-wrap.active .nav-count')?.textContent ?? '')
+
+      // The scroll track: where else the set is (D51). One mark per occurrence
+      // in the loaded window, and exactly one of them the current place.
+      const trackMarks = [...document.querySelectorAll('.tx-track-mark')]
+      say('trackMarks', trackMarks.length)
+      say('trackCurrent', document.querySelectorAll('.tx-track-mark.current').length)
+      say('trackTops', trackMarks.map(m => (m as HTMLElement).style.top))
+      say('trackHeights', trackMarks.map(m => (m as HTMLElement).style.height))
+      say('trackColour', (trackMarks[0] as HTMLElement | undefined)?.style.getPropertyValue('--track') ?? '')
+      say(
+        'tagColourInText',
+        (document.querySelector('.tx-tag') as HTMLElement | null)?.style.getPropertyValue('--tag') ?? '',
+      )
+      say('trackBeyond', [...document.querySelectorAll('.tx-track-beyond')].map(e => e.textContent))
       say('steppersShown', document.querySelectorAll('.nav-steps button').length)
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)

@@ -9,6 +9,7 @@
 // and the caret lives here.
 
 import { EditorView } from '@codemirror/view'
+import type { TrackMarks } from './scroll-track.ts'
 import type { Extension } from '@codemirror/state'
 import { NO_SELECTION, type SelectionState } from '../../../shared/commands.ts'
 import type { WindowPosition, DocumentWindow, Span } from '../../../shared/document-api.ts'
@@ -183,4 +184,13 @@ export interface EditorHandle {
    * rendered, which a jump across a month always is.
    */
   revealAt(at: number): void
+  /**
+   * Mark a set of places down the scroll track.
+   *
+   * The sidebar owns the SET — which row is active, and where its occurrences
+   * are in the corpus — and the editor owns the geometry, because only it knows
+   * where a buffer position sits on the page. So the marks arrive already in
+   * buffer coordinates and the editor decides where that is (D51).
+   */
+  showTrackMarks(marks: TrackMarks): void
 }

@@ -212,6 +212,27 @@ console.log('\n— the sidebar —')
     typeof r.counterShown === 'string' && /\d+ of 3/.test(r.counterShown) && r.steppersShown === 2,
     `${r.counterShown} · ${r.steppersShown} steppers`,
   )
+  check(
+    'the scroll track shows where else the set is',
+    r.trackMarks === 3 && r.trackCurrent === 1,
+    `${r.trackMarks} marks, ${r.trackCurrent} current, at ${JSON.stringify(r.trackTops)}`,
+  )
+  check(
+    'and the marks are at different heights, not stacked at zero',
+    Array.isArray(r.trackTops) && new Set(r.trackTops).size === 3,
+    JSON.stringify(r.trackTops),
+  )
+  check(
+    'a mark is as tall as the passage it stands for',
+    Array.isArray(r.trackHeights) && r.trackHeights.every(h => /^max\(3px, [\d.]+%\)$/.test(String(h))),
+    JSON.stringify(r.trackHeights),
+  )
+  check(
+    'and it is drawn in the subject\'s own colour, the one the text is underlined in',
+    typeof r.trackColour === 'string' && r.trackColour.startsWith('var(--tag-') &&
+      r.trackColour === String(r.tagColourInText),
+    `track ${r.trackColour} · text ${r.tagColourInText}`,
+  )
   check('and nothing errored on the way', r.appError === 'none')
 }
 

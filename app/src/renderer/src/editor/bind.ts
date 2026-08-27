@@ -20,6 +20,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
 import { listIndent } from './lists.ts'
+import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
 import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
 import { fromBuffer } from '../../../shared/prose.ts'
 import { widgetExtensions } from './widgets.ts'
@@ -62,6 +63,8 @@ export interface Binding {
   wrapSelection(before: string, after: string): void
   /** Put the caret at a buffer position and centre it. */
   revealAt(at: number): void
+  /** Mark the active row's places down the scroll track (D51). */
+  showTrackMarks(marks: TrackMarks): void
   setVim(on: boolean): void
   setTypography(t: Typography): void
   destroy(): void
@@ -86,6 +89,7 @@ export function bindEditor(options: BindOptions): Binding {
         // a blank rectangle — indistinguishable from the app having failed.
         placeholder('Nothing here yet. Start typing.'),
         listIndent(),
+        scrollTrack(),
         vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         markdown(),
@@ -181,6 +185,9 @@ export function bindEditor(options: BindOptions): Binding {
         { userEvent: 'input' },
       )
       view.focus()
+    },
+    showTrackMarks(next: TrackMarks): void {
+      view.dispatch({ effects: setTrackMarks.of(next) })
     },
     revealAt(at: number): void {
       const where = Math.max(0, Math.min(at, view.state.doc.length))

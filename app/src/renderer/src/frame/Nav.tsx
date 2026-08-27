@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { DateKey } from '../../../shared/document-api.ts'
+import { tagSlot } from '../../../shared/tags.ts'
 import type {
   IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
 } from '../../../shared/nav-api.ts'
@@ -22,6 +23,18 @@ export interface NavProps {
   /** Bumped when the document changes, so the sections re-ask. */
   readonly generation: number
   readonly onGo: (at: Located) => void
+  /**
+   * The active row's whole set, so the scroll track can show where else it is.
+   *
+   * The sidebar knows the set; only the editor knows where a place sits on the
+   * page. This is the seam between those two facts (D51).
+   */
+  readonly onActive: (
+    places: readonly Located[],
+    current: number,
+    /** The tag palette slot, so the track matches the underline (D51). */
+    slot: number | null,
+  ) => void
 }
 
 /** What a row is, once its kind is forgotten: a name, and a set of places. */
@@ -46,7 +59,7 @@ interface Row {
 const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
-export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Element {
+export function Nav({ today, here, generation, onGo, onActive }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
   /** Which days have their headings out. Today's, to begin with. */
@@ -59,7 +72,9 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
 
   // The active row, and how far through its set we are. One at a time: it owns
   // the steppers, and it is what "next" is relative to.
-  const [active, setActive] = useState<{ key: string; places: readonly Located[]; at: number } | null>(null)
+  const [active, setActive] = useState<
+    { key: string; reference: Reference; places: readonly Located[]; at: number } | null
+  >(null)
 
   useEffect(() => {
     let cancelled = false
@@ -98,10 +113,11 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
         active?.key === row.key ? active.places : await window.tephra.nav.occurrences(row.reference)
       if (places.length === 0) return
       const next = active?.key === row.key ? (active.at + 1) % places.length : 0
-      setActive({ key: row.key, places, at: next })
+      setActive({ key: row.key, reference: row.reference, places, at: next })
+      onActive(places, next, slotOf(row.reference))
       onGo(places[next] as Located)
     },
-    [active, onGo],
+    [active, onGo, onActive],
   )
 
   const step = useCallback(
@@ -109,9 +125,10 @@ export function Nav({ today, here, generation, onGo }: NavProps): React.JSX.Elem
       if (active === null || active.places.length === 0) return
       const next = (active.at + by + active.places.length) % active.places.length
       setActive({ ...active, at: next })
+      onActive(active.places, next, slotOf(active.reference))
       onGo(active.places[next] as Located)
     },
-    [active, onGo],
+    [active, onGo, onActive],
   )
 
   const toggle = (key: string): void =>
@@ -390,6 +407,16 @@ function Section({
     </div>
   )
 }
+
+/**
+ * Which palette slot a row draws in.
+ *
+ * A subject keeps its colour everywhere it appears (`tagSlot`), so the scroll
+ * track and the underline in the text are the same green. Everything else — a
+ * day, a heading, a bookmark — has no colour of its own and takes the accent.
+ */
+const slotOf = (reference: Reference): number | null =>
+  reference.kind === 'tag' ? tagSlot(reference.subject) : null
 
 /** "21 Aug" — the year is noise in a list that rarely crosses one. */
 function shortDate(date: DateKey): string {
