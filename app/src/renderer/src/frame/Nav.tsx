@@ -38,6 +38,10 @@ export interface NavProps {
    * The sidebar knows the set; only the editor knows where a place sits on the
    * page. This is the seam between those two facts (D51).
    */
+  /** Put a row into a section, and tell the panel to re-read (D53). */
+  readonly onPin: (reference: Reference, label: string) => void
+  /** Take one out of the file it is in — a PATH, because names are slugged. */
+  readonly onUnpin: (reference: Reference, sectionPath: string) => void
   /** A destination that could not be reached, and why. */
   readonly onUnavailable: (target: Reference, why: 'missing' | 'unsupported') => void
   readonly onActive: (
@@ -71,7 +75,7 @@ const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
 export function Nav({
-  today, here, where, generation, onGo, onActive, onUnavailable,
+  today, here, where, generation, onGo, onActive, onUnavailable, onPin, onUnpin,
 }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
@@ -189,22 +193,58 @@ export function Nav({
   return (
     <nav className="frame-nav" aria-label="Sections">
       <div className="nav-scroll">
-        {/* **Curated first, derived below** (D51). What someone put here on
-            purpose outranks what the corpus happens to contain — and both are
-            the same row, so this costs a list and no new machinery (D53). */}
-        {sections !== null && sections.entries.length > 0 && (
-          <Section
-            id="sections"
-            title={sections.title === '_index' ? 'Sections' : sections.title}
-            count={sections.entries.length}
-            open={open.has('sections')}
-            onToggle={toggle}
-          >
-            {sections.entries.map((entry, i) => (
-              <CuratedRows key={`${entry.label}:${i}`} entry={entry} depth={0} active={active} onGo={go} />
-            ))}
-          </Section>
-        )}
+        {/* **The top level is the list of GROUPS, not a group.** A curated
+            section is a section beside Timeline and Subjects — same header,
+            same expando, same standing — because that is what "the sidebar is
+            a list of sections, each a fileset" means (D10). An entry that is
+            not a section is a loose pin, and sits above them as itself. */}
+        {sections?.entries
+          .filter(entry => entry.target.kind !== 'section')
+          .map((entry, i) => (
+            <CuratedRows
+              key={`loose:${entry.label}:${i}`}
+              entry={entry}
+              depth={0}
+              active={active}
+              onGo={go}
+              onUnpin={onUnpin}
+              section={sections.path}
+            />
+          ))}
+
+        {sections?.entries
+          .filter(entry => entry.target.kind === 'section')
+          .map(entry => {
+            const name = entry.target.kind === 'section' ? entry.target.name : ''
+            return (
+              <Section
+                key={`section:${name}`}
+                id={`section-${name}`}
+                // **The label wins when the file is gone.** A missing section's
+                // own title is its filename, which is the one thing nobody
+                // chose; the label in the order is what someone wrote down and
+                // the only remaining record of what was meant (D53).
+                title={entry.missing ? entry.label : (entry.children?.title ?? entry.label)}
+                count={entry.children?.entries.length ?? 0}
+                open={!open.has(`closed:${name}`)}
+                onToggle={() => toggle(`closed:${name}`)}
+                missing={entry.missing}
+                summary={entry.summary}
+              >
+                {entry.children?.entries.map((row, i) => (
+                  <CuratedRows
+                    key={`${row.label}:${i}`}
+                    entry={row}
+                    depth={0}
+                    active={active}
+                    onGo={go}
+                    onUnpin={onUnpin}
+                    section={entry.children?.path ?? null}
+                  />
+                ))}
+              </Section>
+            )
+          })}
 
       <Section id="timeline" title="Timeline" count={outline.length} open={open.has('timeline')} onToggle={toggle}>
         {/* Newest first: "the most recent five" is what a person means by
@@ -246,19 +286,19 @@ export function Nav({
 
       <Section id="subjects" title="Subjects" count={rows.subjects.length} open={open.has('subjects')} onToggle={toggle}>
         {rows.subjects.map(row => (
-          <RowButton key={row.key} row={row} active={active} onGo={go} onStep={step} />
+          <RowButton key={row.key} row={row} active={active} onGo={go} onStep={step} onPin={onPin} />
         ))}
       </Section>
 
       <Section id="bookmarks" title="Bookmarks" count={rows.bookmarks.length} open={open.has('bookmarks')} onToggle={toggle}>
         {rows.bookmarks.map(row => (
-          <RowButton key={row.key} row={row} active={active} onGo={go} onStep={step} />
+          <RowButton key={row.key} row={row} active={active} onGo={go} onStep={step} onPin={onPin} />
         ))}
       </Section>
 
       <Section id="comments" title="Comments" count={rows.threads.length} open={open.has('comments')} onToggle={toggle}>
         {rows.threads.map(row => (
-          <RowButton key={row.key} row={row} active={active} onGo={go} onStep={step} />
+          <RowButton key={row.key} row={row} active={active} onGo={go} onStep={step} onPin={onPin} />
         ))}
       </Section>
 
@@ -317,11 +357,16 @@ function CuratedRows({
   depth,
   active,
   onGo,
+  onUnpin,
+  section,
 }: {
   entry: SectionRow
   depth: number
   active: { key: string; places: readonly Located[]; at: number } | null
   onGo: (row: Row) => void
+  onUnpin: (reference: Reference, sectionPath: string) => void
+  /** The PATH of the file this row lives in — what unpinning has to edit. */
+  section: string | null
 }): React.JSX.Element {
   // Open by default: a section someone curated is one they want to see.
   const [open, setOpen] = useState(true)
@@ -360,6 +405,17 @@ function CuratedRows({
           {/* Never hidden, and it says why it is dim (D53). */}
           {entry.missing && <span className="nav-count nav-missing">not found</span>}
         </button>
+        {section !== null && entry.target.kind !== 'section' && (
+          <button
+            type="button"
+            className="nav-pin"
+            aria-label={`Unpin ${entry.label}`}
+            title={`Unpin ${entry.label}`}
+            onClick={() => onUnpin(entry.target, section)}
+          >
+            −
+          </button>
+        )}
       </div>
       {open && entry.children?.entries.map((child, i) => (
         <CuratedRows
@@ -368,6 +424,8 @@ function CuratedRows({
           depth={depth + 1}
           active={active}
           onGo={onGo}
+          onUnpin={onUnpin}
+          section={entry.children?.path ?? section}
         />
       ))}
     </>
@@ -483,11 +541,13 @@ function RowButton({
   active,
   onGo,
   onStep,
+  onPin,
 }: {
   row: Row
   active: { key: string; places: readonly Located[]; at: number } | null
   onGo: (row: Row) => void
   onStep: (by: 1 | -1) => void
+  onPin?: ((reference: Reference, label: string) => void) | undefined
 }): React.JSX.Element {
   const isActive = active?.key === row.key
   const many = (isActive ? active.places.length : row.count) > 1
@@ -502,6 +562,19 @@ function RowButton({
           </span>
         )}
       </button>
+      {onPin !== undefined && (
+        // Revealed on hover, and never in the row's own button: pinning is a
+        // different act from going, and the one verb belongs to the stripe.
+        <button
+          type="button"
+          className="nav-pin"
+          aria-label={`Pin ${row.label}`}
+          title={`Pin ${row.label}`}
+          onClick={() => onPin(row.reference, row.label)}
+        >
+          +
+        </button>
+      )}
       {isActive && many && (
         <span className="nav-steps">
           <button type="button" aria-label="Previous" onClick={() => onStep(-1)}>
@@ -522,6 +595,8 @@ function Section({
   count,
   open,
   onToggle,
+  missing,
+  summary,
   children,
 }: {
   id: string
@@ -529,13 +604,26 @@ function Section({
   count: number
   open: boolean
   onToggle: (id: string) => void
+  /** A section named in the order but whose file is gone (D53). */
+  missing?: boolean
+  /**
+   * What the person wrote after the link, when this section is one they wrote
+   * down (R20).
+   *
+   * **It needs somewhere to be.** A section became a header rather than a row,
+   * and a header shows a title and a count — so the summary, which is the one
+   * part of an entry nothing regenerates, would have quietly stopped being
+   * displayed anywhere. Under the header, in the same quiet tone a row's
+   * summary takes.
+   */
+  summary?: string | null
   children: React.ReactNode
 }): React.JSX.Element {
   return (
     <div className="nav-section">
       <button
         type="button"
-        className="nav-head"
+        className={`nav-head${missing === true ? ' missing' : ''}`}
         aria-expanded={open}
         aria-controls={`nav-${id}`}
         onClick={() => onToggle(id)}
@@ -544,8 +632,11 @@ function Section({
           {open ? '▾' : '▸'}
         </span>
         {title}
-        <span className="nav-count">{count}</span>
+        <span className="nav-count">{missing === true ? 'not found' : count}</span>
       </button>
+      {summary !== undefined && summary !== null && (
+        <p className="nav-detail nav-section-summary">{summary}</p>
+      )}
       <div id={`nav-${id}`} hidden={!open}>
         {children}
       </div>

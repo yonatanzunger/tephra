@@ -15,6 +15,17 @@ import type { Reference, SectionRow, SectionTree } from './nav-api.ts'
 /** The nav's top level: a fileset of filesets. The underscore guards a collision. */
 export const INDEX_SECTION = 'sections/_index.fileset.md'
 
+/**
+ * Where a pin goes when nobody says where.
+ *
+ * **Named for what it holds, not for what it is.** An earlier draft dropped
+ * pins straight into the top-level list, which meant the one section a new
+ * notebook had was called "Sections" — a container named after the category of
+ * containers, which tells a reader nothing. The top level orders the groups;
+ * this is a group.
+ */
+export const PINNED_SECTION = 'pinned'
+
 /** How deep a section may nest before the panel stops following it (D53). */
 export const MAX_DEPTH = 3
 
@@ -25,8 +36,15 @@ export const MAX_DEPTH = 3
  * link item is prose, and prose in a section file is allowed. A person may
  * write a paragraph explaining what the section is for, and it is not an error
  * that the parser has nothing to do with it.
+ *
+ * **Both legal spellings of a destination.** A target containing a space is not
+ * a markdown link unless it is wrapped in angle brackets — `<tephra:tag/House
+ * Deal>` — which is exactly what a person hand-editing a section will reach
+ * for, since escaping to `%20` is what a program does. Accepting only the bare
+ * form silently dropped their entry, and dropping an entry is the one thing
+ * this file may not do (D53).
  */
-const ITEM = /^\s*[-*]\s+\[([^\]]*)\]\(([^)\s]+)\)\s*(?:[—–-]\s+(.*))?$/
+const ITEM = /^\s*[-*]\s+\[([^\]]*)\]\(\s*(?:<([^>]*)>|([^)\s]+))\s*\)\s*(?:[—–-]\s+(.*))?$/
 
 /** The entries of one section file, given its body and a title from elsewhere. */
 export function parseEntries(body: string): readonly SectionRow[] {
@@ -34,11 +52,11 @@ export function parseEntries(body: string): readonly SectionRow[] {
   for (const line of body.split('\n')) {
     const item = ITEM.exec(line)
     if (item === null) continue
-    const target = referenceOf(item[2] as string)
+    const target = referenceOf((item[2] ?? item[3] ?? '') as string)
     if (target === null) continue
     entries.push({
       label: (item[1] as string).trim(),
-      summary: item[3]?.trim() ?? null,
+      summary: item[4]?.trim() ?? null,
       target,
       children: null,
       missing: false,
@@ -52,6 +70,9 @@ export function entryLine(label: string, target: Reference, summary?: string): s
   const tail = summary === undefined || summary.trim() === '' ? '' : ` — ${summary.trim()}`
   return `- [${label}](${targetOf(target)})${tail}`
 }
+
+/** The same reference, however it was spelled. Escaping is a program's habit. */
+export const sameTarget = (a: Reference, b: Reference): boolean => targetOf(a) === targetOf(b)
 
 /** How a reference is written down (D53). */
 export function targetOf(target: Reference): string {

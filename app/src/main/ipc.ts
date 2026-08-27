@@ -56,6 +56,12 @@ export function registerDocumentIpc(service: DocumentService): void {
   )
   ipcMain.handle(CHANNEL.navStatus, () => service.index.status())
   ipcMain.handle(CHANNEL.navSections, () => service.sections.tree())
+  ipcMain.handle(CHANNEL.navPin, (_e, reference: Reference, label: string, section?: string) =>
+    service.sections.pin(reference, label, section),
+  )
+  ipcMain.handle(CHANNEL.navUnpin, (_e, reference: Reference, section?: string) =>
+    service.sections.unpin(reference, section),
+  )
 
   /**
    * Follow a reference that leaves the app (D10's third and fourth kinds).

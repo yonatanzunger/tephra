@@ -87,6 +87,12 @@ const tephra = {
     status: (): Promise<IndexStatus> => ipcRenderer.invoke(CHANNEL.navStatus),
     /** The curated half: sections, resolved into a tree (D53). */
     sections: (): Promise<SectionTree> => ipcRenderer.invoke(CHANNEL.navSections),
+    /** Put a reference into a section — an append to a markdown file (D53). */
+    pin: (reference: Reference, label: string, section?: string): Promise<'pinned' | 'already'> =>
+      ipcRenderer.invoke(CHANNEL.navPin, reference, label, section),
+    /** Take one out again — the same act, one line removed (D53). */
+    unpin: (reference: Reference, section?: string): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNEL.navUnpin, reference, section),
     /** Follow a reference that leaves the app: a URL, or a file the OS owns. */
     open: (reference: Reference): Promise<'opened' | 'missing' | 'unsupported'> =>
       ipcRenderer.invoke(CHANNEL.navOpen, reference),

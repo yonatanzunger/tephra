@@ -709,6 +709,20 @@ export function App(): React.JSX.Element {
             where={where}
             onGo={at => void goToLocated(at)}
             onActive={(places, current, slot) => setTrack({ places, current, slot })}
+            onPin={(reference, label) => {
+              void window.tephra.nav
+                .pin(reference, label)
+                // The panel re-reads rather than being told what changed: the
+                // file on disk is the fact, and it is the only fact (D53).
+                .then(() => setNavGeneration(n => n + 1))
+                .catch(fail)
+            }}
+            onUnpin={(reference, section) => {
+              void window.tephra.nav
+                .unpin(reference, section)
+                .then(() => setNavGeneration(n => n + 1))
+                .catch(fail)
+            }}
             onUnavailable={(target, why) =>
               setError(
                 why === 'missing'

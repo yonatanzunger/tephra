@@ -44,6 +44,8 @@ export const CHANNEL = {
   navStatus: 'tephra:nav:status',
   navSections: 'tephra:nav:sections',
   navOpen: 'tephra:nav:open',
+  navPin: 'tephra:nav:pin',
+  navUnpin: 'tephra:nav:unpin',
   /**
    * A corpus file changed on disk that no document is holding open.
    *

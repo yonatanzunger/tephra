@@ -231,6 +231,7 @@ body {
 }
 .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-detail { font-size: 11px; color: rgb(var(--text-muted)); font-variant-numeric: tabular-nums; }
+.nav-section-summary { margin: -.1rem 1.1rem .25rem 1.9rem; line-height: 1.4; }
 /* A nested heading is subordinate to its day, and says so by weight rather
    than by fading — a heading you cannot read is not a smaller heading. */
 .nav-nested { font-size: 12.5px; color: rgb(var(--text) / .82); }
@@ -258,8 +259,18 @@ body {
   color: rgb(var(--text-muted)); white-space: nowrap;
 }
 .nav-head .nav-count { font-weight: 400; letter-spacing: 0; }
-.nav-row-wrap.missing .nav-row { color: rgb(var(--text) / .5); }
+.nav-row-wrap.missing .nav-row, .nav-head.missing { color: rgb(var(--text) / .5); }
 .nav-missing { font-style: italic; opacity: .8; }
+
+/* The pin: present on every derived row, visible when the row is. A control
+   that is always on screen would crowd a list whose job is to be read. */
+.nav-pin {
+  flex: none; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none; border: 0;
+  padding: .1rem .4rem; opacity: 0;
+}
+.nav-row-wrap:hover .nav-pin, .nav-pin:focus-visible { opacity: 1; }
+.nav-pin:hover { color: rgb(var(--accent)); }
 
 .nav-steps { display: flex; gap: .1rem; padding-right: .5rem; }
 .nav-steps button {

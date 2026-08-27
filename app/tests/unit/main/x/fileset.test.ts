@@ -84,7 +84,10 @@ async function sections(t: TestContext, files: Record<string, string>) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-sections-'))
   await mkdir(join(root, 'sections'), { recursive: true })
   for (const [name, body] of Object.entries(files)) {
-    await writeFile(join(root, 'sections', name), `---\ntephra: 1\nkind: fileset\n---\n${body}`)
+    // A fixture may bring its own frontmatter — a title is part of what is
+    // being tested when the panel shows one.
+    const text = body.startsWith('---\n') ? body : `---\ntephra: 1\nkind: fileset\n---\n${body}`
+    await writeFile(join(root, 'sections', name), text)
   }
   const notebook = await Notebook.open({ root, lock: false, watch: false })
   t.after(() => notebook.close())
@@ -142,4 +145,122 @@ it('a notebook with no sections yet is empty, not broken', async t => {
   const tree = await filesets.tree()
   assert.deepEqual(tree.entries, [])
   assert.equal(tree.path, null, 'and says the file is not there')
+})
+
+// ── pinning, and the bug that a name is not a path ─────────────────────────
+
+it('a pin is a line appended to a markdown file', async t => {
+  const { notebook, filesets } = await sections(t, {})
+  assert.equal(await filesets.pin({ kind: 'tag', subject: 'House Deal' }, 'House Deal'), 'pinned')
+  const written = await notebook.read('sections/pinned.fileset.md' as RelPath)
+  assert.match(written ?? '', /^- \[House Deal\]\(tephra:tag\/House%20Deal\)$/m)
+  assert.match(written ?? '', /^---\ntephra: 1\nkind: fileset\ntitle: Pinned\n---/)
+})
+
+it('pinning the same reference twice does not double it', async t => {
+  const { filesets } = await sections(t, {})
+  await filesets.pin({ kind: 'anchor', name: 'the spot' }, 'the spot')
+  assert.equal(await filesets.pin({ kind: 'anchor', name: 'the spot' }, 'again'), 'already')
+})
+
+it('THE BUG: unpinning from the top-level list, whose name does not survive slugging', async t => {
+  // `sectionFile('_index')` is `sections/index.fileset.md` — `slug` strips the
+  // underscore, because slug exists to turn a person's TITLE into a filename.
+  // Taking a name meant unpinning wrote to a file that did not exist and
+  // reported nothing: the button did nothing, silently, and every test passed
+  // because they all used a name that survives slugging.
+  const { notebook, filesets } = await sections(t, {
+    '_index.fileset.md': '- [Kept](tephra:tag/Kept)\n- [Removed](tephra:mark/removed)\n',
+  })
+  const path = 'sections/_index.fileset.md' as RelPath
+  assert.equal(await filesets.unpin({ kind: 'anchor', name: 'removed' }, path), true)
+
+  const written = (await notebook.read(path)) ?? ''
+  assert.match(written, /Kept/)
+  assert.doesNotMatch(written, /removed/)
+})
+
+it('a reference is matched however it was written down', async t => {
+  // The app escapes a space to `%20`; a person writes `<…>`, which is what
+  // markdown requires of a destination with a space in it. One pin, two hands.
+  const { notebook, filesets } = await sections(t, {
+    'pinned.fileset.md': '- [House Deal](<tephra:tag/House Deal>)\n',
+  })
+  assert.equal(
+    await filesets.unpin({ kind: 'tag', subject: 'House Deal' }, 'sections/pinned.fileset.md' as RelPath),
+    true,
+  )
+  assert.doesNotMatch((await notebook.read('sections/pinned.fileset.md' as RelPath)) ?? '', /House Deal/)
+})
+
+it('unpinning something that is not there says so rather than pretending', async t => {
+  const { filesets } = await sections(t, { 'pinned.fileset.md': '- [Kept](tephra:tag/Kept)\n' })
+  assert.equal(
+    await filesets.unpin({ kind: 'tag', subject: 'Absent' }, 'sections/pinned.fileset.md' as RelPath),
+    false,
+  )
+})
+
+it('THE GAP: a pin into a notebook that already has a top-level order', async t => {
+  // Every earlier test had either NO `_index` — where the tree lists whatever
+  // filesets exist — or one that already named the section being pinned into.
+  // A real notebook is neither: it has an order, written before the section
+  // existed. The pin wrote its file and the panel never showed it, because the
+  // order did not mention it.
+  const { filesets } = await sections(t, {
+    '_index.fileset.md': '- [The house](tephra:section/house)\n',
+    'house.fileset.md': '- [The listing](https://example.com/x)\n',
+  })
+  assert.equal(await filesets.pin({ kind: 'tag', subject: 'Recurring' }, 'Recurring'), 'pinned')
+
+  const tree = await filesets.tree()
+  const titles = tree.entries.map(e => e.label)
+  assert.ok(titles.includes('Pinned'), `the new section should be in the order, got ${titles.join(', ')}`)
+})
+
+it('and a pin into a section already in the order does not name it twice', async t => {
+  const { notebook, filesets } = await sections(t, {
+    '_index.fileset.md': '- [Pinned](tephra:section/pinned)\n',
+    'pinned.fileset.md': '- [Kept](tephra:tag/Kept)\n',
+  })
+  await filesets.pin({ kind: 'tag', subject: 'Another' }, 'Another')
+  const index = (await notebook.read('sections/_index.fileset.md' as RelPath)) ?? ''
+  assert.equal((index.match(/tephra:section\/pinned/g) ?? []).length, 1)
+})
+
+it('THE LIVE BUG: an order that does not name a section must not hide it', async t => {
+  // The state a real notebook was actually in: an order with nothing in it, and
+  // a section file full of pins. Every pin was written correctly and the panel
+  // showed nothing, because the order was being read as a whitelist.
+  const { filesets } = await sections(t, {
+    '_index.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: Sections\n---\n',
+    'pinned.fileset.md':
+      '---\ntephra: 1\nkind: fileset\ntitle: Pinned\n---\n' +
+      '- [COBRA!!](tephra:tag/COBRA!!)\n- [Foo](tephra:tag/Foo)\n',
+  })
+  const tree = await filesets.tree()
+  assert.deepEqual(tree.entries.map(e => e.label), ['Pinned'])
+  assert.deepEqual(tree.entries[0]?.children?.entries.map(e => e.label), ['COBRA!!', 'Foo'])
+})
+
+it('what is named comes first, in the order it is named; the rest follow', async t => {
+  const { filesets } = await sections(t, {
+    '_index.fileset.md': '- [The house](tephra:section/house)\n',
+    'house.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [x](../a.md)\n',
+    'pinned.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: Pinned\n---\n- [y](../b.md)\n',
+    'reading.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: Reading\n---\n- [z](../c.md)\n',
+  })
+  // Named first in its stated order; then pinned, then the rest by title.
+  assert.deepEqual((await filesets.tree()).entries.map(e => e.label), ['The house', 'Pinned', 'Reading'])
+})
+
+it('a section made by hand appears without anyone editing the order', async t => {
+  // R26 in the sidebar: a file dropped into `sections/` is a section, whatever
+  // the app knew about it.
+  const { filesets } = await sections(t, {
+    '_index.fileset.md': '- [Pinned](tephra:section/pinned)\n',
+    'pinned.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: Pinned\n---\n- [y](../b.md)\n',
+    'by-hand.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: Made by hand\n---\n- [z](../c.md)\n',
+  })
+  assert.deepEqual((await filesets.tree()).entries.map(e => e.label), ['Pinned', 'Made by hand'])
 })

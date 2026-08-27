@@ -1609,3 +1609,55 @@ is the one from the day seam: assert the property, not the machinery.
 `PRINT_CSS` is a template literal, and a backtick in a CSS COMMENT ends it. The
 error then lands on a line of perfectly good CSS several lines further down.
 There is now a warning where the literal opens.
+
+## A date in an assertion is a test that expires overnight — twice now
+
+`m2-acceptance` was fixed once for this: it pinned a date, and the morning after
+it was written the app filed a day the harness had never seeded, so the import
+landed somewhere the checks did not read. The fix was to compute today by D38's
+rule.
+
+**`m3-acceptance` made the same mistake in its first week.** Two checks named
+"26 Aug" and "24 Aug" — one asserting that a blank day was absent from the
+timeline, one asserting what the where-you-are line said — and both went red at
+midnight while the code they test was untouched.
+
+The lesson the first fix recorded was "compute today". The lesson it should have
+recorded is stronger: **every date in a harness is derived from the fixture's own
+anchor, including the ones inside string comparisons.** m3 now has `shortDay(n)`,
+which renders the label the sidebar would show for *n days back*, and the checks
+say `shortDay(2)` where they used to say a month name.
+
+Second in a class the acceptance scripts keep rediscovering: a test that passes
+on the day it is written is not yet a test.
+
+## Two pinning bugs the whole harness could not see, for one reason
+
+Both were found by using the app, both after an end-to-end acceptance had
+driven the exact gesture and passed.
+
+**The button did nothing, silently.** `unpin` took a section's NAME, and
+`sectionFile('_index')` is `sections/index.fileset.md` — `slug` strips the
+underscore, correctly, because slug exists to turn a person's title into a
+filename. So unpinning from the top-level list wrote to a file that did not
+exist and returned false. Every test passed because every fixture used a name
+that survives slugging: `pinned`, `house`, `gone`. **The API now takes a path.**
+A path is what the tree already carries and is unambiguous; a name is a
+human-facing thing that a lossy function stands between.
+
+**Then the pin did nothing, visibly.** The file was written correctly; the panel
+never showed it, because a top-level ORDER existed and did not name the new
+section. Reaching a section is what the order is for.
+
+### The reason neither test could see it
+
+**Every fixture was a notebook with no history.** They were built fresh, in the
+state the code was written against — no `_index` at all, or an `_index` that
+already named the section being pinned into. A real notebook is neither: it has
+an order, written before the section existed, and names that were chosen by a
+person rather than by the fixture.
+
+The rule that follows, and that the acceptance now applies: **seed the states a
+notebook PASSES THROUGH, not only the one it starts in.** m3's pinning section
+now begins from a notebook that already has an order and a section in it, which
+is the state every notebook is in after its first day of use.

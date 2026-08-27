@@ -12,7 +12,7 @@
 //   1. Cmd+P asks which days, and produces a PDF of the ones written in
 
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, writeFile, stat } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -20,6 +20,20 @@ const electron = './node_modules/.bin/electron'
 
 /** Today in the reference zone, the same rule the app files by (D38). */
 const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
+
+/**
+ * A day's label as the sidebar writes it — "26 Aug" — counted back from today.
+ *
+ * **Derived, never typed.** m2 was fixed once for hard-coded dates and this
+ * script repeated the mistake in its first week: two checks named "26 Aug" and
+ * "24 Aug", and both went red the next morning. A date written into an
+ * assertion is a test that expires overnight.
+ */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const shortDay = back => {
+  const at = new Date(Date.parse(`${DAY}T12:00:00Z`) - back * 86_400_000)
+  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]}`
+}
 
 /**
  * A notebook of consecutive days, newest first in the list.
@@ -192,8 +206,9 @@ console.log('\n— the sidebar —')
   )
   check(
     'a day nobody wrote in is not a row (D8 files one whenever the app opens)',
-    Array.isArray(r.timelineRows) && !r.timelineRows.some(t => t.startsWith('24 Aug')),
-    JSON.stringify(r.timelineRows),
+    // The blank body is the third day back in the fixture above.
+    Array.isArray(r.timelineRows) && !r.timelineRows.some(t => t.startsWith(shortDay(2))),
+    `${shortDay(2)} should be absent from ${JSON.stringify(r.timelineRows)}`,
   )
   check('and asking for more gets them', r.rowsAfterMore > r.timelineRows.length, `${r.rowsAfterMore} rows`)
   check(
@@ -235,7 +250,7 @@ console.log('\n— the sidebar —')
   )
   check(
     'the foot of the panel says where the caret is: day, heading, subject',
-    /26 Aug/.test(String(r.whereDay)) &&
+    String(r.whereDay).startsWith(shortDay(0)) &&
       Array.isArray(r.whereHeadings) && r.whereHeadings.includes('A heading today') &&
       Array.isArray(r.whereTags) && r.whereTags.includes('Recurring'),
     `${r.whereDay} › ${JSON.stringify(r.whereHeadings)} · ${JSON.stringify(r.whereTags)}`,
@@ -284,15 +299,24 @@ console.log('\n— curated sections —')
   const r = report(await launch('sections', root))
 
   check(
-    'the curated sections come first, above the built-ins (D51)',
-    Array.isArray(r.sections) && r.sections[0] === 'My sections' && r.sections[1] === 'Timeline',
+    'each curated section is a section beside the built-ins (D10)',
+    Array.isArray(r.sections) &&
+      r.sections.slice(0, 2).join('|') === 'The house|A section that went away' &&
+      r.sections.slice(2).join('|') === 'Timeline|Subjects|Bookmarks|Comments',
     JSON.stringify(r.sections),
   )
   check(
-    'a fileset of filesets, with the nested one expanded',
-    Array.isArray(r.curatedRows) && r.curatedRows.some(t => t.includes('The house')) &&
-      r.curatedRows.some(t => t.includes('That marked spot')) && r.nested >= 2,
-    `${JSON.stringify(r.curatedRows)} · ${r.nested} nested`,
+    'a pin that is not a section is a loose row above them',
+    Array.isArray(r.looseRows) && r.looseRows.length === 1 &&
+      r.looseRows[0].includes('What keeps coming up'),
+    JSON.stringify(r.looseRows),
+  )
+  check(
+    'a section holds its own entries, of every kind the format allows',
+    Array.isArray(r.houseRows) && r.houseRows.length === 2 &&
+      r.houseRows.some(t => t.includes('That marked spot')) &&
+      r.houseRows.some(t => t.includes('The listing')),
+    JSON.stringify(r.houseRows),
   )
   check(
     'the summary after the link is shown, and is the words a person wrote (R20)',
@@ -301,9 +325,9 @@ console.log('\n— curated sections —')
     JSON.stringify(r.summaries),
   )
   check(
-    'an entry that resolves to nothing is still an entry, and says so (D53)',
-    Array.isArray(r.missing) && r.missing.length === 1 && r.missing[0] === 'not found',
-    JSON.stringify(r.missing),
+    'a section whose file is gone keeps the name someone gave it, and says so (D53)',
+    r.missingSection === 'not found',
+    `${JSON.stringify(r.sections)} · ${r.missingSection}`,
   )
   check(
     'a pinned subject is the same row as a built-in one: same verb, same marks',
@@ -311,11 +335,91 @@ console.log('\n— curated sections —')
     `caret ${r.caretAfterPinned}, ${r.marksAfterPinned} track marks`,
   )
   check(
-    'and a section is a container its caret discloses',
-    r.rowsAfterCollapse < r.rowsBeforeCollapse,
-    `${r.rowsBeforeCollapse} → ${r.rowsAfterCollapse} rows`,
+    'and a section is a group its own header discloses',
+    r.houseHidden === true && r.houseRowsBefore === 2,
+    `${r.houseRowsBefore} rows, hidden after: ${r.houseHidden}`,
   )
   check('and nothing errored on the way', r.appError === 'none')
+}
+
+// ── 4. pinning ──────────────────────────────────────────────────────────────
+//
+// The claim D53 makes is that pinning is an ORDINARY EDIT: a line appended to a
+// markdown file, and nothing else anywhere. So the test is the round trip —
+// press the control, read the file on disk, and find the row back in the panel
+// having come from that file.
+console.log('\n— pinning —')
+{
+  const TAG = (s, text) => `<!--tephra:tag-start ${s}-->${text}<!--tephra:tag-end ${s}-->`
+  const root = await week([
+    `Today, with ${TAG('Recurring', 'the second mention')}.\n`,
+    `Yesterday, where ${TAG('Recurring', 'it first came up')}, and <!--tephra:mark the-spot-->a mark.\n`,
+  ])
+  // **A notebook with a history, not a fresh one.** The bug this section could
+  // not see was that a pin into a notebook that already had a top-level ORDER
+  // wrote its file and stayed invisible, because the order never named it.
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(
+    join(root, 'sections', '_index.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: Sections\n---\n- [The house](tephra:section/house)\n',
+  )
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The listing](https://example.com/x)\n',
+  )
+  const pinned = join(root, 'sections', 'pinned.fileset.md')
+  const order = join(root, 'sections', '_index.fileset.md')
+  const r = report(await launch('pin', root))
+  const written = await readFile(pinned, 'utf8').catch(() => '')
+
+  // A SECOND launch over the same notebook: what comes back is what the files
+  // hold, which is the whole claim (D53).
+  const back = report(await launch('unpin', root))
+  const afterUnpin = await readFile(pinned, 'utf8').catch(() => '')
+
+  check(
+    'the notebook began with an order that did not mention pinning',
+    r.sectionsBefore === 5,
+    `${r.sectionsBefore} sections`,
+  )
+  check('a row offers a pin', r.pinControlFound === true)
+  check(
+    'THE ROUND TRIP: the pin is a line in a markdown file (D53)',
+    /^- \[Recurring\]\(tephra:tag\/Recurring\)$/m.test(written) &&
+      /^- \[the-spot\]\(tephra:mark\/the-spot\)$/m.test(written),
+    JSON.stringify(written),
+  )
+  check(
+    'and the section it made is named for what it holds, not for its category',
+    /^---\ntephra: 1\nkind: fileset\ntitle: Pinned\n---\n/.test(written),
+    JSON.stringify(written.slice(0, 60)),
+  )
+  check(
+    'pinning the same thing twice does not double it',
+    (written.match(/tephra:tag\/Recurring/g) ?? []).length === 1,
+    `${(written.match(/tephra:tag\/Recurring/g) ?? []).length} occurrences`,
+  )
+  check(
+    'and the order gains the new section, so the pin is VISIBLE (D53)',
+    /tephra:section\/pinned/.test(await readFile(order, 'utf8').catch(() => '')) &&
+      r.sectionsAfter === 6,
+    `${r.sectionsAfter} sections; order: ${JSON.stringify(await readFile(order, 'utf8').catch(() => ''))}`,
+  )
+  check(
+    'and a RESTART finds them, because the file is where they live',
+    Array.isArray(back.rowsAfterRestart) && back.rowsAfterRestart.length === 2 &&
+      back.rowsAfterRestart.some(t => t.includes('Recurring')) &&
+      back.rowsAfterRestart.some(t => t.includes('the-spot')),
+    JSON.stringify(back.rowsAfterRestart),
+  )
+  check('a pinned row offers to be unpinned', back.unpinFound === true)
+  check(
+    'and unpinning takes the line back out of the file',
+    Array.isArray(back.rowsAfterUnpin) && back.rowsAfterUnpin.length === 1 &&
+      !afterUnpin.includes('the-spot') && afterUnpin.includes('Recurring'),
+    `${JSON.stringify(back.rowsAfterUnpin)} · file ${JSON.stringify(afterUnpin)}`,
+  )
+  check('and nothing errored on the way', r.appError === 'none' && back.appError === 'none')
 }
 
 const failed = checks.filter(c => !c.ok)

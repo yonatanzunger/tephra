@@ -1003,30 +1003,129 @@ export async function runVerify(scene: string): Promise<void> {
       say('sections', [...document.querySelectorAll('.nav-section')].map(el =>
         titleOf(el.querySelector('.nav-head'))))
 
-      const curated = [...document.querySelectorAll('.nav-section')][0]
-      const rows = [...(curated?.querySelectorAll('.nav-row') ?? [])] as HTMLElement[]
-      say('curatedRows', rows.map(r => r.textContent?.trim() ?? ''))
-      say('summaries', [...(curated?.querySelectorAll('.nav-detail') ?? [])].map(e => e.textContent))
-      say('missing', [...(curated?.querySelectorAll('.nav-missing') ?? [])].map(e => e.textContent))
-      say('nested', (curated?.querySelectorAll('.nav-row-wrap[style*="0.85rem"]') ?? []).length)
+      // A pin that is not a section is a LOOSE row, above the groups: it is a
+      // thing, not a container, and it has no header of its own.
+      const loose = [...document.querySelectorAll('.nav-scroll > .nav-row-wrap')] as HTMLElement[]
+      say('looseRows', loose.map(r => r.textContent?.trim() ?? ''))
 
-      // A pinned subject is the SAME ROW as the built-in one: same verb, same
-      // steppers, same marks. Clicking it goes to the subject's first place.
-      const pinned = rows.find(r => (r.textContent ?? '').includes('What keeps coming up'))
-      pinned?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
-      await settle(800)
+      const groupOf = (title: string): Element | undefined =>
+        [...document.querySelectorAll('.nav-section')].find(el =>
+          (el.querySelector('.nav-head')?.textContent ?? '').includes(title),
+        )
+      const house = groupOf('The house')
+      say('houseRows', [...(house?.querySelectorAll('.nav-row') ?? [])].map(r => r.textContent?.trim() ?? ''))
+      say('summaries', [...document.querySelectorAll('.nav-detail')].map(e => e.textContent))
+      say('missingSection', groupOf('A section that went away')?.querySelector('.nav-count')?.textContent ?? '')
+
+      // The loose pin is the SAME ROW as the built-in one: same verb, same marks.
+      const pinned = loose.find(r => (r.textContent ?? '').includes('What keeps coming up'))
+      ;(pinned?.querySelector('.nav-row') as HTMLElement | undefined)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(900)
       say('caretAfterPinned', view.state.selection.main.head)
       say('marksAfterPinned', document.querySelectorAll('.tx-track-mark').length)
 
-      // A section is a container: its caret discloses, the way a day's does.
-      const caret = curated?.querySelector('.nav-caret') as HTMLElement | null
-      say('rowsBeforeCollapse', rows.length)
-      caret?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      // A section is a group, so its own header discloses it.
+      say('houseRowsBefore', (house?.querySelectorAll('.nav-row') ?? []).length)
+      ;(house?.querySelector('.nav-head') as HTMLElement | undefined)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
       await settle(300)
-      say('rowsAfterCollapse', (curated?.querySelectorAll('.nav-row') ?? []).length)
+      say('houseRowsAfter', (groupOf('The house')?.querySelectorAll('.nav-row:not([hidden])') ?? []).length)
+      say('houseHidden', groupOf('The house')?.querySelector('[id^=nav-]')?.hasAttribute('hidden') ?? false)
 
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
+    }
+
+    if (scene === 'pin') {
+      // THE ROUND TRIP (D53). A pin is an append to a markdown file, so the
+      // test is: press the control, and find the line on disk — then find the
+      // row back in the panel, having come from the file rather than from
+      // whatever the renderer remembered doing.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-section').length < 5) {
+        await settle(200)
+        waited += 200
+      }
+      for (const head of [...document.querySelectorAll('.nav-head')]) {
+        if (head.getAttribute('aria-expanded') === 'false') {
+          (head as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+        }
+      }
+      await settle(400)
+
+      const sectionsBefore = document.querySelectorAll('.nav-section').length
+      say('sectionsBefore', sectionsBefore)
+
+      const rowIn = (title: string, text: string): HTMLElement | undefined => {
+        const section = [...document.querySelectorAll('.nav-section')].find(el =>
+          (el.querySelector('.nav-head')?.textContent ?? '').includes(title),
+        )
+        return [...(section?.querySelectorAll('.nav-row-wrap') ?? [])].find(w =>
+          (w.textContent ?? '').includes(text),
+        ) as HTMLElement | undefined
+      }
+
+      // Pin a subject.
+      const subject = rowIn('Subjects', 'Recurring')
+      const pin = subject?.querySelector('.nav-pin') as HTMLElement | undefined
+      say('pinControlFound', pin !== undefined)
+      pin?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1200)
+
+      // And a bookmark, so the file has two kinds in it.
+      const mark = rowIn('Bookmarks', 'the-spot')
+      ;(mark?.querySelector('.nav-pin') as HTMLElement | undefined)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1200)
+
+      // Pressing the same one again must not double it.
+      const again = rowIn('Subjects', 'Recurring')
+      ;(again?.querySelector('.nav-pin') as HTMLElement | undefined)
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1200)
+
+      const curated = [...document.querySelectorAll('.nav-section')].find(el =>
+        (el.querySelector('.nav-head')?.textContent ?? '').includes('Pinned'),
+      )
+      say('curatedTitle', [...(curated?.querySelector('.nav-head')?.childNodes ?? [])]
+        .filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent ?? '').join('').trim())
+      say('curatedRows', [...(curated?.querySelectorAll('.nav-row') ?? [])].map(r => r.textContent?.trim() ?? ''))
+      say('sectionsAfter', document.querySelectorAll('.nav-section').length)
+
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
+    if (scene === 'unpin') {
+      // A SECOND LAUNCH over the same notebook: the pins are read back from the
+      // files, which is the part that matters — a pin that only existed in the
+      // renderer's memory would look identical until the app was restarted.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-section').length < 5) {
+        await settle(200)
+        waited += 200
+      }
+      const pinnedSection = [...document.querySelectorAll('.nav-section')].find(el =>
+        (el.querySelector('.nav-head')?.textContent ?? '').includes('Pinned'),
+      )
+      say('rowsAfterRestart', [...(pinnedSection?.querySelectorAll('.nav-row') ?? [])]
+        .map(r => r.textContent?.trim() ?? ''))
+
+      const toRemove = [...(pinnedSection?.querySelectorAll('.nav-row-wrap') ?? [])].find(w =>
+        (w.textContent ?? '').includes('the-spot'),
+      )
+      const minus = toRemove?.querySelector('.nav-pin') as HTMLElement | undefined
+      say('unpinFound', minus !== undefined)
+      minus?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1200)
+
+      const after = [...document.querySelectorAll('.nav-section')].find(el =>
+        (el.querySelector('.nav-head')?.textContent ?? '').includes('Pinned'),
+      )
+      say('rowsAfterUnpin', [...(after?.querySelectorAll('.nav-row') ?? [])].map(r => r.textContent?.trim() ?? ''))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
     }
 
     if (scene === 'markpanel') {
