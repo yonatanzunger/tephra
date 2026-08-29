@@ -429,6 +429,17 @@ export interface Document {
    */
   read(span: Span, at?: SessionGeneration): Promise<DocumentWindow>
 
+  /**
+   * A position inside one segment, at this document's current generation.
+   *
+   * **The only way to build one.** A `DocumentPosition` carries a generation,
+   * and a caller that assembles the record by hand has to supply that from
+   * somewhere — which in the renderer meant a second mirror of the number and a
+   * position that was born stale (D33). Asking the document is asking the thing
+   * that knows.
+   */
+  positionAt(segment: SegmentKey, offset: number): DocumentPosition
+
   /** Boundary widening without loading text — the widget layer needs this constantly. */
   snap(span: Span): Promise<Span>
 

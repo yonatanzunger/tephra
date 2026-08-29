@@ -7,7 +7,7 @@
 import type { DateKey, DocumentKind } from '../../shared/document-api.ts'
 import { asDateKey } from '../../shared/dates.ts'
 
-import { join, relative, resolve, sep } from 'node:path'
+import { dirname, join, posix, relative, resolve, sep } from 'node:path'
 
 export const STREAM_DIR = 'stream'
 
@@ -240,6 +240,19 @@ export function relativePath(from: RelPath, to: RelPath): string {
 
 
 /**
+ * A link resolved against the document it was written in — paths only, no disk.
+ *
+ * The same rule as `resolveInsideNotebook` and none of the filesystem: this is
+ * for deciding what an entry POINTS AT, which the panel asks about every entry
+ * it draws and must answer without a stat per link.
+ */
+export function relativeTo(from: RelPath, target: string): RelPath | null {
+  if (target === '' || /^[a-z][a-z0-9+.-]*:/i.test(target)) return null
+  const at = posix.resolve(posix.join('/', posix.dirname(from)), target)
+  return at === '/' ? null : (at.slice(1) as RelPath)
+}
+
+/**
  * Resolve a link found in a document's text to a path inside the notebook, or
  * null if it leads out.
  *
@@ -248,15 +261,22 @@ export function relativePath(from: RelPath, to: RelPath): string {
  * reaches anywhere on the machine — and anything that opens what a link says
  * without this check has handed that reach to a line of prose.
  *
- * Relative targets resolve from a day file's directory. Every day file sits at
- * the same depth, `stream/YYYY/MM/`, so a well-formed relative link resolves to
- * the same place whichever day it was written on; one that is not well-formed
- * fails containment, which is the answer wanted anyway.
+ * **Relative to the document the link was written in**, which is what a relative
+ * link means everywhere else and what a person hand-editing a file will assume.
+ * `from` is that document; without one the base is a day file's directory,
+ * since every day sits at the same depth (`stream/YYYY/MM/`) and that is where
+ * links came from when the stream was the only document there was.
+ *
+ * Getting this wrong is invisible rather than loud: `../notes/offer.md` in a
+ * section file resolved from the stream's depth lands outside the notebook,
+ * fails containment, and the entry reports itself as missing — a correct link,
+ * a real file, and a row that says "not found" (D53, D54).
  */
-export function resolveInsideNotebook(root: string, target: string): RelPath | null {
+export function resolveInsideNotebook(root: string, target: string, from?: RelPath): RelPath | null {
   if (target === '' || /^[a-z][a-z0-9+.-]*:/i.test(target)) return null // a URI scheme is not a file
   const base = resolve(root)
-  const at = resolve(join(base, STREAM_DIR, '0000', '00'), target)
+  const within = from === undefined ? join(STREAM_DIR, '0000', '00') : dirname(from)
+  const at = resolve(join(base, within), target)
   if (at === base || !at.startsWith(base + sep)) return null
   return relative(base, at).split(sep).join('/') as RelPath
 }

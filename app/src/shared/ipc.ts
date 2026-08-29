@@ -7,8 +7,8 @@
 // smuggle a live object across a boundary it cannot survive.
 
 import type {
-  WindowEdit, DateKey, DocumentChange, DocumentMeta, EditOrigin, SessionGeneration,
-  Span, SpanKind, TypedSpan, DocumentPosition,
+  WindowEdit, DateKey, DocumentChange, DocumentId, DocumentMeta, EditOrigin, SegmentKey,
+  SessionGeneration, Span, SpanKind, TypedSpan, DocumentPosition,
 } from './document-api.ts'
 import type { Annotation, Marker, Prose } from './prose.ts'
 import type { WindowPosition, ProseOffset, ProseText } from './document-api.ts'
@@ -104,7 +104,17 @@ export const CHANNEL = {
 } as const
 
 export interface DocumentInfo {
+  /** Which document this is about — the stream unless the caller said otherwise. */
+  readonly id: DocumentId
   readonly meta: DocumentMeta
+  /**
+   * What the document calls itself, or null when nobody named it.
+   *
+   * A title bar needs a name and the id is a path; the document knows the
+   * answer (its frontmatter), and asking main for it here saves the renderer
+   * from parsing a file it does not have (D54).
+   */
+  readonly title: string | null
   readonly generation: SessionGeneration
   readonly today: DateKey
   readonly extent: { readonly first: DateKey; readonly last: DateKey } | null
@@ -176,9 +186,18 @@ export interface WindowChangedMessage {
   readonly boundaries: Boundaries
 }
 
+/**
+ * Open a window on a region of a document.
+ *
+ * **The document is named, and the region is in SEGMENT KEYS.** Both used to be
+ * implicit: the document was always the stream and a key was always a date. A
+ * note has one segment whose key is not a date, so a request that could only
+ * say `first: DateKey` could not ask for it at all (D54).
+ */
 export interface ReadRequest {
-  readonly first: DateKey
-  readonly last: DateKey
+  readonly doc?: DocumentId
+  readonly first: SegmentKey
+  readonly last: SegmentKey
 }
 
 export interface EditRequest {
@@ -190,6 +209,7 @@ export interface EditRequest {
 }
 
 export interface SpansRequest {
+  readonly doc?: DocumentId
   readonly kind?: SpanKind
 }
 

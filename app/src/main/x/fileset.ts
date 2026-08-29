@@ -15,7 +15,7 @@
 
 import type { Corpus } from './documents/corpus.ts'
 import { asFileset, type FilesetDocument } from './documents/kinds/fileset.ts'
-import { SECTIONS_DIR, sectionFile, type RelPath } from '../w/layout.ts'
+import { SECTIONS_DIR, relativeTo, sectionFile, type RelPath } from '../w/layout.ts'
 import {
   INDEX_SECTION, MAX_DEPTH, PINNED_SECTION, parseEntries, sameTarget,
 } from '../../shared/fileset.ts'
@@ -230,7 +230,7 @@ export class Filesets {
 
     for (const entry of section.entries) {
       if (entry.target.kind !== 'section') {
-        entries.push({ ...entry, missing: await this.#absent(entry.target) })
+        entries.push({ ...entry, missing: await this.#absent(entry.target, path) })
         continue
       }
       const child = sectionFile(entry.target.name)
@@ -246,10 +246,18 @@ export class Filesets {
     return { ...section, entries }
   }
 
-  /** Only the targets this layer can check. Names resolve through the index. */
-  async #absent(target: Reference): Promise<boolean> {
-    if (target.kind === 'file') return !(await this.#corpus.exists(target.path as unknown as DocumentId))
-    return false
+  /**
+   * Only the targets this layer can check. Names resolve through the index.
+   *
+   * **A file entry is relative to the SECTION it is written in**, the way a
+   * markdown link is relative to its own file. Checking it against the notebook
+   * root instead made every correct `../notes/x.md` report itself as missing —
+   * a real file, a good link, and a row that said "not found".
+   */
+  async #absent(target: Reference, from: RelPath): Promise<boolean> {
+    if (target.kind !== 'file') return false
+    const at = relativeTo(from, target.path)
+    return at === null || !(await this.#corpus.exists(at as string as DocumentId))
   }
 }
 

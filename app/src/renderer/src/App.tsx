@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
-  WindowPosition, DateKey, DocumentChange, DocumentPosition, DocumentWindow, SegmentKey, SessionGeneration,
+  WindowPosition, DateKey, DocumentChange, DocumentId, DocumentPosition, DocumentWindow, SegmentKey,
+  SessionGeneration,
 } from '../../shared/document-api.ts'
+import { ONLY_SEGMENT } from '../../shared/document-api.ts'
 import { defaultUiState, type UiState } from '../../shared/ui-state.ts'
-import { RemoteDocument } from './x/remote-document'
+import { Documents } from './x/documents'
+import type { RemoteStream } from './x/kinds/stream'
 import { Pane } from './pane/pane'
 import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { Editor } from './editor/Editor'
@@ -105,8 +108,13 @@ function covering(w: DocumentWindow | null, at: DocumentPosition): Where {
   }
 }
 
+/** A document's filename, which is its name of last resort. */
+const nameOf = (id: string): string =>
+  (id.split('/').pop() ?? id).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')
+
 export function App(): React.JSX.Element {
-  const [doc, setDoc] = useState<RemoteDocument | null>(null)
+  /** The STREAM, which is what the app opens with and what the title bar dates. */
+  const [doc, setDoc] = useState<RemoteStream | null>(null)
   const [pane, setPane] = useState<Pane | null>(null)
   const [vim, setVim] = useState(false)
   const [themeName, setThemeName] = useState<string>(defaultUiState.theme)
@@ -151,14 +159,15 @@ export function App(): React.JSX.Element {
     let created: Pane | null = null
     void (async () => {
       try {
-        const opened = await RemoteDocument.open()
-        const p = new Pane(opened)
+        const documents = new Documents()
+        const opened = await documents.stream()
+        const p = new Pane(documents, opened)
         created = p
         setDoc(opened)
         setPane(p)
         // Temporary: the self-check drives this. Goes away with verify.ts.
         ;(globalThis as unknown as { __pane: Pane }).__pane = p
-        ;(globalThis as unknown as { __doc: RemoteDocument }).__doc = opened
+        ;(globalThis as unknown as { __doc: RemoteStream }).__doc = opened
 
         const state = await window.tephra.doc.loadUiState()
         setVim(state.vim)
@@ -582,17 +591,30 @@ export function App(): React.JSX.Element {
    * A place already on screen skips the load — jumping to where you already are
    * would throw away the scroll position for nothing.
    */
+  /**
+   * Go to a place the index found — in any document, not only in a day.
+   *
+   * **A dateless place is a place in some other document** (D54): the index
+   * scans every file, and a span in a note used to be dropped here because the
+   * pane had one document to offer. Which document it is is the file itself,
+   * whose one segment is the constant every one-segment kind uses (D27).
+   */
   const goToLocated = useCallback(
     async (at: Located): Promise<void> => {
-      if (at.date === null || pane === null || doc === null) return // notes wait for M3.4
+      if (pane === null || doc === null) return
+      const inStream = at.date !== null
+      const id = inStream ? doc.id : (at.file as unknown as DocumentId)
+      const segment = (inStream ? at.date : ONLY_SEGMENT) as unknown as SegmentKey
       const where = (generation: SessionGeneration): DocumentPosition => ({
-        segment: at.date as unknown as SegmentKey,
+        segment,
         offset: at.from as never,
         generation,
       })
       const held = pane.window
-      if (held === null || held.toWindow(where(held.generation)) === null) {
-        await pane.goTo({ kind: 'span', doc: doc.id, span: { begin: where(doc.generation), end: where(doc.generation) } })
+      const showing = held !== null && pane.document.id === id && held.toWindow(where(held.generation)) !== null
+      if (!showing) {
+        const g = pane.document.generation
+        await pane.goTo({ kind: 'span', doc: id, span: { begin: where(g), end: where(g) } })
       }
       const now = pane.window
       const buffer = now === null ? null : now.toWindow(where(now.generation))
@@ -672,7 +694,15 @@ export function App(): React.JSX.Element {
     )
   }
 
-  const title = location?.kind === 'date' ? location.date : (doc?.today ?? '…')
+  // What the title bar says we are looking at. A day is its date; a document is
+  // whatever it calls itself, falling back to its filename, which is the only
+  // other name it has.
+  const title =
+    location?.kind === 'date'
+      ? location.date
+      : location?.kind === 'document'
+        ? (pane?.document.title ?? nameOf(location.id))
+        : (doc?.today ?? '…')
 
   return (
     <div className="app">
@@ -737,6 +767,7 @@ export function App(): React.JSX.Element {
             generation={navGeneration}
             where={where}
             onGo={at => void goToLocated(at)}
+            onOpenDocument={id => void pane?.goTo({ kind: 'document', id }).catch(fail)}
             onActive={(places, current, slot) => setTrack({ places, current, slot })}
             onPin={(reference, label) => {
               void window.tephra.nav

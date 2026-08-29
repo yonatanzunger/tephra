@@ -1,23 +1,28 @@
-// The renderer's handle on the Document that lives in main (D37).
+// The renderer's handle on a Document that lives in main (D37).
 //
 // Everything here is a forward. The one piece of real behaviour is routing a
 // pushed change to the window it belongs to — main addresses windows by handle,
 // because a live object cannot cross a process boundary.
+//
+// **Any document, not the stream.** What is stream-shaped — today, the extent
+// in dates, the date at a position — is `RemoteStream` in `kinds/`, chosen by
+// kind when the handle is made (D54). This class is what every kind can do.
 
 import type {
-  DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
+  Document, DocumentChange, DocumentId, DocumentMeta, DocumentOffset, DocumentPosition,
   DocumentWindow, Edit, EditOrigin, SegmentKey, SessionGeneration, Span, SpanKind,
-  StreamDocumentApi, TypedSpan, Unsubscribe, Divergence,
+  TypedSpan, Unsubscribe, Divergence,
 } from '../../../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../../../shared/comments.ts'
-import type { DocumentInfo } from '../../../shared/ipc.ts'
+import type { DocumentInfo, WindowChangedMessage } from '../../../shared/ipc.ts'
 import { RemoteWindow } from './remote-window.ts'
 
-export class RemoteDocument implements StreamDocumentApi {
-  readonly id = 'stream' as DocumentId
-  readonly meta: DocumentMeta & { readonly kind: 'stream' }
-  #generation: SessionGeneration
-  #today: DateKey
+export class RemoteDocument implements Document {
+  readonly id: DocumentId
+  readonly meta: DocumentMeta
+  /** What the document calls itself, for a title bar. Null when nobody named it. */
+  readonly title: string | null
+  protected generationSeen: SessionGeneration
 
   readonly #windows = new Map<number, RemoteWindow>()
   readonly #changeHandlers = new Set<(c: DocumentChange) => void>()
@@ -33,34 +38,44 @@ export class RemoteDocument implements StreamDocumentApi {
    */
   #waiters: { generation: SessionGeneration; resolve: () => void }[] = []
 
-  private constructor(info: DocumentInfo) {
-    // The stream is what `doc.open()` opens; when this class learns to open
-    // others (MC5) the kind decides which implementation is built, and this
-    // narrowing moves there rather than being asserted here.
-    this.meta = { ...info.meta, kind: 'stream' }
-    this.#generation = info.generation
-    this.#today = info.today
+  constructor(info: DocumentInfo) {
+    this.id = info.id
+    this.meta = info.meta
+    this.title = info.title
+    this.generationSeen = info.generation
   }
 
-  static async open(): Promise<RemoteDocument> {
-    const doc = new RemoteDocument(await window.tephra.doc.open())
-    window.tephra.doc.onWindowChanged(message => {
-      doc.#generation = message.generation
-      doc.#windows
-        .get(message.id)
-        ?.applyRemote(
-          message.edits,
-          message.origin,
-          message.text,
-          message.generation,
-          message.spans,
-          message.placement,
-          message.boundaries,
-        )
-      doc.#settle(message.generation)
-    })
-    window.tephra.doc.onWindowReset(message => doc.#windows.get(message.id)?.remoteReset())
-    return doc
+  /** Whether a pushed message is about one of THIS document's windows. */
+  holds(windowId: number): boolean {
+    return this.#windows.has(windowId)
+  }
+
+  /**
+   * A change main pushed, delivered to the window it names.
+   *
+   * Dispatched from one place rather than subscribed to here, because with more
+   * than one document open a per-document subscription would see every other
+   * document's messages — and the generation carried in them is not this
+   * document's to adopt (D33: two mirrors of one number always drift).
+   */
+  deliver(message: WindowChangedMessage): void {
+    this.generationSeen = message.generation
+    this.#windows
+      .get(message.id)
+      ?.applyRemote(
+        message.edits,
+        message.origin,
+        message.text,
+        message.generation,
+        message.spans,
+        message.placement,
+        message.boundaries,
+      )
+    this.#settle(message.generation)
+  }
+
+  reset(windowId: number): void {
+    this.#windows.get(windowId)?.remoteReset()
   }
 
   /**
@@ -79,7 +94,7 @@ export class RemoteDocument implements StreamDocumentApi {
    * version axis is worth nothing if two objects each keep their own idea of it.
    */
   get generation(): SessionGeneration {
-    let newest = this.#generation as number
+    let newest = this.generationSeen as number
     for (const window of this.#windows.values()) {
       newest = Math.max(newest, window.generation as number)
     }
@@ -90,49 +105,39 @@ export class RemoteDocument implements StreamDocumentApi {
     return false // main owns this; nothing in Z reads it yet
   }
 
-  get today(): DateKey {
-    return this.#today
-  }
-
   /** Same answer as `generation`; kept because the API declares both. */
   currentGeneration(): SessionGeneration {
     return this.generation
   }
 
+  positionAt(segment: SegmentKey, offset: number): DocumentPosition {
+    return { segment, offset: offset as DocumentOffset, generation: this.generation }
+  }
+
   async read(span: Span): Promise<DocumentWindow> {
     const snapshot = await window.tephra.doc.read({
-      first: span.begin.segment as DateKey,
-      last: span.end.segment as DateKey,
+      doc: this.id,
+      first: span.begin.segment,
+      last: span.end.segment,
     })
     const remote = new RemoteWindow(this, snapshot)
     this.#windows.set(snapshot.id, remote)
-    this.#generation = snapshot.generation
+    this.generationSeen = snapshot.generation
     return remote
   }
 
-  /** Sugar for the highest-frequency action: open at the end of today. */
-  async readToday(): Promise<DocumentWindow> {
-    this.#today = await window.tephra.doc.today()
-    const at: DocumentPosition = {
-      segment: this.#today as SegmentKey,
-      offset: 0 as never,
-      generation: this.#generation,
-    }
-    return this.read({ begin: at, end: at })
-  }
-
   async undo(): Promise<DocumentChange | null> {
-    const ack = await window.tephra.doc.undo()
+    const ack = await window.tephra.doc.undo(this.id)
     await this.#windowsCaughtUp(ack.generation)
-    this.#generation = ack.generation
+    this.generationSeen = ack.generation
     if (ack.change !== null) for (const handler of this.#changeHandlers) handler(ack.change)
     return ack.change
   }
 
   async redo(): Promise<DocumentChange | null> {
-    const ack = await window.tephra.doc.redo()
+    const ack = await window.tephra.doc.redo(this.id)
     await this.#windowsCaughtUp(ack.generation)
-    this.#generation = ack.generation
+    this.generationSeen = ack.generation
     if (ack.change !== null) for (const handler of this.#changeHandlers) handler(ack.change)
     return ack.change
   }
@@ -175,19 +180,11 @@ export class RemoteDocument implements StreamDocumentApi {
   }
 
   async spans(kind?: SpanKind): Promise<readonly TypedSpan[]> {
-    return window.tephra.doc.spans(kind === undefined ? {} : { kind })
+    return window.tephra.doc.spans({ doc: this.id, ...(kind === undefined ? {} : { kind }) })
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
     return window.tephra.doc.resolveAnchor(name)
-  }
-
-  async extent(): Promise<{ readonly first: DateKey; readonly last: DateKey } | null> {
-    return window.tephra.doc.extent()
-  }
-
-  dateAt(at: DocumentPosition): DateKey {
-    return at.segment as DateKey
   }
 
   onChanged(handler: (change: DocumentChange) => void): Unsubscribe {

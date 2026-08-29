@@ -4,7 +4,7 @@
 // the renderer: these are the words they have in common. The store, the scan
 // and the cache are all on the other side of this file.
 
-import type { DateKey } from './document-api.ts'
+import type { DateKey, DocumentId } from './document-api.ts'
 
 /** A file-relative path inside the notebook. Mirrors `w/layout.ts`'s RelPath. */
 export type NotebookPath = string
@@ -88,3 +88,18 @@ export interface SectionTree {
   readonly path: NotebookPath | null
   readonly entries: readonly SectionRow[]
 }
+
+/**
+ * What happened when a reference was followed (D51: one verb, several theres).
+ *
+ * **A document is an outcome, not a failure.** A `.md` file inside the notebook
+ * used to come back `unsupported`, because the app had one document and no way
+ * to open another; now main says which document it is and the pane goes there
+ * (D54). A URL and a PDF still leave the app, which is the same verb pointing
+ * somewhere the app does not own.
+ */
+export type Followed =
+  | 'opened'
+  | 'missing'
+  | 'unsupported'
+  | { readonly document: DocumentId }

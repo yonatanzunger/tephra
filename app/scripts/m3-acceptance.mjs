@@ -422,6 +422,86 @@ console.log('\n— pinning —')
   check('and nothing errored on the way', r.appError === 'none' && back.appError === 'none')
 }
 
+// ── 5. opening a document that is not the stream ────────────────────────────
+//
+// MC5's claim, and the first thing in this app that has never worked: a sidebar
+// row naming a FILE opens that file. Every piece of it was missing at once —
+// one hard-coded document handle, a pane that could only express the stream,
+// and a `.md` link that came back `unsupported` and was dropped in silence.
+console.log('\n— opening another document —')
+{
+  const root = await week([
+    'Today, and nothing else.\n',
+    'Yesterday, which is how we know which document we are in.\n',
+  ])
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'offer.md'),
+    '---\ntephra: 1\nkind: markdown\ntitle: The offer letter\n---\n' +
+      'What we offered, and what they said back.\n',
+  )
+  await writeFile(
+    join(root, 'sections', '_index.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: My sections\n---\n- [The house](tephra:section/house)\n',
+  )
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer letter](../notes/offer.md)\n',
+  )
+  const r = report(await launch('open-document', root))
+  const onDisk = await readFile(join(root, 'notes', 'offer.md'), 'utf8').catch(() => '')
+
+  check('the app opened in the stream', r.titleBefore !== undefined && r.streamText === true, r.titleBefore)
+  check('a section names a file, and the row is there', r.fileRowFound === true)
+  check(
+    'THE LANDING: clicking it opens THAT document (D54)',
+    typeof r.textAfter === 'string' &&
+      r.textAfter.includes('What we offered') &&
+      !r.textAfter.includes('Yesterday'),
+    JSON.stringify(r.textAfter),
+  )
+  check(
+    'under the name the document gives itself, not its path',
+    r.titleAfter === 'The offer letter',
+    JSON.stringify(r.titleAfter),
+  )
+  check(
+    'a note opens at the top, because it is not being appended to',
+    r.caretAfter === 0,
+    `caret at ${r.caretAfter}`,
+  )
+  check(
+    'and nothing draws day separators through a document with no days',
+    r.daySeparators === 0,
+    `${r.daySeparators} separators`,
+  )
+  check(
+    'it is an ORDINARY document: typing lands in it and reaches its file',
+    typeof r.afterTyping === 'string' && r.afterTyping.includes('Signed on Tuesday'),
+    JSON.stringify(r.afterTyping),
+  )
+  check(
+    'and undo takes it back, on that document\'s own stack (D54)',
+    typeof r.afterUndo === 'string' && !r.afterUndo.includes('Signed on Tuesday'),
+    JSON.stringify(r.afterUndo),
+  )
+  check(
+    'and BOTH reached the file, which is where the document lives (D54)',
+    /^---\ntephra: 1\n/.test(onDisk) &&
+      /title: The offer letter/.test(onDisk) &&
+      onDisk.includes('What we offered') &&
+      !onDisk.includes('Signed on Tuesday'),
+    JSON.stringify(onDisk),
+  )
+  check(
+    'and BACK returns to the stream we came from',
+    r.backInStream === true,
+    `${JSON.stringify(r.titleBack)} · ${r.backInStream}`,
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -14,9 +14,13 @@ import type { BoundaryState, NavTarget } from '../../../shared/pane-api.ts'
 import { ScreenMetric, V1_EXTENT_POLICY, charsFor, type ExtentPolicy } from '../../../shared/extent.ts'
 import type { RemoteDocument } from '../x/remote-document'
 import type { RemoteWindow } from '../x/remote-window'
+import type { Documents } from '../x/documents'
+import { home } from '../x/kinds/registry'
 
 export class Pane {
-  readonly #doc: RemoteDocument
+  readonly #documents: Documents
+  /** The document the pane is currently showing. Navigation may change it. */
+  #doc: RemoteDocument
   #window: RemoteWindow | null = null
   #location: NavTarget = { kind: 'today' }
 
@@ -34,8 +38,14 @@ export class Pane {
   readonly #locationHandlers = new Set<() => void>()
   readonly #boundaryHandlers = new Set<() => void>()
 
-  constructor(doc: RemoteDocument) {
+  constructor(documents: Documents, doc: RemoteDocument) {
+    this.#documents = documents
     this.#doc = doc
+  }
+
+  /** Whose undo stack a keystroke in this pane means (D54). */
+  get document(): RemoteDocument {
+    return this.#doc
   }
 
   get window(): DocumentWindow | null {
@@ -114,9 +124,10 @@ export class Pane {
 
   async #load(target: NavTarget): Promise<void> {
     const previous = this.#window
-    const window = await this.#open(target)
+    const { doc, window } = await this.#open(target)
     previous?.release()
 
+    this.#doc = doc
     this.#window = window as RemoteWindow
     this.#location = target
     for (const h of this.#windowHandlers) h()
@@ -128,25 +139,45 @@ export class Pane {
     if (this.#policy.target > this.#policy.initial) void this.#growToTarget()
   }
 
-  async #open(target: NavTarget): Promise<DocumentWindow> {
+  /**
+   * Open what a target names, and say which document it turned out to be.
+   *
+   * **The document is part of the answer.** Three of these targets are the
+   * stream's — a day, a bookmark, today — and two name a document of their own;
+   * a pane that assumed one document could express the first three and threw on
+   * the rest (D35, D54).
+   */
+  async #open(target: NavTarget): Promise<{ doc: RemoteDocument; window: DocumentWindow }> {
     switch (target.kind) {
-      case 'today':
-        return this.#doc.readToday()
+      case 'today': {
+        const stream = await this.#documents.stream()
+        return { doc: stream, window: await stream.readToday() }
+      }
       case 'date': {
-        const at = { segment: target.date as SegmentKey, offset: 0 as never, generation: this.#doc.generation }
-        return this.#doc.read({ begin: at, end: at })
+        const stream = await this.#documents.stream()
+        const at = stream.positionAt(target.date as SegmentKey, 0)
+        return { doc: stream, window: await stream.read({ begin: at, end: at }) }
       }
       case 'anchor': {
-        const found = await this.#doc.resolveAnchor(target.name)
+        const stream = await this.#documents.stream()
+        const found = await stream.resolveAnchor(target.name)
         if (found === null) throw new Error(`no anchor named ${target.name}`)
-        return this.#doc.read({ begin: found, end: found })
+        return { doc: stream, window: await stream.read({ begin: found, end: found }) }
       }
-      case 'span':
-        return this.#doc.read(target.span)
+      case 'span': {
+        const doc = await this.#documents.open(target.doc)
+        return { doc, window: await doc.read(target.span) }
+      }
+      case 'document': {
+        // The whole of it, unless the entry said where inside — which is what
+        // `at` is for, and what a fileset entry pointing at a heading will use.
+        const doc = await this.#documents.open(target.id)
+        return { doc, window: await doc.read(await home(doc)) }
+      }
       default:
-        // 'document', 'url' and 'external' arrive with filesets and the nav
-        // panel; failing loudly beats opening the wrong thing.
-        throw new Error(`navigation target ${target.kind} is not implemented yet`)
+        // 'url' and 'external' leave the app entirely; the layer that can open
+        // a browser or a Finder window handles them, not the pane.
+        throw new Error(`navigation target ${target.kind} is not the pane's to open`)
     }
   }
 

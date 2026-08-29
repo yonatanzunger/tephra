@@ -272,9 +272,16 @@ reachable from the UI yet — ⌘Z goes to the focused document, and the only
 focusable one is the stream. That waits on MC5 and MC6, and m3 says nothing
 about it until then rather than claiming it early.
 
+**And ⌘Z going to the stream is right, not a gap.** Focus decides whose undo
+stack a keystroke means, and while the editor is the only thing focusable, the
+stream is the honest answer — undoing a pin from inside the editor would be a
+keystroke reaching past what the person is looking at. What makes the pin's
+undo reachable is the SIDEBAR becoming focusable, which is where the gesture
+belongs; until then the verb is undoable and simply has no key on it.
+
 ---
 
-## MC5 — The renderer learns about kinds
+## MC5 — The renderer learns about kinds *(done)*
 
 **What changes.** `renderer/src/x/kinds/*` forwarders and
 `renderer/src/editor/kinds/*` surfaces, each with a registry keyed by kind and
@@ -288,6 +295,43 @@ that resolves.
 
 **Risk:** medium. The renderer has assumed one document since M0, in more places
 than the type system will show.
+
+**As built.** Four seams, in the order they had to be cut:
+
+1. **Main speaks in document ids.** `open`, `read`, `undo`, `redo` and `spans`
+   take one, defaulting to the stream so nothing that already worked had to
+   change. `DocumentInfo` carries the id and the document's own `title`, and
+   `positionAt` moved onto the shared `Document` interface — a position carries
+   a generation, and every caller that assembled one by hand was keeping a
+   second mirror of that number (D33).
+2. **`Documents`, the renderer's small half of the Corpus.** No eviction, no
+   borrowing — only the two things that break the moment a second document
+   exists: one handle per document, and ONE subscription to the pushed window
+   changes. A per-document listener would have seen every other document's
+   messages and adopted a generation that was not its own.
+3. **The Pane crosses documents.** `#open` returns the document as well as the
+   window, because three of its targets are the stream's and two name a document
+   of their own. `RemoteStream` holds what is day-shaped (`today`, `extent`,
+   `dateAt`); the base handle is what any kind can do.
+4. **The editing surface is per kind.** `editor/kinds/registry.ts` says whether a
+   kind has day separators, an annotation layer, and where the caret lands.
+   Every entry is something that would be actively WRONG elsewhere — a day
+   separator through a note that has no days, or a caret at the END of a
+   document nobody is appending to. Markdown is the default rather than an
+   entry, so an unknown kind still opens (R26).
+
+**And the bug underneath all of it.** A section entry's `../notes/offer.md` was
+resolved from a DAY FILE's depth — the base `resolveInsideNotebook` had always
+used, correctly, back when the stream was the only document with links in it. It
+landed outside the notebook, failed containment, and the row said "not found":
+a correct link, a real file, and an entry that could not be clicked. A link is
+relative to the document it is written in, so `from` is now part of the
+question, in the panel's `missing` check as well as in following the link.
+
+m3 grew a section for it: click a row that names a file, land in that document
+under the name it gives itself, at the top rather than the end, with no day
+separators; type, undo, and find both in the file; then go back to the stream.
+58 checks, and it is the first time `Reference{kind:'file'}` has ever resolved.
 
 ---
 

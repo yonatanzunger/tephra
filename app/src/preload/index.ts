@@ -8,7 +8,7 @@ import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
 import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
 import type {
-  IndexStatus, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow,
+  Followed, IndexStatus, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow,
 } from '../shared/nav-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
@@ -94,8 +94,13 @@ const tephra = {
     unpin: (reference: Reference, section?: string): Promise<boolean> =>
       ipcRenderer.invoke(CHANNEL.navUnpin, reference, section),
     /** Follow a reference that leaves the app: a URL, or a file the OS owns. */
-    open: (reference: Reference): Promise<'opened' | 'missing' | 'unsupported'> =>
-      ipcRenderer.invoke(CHANNEL.navOpen, reference),
+    /**
+     * `from` is the document the reference was READ IN, because a relative link
+     * means "relative to the file it is written in" — a section's entry and a
+     * day's link resolve from different places (D53).
+     */
+    open: (reference: Reference, from?: string): Promise<Followed> =>
+      ipcRenderer.invoke(CHANNEL.navOpen, reference, from),
     /** Something changed on disk that no window is holding open (D53). */
     onCorpusChanged(handler: Handler<readonly string[]>): () => void {
       const listener = (_e: unknown, paths: readonly string[]): void => handler(paths)
@@ -105,15 +110,15 @@ const tephra = {
   },
 
   doc: {
-    open: (): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open),
+    open: (id?: DocumentId): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open, id),
     read: (request: ReadRequest): Promise<WindowSnapshot> => ipcRenderer.invoke(CHANNEL.read, request),
     edit: (request: EditRequest): Promise<EditAck> => ipcRenderer.invoke(CHANNEL.edit, request),
     release: (id: WindowId): Promise<void> => ipcRenderer.invoke(CHANNEL.release, id),
     extend: (request: ExtendRequest): Promise<void> => ipcRenderer.invoke(CHANNEL.extend, request),
     loadUiState: (): Promise<UiState> => ipcRenderer.invoke(CHANNEL.loadUiState),
     saveUiState: (state: UiState): Promise<void> => ipcRenderer.invoke(CHANNEL.saveUiState, state),
-    undo: (): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.undo),
-    redo: (): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.redo),
+    undo: (id?: DocumentId): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.undo, id),
+    redo: (id?: DocumentId): Promise<ChangeAck> => ipcRenderer.invoke(CHANNEL.redo, id),
     flush: (): Promise<void> => ipcRenderer.invoke(CHANNEL.flush),
     spans: (request: SpansRequest): Promise<readonly TypedSpan[]> => ipcRenderer.invoke(CHANNEL.spans, request),
     resolveAnchor: (name: string): Promise<DocumentPosition | null> =>

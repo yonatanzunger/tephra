@@ -6,8 +6,10 @@ import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
 import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
-import type { Reference } from '../shared/nav-api.ts'
+import type { Followed, Reference } from '../shared/nav-api.ts'
 import type { CommentId } from '../shared/comments.ts'
+import type { DocumentId } from '../shared/document-api.ts'
+import type { RelPath } from './w/layout.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
 
@@ -15,7 +17,7 @@ export { DocumentService }
 
 /** One service per notebook, one notebook per app. */
 export function registerDocumentIpc(service: DocumentService): void {
-  ipcMain.handle(CHANNEL.open, () => service.info())
+  ipcMain.handle(CHANNEL.open, (_e, id?: DocumentId) => service.info(id))
   ipcMain.handle(CHANNEL.read, (_e, request: ReadRequest) => service.openWindow(request))
   ipcMain.handle(CHANNEL.edit, (_e, request: EditRequest) => service.edit(request))
   ipcMain.handle(CHANNEL.release, (_e, id: WindowId) => service.releaseWindow(id))
@@ -71,20 +73,22 @@ export function registerDocumentIpc(service: DocumentService): void {
    * subject, a day — never arrives here, because going there is navigation and
    * not opening.
    */
-  ipcMain.handle(CHANNEL.navOpen, async (_e, reference: Reference): Promise<string> => {
+  ipcMain.handle(CHANNEL.navOpen, async (_e, reference: Reference, from?: RelPath): Promise<Followed> => {
     if (reference.kind === 'url') {
       await shell.openExternal(reference.href)
       return 'opened'
     }
     if (reference.kind !== 'file') return 'unsupported'
 
-    const at = await service.linkTarget(reference.path)
+    // **A document in the corpus is this app's to open**, and the renderer is
+    // told which one rather than being sent to the desktop. Handing it to the
+    // OS would open it in some other editor — a different act wearing the same
+    // gesture (D54).
+    const document = await service.documentAt(reference.path, from)
+    if (document !== null) return { document }
+
+    const at = await service.linkTarget(reference.path, from)
     if (at === null) return 'missing'
-    // A markdown file in the corpus is a DOCUMENT, and opening one in the
-    // editor waits on documents other than the stream (D27, M3.4). Handing it
-    // to the OS instead would open it in some other editor, which is a
-    // different act wearing the same gesture.
-    if (at.endsWith('.md')) return 'unsupported'
     return (await shell.openPath(at)) === '' ? 'opened' : 'missing'
   })
   /**
@@ -165,8 +169,8 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.reactToComment, (_e, id: CommentId, i: number, emoji: string, on: boolean) =>
     service.reactToComment(id, i, emoji, on),
   )
-  ipcMain.handle(CHANNEL.undo, () => service.undo())
-  ipcMain.handle(CHANNEL.redo, () => service.redo())
+  ipcMain.handle(CHANNEL.undo, (_e, id?: DocumentId) => service.undo(id))
+  ipcMain.handle(CHANNEL.redo, (_e, id?: DocumentId) => service.redo(id))
   ipcMain.handle(CHANNEL.flush, () => service.flush())
   ipcMain.handle(CHANNEL.spans, (_e, request: SpansRequest) => service.spans(request))
   ipcMain.handle(CHANNEL.resolveAnchor, (_e, name: string) => service.resolveAnchor(name))

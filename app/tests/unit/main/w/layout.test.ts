@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   dayFile, dayDir, parseDayFile, noteFile, sectionFile, attachmentFile, isLocal, slug,
-  relativePath, resolveInsideNotebook,
+  relativePath, relativeTo, resolveInsideNotebook,
+  type RelPath,
 } from '../../../../src/main/w/layout.ts'
 import type { DateKey } from '../../../../src/shared/document-api.ts'
 
@@ -121,4 +122,41 @@ test('a relative link between notebook files', () => {
     '../../../notes/titration-curves.md',
   )
   assert.equal(relativePath(noteFile('a'), noteFile('b')), 'b.md')
+})
+
+// ── a link is relative to the document it is written in (D53, D54) ─────────
+
+test('a link in a section resolves from the section, not from the stream', () => {
+  // THE BUG: `../notes/offer.md` in `sections/house.fileset.md` was resolved
+  // from a day file's depth, landed outside the notebook, failed containment,
+  // and the row reported "not found" — a correct link, a real file, and a
+  // sidebar entry that could not be clicked.
+  assert.equal(
+    resolveInsideNotebook('/n', '../notes/offer.md', 'sections/house.fileset.md' as RelPath),
+    'notes/offer.md',
+  )
+  assert.equal(
+    resolveInsideNotebook('/n', 'offer.md', 'notes/index.md' as RelPath),
+    'notes/offer.md',
+    'a sibling, which is the commonest link of all',
+  )
+})
+
+test('and containment still holds, whichever document is asking', () => {
+  for (const target of ['../../../../etc/passwd', '/etc/passwd', '../..']) {
+    assert.equal(
+      resolveInsideNotebook('/n', target, 'sections/house.fileset.md' as RelPath),
+      null,
+      `${target} should not resolve`,
+    )
+  }
+})
+
+test('relativeTo is the same rule without the disk', () => {
+  // What the panel uses for every entry it draws: a stat per link would be a
+  // filesystem call per row per repaint.
+  assert.equal(relativeTo('sections/house.fileset.md' as RelPath, '../notes/offer.md'), 'notes/offer.md')
+  assert.equal(relativeTo('sections/house.fileset.md' as RelPath, 'other.fileset.md'), 'sections/other.fileset.md')
+  assert.equal(relativeTo('a.md' as RelPath, 'https://example.com'), null, 'a URL is not a path')
+  assert.equal(relativeTo('a.md' as RelPath, '..'), null, 'and the root is not a document')
 })

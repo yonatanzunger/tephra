@@ -31,6 +31,7 @@ import { richPaste } from './paste.ts'
 import { dayBoundaries, redays } from './days.ts'
 import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
 import { Compartment } from '@codemirror/state'
+import { surfaceFor } from './kinds/registry.ts'
 
 /** Marks a transaction as coming FROM the document, so it is not sent back. */
 const fromDocument = StateEffect.define<null>()
@@ -73,6 +74,10 @@ export interface Binding {
 export function bindEditor(options: BindOptions): Binding {
   const { window: docWindow } = options
   const typography = options.typography ?? defaultTypography
+  // **Asked of the window, not passed in.** The window knows its document and
+  // the document knows its kind; a `surface` prop threaded down from the app
+  // would be a second answer to a question that already has one (D54).
+  const surface = surfaceFor(docWindow.document.meta.kind)
 
   const view = new EditorView({
     parent: options.parent,
@@ -97,9 +102,11 @@ export function bindEditor(options: BindOptions): Binding {
         highlightSelectionMatches(),
         EditorView.lineWrapping,
         widgetExtensions(),
-        tagExtents(docWindow),
-        dayBoundaries(docWindow),
-        commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors)),
+        ...(surface.annotations ? [tagExtents(docWindow)] : []),
+        ...(surface.days ? [dayBoundaries(docWindow)] : []),
+        ...(surface.annotations
+          ? [commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors))]
+          : []),
         keymap.of([...defaultKeymap, ...searchKeymap]),
         typographyCompartment.of(tephraTheme(typography)),
         editorToWindow(docWindow, options.onError),
@@ -124,11 +131,15 @@ export function bindEditor(options: BindOptions): Binding {
   // caret happened to be rather than at the end of today. The cursor is still
   // recorded — it is a true fact about the session, and navigation may want it
   // — it simply no longer decides where the app opens.
-  const landing = docWindow.text.length as WindowPosition
+  //
+  // **A note opens at the top instead**, because it is not a thing being
+  // appended to: arriving at the end of a file somebody sent you is arriving at
+  // the wrong end of it (D54).
+  const landing = (surface.landing === 'append' ? docWindow.text.length : 0) as WindowPosition
   view.dispatch({
     selection: { anchor: landing as number },
   })
-  scrollToAppendPosition(view)
+  if (surface.landing === 'append') scrollToAppendPosition(view)
 
   const unsubscribeChanged = docWindow.onChanged((edits, origin) => {
     applyFromDocument(view, edits, origin)

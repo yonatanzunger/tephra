@@ -1894,7 +1894,11 @@ with N views.
   claim is now true of the document. Reaching it from the keyboard waits on a
   fileset being focusable, which is MC6.)*
 - **`Reference{kind:'file'}` cannot be followed.** The sidebar names documents
-  it has no way to open.
+  it has no way to open. *(Done in MC5. Two things were wrong, not one: the
+  renderer had a single hard-coded document handle, AND a relative link in a
+  section file was resolved from a day file's depth, so it failed containment
+  and the row said "not found". A link is relative to the document it is
+  written in.)*
 
 ### One access path, and no second answerer
 

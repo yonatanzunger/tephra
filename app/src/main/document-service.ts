@@ -12,7 +12,7 @@
 // document would be reordered relative to what the typist saw.
 
 import type { Anomaly } from '../shared/anomalies.ts'
-import type { Unsubscribe } from '../shared/document-api.ts'
+import { isStream, ONLY_SEGMENT, type Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
@@ -22,7 +22,7 @@ import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
-import { parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
+import { kindOf, parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
 import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
@@ -309,23 +309,47 @@ export class DocumentService {
     return next
   }
 
-  async info(): Promise<DocumentInfo> {
-    return {
-      meta: (await this.#stream).meta,
-      generation: (await this.#stream).generation,
-      today: this.today,
-      extent: await (await this.#stream).extent(),
-    }
+  /**
+   * What the renderer needs to build a handle on a document.
+   *
+   * Defaults to the stream, because that is what opening the app opens — but
+   * it takes an id now, so a sidebar row naming a note can be followed (D54).
+   * `extent` is a stream's question and comes back null for anything else:
+   * "not applicable", said in the one vocabulary the wire has for it.
+   */
+  async info(id: DocumentId = STREAM_ID): Promise<DocumentInfo> {
+    return this.#corpus.use(
+      id,
+      async doc => ({
+        id,
+        meta: doc.meta,
+        // A stream is not a document anybody named; every other kind keeps its
+        // name where a person can edit it, which is the frontmatter.
+        title: isStream(doc) ? null : await doc.titleOf(ONLY_SEGMENT),
+        generation: doc.generation,
+        today: this.today,
+        extent: isStream(doc) ? await doc.extent() : null,
+      }),
+      { mode: 'read' },
+    )
   }
 
   async openWindow(request: ReadRequest): Promise<WindowSnapshot> {
-    const window = (await (await this.#stream).read({
-      begin: (await this.#stream).positionAt(request.first, 0),
-      end: (await this.#stream).positionAt(request.last, 0),
-    })) as LocalWindow
+    const docId = request.doc ?? STREAM_ID
+    const window = await this.#corpus.use(
+      docId,
+      async doc =>
+        (await doc.read({
+          begin: doc.positionAt(request.first, 0),
+          end: doc.positionAt(request.last, 0),
+        })) as LocalWindow,
+    )
 
     const id = this.#nextId++
-    this.#windows.set(id, { window, release: this.#corpus.watch(STREAM_ID) })
+    // The watch is what keeps the document open for as long as something is
+    // looking at it — a borrow ends when the call does, and a window outlives
+    // the call that made it (D54).
+    this.#windows.set(id, { window, release: this.#corpus.watch(docId) })
     window.onChanged((edits, origin) => {
       this.#broadcast({
         id,
@@ -396,20 +420,31 @@ export class DocumentService {
     return (await this.#stream).anomalies()
   }
 
-  async undo(): Promise<ChangeAck> {
-    return this.#serial(async () => {
-      const change = await (await this.#stream).undo()
-      this.#scheduleFlush()
-      return { change, generation: (await this.#stream).generation }
-    })
+  /**
+   * Undo, on the document that asked.
+   *
+   * **Whose stack a keystroke means is a question about FOCUS**, and focus is
+   * the renderer's to know — so the id comes in rather than being decided here.
+   * It defaults to the stream, which is what the only focusable surface holds.
+   */
+  async undo(id: DocumentId = STREAM_ID): Promise<ChangeAck> {
+    return this.#serial(() =>
+      this.#corpus.use(id, async doc => {
+        const change = await doc.undo()
+        this.#scheduleFlush()
+        return { change, generation: doc.generation }
+      }),
+    )
   }
 
-  async redo(): Promise<ChangeAck> {
-    return this.#serial(async () => {
-      const change = await (await this.#stream).redo()
-      this.#scheduleFlush()
-      return { change, generation: (await this.#stream).generation }
-    })
+  async redo(id: DocumentId = STREAM_ID): Promise<ChangeAck> {
+    return this.#serial(() =>
+      this.#corpus.use(id, async doc => {
+        const change = await doc.redo()
+        this.#scheduleFlush()
+        return { change, generation: doc.generation }
+      }),
+    )
   }
 
   async flush(): Promise<void> {
@@ -777,8 +812,24 @@ export class DocumentService {
    * layering telling the truth: what a link means is a question about the
    * notebook, and opening a file is a question about the desktop.
    */
-  async linkTarget(target: string): Promise<string | null> {
-    const rel = resolveInsideNotebook(this.#notebook.root, target)
+  /**
+   * What DOCUMENT a link names, if it names one.
+   *
+   * The other half of `linkTarget`, and the half that had no answer until there
+   * were documents other than the stream: a `.md` file inside the notebook is
+   * not a file for the OS to open in some other editor, it is a document this
+   * app opens (D54). Anything the corpus does not recognise as a document — an
+   * attachment, a PDF — is not one, and falls through to the desktop.
+   */
+  async documentAt(target: string, from?: RelPath): Promise<DocumentId | null> {
+    const rel = resolveInsideNotebook(this.#notebook.root, target, from)
+    if (rel === null || kindOf(rel) === null) return null
+    const id = rel as string as DocumentId
+    return (await this.#corpus.exists(id)) ? id : null
+  }
+
+  async linkTarget(target: string, from?: RelPath): Promise<string | null> {
+    const rel = resolveInsideNotebook(this.#notebook.root, target, from)
     if (rel === null) return null
     if (!(await this.#notebook.has(rel))) return null
     return join(this.#notebook.root, rel)

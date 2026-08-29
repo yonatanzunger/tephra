@@ -11,7 +11,7 @@
 // `3 of 7` and a pair of steppers on the active row.
 
 import { useCallback, useEffect, useState } from 'react'
-import type { DateKey } from '../../../shared/document-api.ts'
+import type { DateKey, DocumentId } from '../../../shared/document-api.ts'
 import { tagSlot } from '../../../shared/tags.ts'
 import type {
   IndexStatus, Located, OutlineNode, Reference, SectionRow, SectionTree, Subject, ThreadRow,
@@ -44,6 +44,8 @@ export interface NavProps {
   readonly onUnpin: (reference: Reference, sectionPath: string) => void
   /** A destination that could not be reached, and why. */
   readonly onUnavailable: (target: Reference, why: 'missing' | 'unsupported') => void
+  /** A destination that turned out to be a document in the corpus (D54). */
+  readonly onOpenDocument: (id: DocumentId) => void
   readonly onActive: (
     places: readonly Located[],
     current: number,
@@ -61,6 +63,8 @@ interface Row {
   readonly count: number
   /** Nesting, for the outline. Everything else is flat. */
   readonly depth?: number
+  /** The document this row was read in — what a relative link resolves from. */
+  readonly from?: string | undefined
 }
 
 /**
@@ -75,7 +79,7 @@ const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
 export function Nav({
-  today, here, where, generation, onGo, onActive, onUnavailable, onPin, onUnpin,
+  today, here, where, generation, onGo, onActive, onUnavailable, onOpenDocument, onPin, onUnpin,
 }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
@@ -133,8 +137,11 @@ export function Nav({
       // a PDF is the OS's (D10), so "take me there" leaves the app rather than
       // moving the caret — the same verb, a different there.
       if (row.reference.kind === 'url' || row.reference.kind === 'file') {
-        const how = await window.tephra.nav.open(row.reference)
-        if (how !== 'opened') onUnavailable(row.reference, how)
+        const how = await window.tephra.nav.open(row.reference, row.from)
+        // A document comes back as a document: the same verb, and the there is
+        // inside the app after all (D54).
+        if (typeof how === 'object') onOpenDocument(how.document)
+        else if (how !== 'opened') onUnavailable(row.reference, how)
         return
       }
       const places =
@@ -145,7 +152,7 @@ export function Nav({
       onActive(places, next, slotOf(row.reference))
       onGo(places[next] as Located)
     },
-    [active, onGo, onActive, onUnavailable],
+    [active, onGo, onActive, onUnavailable, onOpenDocument],
   )
 
   const step = useCallback(
@@ -377,6 +384,7 @@ function CuratedRows({
     ...(entry.summary === null ? {} : { detail: entry.summary }),
     reference: entry.target,
     count: 1,
+    ...(section === null ? {} : { from: section }),
   }
   return (
     <>

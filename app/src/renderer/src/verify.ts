@@ -1128,6 +1128,77 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'open-document') {
+      // MC5: a row that names a FILE opens that file in the editor.
+      //
+      // Every part of this used to be impossible at once — the pane had one
+      // document, the handle was hard-coded to the stream, and a `.md` file
+      // came back from `nav.open` as `unsupported` and was silently dropped
+      // (D54). So the claim is the whole path: click, land, read, type, undo,
+      // and go back to the stream you came from.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-section').length < 5) {
+        await settle(200)
+        waited += 200
+      }
+      for (const head of [...document.querySelectorAll('.nav-head')]) {
+        if (head.getAttribute('aria-expanded') === 'false') {
+          (head as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+        }
+      }
+      await settle(400)
+
+      const titleNow = (): string => document.querySelector('.titlebar .title')?.textContent ?? ''
+      // **Re-read the view every time.** Landing in another document rebinds the
+      // editor, so the object captured at the start of the run is a destroyed
+      // one holding the text we just navigated away from.
+      const live = (): EditorViewLike =>
+        (globalThis as unknown as { __view: EditorViewLike }).__view
+      say('titleBefore', titleNow())
+      say('streamText', live().state.doc.toString().includes('Yesterday'))
+
+      const row = [...document.querySelectorAll('.nav-row')].find(r =>
+        (r.textContent ?? '').includes('The offer letter'),
+      ) as HTMLElement | undefined
+      say('fileRowFound', row !== undefined)
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1200)
+
+      // THE LANDING: the note's own text, under the note's own name.
+      say('titleAfter', titleNow())
+      say('textAfter', live().state.doc.toString())
+      say('caretAfter', live().state.selection.main.head)
+      // A note has no days, so nothing draws a day separator through it.
+      say('daySeparators', document.querySelectorAll('.tx-day').length)
+
+      // An ORDINARY EDIT in an ordinary document: type, and undo it.
+      live().dispatch({ selection: { anchor: live().state.doc.length } })
+      live().dispatch({
+        changes: { from: live().state.doc.length, insert: ' Signed on Tuesday.' },
+        userEvent: 'input.type',
+      })
+      await settle(900)
+      say('afterTyping', live().state.doc.toString())
+      await window.tephra.doc.flush()
+
+      const pane = (globalThis as unknown as { __pane: { document: { undo: () => Promise<unknown> } } }).__pane
+      await pane.document.undo()
+      await settle(900)
+      say('afterUndo', live().state.doc.toString())
+      // Flushed again, so the FILE is what the harness reads at the end: an
+      // edit and its undo both have to arrive there, or "undoable" is a claim
+      // about the screen only.
+      await window.tephra.doc.flush()
+
+      // And back where we came from, which is what a back stack is for.
+      document.querySelector('.titlebar .nav')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await settle(1200)
+      say('titleBack', titleNow())
+      say('backInStream', live().state.doc.toString().includes('Yesterday'))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'markpanel') {
       const click = (index: number): boolean => {
         const marks = document.querySelectorAll('.tx-handle')
