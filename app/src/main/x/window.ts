@@ -20,7 +20,7 @@ import {
 } from '../../shared/prose.ts'
 import { minimalReplacement } from './text-edits.ts'
 import type { WindowSnapshot } from '../../shared/ipc.ts'
-import type { StreamDocument } from './stream-document.ts'
+import type { SegmentedDocument } from './documents/segmented.ts'
 
 interface Placed {
   readonly segment: Segment
@@ -33,7 +33,7 @@ interface Placed {
 }
 
 export class StreamWindow implements DocumentWindow {
-  readonly #doc: StreamDocument
+  readonly #doc: SegmentedDocument
   #segments: Segment[]
   #placed: Placed[] = []
   #text = '' as ProseText
@@ -49,7 +49,7 @@ export class StreamWindow implements DocumentWindow {
 
   #edges = { earlier: false, later: false }
 
-  constructor(doc: StreamDocument, segments: readonly Segment[]) {
+  constructor(doc: SegmentedDocument, segments: readonly Segment[]) {
     this.#doc = doc
     this.#segments = [...segments]
     this.#generation = doc.generation
@@ -376,7 +376,7 @@ export class StreamWindow implements DocumentWindow {
     const last = loaded[loaded.length - 1]
     if (first === undefined || last === undefined) return
 
-    const all = await this.#doc.dates()
+    const all = await this.#doc.keys()
     const candidates =
       direction === 'earlier'
         ? all.filter(d => compareDateKeys(d, first) < 0).reverse()
@@ -431,7 +431,7 @@ export class StreamWindow implements DocumentWindow {
       this.#edges = { earlier: false, later: false }
       return
     }
-    const all = await this.#doc.dates()
+    const all = await this.#doc.keys()
     this.#edges = {
       earlier: all.some(d => compareDateKeys(d, first) < 0),
       later: all.some(d => compareDateKeys(d, last) > 0),
