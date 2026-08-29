@@ -13,9 +13,9 @@
 
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, type Extension } from '@codemirror/state'
-import type { DocumentWindow } from '../../../shared/document-api.ts'
-import { DESKTOP, place } from '../../../shared/presentation.ts'
-import { stack } from '../../../shared/tags.ts'
+import type { DocumentWindow } from '../../../../../shared/document-api.ts'
+import { DESKTOP, place } from '../../../../../shared/presentation.ts'
+import { stack } from '../../../../../shared/tags.ts'
 
 /** Dispatched when the spans may have changed without the text changing. */
 export const retag = StateEffect.define<null>()

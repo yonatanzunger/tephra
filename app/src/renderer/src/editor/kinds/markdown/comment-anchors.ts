@@ -7,18 +7,13 @@
 
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, type Extension } from '@codemirror/state'
-import type { DocumentWindow } from '../../../shared/document-api.ts'
-import { DESKTOP, place } from '../../../shared/presentation.ts'
+import type { DocumentWindow } from '../../../../../shared/document-api.ts'
+import { DESKTOP, place } from '../../../../../shared/presentation.ts'
+import type { CommentAnchor } from '../../annotations.ts'
 
 /** Dispatched when the spans may have changed without the text changing (D45). */
 export const recomment = StateEffect.define<null>()
 
-export interface CommentAnchor {
-  readonly id: string
-  /** Pixels from the top of the scroller's content, so it scrolls for free. */
-  readonly top: number
-  readonly resolved: boolean
-}
 
 /**
  * The rule under a commented range, and the anchor positions the rail needs.

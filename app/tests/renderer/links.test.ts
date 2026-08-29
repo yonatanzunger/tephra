@@ -2,7 +2,7 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { destination } from '../../src/renderer/src/editor/links.ts'
+import { destination } from '../../src/renderer/src/editor/kinds/markdown/links.ts'
 import { parser, GFM } from '@lezer/markdown'
 
 const md = parser.configure(GFM)

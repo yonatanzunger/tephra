@@ -1,40 +1,26 @@
-// What the editing surface offers, per kind of document (D54).
+// Which surface shows which kind — one table, and one line per kind (D54).
 //
-// **Not a capability list for its own sake.** Every entry here is something that
-// would be actively WRONG on the other kinds: day separators drawn through a
-// note that has no days, a tag underline in a fileset whose links are its
-// content, a caret landing at the end of a document nobody is appending to.
+// **Data rather than a switch someone has to find.** `architecture.md` puts the
+// surface among the four artifacts a kind needs, precisely so that adding a kind
+// is adding files: the implementation in main, the forwarder in the renderer,
+// and the surface here.
 //
-// Markdown is the default rather than an entry. A kind the renderer has not been
-// taught about is still a markdown file and still opens — refusing would make an
-// unknown kind worse than a known one (R26).
+// Markdown is the DEFAULT rather than an entry. Every kind in the corpus is a
+// markdown file underneath — a stream, a note, a fileset, a todo list — so a
+// kind nobody has written a surface for still opens as the text it is, which is
+// R26 applied to this app's own future.
 
+import type { ComponentType } from 'react'
+import { MarkdownSurface } from './Markdown.tsx'
+import type { SurfaceProps } from '../surface.ts'
 import type { DocumentKind } from '../../../../shared/document-api.ts'
 
-export interface Surface {
-  /** Day separators and the date gutter. The stream has days; nothing else does. */
-  readonly days: boolean
-  /**
-   * The annotation layer: tag extents, marks, comment anchors (D44).
-   *
-   * Off elsewhere because the gestures that make them are the stream's in v1 —
-   * a note cannot be tagged yet, so drawing the layer would only ever show an
-   * empty one.
-   */
-  readonly annotations: boolean
-  /**
-   * Where the caret goes when a window opens.
-   *
-   * `append` is the stream's rule — you are continuing, not arriving (Q7). A
-   * note is a thing you came to READ or to edit in the middle, so it opens at
-   * the top, the way every other editor opens a file.
-   */
-  readonly landing: 'append' | 'start'
+const SURFACES: Partial<Record<DocumentKind, ComponentType<SurfaceProps>>> = {
+  // stream, markdown, todo and fileset are all running text today. The first
+  // entry here will be the first kind that is shown as something else — a todo
+  // list with checkboxes to click, or a fileset as a list to drag.
 }
 
-const STREAM: Surface = { days: true, annotations: true, landing: 'append' }
-const PLAIN: Surface = { days: false, annotations: false, landing: 'start' }
-
-export function surfaceFor(kind: DocumentKind): Surface {
-  return kind === 'stream' ? STREAM : PLAIN
+export function surfaceFor(kind: DocumentKind): ComponentType<SurfaceProps> {
+  return SURFACES[kind] ?? MarkdownSurface
 }

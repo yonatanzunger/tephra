@@ -191,3 +191,35 @@ test('nothing in main uses the ambient DOM Document', async () => {
   }
   assert.deepEqual(offenders, [], 'import Document from shared/document-api.ts, or say which one you mean')
 })
+
+/**
+ * **A surface owns its editor, and nothing else may reach into it.**
+ *
+ * `bind.ts` and everything beside it under `kinds/markdown/` are not a shared
+ * editing facility that the app happens to use — they ARE the markdown surface,
+ * which is one of several ways a document could be shown (D54). The moment
+ * something outside imports `@codemirror/view`, the app has a second opinion
+ * about how documents are edited, and the kind axis stops being a lookup.
+ *
+ * The markdown PARSER is exempt on purpose: `@lezer/markdown` is how this app
+ * reads markdown, and printing and importing read markdown without editing it.
+ * What is fenced off is the editor, not the format.
+ */
+test('only the markdown surface holds the editor', async () => {
+  const EDITOR = ['@codemirror/view', '@codemirror/state', '@codemirror/commands', '@replit/codemirror-vim']
+  const inside = 'renderer/src/editor/kinds/markdown/'
+  const offenders: string[] = []
+  for (const root of ['renderer', 'main', 'shared']) {
+    for (const rel of await sources(root)) {
+      if (`${root}/${rel}`.startsWith(inside)) continue
+      for (const from of await importsOf(root, rel)) {
+        if (EDITOR.includes(from)) offenders.push(`${root}/${rel} imports ${from}`)
+      }
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'the editor belongs to the markdown surface; ask it through SurfaceProps instead',
+  )
+})

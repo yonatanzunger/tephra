@@ -11,9 +11,10 @@ import { Documents } from './x/documents'
 import type { RemoteStream } from './x/kinds/stream'
 import { Pane } from './pane/pane'
 import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
-import { Editor } from './editor/Editor'
-import type { EditorHandle } from './editor/range-commands.ts'
-import { defaultTypography, type Typography } from './editor/theme'
+import { surfaceFor } from './editor/kinds/registry.ts'
+import type { SurfaceHandle } from './editor/surface.ts'
+import { asEditorHandle, type EditorHandle } from './editor/kinds/markdown/range-commands.ts'
+import { defaultTypography, type Typography } from './editor/typography.ts'
 import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
@@ -24,8 +25,8 @@ import { MarkPanel } from './frame/MarkPanel'
 import { Rail } from './frame/Rail'
 import { createPortal } from 'react-dom'
 import type { CommentThread } from '../../shared/comments.ts'
-import type { CommentAnchor } from './editor/comment-anchors.ts'
-import type { MarkInfo } from './editor/range-commands.ts'
+import type { CommentAnchor } from './editor/annotations.ts'
+import type { MarkInfo } from './editor/annotations.ts'
 import {
   printPage, printRangePage, rangeTitle, needsPages,
   PAPER_CLEAN, PAPER_FOOTNOTES, PAPER_MARGIN, PAPER_NOTES, PRINT_CSS,
@@ -48,7 +49,7 @@ const POLICIES: Record<AnnotationChoice, Presentation> = {
   margin: PAPER_MARGIN,
 }
 import { markdownFromHtml } from './import/html.ts'
-import { destination } from './editor/links.ts'
+import { destination } from './editor/kinds/markdown/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -694,6 +695,12 @@ export function App(): React.JSX.Element {
     )
   }
 
+  // **Which surface, decided from the document rather than assumed.** Every kind
+  // is running text today, so this is always the markdown one — but it is a
+  // lookup, so the first kind that is shown some other way is a file and a line
+  // in the registry rather than another flag inside the editor (D54).
+  const Surface = docWindow === null ? null : surfaceFor(docWindow.document.meta.kind)
+
   // What the title bar says we are looking at. A day is its date; a document is
   // whatever it calls itself, falling back to its filename, which is the only
   // other name it has.
@@ -818,22 +825,23 @@ export function App(): React.JSX.Element {
         )}
         {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
 
-        {docWindow === null ? (
+        {docWindow === null || Surface === null ? (
           <main className="scaffold">
             <p className="sub">Opening…</p>
           </main>
         ) : (
-          <Editor
+          <Surface
             window={docWindow}
-            vim={vim}
-            typography={typography}
+            settings={{ vim, typography }}
             onViewport={onViewport}
             onCursor={onCursor}
-            onError={err => setError(err.message)}
-            onEditorHandle={handle => (editorRef.current = handle)}
-            onMark={setMark}
-            onCommentAnchors={setAnchors}
-            onRailHost={setRailHost}
+            onError={(err: Error) => setError(err.message)}
+            // **Narrowed at runtime, not asserted.** The range commands are
+            // text commands; a surface that is not text has no selection to
+            // wrap, and the honest answer there is a null handle and greyed
+            // menu items rather than a cast that would be a lie (D54).
+            onHandle={(handle: SurfaceHandle | null) => (editorRef.current = asEditorHandle(handle))}
+            annotations={{ onMark: setMark, onCommentAnchors: setAnchors, onRailHost: setRailHost }}
           />
         )}
         {anomaliesOpen && (

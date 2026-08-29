@@ -132,6 +132,26 @@ finding them.**
 | **the forwarder** | `renderer/src/x/kinds/<kind>.ts` | the same API over IPC, holding whatever must be answered synchronously (D37) |
 | **the surface** | `renderer/src/editor/kinds/<Kind>.tsx` | how it is edited and shown; markdown is the default, and a kind opts out |
 
+**A surface is a whole view, not a configured editor.** `kinds/Markdown.tsx` is
+one, and everything that makes it CodeMirror — the binding, the day separators,
+the marker layer, the list behaviour — is `kinds/markdown/` underneath it, not a
+shared editing facility the app happens to use. What the app knows is
+`editor/surface.ts`: a window, the editing settings, where the caret went, what
+is on screen, a handle that can reveal a place, and the annotation reports its
+chrome subscribes to.
+
+The line, because it is the one that will be crossed by accident: **a boolean
+varies a view; a file replaces one.** Stream-versus-note is a variation — both
+are running text, and `kinds/markdown/options.ts` holds the three flags that
+differ. A todo list with checkboxes to click, or a fileset as a list to drag, is
+a different view: a file beside `Markdown.tsx` and a line in the registry. The
+failure mode this guards against is the quiet one — flags accumulating in
+`bind.ts` until it is a switchboard for three editors that were never designed
+as one — so `layering.test.ts` asserts that nothing outside the markdown surface
+imports the editor at all. (The markdown PARSER is exempt: printing and importing
+read markdown without editing it. What is fenced off is the editor, not the
+format.)
+
 Plus **one line in each process's registry** — kind → implementation, kind →
 surface — so the lookup is data rather than a switch that someone forgets.
 

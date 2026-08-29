@@ -11,8 +11,10 @@
 import { EditorView } from '@codemirror/view'
 import type { TrackMarks } from './scroll-track.ts'
 import type { Extension } from '@codemirror/state'
-import { NO_SELECTION, type SelectionState } from '../../../shared/commands.ts'
-import type { WindowPosition, DocumentWindow, Span } from '../../../shared/document-api.ts'
+import { NO_SELECTION, type SelectionState } from '../../../../../shared/commands.ts'
+import type { WindowPosition, DocumentWindow, Span } from '../../../../../shared/document-api.ts'
+import type { MarkInfo } from '../../annotations.ts'
+import type { SurfaceHandle } from '../../surface.ts'
 
 /**
  * Report the caret to main whenever it changes, so menu items enable and grey
@@ -114,23 +116,6 @@ export function readSelection(view: EditorView, docWindow: DocumentWindow): Sele
   }
 }
 
-/** What a mark stands for, once someone clicks it. */
-export interface MarkInfo {
-  /** Where on screen it is, so the panel can sit beside it. */
-  readonly box: DOMRect
-  /** The bookmark this mark IS, if it is one. */
-  readonly anchor: string | null
-  /**
-   * The subject this mark opens, first, followed by any others covering the
-   * same point.
-   *
-   * The mark belongs to exactly one span — a tag's start marker — but a passage
-   * may carry several subjects at once, and the ones past the third are not
-   * drawn at all (the extent stacks only three deep). So this is where they
-   * become visible: the list is the answer to "what is this passage".
-   */
-  readonly tags: readonly { readonly name: string; readonly span: Span }[]
-}
 
 /**
  * What the mark at this buffer position stands for.
@@ -164,7 +149,7 @@ export function markAt(docWindow: DocumentWindow, at: number, box: DOMRect): Mar
  * — so the app holds this rather than the view itself, and asks in terms of the
  * selection rather than in terms of CodeMirror.
  */
-export interface EditorHandle {
+export interface EditorHandle extends SurfaceHandle {
   selection(): Selection
   /**
    * Put text around the selection, as ordinary typing would.
@@ -193,4 +178,17 @@ export interface EditorHandle {
    * buffer coordinates and the editor decides where that is (D51).
    */
   showTrackMarks(marks: TrackMarks): void
+}
+
+/**
+ * The handle, if what is showing is text.
+ *
+ * **A check rather than a cast.** The range commands — tag, mark, link, comment
+ * — are all "do something with the selection", which is a question only a text
+ * surface can answer. When the thing on screen is a list or a canvas, the honest
+ * result is null, and the menu items grey out because there genuinely is no
+ * selection to act on (D54).
+ */
+export function asEditorHandle(handle: SurfaceHandle | null): EditorHandle | null {
+  return handle !== null && 'wrapSelection' in handle ? (handle as EditorHandle) : null
 }

@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { EditorState, EditorSelection, type Transaction } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
-import { indentListItem, outdentListItem } from '../../src/renderer/src/editor/lists.ts'
+import { indentListItem, outdentListItem } from '../../src/renderer/src/editor/kinds/markdown/lists.ts'
 
 /** A state with the caret at `|`, or a selection between two of them. */
 function at(doc: string): EditorState {

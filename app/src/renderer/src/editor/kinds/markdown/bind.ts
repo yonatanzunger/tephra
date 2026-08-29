@@ -21,17 +21,20 @@ import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
 import { listIndent } from './lists.ts'
 import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
-import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../shared/document-api.ts'
-import { fromBuffer } from '../../../shared/prose.ts'
+import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../../../shared/document-api.ts'
+import { fromBuffer } from '../../../../../shared/prose.ts'
 import { widgetExtensions } from './widgets.ts'
-import { contextMenu, markAt, readSelection, reportSelection, type MarkInfo, type Selection } from './range-commands.ts'
+import { contextMenu, markAt, readSelection, reportSelection, type Selection } from './range-commands.ts'
+import type { MarkInfo } from '../../annotations.ts'
 import { retag, tagExtents } from './tags.ts'
-import { commentExtents, recomment, type CommentAnchor } from './comment-anchors.ts'
+import { commentExtents, recomment } from './comment-anchors.ts'
+import type { CommentAnchor } from '../../annotations.ts'
 import { richPaste } from './paste.ts'
 import { dayBoundaries, redays } from './days.ts'
-import { proseHighlight, tephraTheme, typographyCompartment, defaultTypography, type Typography } from './theme.ts'
+import { proseHighlight, tephraTheme, typographyCompartment } from './theme.ts'
+import { defaultTypography, type Typography } from '../../typography.ts'
 import { Compartment } from '@codemirror/state'
-import { surfaceFor } from './kinds/registry.ts'
+import { optionsFor } from './options.ts'
 
 /** Marks a transaction as coming FROM the document, so it is not sent back. */
 const fromDocument = StateEffect.define<null>()
@@ -77,7 +80,7 @@ export function bindEditor(options: BindOptions): Binding {
   // **Asked of the window, not passed in.** The window knows its document and
   // the document knows its kind; a `surface` prop threaded down from the app
   // would be a second answer to a question that already has one (D54).
-  const surface = surfaceFor(docWindow.document.meta.kind)
+  const behaviour = optionsFor(docWindow.document.meta.kind)
 
   const view = new EditorView({
     parent: options.parent,
@@ -102,9 +105,9 @@ export function bindEditor(options: BindOptions): Binding {
         highlightSelectionMatches(),
         EditorView.lineWrapping,
         widgetExtensions(),
-        ...(surface.annotations ? [tagExtents(docWindow)] : []),
-        ...(surface.days ? [dayBoundaries(docWindow)] : []),
-        ...(surface.annotations
+        ...(behaviour.annotations ? [tagExtents(docWindow)] : []),
+        ...(behaviour.days ? [dayBoundaries(docWindow)] : []),
+        ...(behaviour.annotations
           ? [commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors))]
           : []),
         keymap.of([...defaultKeymap, ...searchKeymap]),
@@ -135,11 +138,11 @@ export function bindEditor(options: BindOptions): Binding {
   // **A note opens at the top instead**, because it is not a thing being
   // appended to: arriving at the end of a file somebody sent you is arriving at
   // the wrong end of it (D54).
-  const landing = (surface.landing === 'append' ? docWindow.text.length : 0) as WindowPosition
+  const landing = (behaviour.landing === 'append' ? docWindow.text.length : 0) as WindowPosition
   view.dispatch({
     selection: { anchor: landing as number },
   })
-  if (surface.landing === 'append') scrollToAppendPosition(view)
+  if (behaviour.landing === 'append') scrollToAppendPosition(view)
 
   const unsubscribeChanged = docWindow.onChanged((edits, origin) => {
     applyFromDocument(view, edits, origin)

@@ -1,5 +1,10 @@
-// Typography. The visual reference is the Clarity app's sage theme (notes.md),
-// judged against real prose in Spike A rather than chosen from a palette.
+// How the markdown surface paints the type — the CodeMirror half of it.
+//
+// The numbers themselves are `editor/typography.ts`, which the frame and the
+// theme picker also read; what is here is how CodeMirror is told about them.
+//
+// The visual reference is the Clarity app's sage theme (notes.md), judged
+// against real prose in Spike A rather than chosen from a palette.
 //
 // The stock CodeMirror highlight style is built for code: it underlines
 // headings and colours syntax. Long-form prose wants neither.
@@ -8,34 +13,7 @@ import { EditorView } from '@codemirror/view'
 import { HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { Compartment, type Extension } from '@codemirror/state'
-
-export interface Typography {
-  font: string
-  size: number
-  /** The text measure, in characters. */
-  measure: number
-  /** The reserved annotation gutter, in characters (D42, R27). */
-  gutter: number
-  /** Space between the measure and the gutter, in characters. */
-  gutterGap: number
-  /** Line height within a paragraph. */
-  leading: number
-  /** Extra space at a paragraph's end, in ems. */
-  paragraphSpace: number
-  /** Height of a blank line, as a fraction of a text line. */
-  blankLine: number
-}
-
-export const defaultTypography: Typography = {
-  font: "'Lora', Georgia, serif",
-  size: 18,
-  measure: 74,
-  gutter: 19,
-  gutterGap: 3,
-  leading: 1.55,
-  paragraphSpace: 0.5,
-  blankLine: 0.55,
-}
+import type { Typography } from '../../typography.ts'
 
 export const typographyCompartment = new Compartment()
 

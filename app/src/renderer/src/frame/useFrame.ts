@@ -5,7 +5,7 @@
 // frame's width, and convert the typographic `ch` quantities into pixels.
 
 import { useEffect, useMemo, useState } from 'react'
-import type { Typography } from '../editor/theme'
+import type { Typography } from '../editor/typography.ts'
 import { gutterFits, streamOcclusion, streamWidth, type ReadingNeed } from './metrics'
 
 /**

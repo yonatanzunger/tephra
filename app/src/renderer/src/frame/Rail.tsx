@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CommentId, CommentThread } from '../../../shared/comments.ts'
-import type { CommentAnchor } from '../editor/comment-anchors.ts'
+import type { CommentAnchor } from '../editor/annotations.ts'
 import { toHtml } from '../print/markdown.ts'
 
 /**

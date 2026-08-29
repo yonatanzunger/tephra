@@ -320,6 +320,26 @@ than the type system will show.
    document nobody is appending to. Markdown is the default rather than an
    entry, so an unknown kind still opens (R26).
 
+**MC5½ — the surface became a view.** MC5 shipped the parameter version of the
+fourth artifact: three booleans consumed inside `bind.ts`, which is fine for
+stream-versus-note and wrong for the kind after them. So `Editor.tsx` is
+`editor/kinds/Markdown.tsx` and everything that makes it CodeMirror moved with
+it into `kinds/markdown/` — because `bind.ts` is not a facility the app uses,
+it IS the markdown surface. The registry answers with a COMPONENT; the app
+knows only `editor/surface.ts`; the two screen-facing annotation types the
+chrome subscribes to (`MarkInfo`, `CommentAnchor`) moved up beside the contract,
+since the mark panel and the comment rail are app furniture, not CodeMirror's.
+The handle split: `SurfaceHandle` is `revealAt` and nothing else, and the app
+narrows to the text handle with a runtime check — the range commands are
+questions about a selection, and a view with no selection should grey them out
+rather than be cast into having one.
+
+Deliberately NOT done: untangling the mark panel, the comment margin and the
+scroll track from App. There is no second surface to test that abstraction
+against, and a guessed interface is worse than an honest coupling. When a second
+surface's props diverge, the ambient settings move to context rather than the
+contract growing.
+
 **And the bug underneath all of it.** A section entry's `../notes/offer.md` was
 resolved from a DAY FILE's depth — the base `resolveInsideNotebook` had always
 used, correctly, back when the stream was the only document with links in it. It

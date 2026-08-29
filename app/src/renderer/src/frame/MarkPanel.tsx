@@ -11,7 +11,7 @@
 
 import { useEffect, useRef } from 'react'
 import { tagSlot } from '../../../shared/tags.ts'
-import type { MarkInfo } from '../editor/range-commands.ts'
+import type { MarkInfo } from '../editor/annotations.ts'
 
 export interface MarkActions {
   readonly onRenameTag: (name: string, span: MarkInfo['tags'][number]['span']) => void

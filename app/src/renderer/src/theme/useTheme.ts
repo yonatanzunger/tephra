@@ -14,7 +14,7 @@ import {
   themeTokens,
   type Theme,
 } from '../../../shared/theme.ts'
-import type { Typography } from '../editor/theme'
+import type { Typography } from '../editor/typography.ts'
 
 /**
  * The Hebrew range: the block itself, presentation forms, and the two

@@ -12,7 +12,7 @@
 
 import { EditorView } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
-import { markdownFromHtml } from '../import/html.ts'
+import { markdownFromHtml } from '../../../import/html.ts'
 
 export function richPaste(): Extension {
   return EditorView.domEventHandlers({

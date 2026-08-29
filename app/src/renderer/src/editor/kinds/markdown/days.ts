@@ -12,8 +12,8 @@
 
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state'
-import type { DateKey, DocumentWindow } from '../../../shared/document-api.ts'
-import { DESKTOP, place } from '../../../shared/presentation.ts'
+import type { DateKey, DocumentWindow } from '../../../../../shared/document-api.ts'
+import { DESKTOP, place } from '../../../../../shared/presentation.ts'
 
 /** Dispatched when the loaded days may have changed — growth, or a jump. */
 export const redays = StateEffect.define<null>()
