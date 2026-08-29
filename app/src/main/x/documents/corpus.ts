@@ -23,6 +23,7 @@
 import type { Notebook } from '../../w/notebook.ts'
 import { kindOf, type RelPath } from '../../w/layout.ts'
 import { StreamDocument } from '../stream-document.ts'
+import { MarkdownDocument } from './kinds/markdown.ts'
 import type {
   Divergence, DocumentChange, DocumentId, DocumentKind, SegmentKey, Unsubscribe,
 } from '../../../shared/document-api.ts'
@@ -222,12 +223,16 @@ export class Corpus {
   // ── internals ──────────────────────────────────────────────
 
   #openDocument(id: DocumentId): Promise<StoredDocument> {
-    // A factory keyed by kind, with one entry. The other kinds arrive as lines
-    // here rather than as a place someone has to find (MC3).
-    if (id !== STREAM_ID) {
-      return Promise.reject(new Error(`documents other than the stream are not built yet: ${id}`))
+    // A factory keyed by kind. Adding one is a line here rather than a place
+    // somebody has to find (D54).
+    const kind = id === STREAM_ID ? 'stream' : kindOf(id as string as RelPath)
+    if (kind === null) {
+      return Promise.reject(new Error(`${id} is not a document`))
     }
-    const doc = new StreamDocument(this.#notebook)
+    const doc: StoredDocument =
+      kind === 'stream'
+        ? new StreamDocument(this.#notebook)
+        : new MarkdownDocument(this.#notebook, id, kind)
     this.#unsubscribe.set(id, [
       doc.onChanged(change => {
         for (const handler of this.#changed) handler(id, change)

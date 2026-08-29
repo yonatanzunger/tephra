@@ -159,7 +159,7 @@ export function renderFrontmatter(fm: Frontmatter): string {
   return out.join('\n')
 }
 
-export function frontmatterFor(date: DateKey, kind: string, part?: number): Frontmatter {
+export function frontmatterFor(date: DateKey | null, kind: string, part?: number): Frontmatter {
   return {
     tephra: 1,
     date,

@@ -5,7 +5,7 @@
 // not text the user is editing, and if offsets included it then editing a
 // keyword would silently move every position in the day.
 
-import type { DateKey, DocumentText, TypedSpan } from '../../shared/document-api.ts'
+import type { DateKey, DocumentText, SegmentKey, TypedSpan } from '../../shared/document-api.ts'
 import { frontmatterFor, parseFile, renderFrontmatter, spliceBody, type ParsedFile } from './frontmatter.ts'
 import {
   resolveAnchors, scanMarkers, scanSpans,
@@ -22,13 +22,16 @@ import { proseOf, proseMarkers, type SegmentProse } from './prose.ts'
  */
 import { findAnomalies } from './anomalies.ts'
 import { splitBody, SPLIT_THRESHOLD } from './split.ts'
-import { dayFile } from '../w/layout.ts'
+import { dayFile, parseDayFile } from '../w/layout.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import type { RelPath } from '../w/layout.ts'
 
 export class Segment {
   readonly date: DateKey
   readonly rel: RelPath
+
+  /** Whether this segment is a day of the stream, and so covers itself (D51). */
+  #dated = true
 
   /** The file exactly as read. Never regenerated — spliced (format-spec). */
   #original: string
@@ -51,6 +54,18 @@ export class Segment {
 
   static load(date: DateKey, rel: RelPath, fileText: string): Segment {
     return new Segment(date, rel, fileText)
+  }
+
+  /**
+   * A segment that is not a day: one file, one document, no date.
+   *
+   * The key is the constant every one-segment document uses (D27, D54), and it
+   * is not a date — which is exactly what `dated` records.
+   */
+  static forFile(key: SegmentKey, rel: RelPath, fileText: string): Segment {
+    const made = new Segment(key as DateKey, rel, fileText)
+    made.#dated = false
+    return made
   }
 
   /** A day that does not exist yet. Its file appears when something is written. */
@@ -175,6 +190,12 @@ export class Segment {
     const parts = splitBody(this.#body, threshold)
     if (parts.length === 1) return [{ rel: this.rel, text: this.serialise() }]
 
+    // **Only a day splits.** The naming below is `dayFile(date, part)`, so a
+    // one-segment document past the threshold would write itself into the
+    // stream's directory under a date it does not have. A note that large is a
+    // problem for another day; writing it somewhere false is a problem now.
+    if (parseDayFile(this.rel) === null) return [{ rel: this.rel, text: this.serialise() }]
+
     const base = this.#parsed.frontmatter ?? frontmatterFor(this.date, 'stream')
     return parts.map((body, i) => {
       const part = i + 1
@@ -222,11 +243,19 @@ export class Segment {
    * comes from the shared scan, which any markdown file can be put through
    * whether or not it is a day.
    */
+  /**
+   * Every span in this segment, the whole-body one included when there is one.
+   *
+   * **Only a DAY covers itself.** That span is what makes the outline a tree
+   * (D51) and it is a fact about the stream: a note's single segment is not a
+   * date, and emitting one meant every note carried a span named `content`
+   * pretending to be a day. `dated` is how a segment knows which it is — the
+   * kind decides at construction, because the kind is what knows.
+   */
   spans(): readonly ScannedSpan[] {
-    return [
-      { kind: 'date', name: this.date, level: 0, from: 0, to: this.#body.length },
-      ...scanSpans(this.#body, this.#scan()),
-    ]
+    const own = scanSpans(this.#body, this.#scan())
+    if (!this.#dated) return own
+    return [{ kind: 'date', name: this.date, level: 0, from: 0, to: this.#body.length }, ...own]
   }
 
   anchorAt(name: string): number | null {

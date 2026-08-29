@@ -150,12 +150,73 @@ test('existence does not require opening', async t => {
   assert.deepEqual(c.held(), [], 'and nothing was opened to answer')
 })
 
-test('a kind that is not built yet says so, rather than half-working', async t => {
+test('a note opens as its own document, with one segment (D27)', async t => {
+  const { corpus: c } = await corpus(t)
+  await c.use('notes/a-note.md' as DocumentId, async doc => {
+    assert.equal(doc.meta.kind, 'markdown')
+    assert.deepEqual(await doc.keys(), ['content'], 'one segment, and it is not a date')
+  })
+})
+
+test('and a fileset opens as one too, until it has verbs of its own', async t => {
+  const { corpus: c } = await corpus(t)
+  await c.use('sections/house.fileset.md' as DocumentId, async doc => {
+    assert.equal(doc.meta.kind, 'fileset')
+  })
+})
+
+test('a note is not a stream, and says so rather than half-answering', async t => {
+  const { corpus: c } = await corpus(t)
+  await c.use('notes/a-note.md' as DocumentId, async doc => {
+    // A position naming some other segment came from code that thinks this is
+    // a stream; an empty segment would let it go on believing that.
+    await assert.rejects(() => doc.spansAt({ segment: '2026-03-01' as never, offset: 0 as never, generation: doc.generation }))
+  })
+})
+
+test('something that is not a document at all is refused', async t => {
   const { corpus: c } = await corpus(t)
   await assert.rejects(
-    () => c.use('notes/a-note.md' as DocumentId, async doc => doc),
-    /not built yet/,
+    () => c.use('attachments/2026/03/a.png' as DocumentId, async doc => doc),
+    /is not a document/,
   )
+})
+
+test('THE MULTI-DOCUMENT CASE: clean documents cycle, the dirty one stays', async t => {
+  // Deferred from MC2d, which could not write it: with one openable kind there
+  // was nothing to fill a cache WITH. The rule is the one eviction exists to
+  // respect — never let go of unsaved work, however much pressure there is.
+  const { corpus: c, root } = await corpus(t, { cache: 2 })
+  await mkdir(join(root, 'notes'), { recursive: true })
+  for (let i = 0; i < 6; i++) {
+    await writeFile(join(root, 'notes', `n${i}.md`), `---\ntephra: 1\n---\nNote ${i}.\n`)
+  }
+
+  await c.use(STREAM_ID, scribble)
+  for (let i = 0; i < 6; i++) {
+    await c.use(`notes/n${i}.md` as DocumentId, async doc => doc.meta.kind)
+  }
+
+  const held = c.held().map(h => h.id)
+  assert.ok(held.includes(STREAM_ID), `the dirty document is still held, got ${held.join(', ')}`)
+  await c.use(STREAM_ID, async doc => assert.equal(doc.isDirty, true, 'and still has its edit'))
+})
+
+test('a batch sweep of the whole corpus leaves the cache where it found it', async t => {
+  // What the index does. `retain: false` is what makes indexing affordable
+  // without eviction being load-bearing (D54).
+  const { corpus: c, root } = await corpus(t, { cache: 8 })
+  await mkdir(join(root, 'notes'), { recursive: true })
+  for (let i = 0; i < 12; i++) {
+    await writeFile(join(root, 'notes', `s${i}.md`), `---\ntephra: 1\n---\nNote ${i}.\n`)
+  }
+  await c.use(STREAM_ID, async doc => doc) // one interactive open, kept
+
+  for (const id of await c.list()) {
+    await c.use(id, async doc => (await doc.keys()).length, { mode: 'read', retain: false })
+  }
+
+  assert.deepEqual(c.held().map(h => h.id), [STREAM_ID], 'the sweep displaced nothing')
 })
 
 // ── the tiers are the corpus's, not one document's (MC2c) ──────────────────
@@ -176,8 +237,10 @@ test('a document that failed to open is not unsaved work', async t => {
   // `flushAll` iterates what has been opened, and an opening that rejected is
   // in that map until it is evicted. Asking it whether it is dirty would throw
   // inside the commit path, which is the worst place to find out.
+  // Something that is not a document at all: opening it rejects, and the
+  // rejected opening sits in the map until it is evicted.
   const { corpus: c } = await corpus(t)
-  await assert.rejects(() => c.use('notes/a-note.md' as DocumentId, async doc => doc))
+  await assert.rejects(() => c.use('attachments/a.png' as DocumentId, async doc => doc))
   assert.deepEqual(await c.flushAll(), [])
 })
 

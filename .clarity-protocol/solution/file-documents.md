@@ -404,6 +404,35 @@ single serial queue satisfies that conservatively and is what exists now; a
 queue per document is the refinement, and only if the conservative one is ever
 measurably in the way.
 
+## What subclasses what, and the fork waiting at the end of it
+
+`SegmentedDocument` holds everything that is *text with positions in it*: the
+segment map, the edits, the history, the spans, the journal. A kind extends it
+when that describes its content, and **implements `StoredDocument` directly when
+it does not** — the base is a convenience, not a requirement, and the `Corpus`
+deals in the interface.
+
+| Likely kind | Why |
+|---|---|
+| **stream, markdown, fileset** | text with positions; extend the base |
+| **PDF, image** | positions are pages and rectangles; annotations are not character spans; nothing in the base applies |
+| **todo / calendar**, if R15–R19 ever stop being plain files | record-shaped: an edit is a field, and history is per item |
+| **a saved query or filtered view** | zero files. Content is computed from other documents and writes are written THROUGH to them; there is no `load` and nothing to `writeDirty` |
+
+And the contrast that draws the line: **the shreddable notebook (D46) is not a
+new kind.** Encrypted bytes and opaque names are a different STORAGE for the
+same documents; only W changes. A different place to keep it is not a different
+thing.
+
+### The fork the first non-text kind forces
+
+**`Document` is a text-document interface today.** `read()` returns a window of
+prose, `spans()` returns character ranges, a position is an offset. A PDF cannot
+satisfy it, so the first non-text kind splits it in two: a lifecycle contract —
+identity, dirtiness, flush, events, undo in the abstract — and a text contract
+standing on it. Worth knowing in advance rather than discovering it while
+writing a PDF reader.
+
 ## Still open
 
 - **What the fileset's editing surface eventually IS**, if not markdown. Worth
