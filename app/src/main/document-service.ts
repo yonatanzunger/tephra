@@ -176,7 +176,6 @@ export class DocumentService {
     // itself: opening is asynchronous in general, and a constructor cannot wait.
     // In MC3 this becomes the Corpus, and the closure goes away.
     this.#index = new StreamIndex(notebook, () => this.#stream)
-    void this.#stream.then(doc => doc.attachIndex(this.#index))
     this.#filesets = new Filesets(notebook)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
@@ -637,8 +636,26 @@ export class DocumentService {
     this.#windows.delete(id)
   }
 
+  /**
+   * Spans across the corpus, answered by the INDEX rather than by a document.
+   *
+   * **A document answers about itself; the index answers about everything.**
+   * Asking the stream would mean loading every day it has ever had to build a
+   * list of dates — instant at a fortnight, a gigabyte at twenty years (D52).
+   * The index holds exactly that answer and refreshes it by borrowing.
+   *
+   * Spans in files no document is holding open have no `DocumentPosition` to be
+   * given, so they are left out here; the sidebar asks the index directly and
+   * gets them (D54).
+   */
   async spans(request: SpansRequest): Promise<readonly TypedSpan[]> {
-    return request.kind === undefined ? (await this.#stream).spans() : (await this.#stream).spans(request.kind)
+    const stream = await this.#stream
+    const out: TypedSpan[] = []
+    for (const { at, span } of await this.#index.spansOf(request.kind)) {
+      if (at.date === null) continue
+      out.push(stream.typed(at.date, span))
+    }
+    return out
   }
 
   /** Bookmark a point (R11's degenerate range). Serial, like every mutation. */

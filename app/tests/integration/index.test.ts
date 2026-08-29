@@ -138,21 +138,24 @@ test('occurrences are what a row traverses, in corpus order', async t => {
   assert.deepEqual(found.map(f => f.date), ['2026-03-01', '2026-03-02', '2026-03-02'])
 })
 
-test('THE EQUIVALENCE: the document says the same thing with the index and without', async t => {
+test('THE EQUIVALENCE: the index says what the document would have said', async t => {
   // The index is a cache, so the only defensible test of it is that it changes
-  // nothing except how long the answer takes. Both paths, one corpus, compared
-  // span for span.
+  // nothing except how long the answer takes — and WHO you ask. The document
+  // answers about itself, the index about the corpus, and over a corpus that is
+  // only the stream the two answers must agree span for span.
   const { doc, index } = await corpus(t, [
     ['2026-03-01', `# Chapter\n\nA ${TAG('Subject', 'phrase')} and <!--tephra:mark spot-->a mark.\n`],
     ['2026-03-02', `## Section\n\nMore ${TAG('Subject', 'text')} here.\n`],
   ])
 
-  const slow = await doc.spans()
-  doc.attachIndex(index)
-  const fast = await doc.spans()
+  const asked = await doc.spans()
+  const cached = (await index.spansOf()).filter(s => s.at.date !== null)
 
-  assert.deepEqual(fast, slow)
-  assert.ok(slow.length >= 6, `six spans at least, got ${slow.length}`)
+  assert.deepEqual(
+    cached.map(s => `${s.at.date}:${s.span.kind}:${s.span.from}`),
+    asked.map(s => `${s.span.begin.segment}:${s.kind}:${s.span.begin.offset as number}`),
+  )
+  assert.ok(asked.length >= 6, `six spans at least, got ${asked.length}`)
 })
 
 test('and the index does not need the corpus to be the stream', async t => {
@@ -161,7 +164,6 @@ test('and the index does not need the corpus to be the stream', async t => {
     [['2026-03-01', `${TAG('Shared', 'a')}\n`]],
     { 'note.md': `${TAG('Shared', 'b')}\n` },
   )
-  doc.attachIndex(index)
 
   // The document speaks for the stream; the index speaks for the corpus. A
   // note's spans have no DocumentPosition, so they are the sidebar's business.

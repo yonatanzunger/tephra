@@ -140,6 +140,30 @@ sequencing is wrong and it is worth stopping to say so.
 
 ## MC3 — The markdown kind, and the readers that stop reading files
 
+**Split in two, on measurement.** `StreamDocument` has 83 members and about
+thirteen of them are day-shaped: the loader, `dates`, `extent`, `dateAt`,
+`proseIn`, `externalChanged`, `branch` and their helpers. Everything else is
+already keyed by `SegmentKey` — `DateKey` is an alias for it — so a second kind
+does not need a second implementation of any of it. **That makes the extraction
+worth doing and too large to do beside anything else.**
+
+### MC3a — untangle the index from the document *(done first, stands alone)*
+
+`Document.spans()` consults the index while the index reads days through the
+document. The corpus-wide question moves to where it belongs: **the service asks
+the INDEX for corpus-wide spans, and a document answers only about itself.**
+`attachIndex` and the `SpanIndex` interface go away, and the two arrows in
+opposite directions become one.
+
+### MC3b — `SegmentedDocument`, and the kind that stands on it
+
+The generic machinery — edits, history, spans, comments, tags, the journal —
+becomes a base class whose only abstract members are *load a segment* and *list
+the segments*. `StreamDocument` supplies days; `MarkdownDocument` supplies one.
+Then `StreamIndex` and `Filesets` take the `Corpus`, the sweep borrows
+`{ mode: 'read', retain: false }`, and the import-graph test lands.
+
+
 **What changes.** `main/x/documents/kinds/markdown.ts`: one segment, keyed by the constant,
 no whole-body date span (that span is a day's, and `Segment` learns the
 difference). `StreamIndex` and `Filesets` stop taking a `Notebook` and take the
