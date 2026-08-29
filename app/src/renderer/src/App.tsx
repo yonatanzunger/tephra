@@ -503,6 +503,35 @@ export function App(): React.JSX.Element {
   useEffect(() => window.tephra.nav.onCorpusChanged(() => setNavGeneration(n => n + 1)), [])
 
   /**
+   * Midnight, while the app was open.
+   *
+   * **The caret is the whole question.** An app left running decided which day
+   * it was appending to when its window opened; the next morning's first
+   * sentence continued yesterday, and a restart then filed the new day AFTER
+   * the text that belonged in it.
+   *
+   * Main says the day changed; where to go is here, because only this side
+   * knows what someone is doing. **The window moves only if the caret is at the
+   * append position** — that is what "still writing today's entry" looks like,
+   * and it is exactly the state that would otherwise put tomorrow's words in
+   * yesterday. A caret anywhere else means someone is working on a passage, and
+   * a document that jumped out from under them would be worse than the bug.
+   */
+  useEffect(() => {
+    if (pane === null) return
+    return window.tephra.doc.onDayRolled(() => {
+      setNavGeneration(n => n + 1)
+      const editor = editorRef.current
+      const w = pane.window
+      if (editor === null || editor === undefined || w === null) return
+      const at = editor.selection()
+      const buffer = w.toWindow(at.span.begin)
+      if (!at.empty || buffer === null || (buffer as number) !== w.text.length) return
+      void pane.goToToday()
+    })
+  }, [pane])
+
+  /**
    * The active set, drawn down the scroll track.
    *
    * **Recomputed when the window moves**, not only when the row changes: growth

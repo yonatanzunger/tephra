@@ -55,6 +55,14 @@ export const CHANNEL = {
    * when it started.
    */
   corpusChanged: 'tephra:doc:corpusChanged',
+  /**
+   * Midnight happened while the app was open.
+   *
+   * An app left running overnight decided which day it was filing into when its
+   * window opened, and went on believing it. Typing the next morning continued
+   * yesterday; a restart then filed the new day AFTER text that belonged in it.
+   */
+  dayRolled: 'tephra:doc:dayRolled',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
   readClipboard: 'tephra:readClipboard',

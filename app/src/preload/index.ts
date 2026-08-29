@@ -195,6 +195,17 @@ const tephra = {
       resetHandlers.add(handler)
       return () => resetHandlers.delete(handler)
     },
+    /**
+     * Midnight happened while the app was open.
+     *
+     * The day a notebook files into was decided when its window opened, and an
+     * app left running went on believing it.
+     */
+    onDayRolled(handler: Handler<string>): () => void {
+      const listener = (_e: unknown, today: string): void => handler(today)
+      ipcRenderer.on(CHANNEL.dayRolled, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.dayRolled, listener)
+    },
     /** A day changed on disk while it had unsaved edits. Surfaced, never resolved (D12). */
     onDiverged(handler: Handler<Divergence>): () => void {
       divergedHandlers.add(handler)

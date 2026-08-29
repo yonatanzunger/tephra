@@ -65,3 +65,18 @@ export function daysBetween(a: DateKey, b: DateKey): number {
   const ms = startOfDay(b).getTime() - startOfDay(a).getTime()
   return Math.round(ms / 86_400_000)
 }
+
+/**
+ * How long until the reference-zone date changes.
+ *
+ * **Because an app left open overnight is the ordinary case, not an edge one.**
+ * A notebook is a thing you leave running; the day it files into was decided
+ * when the window opened, and nothing noticed it becoming yesterday. Typing the
+ * next morning continued the previous day, and a restart filed the new day
+ * *after* text that belonged in it.
+ */
+export function msUntilNextDay(at: Date = new Date()): number {
+  const shifted = at.getTime() + REFERENCE_ZONE_OFFSET_MINUTES * 60_000
+  const sinceMidnight = ((shifted % 86_400_000) + 86_400_000) % 86_400_000
+  return 86_400_000 - sinceMidnight
+}

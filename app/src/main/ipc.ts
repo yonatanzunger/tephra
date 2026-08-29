@@ -10,7 +10,6 @@ import type { Reference } from '../shared/nav-api.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
-import { StreamDocument } from './x/stream-document.ts'
 
 export { DocumentService }
 
@@ -172,7 +171,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.spans, (_e, request: SpansRequest) => service.spans(request))
   ipcMain.handle(CHANNEL.resolveAnchor, (_e, name: string) => service.resolveAnchor(name))
   ipcMain.handle(CHANNEL.extent, () => service.extent())
-  ipcMain.handle(CHANNEL.today, () => StreamDocument.today())
+  ipcMain.handle(CHANNEL.today, () => service.today)
 }
 
 /** Push messages to a renderer for as long as its window lives. */

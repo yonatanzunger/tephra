@@ -26,6 +26,7 @@ import { parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts
 import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
+import { dateKeyAt } from '../shared/dates.ts'
 import { StreamDocument } from './x/stream-document.ts'
 import { StreamIndex } from './x/index.ts'
 import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
@@ -52,6 +53,15 @@ export interface MessageSink {
  */
 const QUIESCE_MS = 1_000
 
+/**
+ * How often the service checks whether the day has changed.
+ *
+ * Well below noticing, well above costing anything — and a poll rather than a
+ * timer to the boundary because the case that matters most is a machine that
+ * was asleep when the boundary passed.
+ */
+const DAY_CHECK_MS = 30_000
+
 const MAX_INTERVAL_MS = 5_000
 
 /**
@@ -73,6 +83,10 @@ const VERSION_QUIESCE_MS = 5 * 60_000
 const VERSION_MAX_MS = 30 * 60_000
 
 export interface ServiceOptions {
+  /** The clock, so a test can be at any hour it likes without waiting. */
+  readonly now?: () => Date
+  /** How often to notice midnight. Tests make it small. */
+  readonly dayCheckMs?: number
   /**
    * Overridable so the tiers can be tested in milliseconds rather than by
    * waiting half an hour. **Both tiers, because they are chained**: a commit is
@@ -139,6 +153,11 @@ export class DocumentService {
   readonly #versionMaxMs: number
   readonly #wantsHistory: boolean
 
+  /** The day the app believes it is in, and the poll that keeps it honest. */
+  #today: DateKey
+  #dayTimer: ReturnType<typeof setInterval> | null = null
+  readonly #now: () => Date
+
   /** Something is unwritten or unversioned; the tiers have work to do. */
   #unsavedWork = false
   /** Whether anything outside the app changed since the last version. */
@@ -183,6 +202,9 @@ export class DocumentService {
     this.#versionQuiesceMs = options.versionQuiesceMs ?? VERSION_QUIESCE_MS
     this.#versionMaxMs = options.versionMaxMs ?? VERSION_MAX_MS
     this.#wantsHistory = options.history !== false
+    this.#now = options.now ?? (() => new Date())
+    this.#today = dateKeyAt(this.#now())
+    this.#watchTheClock(options.dayCheckMs ?? DAY_CHECK_MS)
 
     // What went into the commit message, gathered as it happens. Reconstructing
     // it later would mean diffing, and the point of quoting the text is that it
@@ -284,7 +306,7 @@ export class DocumentService {
     return {
       meta: (await this.#stream).meta,
       generation: (await this.#stream).generation,
-      today: StreamDocument.today(),
+      today: this.today,
       extent: await (await this.#stream).extent(),
     }
   }
@@ -398,6 +420,45 @@ export class DocumentService {
     if (written.length > 0) {
       this.#versionable()
     }
+  }
+
+  // ── the day, which changes whether or not anyone is looking ──
+
+  /**
+   * What day the app is filing into.
+   *
+   * **One place decides this.** `StreamDocument.today()` reads the system clock
+   * afresh, which is right for a static helper and wrong for an app that has to
+   * agree with itself: the service polls, announces, and answers from what it
+   * announced, so a window opened at 23:59 and the message that arrives at
+   * 00:00 cannot disagree about which day it is now.
+   */
+  get today(): DateKey {
+    return this.#today
+  }
+
+  /**
+   * Notice midnight, and say so.
+   *
+   * **Polled rather than scheduled to the boundary**, for the case a scheduled
+   * timer is worst at: a laptop asleep at midnight wakes at nine, and a timer
+   * set for the boundary fires late and alone while a poll simply notices on
+   * its next tick. Thirty seconds is far below what anyone would perceive and
+   * far above what it costs.
+   *
+   * The announcement is all main does. Where the caret should go is the
+   * renderer's — it is the only side that knows whether someone is in the
+   * middle of a sentence (D35: the editor reports facts, Z owns policy).
+   */
+  #watchTheClock(everyMs: number): void {
+    this.#dayTimer = setInterval(() => {
+      const now = dateKeyAt(this.#now())
+      if (now === this.#today) return
+      this.#today = now
+      for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, now)
+    }, everyMs)
+    // The clock must never be the reason a process stays alive.
+    this.#dayTimer.unref?.()
   }
 
   // ── the write-ahead log (D32) ────────────────────────────────
