@@ -18,7 +18,7 @@
 
 import { dayFile, parseDayFile, STREAM_DIR, type RelPath } from '../w/layout.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
-import type { StreamDocument } from './stream-document.ts'
+import type { StreamDocument } from './documents/kinds/stream.ts'
 import type { RestoreReport } from '../../shared/history-api.ts'
 import { parseFile } from './frontmatter.ts'
 import type { Repository } from '../w/repository.ts'

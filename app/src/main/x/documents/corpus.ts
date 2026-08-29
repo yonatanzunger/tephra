@@ -22,7 +22,7 @@
 
 import type { Notebook } from '../../w/notebook.ts'
 import { kindOf, type RelPath } from '../../w/layout.ts'
-import { StreamDocument } from '../stream-document.ts'
+import { StreamDocument } from './kinds/stream.ts'
 import { MarkdownDocument } from './kinds/markdown.ts'
 import type {
   Divergence, DocumentChange, DocumentId, DocumentKind, SegmentKey, Unsubscribe,
@@ -151,12 +151,22 @@ export class Corpus {
     }
   }
 
-  /** Every document there is, or every one of a kind. */
+  /**
+   * Every document there is, or every one of a kind.
+   *
+   * **Open documents count, file or no file.** A section just created by a pin
+   * has no file until a write tier runs, and a panel that listed only the disk
+   * would show the notebook as it was a second ago — the pin would appear to
+   * have done nothing, which is the exact bug this layer exists to end (D54).
+   */
   async list(kind?: DocumentKind): Promise<readonly DocumentId[]> {
     const out: DocumentId[] = []
     if (kind === undefined || kind === 'stream') out.push(STREAM_ID)
-    for (const rel of await this.#notebook.list()) {
-      const found = kindOf(rel)
+    const seen = new Set<string>()
+    for (const rel of [...(await this.#notebook.list()), ...this.#openPaths()]) {
+      if (seen.has(rel)) continue
+      seen.add(rel)
+      const found = kindOf(rel as RelPath)
       if (found === null || found === 'stream') continue // stream files are the stream's
       if (kind !== undefined && found !== kind) continue
       out.push(rel as string as DocumentId)
@@ -164,8 +174,19 @@ export class Corpus {
     return out
   }
 
+  /** The paths of documents held in memory, whose files may not be written yet. */
+  #openPaths(): readonly string[] {
+    return [...this.#opened.keys()].filter(id => id !== STREAM_ID) as unknown as string[]
+  }
+
+  /**
+   * Is there such a document?
+   *
+   * Open counts as existing, for the same reason as in `list`: the document IS
+   * the thing, and its file is where the document is kept.
+   */
   async exists(id: DocumentId): Promise<boolean> {
-    if (id === STREAM_ID) return true
+    if (id === STREAM_ID || this.#opened.has(id)) return true
     return this.#notebook.has(id as string as RelPath)
   }
 

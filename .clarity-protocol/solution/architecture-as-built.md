@@ -16,7 +16,7 @@ flowchart TB
   subgraph MAIN["Electron main process"]
     direction TB
     subgraph X["X — logical objects"]
-      SD["StreamDocument<br/><i>main/x/stream-document.ts</i><br/>generation, undo/redo, replace"]
+      SD["StreamDocument<br/><i>main/x/documents/kinds/stream.ts</i><br/>generation, undo/redo, replace"]
       DW["DocumentWindow<br/><i>main/x/window.ts</i><br/>buffer ↔ document coordinates"]
       SEG["Segment<br/><i>main/x/segment.ts</i><br/>one day file, spliced not serialised"]
       PARSE["frontmatter · markers · text-edits · anomalies<br/><i>main/x/</i>"]

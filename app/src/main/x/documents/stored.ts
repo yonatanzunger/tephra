@@ -10,7 +10,7 @@
 // already in `Document`.
 
 import type {
-  Document, DocumentText, SegmentKey, Unsubscribe,
+  Document, DocumentText, EditOrigin, SegmentKey, Unsubscribe,
 } from '../../../shared/document-api.ts'
 import type { RelPath } from '../../w/layout.ts'
 
@@ -22,6 +22,21 @@ export interface JournalEdit {
 }
 
 export interface StoredDocument extends Document {
+  /** Every segment this document has, in the order it reads in (D27). */
+  keys(): Promise<readonly SegmentKey[]>
+
+  /** One segment's content, as the file holds it. */
+  bodyOf(key: SegmentKey): Promise<DocumentText>
+
+  /** What this document calls itself, from its frontmatter. Null if unnamed. */
+  titleOf(key: SegmentKey): Promise<string | null>
+
+  /** Name the document. Not an edit: no span, no undo entry, no moved position. */
+  setTitleOf(key: SegmentKey, title: string): Promise<void>
+
+  /** Replace one segment's content, as an ordinary edit — undo and all. */
+  setBodyOf(key: SegmentKey, body: DocumentText, origin?: EditOrigin): Promise<void>
+
   /**
    * Told about each batch of edits as it is applied, with the segment's length
    * BEFORE it — what the write-ahead log needs, and nothing else does (D32).

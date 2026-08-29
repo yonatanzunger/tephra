@@ -1,7 +1,7 @@
 // The renderer's half of the window (D37), and specifically its coordinates.
 //
 // **This file exists because its absence was the bug.** When markers left the
-// buffer (D44), `StreamWindow` in main learned the prose↔raw mapping and
+// buffer (D44), `LocalWindow` in main learned the prose↔raw mapping and
 // `RemoteWindow` — the same object's other half — did not. Every test passed,
 // because every window test drove main. What reached the screen was a tag
 // applied 27 characters from where the selection was, and the file said so.

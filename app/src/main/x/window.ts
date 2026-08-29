@@ -1,4 +1,8 @@
-// A loaded region of the stream, spanning one or more days.
+// A loaded region of a document — for the stream, one or more days.
+//
+// **Not the stream's, though the stream is what has segments to span.** A window
+// is over SEGMENTS, and every kind has those; a one-segment note gets a window
+// whose region happens to be the whole of it (D54).
 //
 // This is the whole editor-facing surface (D26) and the only code that knows
 // both coordinate systems. In M0 it lives in main alongside Document; bullet 6
@@ -32,7 +36,13 @@ interface Placed {
   readonly start: WindowPosition
 }
 
-export class StreamWindow implements DocumentWindow {
+/**
+ * The in-process half of `DocumentWindow`, beside the renderer's `RemoteWindow`.
+ *
+ * Same interface, two sides of the boundary: this one holds the document and
+ * answers from it, that one holds a copy and answers from the last snapshot.
+ */
+export class LocalWindow implements DocumentWindow {
   readonly #doc: SegmentedDocument
   #segments: Segment[]
   #placed: Placed[] = []

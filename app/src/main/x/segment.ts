@@ -73,6 +73,33 @@ export class Segment {
     return new Segment(date, rel, header)
   }
 
+  /**
+   * What the file's frontmatter says beyond the keys the format knows.
+   *
+   * A document's own title lives here (`title:` on a fileset), which is a fact
+   * about the DOCUMENT rather than about its text — so it is reachable without
+   * anyone re-parsing the file they just asked a document for.
+   */
+  get extra(): readonly (readonly [string, string])[] {
+    return this.#parsed.frontmatter?.extra ?? []
+  }
+
+  /**
+   * Set one frontmatter key, rewriting the block.
+   *
+   * One of the few places that regenerates frontmatter rather than splicing the
+   * body under it (format-spec): the block itself is what changed. Unknown keys
+   * survive because they are carried in `extra` and re-emitted in order.
+   */
+  setExtra(key: string, value: string): void {
+    const base = this.#parsed.frontmatter ?? frontmatterFor(this.#dated ? this.date : null, 'markdown')
+    const kept = base.extra.filter(([k]) => k.toLowerCase() !== key.toLowerCase())
+    const text = renderFrontmatter({ ...base, extra: [...kept, [key, value] as const] }) + this.#body
+    this.#original = text
+    this.#parsed = parseFile(text)
+    this.#dirty = true
+  }
+
   get body(): DocumentText {
     return this.#body
   }
@@ -107,6 +134,11 @@ export class Segment {
    * promise to keep on rewrite and break by deletion.
    */
   get disposable(): boolean {
+    // Only a DAY. "Nothing was written that day" is a fact about a stream, and
+    // the cure — remove the file — is a stream's cure. An empty fileset is a
+    // section someone emptied on purpose, and deleting it would turn "take the
+    // last thing out" into "and now the section is gone too".
+    if (!this.#dated) return false
     return this.#body.trim() === '' && (this.#parsed.frontmatter?.extra.length ?? 0) === 0
   }
 

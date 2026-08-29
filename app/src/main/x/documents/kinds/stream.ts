@@ -10,17 +10,17 @@ import type {
   DateKey, Document, DocumentChange, DocumentId, DocumentMeta, DocumentPosition,
   DocumentWindow, Edit, EditOrigin, DocumentOffset, SegmentKey, SessionGeneration, Span,
   SpanKind, StreamDocumentApi, TypedSpan, Unsubscribe, VersionId, Divergence, DocumentText,
-} from '../../shared/document-api.ts'
-import { addDays, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
-import { StalePositionError, offsetOf } from '../../shared/positions.ts'
-import type { Notebook } from '../w/notebook.ts'
-import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../w/layout.ts'
+} from '../../../../shared/document-api.ts'
+import { addDays, compareDateKeys, dateKeyAt } from '../../../../shared/dates.ts'
+import { StalePositionError, offsetOf } from '../../../../shared/positions.ts'
+import type { Notebook } from '../../../w/notebook.ts'
+import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../../../w/layout.ts'
 import { createHash } from 'node:crypto'
-import { frontmatterFor, parseFile, renderFrontmatter } from './frontmatter.ts'
-import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody, type ScannedSpan } from './markers.ts'
-import type { Anomaly } from '../../shared/anomalies.ts'
-import type { RestoreReport } from '../../shared/history-api.ts'
-import { Segment } from './segment.ts'
+import { frontmatterFor, parseFile, renderFrontmatter } from '../../frontmatter.ts'
+import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody, type ScannedSpan } from '../../markers.ts'
+import type { Anomaly } from '../../../../shared/anomalies.ts'
+import type { RestoreReport } from '../../../../shared/history-api.ts'
+import { Segment } from '../../segment.ts'
 
 
 /** What one file contributes to the index: its spans, and whether it is empty. */
@@ -37,12 +37,12 @@ export interface FileScan {
 import {
   anchorComment, at, author, insertBlock, insertBlockAt, renderBlock, restate, scanThreadBlocks, splice,
   thread, threadsIn, unanchorComment, unusedCommentId, type ThreadBlock,
-} from './comments.ts'
-import type { CommentId, CommentMessage, CommentThread } from '../../shared/comments.ts'
-import type { DayProse } from '../../shared/ipc.ts'
-import { stripHandles } from '../../shared/prose.ts'
-import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from './text-edits.ts'
-import { StreamWindow } from './window.ts'
+} from '../../comments.ts'
+import type { CommentId, CommentMessage, CommentThread } from '../../../../shared/comments.ts'
+import type { DayProse } from '../../../../shared/ipc.ts'
+import { stripHandles } from '../../../../shared/prose.ts'
+import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from '../../text-edits.ts'
+import { LocalWindow } from '../../window.ts'
 
 /**
  * When an edit removes the start of a tagged range, the edits that remove its
@@ -93,7 +93,7 @@ const GROUPING_WINDOW_MS = 1_500
 /** Enough parts to cover any real day; the split threshold is 1 MB (D20). */
 const MAX_PARTS = 64
 
-import { SegmentedDocument } from './documents/segmented.ts'
+import { SegmentedDocument } from '../segmented.ts'
 
 export class StreamDocument extends SegmentedDocument implements StreamDocumentApi {
   readonly id = 'stream' as DocumentId

@@ -11,7 +11,8 @@ import { parseSection, referenceOf } from '../../../../src/main/x/fileset.ts'
 import type { RelPath } from '../../../../src/main/w/layout.ts'
 
 const PATH = 'sections/house-deal.fileset.md' as RelPath
-const file = (body: string): string => `---\ntephra: 1\nkind: fileset\ntitle: House deal\n---\n${body}`
+/** A section's body, as a document hands it over: frontmatter already off. */
+const file = (body: string): string => body
 
 test('the entries are the list, in the order the list has them', () => {
   const section = parseSection(
@@ -21,6 +22,7 @@ test('the entries are the list, in the order the list has them', () => {
         '- [The listing](https://example.com/listing)\n',
     ),
     PATH,
+    'House deal',
   )
   assert.equal(section.title, 'House deal')
   assert.deepEqual(section.entries.map(e => e.label), ['Mortgage contact', 'Offer letter', 'The listing'])
@@ -29,22 +31,19 @@ test('the entries are the list, in the order the list has them', () => {
 
 test('the text after the link is the summary, and it is left alone', () => {
   // R20: human-authored, and the place regeneration must never clobber.
-  const [entry] = parseSection(file('- [A thing](../notes/a.md) — why it matters, in my words\n'), PATH).entries
+  const [entry] = parseSection(file('- [A thing](../notes/a.md) — why it matters, in my words\n'), PATH, 'House deal').entries
   assert.equal(entry?.summary, 'why it matters, in my words')
 })
 
 test('an entry with no summary has none, rather than an empty one', () => {
-  const [entry] = parseSection(file('- [A thing](../notes/a.md)\n'), PATH).entries
+  const [entry] = parseSection(file('- [A thing](../notes/a.md)\n'), PATH, 'House deal').entries
   assert.equal(entry?.summary, null)
 })
 
 test('prose between the entries is prose, not an error', () => {
   // A person may explain what a section is for. The parser has nothing to do
   // with that, which is not the same as it being wrong.
-  const section = parseSection(
-    file('This is what I am tracking about the house.\n\n- [A thing](../notes/a.md)\n\nStill me talking.\n'),
-    PATH,
-  )
+  const section = parseSection(file('This is what I am tracking about the house.\n\n- [A thing](../notes/a.md)\n\nStill me talking.\n'), PATH, 'House deal')
   assert.equal(section.entries.length, 1)
 })
 
@@ -67,7 +66,7 @@ test('an unknown scheme is not a guess worth making', () => {
 })
 
 test('a title comes from frontmatter, and falls back to the filename', () => {
-  assert.equal(parseSection('---\ntephra: 1\n---\n- [x](../a.md)\n', PATH).title, 'house-deal')
+  assert.equal(parseSection('- [x](../a.md)\n', PATH, null).title, 'house-deal')
 })
 
 // ── the tree, which is where the rules that keep it finite live ─────────────
@@ -78,6 +77,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../../../src/main/w/notebook.ts'
 import { Filesets } from '../../../../src/main/x/fileset.ts'
+import { Corpus } from '../../../../src/main/x/documents/corpus.ts'
 import type { TestContext } from 'node:test'
 
 async function sections(t: TestContext, files: Record<string, string>) {
@@ -91,7 +91,22 @@ async function sections(t: TestContext, files: Record<string, string>) {
   }
   const notebook = await Notebook.open({ root, lock: false, watch: false })
   t.after(() => notebook.close())
-  return { root, notebook, filesets: new Filesets(notebook) }
+  const corpus = new Corpus(notebook)
+  return {
+    root,
+    notebook,
+    corpus,
+    filesets: new Filesets(corpus),
+    /**
+     * Write what the documents are holding.
+     *
+     * A pin is a document edit now, so it lands in memory and the write tiers
+     * put it on disk (D54). A test that reads the FILE has to say when it
+     * expects that to have happened — which is the honest shape, because it is
+     * what the app does.
+     */
+    flush: () => corpus.flushAll(),
+  }
 }
 
 it('the top level is a fileset of filesets (D53)', async t => {
@@ -150,8 +165,9 @@ it('a notebook with no sections yet is empty, not broken', async t => {
 // ── pinning, and the bug that a name is not a path ─────────────────────────
 
 it('a pin is a line appended to a markdown file', async t => {
-  const { notebook, filesets } = await sections(t, {})
+  const { notebook, filesets, flush } = await sections(t, {})
   assert.equal(await filesets.pin({ kind: 'tag', subject: 'House Deal' }, 'House Deal'), 'pinned')
+  await flush()
   const written = await notebook.read('sections/pinned.fileset.md' as RelPath)
   assert.match(written ?? '', /^- \[House Deal\]\(tephra:tag\/House%20Deal\)$/m)
   assert.match(written ?? '', /^---\ntephra: 1\nkind: fileset\ntitle: Pinned\n---/)
@@ -169,11 +185,12 @@ it('THE BUG: unpinning from the top-level list, whose name does not survive slug
   // Taking a name meant unpinning wrote to a file that did not exist and
   // reported nothing: the button did nothing, silently, and every test passed
   // because they all used a name that survives slugging.
-  const { notebook, filesets } = await sections(t, {
+  const { notebook, filesets, flush } = await sections(t, {
     '_index.fileset.md': '- [Kept](tephra:tag/Kept)\n- [Removed](tephra:mark/removed)\n',
   })
   const path = 'sections/_index.fileset.md' as RelPath
   assert.equal(await filesets.unpin({ kind: 'anchor', name: 'removed' }, path), true)
+  await flush()
 
   const written = (await notebook.read(path)) ?? ''
   assert.match(written, /Kept/)
@@ -183,13 +200,14 @@ it('THE BUG: unpinning from the top-level list, whose name does not survive slug
 it('a reference is matched however it was written down', async t => {
   // The app escapes a space to `%20`; a person writes `<…>`, which is what
   // markdown requires of a destination with a space in it. One pin, two hands.
-  const { notebook, filesets } = await sections(t, {
+  const { notebook, filesets, flush } = await sections(t, {
     'pinned.fileset.md': '- [House Deal](<tephra:tag/House Deal>)\n',
   })
   assert.equal(
     await filesets.unpin({ kind: 'tag', subject: 'House Deal' }, 'sections/pinned.fileset.md' as RelPath),
     true,
   )
+  await flush()
   assert.doesNotMatch((await notebook.read('sections/pinned.fileset.md' as RelPath)) ?? '', /House Deal/)
 })
 
@@ -219,11 +237,12 @@ it('THE GAP: a pin into a notebook that already has a top-level order', async t 
 })
 
 it('and a pin into a section already in the order does not name it twice', async t => {
-  const { notebook, filesets } = await sections(t, {
+  const { notebook, filesets, flush } = await sections(t, {
     '_index.fileset.md': '- [Pinned](tephra:section/pinned)\n',
     'pinned.fileset.md': '- [Kept](tephra:tag/Kept)\n',
   })
   await filesets.pin({ kind: 'tag', subject: 'Another' }, 'Another')
+  await flush()
   const index = (await notebook.read('sections/_index.fileset.md' as RelPath)) ?? ''
   assert.equal((index.match(/tephra:section\/pinned/g) ?? []).length, 1)
 })

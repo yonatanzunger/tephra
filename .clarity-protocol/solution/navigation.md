@@ -223,7 +223,7 @@ interface Index {
 }
 ```
 
-— implemented as `StreamIndex` over an `IndexStore` in `w/`, the same shape as
+— implemented as `CorpusIndex` over an `IndexStore` in `w/`, the same shape as
 `StreamHistory` over `Repository`.
 
 ## And then pinning, which is the same row

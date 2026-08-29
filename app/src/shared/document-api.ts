@@ -66,7 +66,7 @@
 //   │             PRESENTED: marker syntax gone, handles standing in for it    │
 //   │             (D44). Rendering only; nothing here is saved, and it may     │
 //   │             move under the reader as growth brings earlier days in.      │
-//   │   class     `DocumentWindow`, twice again: `StreamWindow` (main) and     │
+//   │   class     `DocumentWindow`, twice again: `LocalWindow` (main) and     │
 //   │             `RemoteWindow` (renderer). Made by `Document.read(span)`.    │
 //   │   text      `ProseText`, the segments' prose joined.                     │
 //   │   address   `WindowPosition`, an offset into that text.                  │

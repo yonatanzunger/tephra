@@ -27,12 +27,12 @@ import { join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { dateKeyAt } from '../shared/dates.ts'
-import { StreamDocument } from './x/stream-document.ts'
-import { StreamIndex } from './x/index.ts'
+import { StreamDocument } from './x/documents/kinds/stream.ts'
+import { CorpusIndex } from './x/documents/corpus-index.ts'
 import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
 import { Filesets } from './x/fileset.ts'
 import { applyEdits } from './x/text-edits.ts'
-import type { StreamWindow } from './x/window.ts'
+import type { LocalWindow } from './x/window.ts'
 
 /** Anything that can carry a pushed message to a renderer. */
 export interface MessageSink {
@@ -125,7 +125,7 @@ export class DocumentService {
    * are borrowed per operation and tracked by nobody, which is MC3 onward.
    */
   readonly #stream: Promise<StreamDocument>
-  readonly #index: StreamIndex
+  readonly #index: CorpusIndex
   readonly #filesets: Filesets
   /**
    * The windows, and what keeps each one's document open.
@@ -135,7 +135,7 @@ export class DocumentService {
    * That is what `watch` is for, and why the release is kept beside the window
    * rather than being derivable: it ends when the window does (D54).
    */
-  readonly #windows = new Map<WindowId, { window: StreamWindow; release: Unsubscribe }>()
+  readonly #windows = new Map<WindowId, { window: LocalWindow; release: Unsubscribe }>()
   #nextId: WindowId = 1
 
   /** The serial queue. Every mutation chains onto it; reads do not need to. */
@@ -194,8 +194,8 @@ export class DocumentService {
     // The index is handed a way to REACH the stream rather than the stream
     // itself: opening is asynchronous in general, and a constructor cannot wait.
     // In MC3 this becomes the Corpus, and the closure goes away.
-    this.#index = new StreamIndex(notebook, () => this.#stream)
-    this.#filesets = new Filesets(notebook)
+    this.#index = new CorpusIndex(notebook, () => this.#stream)
+    this.#filesets = new Filesets(this.#corpus)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
     this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
@@ -231,6 +231,13 @@ export class DocumentService {
     })
 
     this.#corpus.onChanged((_id, change) => {
+      // **Any document changing schedules a write.** The service used to say so
+      // at each of its own mutating methods, which was complete while it was
+      // the only writer — then a pin became a document edit made through
+      // another object, and nothing scheduled anything: the text sat in memory
+      // until the app quit. A change is a change, whoever asked for it (D54).
+      if (change.origin !== 'external') this.#touched()
+
       // An external change must not colour OUR commit message. Measured before
       // this guard existed: a hand-edit set the headline, and the next commit
       // triggered by typing quoted text its author never wrote.
@@ -315,7 +322,7 @@ export class DocumentService {
     const window = (await (await this.#stream).read({
       begin: (await this.#stream).positionAt(request.first, 0),
       end: (await this.#stream).positionAt(request.last, 0),
-    })) as StreamWindow
+    })) as LocalWindow
 
     const id = this.#nextId++
     this.#windows.set(id, { window, release: this.#corpus.watch(STREAM_ID) })
@@ -335,7 +342,7 @@ export class DocumentService {
     return this.#snapshot(id, window)
   }
 
-  #snapshot(id: WindowId, window: StreamWindow): WindowSnapshot {
+  #snapshot(id: WindowId, window: LocalWindow): WindowSnapshot {
     return {
       id,
       text: window.text,
@@ -617,7 +624,7 @@ export class DocumentService {
   }
 
   /** The corpus index (D52) — what the sidebar asks, and what repairs it. */
-  get index(): StreamIndex {
+  get index(): CorpusIndex {
     return this.#index
   }
 

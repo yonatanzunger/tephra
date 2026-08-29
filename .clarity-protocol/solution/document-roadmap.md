@@ -72,7 +72,7 @@ and a directory says so better than a rule does (`architecture.md`, invariant 2)
 
 7. **Windows are what "open" means, so the Corpus must know about them.**
    `watch(id)` returns an unwatch; the service calls it when a window opens and
-   releases it when the window does. `StreamWindow` holds its document directly,
+   releases it when the window does. `LocalWindow` holds its document directly,
    so this is not bookkeeping for its own sake — it is what makes that reference
    safe.
 8. **Event aggregation, which cannot wait for a later phase.** The service
@@ -155,7 +155,7 @@ the INDEX for corpus-wide spans, and a document answers only about itself.**
 `attachIndex` and the `SpanIndex` interface go away, and the two arrows in
 opposite directions become one.
 
-### MC3b — `SegmentedDocument`, and the kind that stands on it
+### MC3b — `SegmentedDocument`, and the kind that stands on it *(done)*
 
 The generic machinery — edits, history, spans, comments, tags, the journal —
 becomes a base class whose only abstract members are *load a segment* and *list
@@ -169,9 +169,35 @@ no whole-body date span (that span is a day's, and `Segment` learns the
 difference). `StreamIndex` and `Filesets` stop taking a `Notebook` and take the
 `Corpus`; the index's sweep borrows `{ mode: 'read', retain: false }`.
 
+**As built, the index went the other way, and that is the better answer.** It
+did not move ONTO the Corpus; it moved INSIDE it, to
+`main/x/documents/corpus-index.ts`. The reason is the one thing the index exists
+for: answering "every subject in twenty years" without opening twenty years of
+documents. It scans bytes and compares `stat` stamps, and routing that through
+open documents would have deleted the feature while satisfying the rule. So the
+rule is stated as what it always meant — **only the floor touches storage** —
+and the index is part of the floor, which is exactly what D52 called it.
+
+`Filesets` did move onto the Corpus, and pinning is a document edit now. That
+found three things at once: a body has no frontmatter in it, so a title is a
+question for the DOCUMENT (`titleOf` / `setTitleOf`, which is not an edit — no
+span, no undo entry, no generation); an empty file is not a disposable day, so
+`disposable` is a fact about days and now says so; and **an open document exists
+whether or not its file does yet**, which is what `Corpus.exists` and
+`Corpus.list` now answer. Without that last one the second pin into a new
+section could not see the first, and the sidebar showed the notebook as it had
+been a second earlier.
+
+Two names came along with it. `StreamWindow` is `LocalWindow`: it was never the
+stream's, and it sits beside the renderer's `RemoteWindow` implementing the same
+`DocumentWindow` from opposite sides of the boundary. `StreamDocument` moved to
+`main/x/documents/kinds/stream.ts`, beside `markdown.ts` — a kind, in with the
+kinds, which is also what let the floor rule pass without an exception for it.
+
 **The invariant gets a test, not a comment.** Nothing outside `x/documents/`
 imports `w/notebook.ts`, asserted over the import graph the way
-`no-electron.test.ts` asserts its own rule. A directory boundary rather than an
+`layering.test.ts` (which is `no-electron.test.ts`, grown into its real subject)
+asserts its own rule. A directory boundary rather than an
 allowlist, so adding a kind cannot require editing the test. Three violations of
 that earlier rule got through comments; this one starts as a test.
 

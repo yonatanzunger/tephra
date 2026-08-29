@@ -50,7 +50,7 @@ import type { CommentId, CommentMessage, CommentThread } from '../../../shared/c
 import type { DayProse } from '../../../shared/ipc.ts'
 import { stripHandles } from '../../../shared/prose.ts'
 import { applyEdits, composeEdits, invertEdits, mapOffset, minimalReplacement, type TextEdit } from '../text-edits.ts'
-import { StreamWindow } from '../window.ts'
+import { LocalWindow } from '../window.ts'
 
 /**
  * When an edit removes the start of a tagged range, the edits that remove its
@@ -120,6 +120,76 @@ export abstract class SegmentedDocument implements StoredDocument {
   abstract keys(): Promise<readonly SegmentKey[]>
 
   /**
+   * One segment's content, as the file holds it.
+   *
+   * **The way anything outside reads a document's text.** X used to read files
+   * for this — the fileset parser did, and would have shown what was saved
+   * while a window showed what was typed. Asking the document costs the same
+   * and cannot be stale (D54).
+   */
+  async bodyOf(key: SegmentKey): Promise<DocumentText> {
+    return (await this.segment(key)).body
+  }
+
+  /**
+   * Name this document, in the only place a name can live: its frontmatter.
+   *
+   * Not an edit — it changes nothing in the text, so it takes no span, makes no
+   * undo entry and moves no position. It does make the document dirty, which is
+   * what carries it to disk on the next write.
+   */
+  async setTitleOf(key: SegmentKey, title: string): Promise<void> {
+    ;(await this.segment(key)).setExtra('title', title)
+    this.touch('operation')
+  }
+
+  /**
+   * Say that something about this document changed which is not its text.
+   *
+   * The generation does NOT advance: a generation counts edits, and a renderer
+   * holding the old number is not stale, because nothing it holds has moved.
+   * What this is for is the write — whoever schedules one is listening for
+   * changes, and a rename that nobody announced would sit in memory until the
+   * next edit happened to carry it out.
+   */
+  protected touch(origin: EditOrigin): void {
+    const change: DocumentChange = { from: this.gen, to: this.gen, edits: [], origin, at: Date.now() }
+    for (const handler of this.changeHandlers) handler(change)
+  }
+
+  /**
+   * What this document calls itself, if anything.
+   *
+   * From the frontmatter, which is storage — so asking the document is the way
+   * to get it without a second parse of a file that has already been read once.
+   * Null when nobody named it, and the caller decides what to fall back to.
+   */
+  async titleOf(key: SegmentKey): Promise<string | null> {
+    const found = (await this.segment(key)).extra.find(([k]) => k.toLowerCase() === 'title')?.[1]
+    return found !== undefined && found.trim() !== '' ? found.trim() : null
+  }
+
+  /**
+   * Replace one segment's content wholesale, as an ordinary edit.
+   *
+   * A minimal replacement rather than a reset, so the change is one undo step,
+   * carries through the journal, and leaves a cursor elsewhere in the document
+   * where it was. Whoever rewrites a file — the fileset writer, an importer —
+   * goes through here rather than through the notebook, and gets undo and
+   * durability for having done so.
+   */
+  async setBodyOf(key: SegmentKey, body: DocumentText, origin: EditOrigin = 'operation'): Promise<void> {
+    const segment = await this.segment(key)
+    const change = minimalReplacement(segment.body, body)
+    if (change === null) return
+    const at = (offset: number): DocumentPosition => this.at(key, offset)
+    await this.replace(
+      [{ span: { begin: at(change.from), end: at(change.to) }, payload: change.insert }],
+      origin,
+    )
+  }
+
+  /**
    * The two operations that make a NEW document, which only a kind can answer.
    *
    * Branching writes a note beside the corpus and leaves a link; importing puts
@@ -154,7 +224,7 @@ export abstract class SegmentedDocument implements StoredDocument {
   protected readonly divergeHandlers = new Set<(d: Divergence) => void>()
 
   /** Windows that need telling when something else changes the text. */
-  protected readonly windows = new Set<StreamWindow>()
+  protected readonly windows = new Set<LocalWindow>()
 
   constructor(notebook: Notebook) {
     this.notebook = notebook
@@ -261,7 +331,7 @@ export abstract class SegmentedDocument implements StoredDocument {
     const segments: Segment[] = []
     for (const date of dates) segments.push(await this.segment(date))
 
-    const window = new StreamWindow(this, segments)
+    const window = new LocalWindow(this, segments)
     await window.refreshBoundaries()
     this.windows.add(window)
     return window
@@ -924,7 +994,7 @@ export abstract class SegmentedDocument implements StoredDocument {
     return () => this.divergeHandlers.delete(handler)
   }
 
-  releaseWindow(window: StreamWindow): void {
+  releaseWindow(window: LocalWindow): void {
     this.windows.delete(window)
   }
 
@@ -1044,7 +1114,7 @@ export abstract class SegmentedDocument implements StoredDocument {
   /**
    * A scanned span becomes a typed one.
    *
-   * **The only implementation, and it has to stay that way.** `StreamWindow`
+   * **The only implementation, and it has to stay that way.** `LocalWindow`
    * had a second copy whose last branch was `{ kind: 'tag' }`, so the moment a
    * new kind arrived — comments — every one of them reached the renderer
    * labelled a tag: `spans('comment')` was empty, the margin drew nothing, and

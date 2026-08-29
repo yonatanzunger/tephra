@@ -1,5 +1,10 @@
 // The corpus index: what is written down, and where (D52).
 //
+// **Inside the floor, because it reads files.** It is a cache OF the corpus and
+// not a reader of it: answering "every subject in twenty years" by opening
+// twenty years of documents is the one thing it exists to avoid, so it scans
+// bytes and stamps directly — which it may do here and could not do above (D54).
+//
 // **A cache of the scan, and never a source of truth.** The files are
 // authoritative; this holds what a scan of them found, keyed by file and stamped
 // with size and mtime, so verifying it is one `stat` per file and no reads.
@@ -11,16 +16,16 @@
 // segment is a gigabyte through memory at twenty years (D8's measured scale).
 // D7 put an index in v3; the sidebar is the feature that could not wait.
 
-import type { Notebook } from '../w/notebook.ts'
-import { IndexStore, type Entries, type Cached } from '../w/index-store.ts'
-import { dayFile, parseDayFile, type RelPath } from '../w/layout.ts'
-import { scanMarkers, scanSpans, type ScannedSpan } from './markers.ts'
-import { parseFile } from './frontmatter.ts'
-import type { StreamDocument } from './stream-document.ts'
-import type { DateKey } from '../../shared/document-api.ts'
+import type { Notebook } from '../../w/notebook.ts'
+import { IndexStore, type Entries, type Cached } from '../../w/index-store.ts'
+import { dayFile, parseDayFile, type RelPath } from '../../w/layout.ts'
+import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
+import { parseFile } from '../frontmatter.ts'
+import type { StreamDocument } from './kinds/stream.ts'
+import type { DateKey } from '../../../shared/document-api.ts'
 import type {
   IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
-} from '../../shared/nav-api.ts'
+} from '../../../shared/nav-api.ts'
 
 export type { IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow }
 
@@ -45,7 +50,7 @@ const isPayload = (value: unknown): value is Payload =>
   typeof value === 'object' && value !== null &&
   Array.isArray((value as Payload).spans) && typeof (value as Payload).blank === 'boolean'
 
-export class StreamIndex {
+export class CorpusIndex {
   readonly #notebook: Notebook
   readonly #stream: () => Promise<StreamDocument>
   readonly #store: IndexStore<Payload>

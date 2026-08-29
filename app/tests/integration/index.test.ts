@@ -11,8 +11,8 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { StreamDocument } from '../../src/main/x/stream-document.ts'
-import { StreamIndex } from '../../src/main/x/index.ts'
+import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
+import { CorpusIndex } from '../../src/main/x/documents/corpus-index.ts'
 import { dayFile, indexFile, type RelPath } from '../../src/main/w/layout.ts'
 import type { DateKey } from '../../src/shared/document-api.ts'
 import { rt } from '../support/text.ts'
@@ -34,7 +34,7 @@ async function corpus(t: TestContext, days: readonly [string, string][], notes: 
   const notebook = await Notebook.open({ root, lock: false, watch: false })
   t.after(() => notebook.close())
   const doc = new StreamDocument(notebook)
-  return { root, notebook, doc, index: new StreamIndex(notebook, async () => doc) }
+  return { root, notebook, doc, index: new CorpusIndex(notebook, async () => doc) }
 }
 
 test('subjects come back with their counts and where they first appear', async t => {

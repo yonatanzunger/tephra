@@ -10,34 +10,72 @@
 // renderer will meet one in the editor. What is here is everything that needs a
 // Notebook: reading, walking the tree, and writing an entry into it.
 
-import type { Notebook } from '../w/notebook.ts'
+import type { Corpus } from './documents/corpus.ts'
 import { SECTIONS_DIR, sectionFile, type RelPath } from '../w/layout.ts'
 import { parseFile, type Frontmatter } from './frontmatter.ts'
 import {
   INDEX_SECTION, MAX_DEPTH, PINNED_SECTION, entryLine, parseEntries, targetOf,
 } from '../../shared/fileset.ts'
 import type { Reference, SectionRow, SectionTree } from '../../shared/nav-api.ts'
+import { ONLY_SEGMENT, type DocumentId, type DocumentText } from '../../shared/document-api.ts'
 
 export { referenceOf } from '../../shared/fileset.ts'
 
 
 
 
-/** One section file: its title from the frontmatter, its entries from the body. */
-export function parseSection(text: string, path: RelPath): SectionTree {
-  const parsed = parseFile(text)
-  return {
-    title: titleOf(parsed.frontmatter) ?? nameOf(path),
-    path,
-    entries: parseEntries(parsed.body),
-  }
+/**
+ * One section file: its entries from the body, its title from the document.
+ *
+ * Takes the title rather than digging it out, because the frontmatter is
+ * storage and the document has already read it — see `titleOf` on the document
+ * (D54). Falls back to the filename, which is the only other name it has.
+ */
+export function parseSection(body: string, path: RelPath, title: string | null): SectionTree {
+  return { title: title ?? nameOf(path), path, entries: parseEntries(body) }
 }
 
 export class Filesets {
-  readonly #notebook: Notebook
+  readonly #corpus: Corpus
 
-  constructor(notebook: Notebook) {
-    this.#notebook = notebook
+  constructor(corpus: Corpus) {
+    this.#corpus = corpus
+  }
+
+  /**
+   * One section file's text, or null if there is no such section.
+   *
+   * **Through the document, never off the disk** (D54). A fileset is a document
+   * — it can be open in a window with edits nobody has written yet — so reading
+   * the file would show what was saved while the editor showed what was typed.
+   */
+  async #read_(path: RelPath): Promise<{ body: string; title: string | null } | null> {
+    if (!(await this.#corpus.exists(path as string as DocumentId))) return null
+    return this.#corpus.use(
+      path as string as DocumentId,
+      async doc => ({
+        body: (await doc.bodyOf(ONLY_SEGMENT)) as string,
+        title: await doc.titleOf(ONLY_SEGMENT),
+      }),
+      { mode: 'read' },
+    )
+  }
+
+  /** Just the text, for the paths that rewrite it. */
+  async #text(path: RelPath): Promise<string | null> {
+    return (await this.#read_(path))?.body ?? null
+  }
+
+  /**
+   * Rewrite a section, as an ordinary edit.
+   *
+   * Which makes a pin undoable, versioned and journalled for free — D53 claimed
+   * all three and none were true while this wrote files behind the document
+   * layer's back (D54).
+   */
+  async #write(path: RelPath, text: string): Promise<void> {
+    const id = path as string as DocumentId
+    await this.#corpus.use(id, async doc => doc.setBodyOf(ONLY_SEGMENT, text as DocumentText))
   }
 
   /**
@@ -49,7 +87,7 @@ export class Filesets {
    */
   async tree(): Promise<SectionTree> {
     const ordered =
-      (await this.#notebook.has(INDEX_SECTION as RelPath))
+      (await this.#corpus.exists(INDEX_SECTION as unknown as DocumentId))
         ? await this.#read(INDEX_SECTION as RelPath, new Set(), 0)
         : { title: 'Sections', path: null, entries: [] as readonly SectionRow[] }
 
@@ -91,11 +129,12 @@ export class Filesets {
   /** Every section file, for a "pin to…" list. */
   async all(): Promise<readonly { name: string; title: string; path: RelPath }[]> {
     const out: { name: string; title: string; path: RelPath }[] = []
-    for (const rel of await this.#notebook.list(SECTIONS_DIR as RelPath)) {
-      if (!rel.endsWith('.fileset.md') || rel === (INDEX_SECTION as RelPath)) continue
-      const text = await this.#notebook.read(rel)
-      if (text === null) continue
-      out.push({ name: nameOf(rel), title: parseSection(text, rel).title, path: rel })
+    for (const id of await this.#corpus.list('fileset')) {
+      const rel = id as string as RelPath
+      if (rel === (INDEX_SECTION as RelPath)) continue
+      const found = await this.#read_(rel)
+      if (found === null) continue
+      out.push({ name: nameOf(rel), title: found.title ?? nameOf(rel), path: rel })
     }
     return out
   }
@@ -126,21 +165,41 @@ export class Filesets {
     into: string = sectionFile(PINNED_SECTION),
   ): Promise<'pinned' | 'already'> {
     const path = into as RelPath
-    const existing = await this.#notebook.read(path)
-    const body = existing ?? blankSection(path)
+    const body = (await this.#text(path)) ?? ''
 
     // Compared as REFERENCES rather than as text: `tephra:tag/House%20Deal` and
     // `tephra:tag/House Deal` are the same pin written two ways, and a person
     // hand-editing the file will write the readable one.
-    const already = parseEntries(parseFile(body).body).some(
+    const already = parseEntries(body).some(
       entry => targetOf(entry.target) === targetOf(reference),
     )
     if (already) return 'already'
 
     const line = entryLine(label, reference)
-    await this.#notebook.write(path, `${body.replace(/\n*$/, '')}\n${line}\n`)
+    const text = body.trim() === '' ? `${line}\n` : `${body.replace(/\n*$/, '')}\n${line}\n`
+    await this.#write(path, text)
+    await this.#name(path)
     await this.#ensureOrdered(path)
     return 'pinned'
+  }
+
+  /**
+   * Give a section a name if it has none.
+   *
+   * A title is the document's, not the file's (D54) — so this asks the document
+   * rather than composing frontmatter, which is how a fileset written by hand
+   * keeps the title its author chose. Only ever fills a blank.
+   */
+  async #name(path: RelPath): Promise<void> {
+    await this.#corpus.use(
+      path as string as DocumentId,
+      async doc => {
+        if ((await doc.titleOf(ONLY_SEGMENT)) === null) {
+          await doc.setTitleOf(ONLY_SEGMENT, defaultTitle(path))
+        }
+      },
+      { mode: 'write' },
+    )
   }
 
   /**
@@ -158,18 +217,18 @@ export class Filesets {
    */
   async #ensureOrdered(section: RelPath): Promise<void> {
     const index = INDEX_SECTION as RelPath
-    const text = await this.#notebook.read(index)
+    const text = await this.#text(index)
     if (text === null) return
 
     const name = nameOf(section)
     const target: Reference = { kind: 'section', name }
-    const listed = parseEntries(parseFile(text).body).some(
+    const listed = parseEntries(text).some(
       entry => targetOf(entry.target) === targetOf(target),
     )
     if (listed) return
 
-    const title = titleOf(parseFile((await this.#notebook.read(section)) ?? '').frontmatter) ?? humanise(name)
-    await this.#notebook.write(index, `${text.replace(/\n*$/, '')}\n${entryLine(title, target)}\n`)
+    const title = (await this.#read_(section))?.title ?? humanise(name)
+    await this.#write(index, `${text.replace(/\n*$/, '')}\n${entryLine(title, target)}\n`)
   }
 
   /**
@@ -182,7 +241,7 @@ export class Filesets {
    */
   async unpin(reference: Reference, from: string = sectionFile(PINNED_SECTION)): Promise<boolean> {
     const path = from as RelPath
-    const text = await this.#notebook.read(path)
+    const text = await this.#text(path)
     if (text === null) return false
 
     const wanted = targetOf(reference)
@@ -192,15 +251,15 @@ export class Filesets {
       return entry === undefined || targetOf(entry.target) !== wanted
     })
     if (kept.length === lines.length) return false
-    await this.#notebook.write(path, kept.join('\n'))
+    await this.#write(path, kept.join('\n'))
     return true
   }
 
   async #read(path: RelPath, seen: ReadonlySet<string>, depth: number): Promise<SectionTree> {
-    const text = await this.#notebook.read(path)
-    if (text === null) return { title: nameOf(path), path: null, entries: [] }
+    const found = await this.#read_(path)
+    if (found === null) return { title: nameOf(path), path: null, entries: [] }
 
-    const section = parseSection(text, path)
+    const section = parseSection(found.body, path, found.title)
     const within = new Set([...seen, path])
     const entries: SectionRow[] = []
 
@@ -216,7 +275,7 @@ export class Filesets {
       entries.push({
         ...entry,
         children: expandable ? await this.#read(child, within, depth + 1) : null,
-        missing: !(await this.#notebook.has(child)),
+        missing: !(await this.#corpus.exists(child as string as DocumentId)),
       })
     }
     return { ...section, entries }
@@ -224,16 +283,15 @@ export class Filesets {
 
   /** Only the targets this layer can check. Names resolve through the index. */
   async #absent(target: Reference): Promise<boolean> {
-    if (target.kind === 'file') return !(await this.#notebook.has(target.path as RelPath))
+    if (target.kind === 'file') return !(await this.#corpus.exists(target.path as unknown as DocumentId))
     return false
   }
 }
 
-/** A new section file, with the frontmatter every document here carries. */
-function blankSection(path: RelPath): string {
+/** What a section is called before anyone has renamed it. */
+function defaultTitle(path: RelPath): string {
   const name = nameOf(path)
-  const title = name === '_index' ? 'Sections' : humanise(name)
-  return `---\ntephra: 1\nkind: fileset\ntitle: ${title}\n---\n`
+  return name === '_index' ? 'Sections' : humanise(name)
 }
 
 const humanise = (name: string): string =>
@@ -242,15 +300,3 @@ const humanise = (name: string): string =>
 const nameOf = (path: string): string =>
   (path.split('/').pop() ?? path).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')
 
-/**
- * The section's own name for itself.
- *
- * `title` is not one of the frontmatter's known keys, so it arrives in `extra`
- * — which is exactly where unknown keys are meant to live, preserved verbatim
- * and in order (format-spec). Reading it from there rather than teaching the
- * parser a new key keeps the frontmatter contract as small as it is.
- */
-const titleOf = (frontmatter: Frontmatter | null): string | null => {
-  const found = frontmatter?.extra.find(([key]) => key.toLowerCase() === 'title')?.[1]
-  return found !== undefined && found.trim() !== '' ? found.trim() : null
-}
