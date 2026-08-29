@@ -78,6 +78,11 @@ import { join } from 'node:path'
 import { Notebook } from '../../../../src/main/w/notebook.ts'
 import { Filesets } from '../../../../src/main/x/fileset.ts'
 import { Corpus } from '../../../../src/main/x/documents/corpus.ts'
+import { asFileset, type FilesetDocument } from '../../../../src/main/x/documents/kinds/fileset.ts'
+import {
+  ONLY_SEGMENT, type DocumentId, type DocumentOffset, type DocumentPosition,
+  type SegmentKey, type SessionGeneration,
+} from '../../../../src/shared/document-api.ts'
 import type { TestContext } from 'node:test'
 
 async function sections(t: TestContext, files: Record<string, string>) {
@@ -282,4 +287,106 @@ it('a section made by hand appears without anyone editing the order', async t =>
     'by-hand.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: Made by hand\n---\n- [z](../c.md)\n',
   })
   assert.deepEqual((await filesets.tree()).entries.map(e => e.label), ['Pinned', 'Made by hand'])
+})
+
+// ── the fileset as a document, whose verbs are edits (MC4) ────────────────
+
+/** The document itself, borrowed the way anything else borrows one. */
+/** A position at the start of the one segment, which is all this window needs. */
+const whereIs = (segment: SegmentKey): DocumentPosition =>
+  ({ segment, offset: 0 as DocumentOffset, generation: 1 as SessionGeneration })
+
+const fileset = <T,>(corpus: Corpus, path: string, work: (doc: FilesetDocument) => Promise<T>): Promise<T> =>
+  corpus.use(path as DocumentId, doc => work(asFileset(doc)))
+
+it('THE POINT OF MC4: a pin is undone by the ordinary undo', async t => {
+  // D53 said this from the start, and it was not true while pinning wrote the
+  // file behind the document's back: there was nothing on any undo stack.
+  const { corpus, filesets, notebook, flush } = await sections(t, {
+    'pinned.fileset.md': '- [Kept](tephra:tag/Kept)\n',
+  })
+  await filesets.pin({ kind: 'tag', subject: 'House Deal' }, 'House Deal')
+
+  const undone = await fileset(corpus, 'sections/pinned.fileset.md', doc => doc.undo())
+  assert.notEqual(undone, null, 'the pin was on the undo stack')
+  await flush()
+
+  const written = (await notebook.read('sections/pinned.fileset.md' as RelPath)) ?? ''
+  assert.match(written, /Kept/, 'and undoing it took back only the pin')
+  assert.doesNotMatch(written, /House Deal/)
+})
+
+it('a pin reaches a window that has the same fileset open', async t => {
+  // The second half of the same claim: two views of one document, so the panel
+  // and the editor cannot disagree about what is pinned.
+  const { corpus, filesets } = await sections(t, { 'pinned.fileset.md': '- [Kept](tephra:tag/Kept)\n' })
+  const whole = { begin: whereIs(ONLY_SEGMENT), end: whereIs(ONLY_SEGMENT) }
+  const window = await fileset(corpus, 'sections/pinned.fileset.md', doc => doc.read(whole))
+
+  await filesets.pin({ kind: 'anchor', name: 'the spot' }, 'The spot')
+  assert.match(window.text, /The spot/, 'the open window saw the pin without being told')
+})
+
+it('an entry is removed by position, and the line goes with its newline', async t => {
+  const { corpus, notebook, flush } = await sections(t, {
+    'pinned.fileset.md': '- [One](../a.md)\n- [Two](../b.md)\n- [Three](../c.md)\n',
+  })
+  assert.equal(await fileset(corpus, 'sections/pinned.fileset.md', doc => doc.remove(1)), true)
+  await flush()
+  assert.match(
+    (await notebook.read('sections/pinned.fileset.md' as RelPath)) ?? '',
+    /- \[One\]\(\.\.\/a\.md\)\n- \[Three\]\(\.\.\/c\.md\)\n$/,
+    'no blank line left where the entry was',
+  )
+})
+
+it('reordering is one edit, so one undo puts it back', async t => {
+  const { corpus } = await sections(t, {
+    'pinned.fileset.md': '- [One](../a.md)\n- [Two](../b.md)\n- [Three](../c.md)\n',
+  })
+  const labels = async (doc: FilesetDocument): Promise<string[]> =>
+    (await doc.entries()).map(e => e.label)
+
+  await fileset(corpus, 'sections/pinned.fileset.md', async doc => {
+    assert.equal(await doc.reorder(2, 0), true, 'the third goes to the front')
+    assert.deepEqual(await labels(doc), ['Three', 'One', 'Two'])
+
+    // A move that came back as two edits would let an undo leave the entry
+    // deleted and never reinserted — a pin lost to a gesture meant to be free.
+    await doc.undo()
+    assert.deepEqual(await labels(doc), ['One', 'Two', 'Three'])
+  })
+})
+
+it('reorder says no rather than pretending, when there is nothing to do', async t => {
+  const { corpus } = await sections(t, { 'pinned.fileset.md': '- [One](../a.md)\n- [Two](../b.md)\n' })
+  await fileset(corpus, 'sections/pinned.fileset.md', async doc => {
+    assert.equal(await doc.reorder(0, 0), false, 'to where it already is')
+    assert.equal(await doc.reorder(0, 1), false, 'and to just before the next one, which is the same place')
+    assert.equal(await doc.reorder(5, 0), false, 'and there is no fifth entry')
+  })
+})
+
+it('a fileset borrowed for reading refuses to be pinned into', async t => {
+  // The read borrow is what makes a sweep safe (D54). A verb that edits has to
+  // be on the wrong side of it, or "read" means nothing.
+  const { corpus } = await sections(t, { 'pinned.fileset.md': '- [Kept](tephra:tag/Kept)\n' })
+  await assert.rejects(
+    () =>
+      corpus.use(
+        'sections/pinned.fileset.md' as DocumentId,
+        doc => asFileset(doc).pin({ kind: 'tag', subject: 'No' }, 'No'),
+        { mode: 'read' },
+      ),
+    /borrowed for reading/,
+  )
+})
+
+it('a note is not a fileset, and says so instead of being coerced', async t => {
+  const { corpus, root } = await sections(t, {})
+  await writeFile(join(root, 'a-note.md'), '---\ntephra: 1\nkind: markdown\n---\nJust a note.\n')
+  await assert.rejects(
+    () => corpus.use('a-note.md' as DocumentId, async doc => asFileset(doc).entries()),
+    /is not a fileset/,
+  )
 })

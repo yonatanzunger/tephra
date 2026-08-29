@@ -235,7 +235,7 @@ mechanism replaced.
 
 ---
 
-## MC4 — The fileset kind, and pinning that can be undone
+## MC4 — The fileset kind, and pinning that can be undone *(done)*
 
 **What changes.** `main/x/documents/kinds/fileset.ts` gains `entries`, `pin`, `unpin`,
 `reorder`, `remove` — all as `replace` calls on the document. The service's
@@ -248,6 +248,29 @@ becomes true here.
 the file; pin while the fileset is open in a window, and the window sees it.
 
 **Risk:** low, on top of MC2 and MC3.
+
+**As built.** `FilesetDocument` has `entries`, `pin`, `unpin`, `remove` and
+`reorder`, each one a `replace` on a span of the body; `Filesets` keeps only
+what is about no single section — walking the tree, resolving the entries, and
+the order-does-not-gate rule. For the spans to exist the parser had to say WHERE
+each entry is, so `shared/fileset.ts` gained `scanEntries` (offsets) with
+`parseEntries` built on it: one parse, both uses.
+
+`reorder` is one batch on purpose. Two edits would let an undo land between them
+and leave the entry deleted and never reinserted — a pin lost to a gesture meant
+to be free.
+
+Opening a window on a fileset found a day-shaped assumption in the base class:
+`read()` walked from the first key to the last by ADDING DAYS, which is right
+for a stream and nonsense for a note whose one key is not a date. It asks
+`segmentsAcross` now, which asks the kind.
+
+**What is proved, and what is not yet.** The unit suite proves the document
+claim: pin, undo, and only the pin comes back off; pin while a window is open on
+the same fileset, and the window has it without being told. The GESTURE is not
+reachable from the UI yet — ⌘Z goes to the focused document, and the only
+focusable one is the stream. That waits on MC5 and MC6, and m3 says nothing
+about it until then rather than claiming it early.
 
 ---
 

@@ -7,17 +7,20 @@
 // corpus: one file to read, with the order written in it.
 //
 // The PARSE is in `shared/fileset.ts`, because a fileset is a document and the
-// renderer will meet one in the editor. What is here is everything that needs a
-// Notebook: reading, walking the tree, and writing an entry into it.
+// renderer will meet one in the editor. The VERBS are in the fileset kind
+// (`x/documents/kinds/fileset.ts`), because a change to a fileset is an edit to
+// a document. What is left here is the part that is about no single section:
+// walking the tree, resolving what the entries point at, and deciding what the
+// panel sees when the order and the directory disagree.
 
 import type { Corpus } from './documents/corpus.ts'
+import { asFileset, type FilesetDocument } from './documents/kinds/fileset.ts'
 import { SECTIONS_DIR, sectionFile, type RelPath } from '../w/layout.ts'
-import { parseFile, type Frontmatter } from './frontmatter.ts'
 import {
-  INDEX_SECTION, MAX_DEPTH, PINNED_SECTION, entryLine, parseEntries, targetOf,
+  INDEX_SECTION, MAX_DEPTH, PINNED_SECTION, parseEntries, sameTarget,
 } from '../../shared/fileset.ts'
 import type { Reference, SectionRow, SectionTree } from '../../shared/nav-api.ts'
-import { ONLY_SEGMENT, type DocumentId, type DocumentText } from '../../shared/document-api.ts'
+import { ONLY_SEGMENT, type DocumentId } from '../../shared/document-api.ts'
 
 export { referenceOf } from '../../shared/fileset.ts'
 
@@ -43,39 +46,29 @@ export class Filesets {
   }
 
   /**
-   * One section file's text, or null if there is no such section.
+   * Borrow one section, as the fileset it is.
    *
-   * **Through the document, never off the disk** (D54). A fileset is a document
-   * — it can be open in a window with edits nobody has written yet — so reading
-   * the file would show what was saved while the editor showed what was typed.
+   * **Through the document, never off the disk** (D54). A fileset can be open
+   * in a window with edits nobody has written yet, so reading the file would
+   * show what was saved while the editor showed what was typed — and writing it
+   * would throw the second away.
    */
-  async #read_(path: RelPath): Promise<{ body: string; title: string | null } | null> {
+  async #use<T>(path: RelPath, work: (doc: FilesetDocument) => Promise<T>): Promise<T> {
+    return this.#corpus.use(path as string as DocumentId, doc => work(asFileset(doc)))
+  }
+
+  /** The same, for a section that may not be there. Null means there is none. */
+  async #peek<T>(path: RelPath, work: (doc: FilesetDocument) => Promise<T>): Promise<T | null> {
     if (!(await this.#corpus.exists(path as string as DocumentId))) return null
-    return this.#corpus.use(
-      path as string as DocumentId,
-      async doc => ({
-        body: (await doc.bodyOf(ONLY_SEGMENT)) as string,
-        title: await doc.titleOf(ONLY_SEGMENT),
-      }),
-      { mode: 'read' },
-    )
+    return this.#corpus.use(path as string as DocumentId, doc => work(asFileset(doc)), { mode: 'read' })
   }
 
-  /** Just the text, for the paths that rewrite it. */
-  async #text(path: RelPath): Promise<string | null> {
-    return (await this.#read_(path))?.body ?? null
-  }
-
-  /**
-   * Rewrite a section, as an ordinary edit.
-   *
-   * Which makes a pin undoable, versioned and journalled for free — D53 claimed
-   * all three and none were true while this wrote files behind the document
-   * layer's back (D54).
-   */
-  async #write(path: RelPath, text: string): Promise<void> {
-    const id = path as string as DocumentId
-    await this.#corpus.use(id, async doc => doc.setBodyOf(ONLY_SEGMENT, text as DocumentText))
+  /** What one section holds and what it is called — the pair every walk needs. */
+  async #contents(path: RelPath): Promise<{ title: string | null; entries: readonly SectionRow[] } | null> {
+    return this.#peek(path, async doc => ({
+      title: await doc.titleOf(ONLY_SEGMENT),
+      entries: await doc.entries(),
+    }))
   }
 
   /**
@@ -132,9 +125,8 @@ export class Filesets {
     for (const id of await this.#corpus.list('fileset')) {
       const rel = id as string as RelPath
       if (rel === (INDEX_SECTION as RelPath)) continue
-      const found = await this.#read_(rel)
-      if (found === null) continue
-      out.push({ name: nameOf(rel), title: found.title ?? nameOf(rel), path: rel })
+      const title = await this.#peek(rel, doc => doc.titleOf(ONLY_SEGMENT))
+      out.push({ name: nameOf(rel), title: title ?? nameOf(rel), path: rel })
     }
     return out
   }
@@ -165,22 +157,12 @@ export class Filesets {
     into: string = sectionFile(PINNED_SECTION),
   ): Promise<'pinned' | 'already'> {
     const path = into as RelPath
-    const body = (await this.#text(path)) ?? ''
+    const outcome = await this.#use(path, doc => doc.pin(reference, label))
+    if (outcome === 'already') return outcome
 
-    // Compared as REFERENCES rather than as text: `tephra:tag/House%20Deal` and
-    // `tephra:tag/House Deal` are the same pin written two ways, and a person
-    // hand-editing the file will write the readable one.
-    const already = parseEntries(body).some(
-      entry => targetOf(entry.target) === targetOf(reference),
-    )
-    if (already) return 'already'
-
-    const line = entryLine(label, reference)
-    const text = body.trim() === '' ? `${line}\n` : `${body.replace(/\n*$/, '')}\n${line}\n`
-    await this.#write(path, text)
     await this.#name(path)
     await this.#ensureOrdered(path)
-    return 'pinned'
+    return outcome
   }
 
   /**
@@ -191,15 +173,11 @@ export class Filesets {
    * keeps the title its author chose. Only ever fills a blank.
    */
   async #name(path: RelPath): Promise<void> {
-    await this.#corpus.use(
-      path as string as DocumentId,
-      async doc => {
-        if ((await doc.titleOf(ONLY_SEGMENT)) === null) {
-          await doc.setTitleOf(ONLY_SEGMENT, defaultTitle(path))
-        }
-      },
-      { mode: 'write' },
-    )
+    await this.#use(path, async doc => {
+      if ((await doc.titleOf(ONLY_SEGMENT)) === null) {
+        await doc.setTitleOf(ONLY_SEGMENT, defaultTitle(path))
+      }
+    })
   }
 
   /**
@@ -217,18 +195,15 @@ export class Filesets {
    */
   async #ensureOrdered(section: RelPath): Promise<void> {
     const index = INDEX_SECTION as RelPath
-    const text = await this.#text(index)
-    if (text === null) return
+    const listed = await this.#peek(index, doc => doc.entries())
+    if (listed === null) return // no order yet, and inventing one freezes an arrangement nobody chose
 
     const name = nameOf(section)
     const target: Reference = { kind: 'section', name }
-    const listed = parseEntries(text).some(
-      entry => targetOf(entry.target) === targetOf(target),
-    )
-    if (listed) return
+    if (listed.some(entry => sameTarget(entry.target, target))) return
 
-    const title = (await this.#read_(section))?.title ?? humanise(name)
-    await this.#write(index, `${text.replace(/\n*$/, '')}\n${entryLine(title, target)}\n`)
+    const title = (await this.#peek(section, doc => doc.titleOf(ONLY_SEGMENT))) ?? humanise(name)
+    await this.#use(index, doc => doc.pin(target, title))
   }
 
   /**
@@ -241,25 +216,15 @@ export class Filesets {
    */
   async unpin(reference: Reference, from: string = sectionFile(PINNED_SECTION)): Promise<boolean> {
     const path = from as RelPath
-    const text = await this.#text(path)
-    if (text === null) return false
-
-    const wanted = targetOf(reference)
-    const lines = text.split('\n')
-    const kept = lines.filter(line => {
-      const [entry] = parseEntries(line)
-      return entry === undefined || targetOf(entry.target) !== wanted
-    })
-    if (kept.length === lines.length) return false
-    await this.#write(path, kept.join('\n'))
-    return true
+    if (!(await this.#corpus.exists(path as string as DocumentId))) return false
+    return this.#use(path, doc => doc.unpin(reference))
   }
 
   async #read(path: RelPath, seen: ReadonlySet<string>, depth: number): Promise<SectionTree> {
-    const found = await this.#read_(path)
+    const found = await this.#contents(path)
     if (found === null) return { title: nameOf(path), path: null, entries: [] }
 
-    const section = parseSection(found.body, path, found.title)
+    const section: SectionTree = { title: found.title ?? nameOf(path), path, entries: found.entries }
     const within = new Set([...seen, path])
     const entries: SectionRow[] = []
 

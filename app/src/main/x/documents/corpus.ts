@@ -24,6 +24,7 @@ import type { Notebook } from '../../w/notebook.ts'
 import { kindOf, type RelPath } from '../../w/layout.ts'
 import { StreamDocument } from './kinds/stream.ts'
 import { MarkdownDocument } from './kinds/markdown.ts'
+import { FilesetDocument } from './kinds/fileset.ts'
 import type {
   Divergence, DocumentChange, DocumentId, DocumentKind, SegmentKey, Unsubscribe,
 } from '../../../shared/document-api.ts'
@@ -54,6 +55,7 @@ const CACHE = 32
 /** What a read-only borrow refuses. Everything that can change a document. */
 const MUTATORS = new Set([
   'replace', 'undo', 'redo', 'writeDirty', 'flush', 'reload', 'branch', 'importText',
+  'setBodyOf', 'setTitleOf', 'pin', 'unpin', 'reorder', 'remove',
   'tag', 'untag', 'renameTag', 'setAnchor', 'removeAnchor', 'restoreTo',
   'startComment', 'reply', 'editComment', 'resolveComment', 'react', 'assign', 'removeComment',
 ])
@@ -253,7 +255,9 @@ export class Corpus {
     const doc: StoredDocument =
       kind === 'stream'
         ? new StreamDocument(this.#notebook)
-        : new MarkdownDocument(this.#notebook, id, kind)
+        : kind === 'fileset'
+          ? new FilesetDocument(this.#notebook, id)
+          : new MarkdownDocument(this.#notebook, id, kind)
     this.#unsubscribe.set(id, [
       doc.onChanged(change => {
         for (const handler of this.#changed) handler(id, change)

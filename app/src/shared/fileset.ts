@@ -46,23 +46,52 @@ export const MAX_DEPTH = 3
  */
 const ITEM = /^\s*[-*]\s+\[([^\]]*)\]\(\s*(?:<([^>]*)>|([^)\s]+))\s*\)\s*(?:[—–-]\s+(.*))?$/
 
-/** The entries of one section file, given its body and a title from elsewhere. */
-export function parseEntries(body: string): readonly SectionRow[] {
-  const entries: SectionRow[] = []
+/**
+ * One entry, and the line it is written on.
+ *
+ * The offsets are what makes a fileset EDITABLE rather than rewritable: pinning
+ * and unpinning are a replacement of one line's span, so they are ordinary
+ * document edits — undoable, journalled, and visible to a window that has the
+ * same file open (D53, D54). `to` excludes the newline; `end` includes it,
+ * because removing a line means removing the line break with it.
+ */
+export interface ScannedEntry {
+  readonly row: SectionRow
+  readonly from: number
+  readonly to: number
+  readonly end: number
+}
+
+/** The entries of one section file, with where each one sits in the body. */
+export function scanEntries(body: string): readonly ScannedEntry[] {
+  const entries: ScannedEntry[] = []
+  let at = 0
   for (const line of body.split('\n')) {
+    const from = at
+    at += line.length + 1 // the split ate the newline; the next line starts past it
     const item = ITEM.exec(line)
     if (item === null) continue
     const target = referenceOf((item[2] ?? item[3] ?? '') as string)
     if (target === null) continue
     entries.push({
-      label: (item[1] as string).trim(),
-      summary: item[4]?.trim() ?? null,
-      target,
-      children: null,
-      missing: false,
+      row: {
+        label: (item[1] as string).trim(),
+        summary: item[4]?.trim() ?? null,
+        target,
+        children: null,
+        missing: false,
+      },
+      from,
+      to: from + line.length,
+      end: Math.min(from + line.length + 1, body.length),
     })
   }
   return entries
+}
+
+/** The entries of one section file, given its body and a title from elsewhere. */
+export function parseEntries(body: string): readonly SectionRow[] {
+  return scanEntries(body).map(entry => entry.row)
 }
 
 /** One entry, as it is written in the file. The inverse of `referenceOf`. */

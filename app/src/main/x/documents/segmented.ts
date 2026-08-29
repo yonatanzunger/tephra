@@ -322,14 +322,11 @@ export abstract class SegmentedDocument implements StoredDocument {
       throw new StalePositionError(this.gen, at)
     }
 
-    const first = span.begin.segment as DateKey
-    const last = span.end.segment as DateKey
-    const dates: DateKey[] = []
-    for (let d = first; compareDateKeys(d, last) <= 0; d = addDays(d, 1)) dates.push(d)
-    if (dates.length === 0) dates.push(first)
-
+    // Through `segmentsAcross`, which asks the KIND what lies between two keys.
+    // Counting days here would be right for the stream and nonsense for a note,
+    // whose one key is not a date and has no successor to walk to (D54).
     const segments: Segment[] = []
-    for (const date of dates) segments.push(await this.segment(date))
+    for (const key of await this.segmentsAcross(span)) segments.push(await this.segment(key))
 
     const window = new LocalWindow(this, segments)
     await window.refreshBoundaries()

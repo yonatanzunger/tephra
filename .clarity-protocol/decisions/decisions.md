@@ -1890,7 +1890,9 @@ with N views.
 - **`pin` and `unpin` write files behind the document layer's back**, so D53's
   claim that a pin is undoable by the ordinary undo is false. As fileset verbs
   they become ordinary `replace` calls and inherit undo, the write tiers, the
-  WAL, divergence and versioning without new machinery.
+  WAL, divergence and versioning without new machinery. *(Done in MC4: the
+  claim is now true of the document. Reaching it from the keyboard waits on a
+  fileset being focusable, which is MC6.)*
 - **`Reference{kind:'file'}` cannot be followed.** The sidebar names documents
   it has no way to open.
 
