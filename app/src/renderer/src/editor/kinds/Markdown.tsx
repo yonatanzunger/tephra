@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react'
 import { bindEditor, type Binding } from './markdown/bind.ts'
 import type { SurfaceProps } from '../surface.ts'
+import { tephra } from '../../handle.ts'
 
 /**
  * The handle, which is richer than `SurfaceHandle` because text is richer.
@@ -52,9 +53,10 @@ export function MarkdownSurface({
     onHandle?.(bound)
     bound.view.focus()
     // Temporary: the self-check drives this. Goes away with verify.ts.
-    ;(globalThis as unknown as { __view: unknown }).__view = bound.view
+    tephra.view = bound.view
     return () => {
       onHandle?.(null)
+      tephra.view = null
       bound.destroy()
       binding.current = null
     }

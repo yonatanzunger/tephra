@@ -502,6 +502,84 @@ console.log('\n— opening another document —')
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── 6. windows: a session, not a window ─────────────────────────────────────
+//
+// MC6's claim. A window is a VIEW on a document, so the thing that survives a
+// quit is the ARRANGEMENT — someone who left a note open beside the notebook
+// left both, and restoring only the last one they touched throws that away.
+// Then the other half: two windows on ONE document, each seeing the other's
+// edits, because there is one document in main and both are looking at it.
+console.log('\n— windows —')
+{
+  const root = await week([
+    'Today, in the notebook.\n',
+    'Yesterday, also in the notebook.\n',
+  ])
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'offer.md'),
+    '---\ntephra: 1\nkind: markdown\ntitle: The offer letter\n---\nWhat we offered.\n',
+  )
+
+  const first = report(await launch('windows', root))
+  const saved = JSON.parse(await readFile(join(root, '.tephra', 'ui-state.json'), 'utf8').catch(() => '{}'))
+  const back = report(await launch('windows-back', root))
+  const onDisk = await readFile(join(root, 'notes', 'offer.md'), 'utf8').catch(() => '')
+
+  check(
+    'the Open… list names every document, the notebook first',
+    Array.isArray(first.documents) && first.documents[0] === 'Notebook' &&
+      first.documents.includes('The offer letter'),
+    JSON.stringify(first.documents),
+  )
+  check('a second window opened on the note', first['w2.name'] === 'The offer letter', String(first['w2.name']))
+  check(
+    'and it is showing that document, not a second copy of the stream',
+    typeof first['w2.text'] === 'string' && first['w2.text'].includes('What we offered'),
+    JSON.stringify(first['w2.text']),
+  )
+  check(
+    'the window this one is stayed the notebook',
+    typeof first.titleHere === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(first.titleHere),
+    JSON.stringify(first.titleHere),
+  )
+  check(
+    'THE SESSION IS A SET: both windows were written down, in order (MC6)',
+    Array.isArray(saved.windows) && saved.windows.length === 2 &&
+      saved.windows[0]?.location?.kind === 'today' &&
+      saved.windows[1]?.location?.kind === 'document',
+    JSON.stringify(saved.windows),
+  )
+  check(
+    'and each remembered where it sat',
+    Array.isArray(saved.windows) && saved.windows.every(w => typeof w.bounds?.width === 'number'),
+    JSON.stringify(saved.windows?.map(w => w.bounds)),
+  )
+  check(
+    'ACROSS A QUIT: both come back, each where it was',
+    typeof back.titleHere === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(back.titleHere) &&
+      back['w2.name'] === 'The offer letter',
+    `${JSON.stringify(back.titleHere)} · ${JSON.stringify(back['w2.name'])}`,
+  )
+  check(
+    'the restored window is showing the note, not just named for it',
+    typeof back['w2.text'] === 'string' && back['w2.text'].includes('What we offered'),
+    JSON.stringify(back['w2.text']),
+  )
+  check(
+    'ONE DOCUMENT, TWO VIEWS: an edit in this window arrives in the other (D45)',
+    typeof back['w2.textLater'] === 'string' && back['w2.textLater'].includes('Countersigned'),
+    JSON.stringify(back['w2.textLater']),
+  )
+  check(
+    'and it reached the file, once, from whichever window typed it',
+    (onDisk.match(/Countersigned/g) ?? []).length === 1,
+    JSON.stringify(onDisk),
+  )
+  check('and nothing errored on the way', first.appError === 'none' && back.appError === 'none',
+    `${first.appError} · ${back.appError}`)
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

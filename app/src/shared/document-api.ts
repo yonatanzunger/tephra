@@ -358,6 +358,14 @@ export interface DocumentChange {
 
 export type DocumentKind = 'stream' | 'markdown' | 'todo' | 'fileset'
 
+/**
+ * The stream's id, which is not a path because the stream is not a file (D8).
+ *
+ * Shared because both processes name it now: main opens it by default, and the
+ * renderer meets it in a list of documents beside the ones that ARE files.
+ */
+export const STREAM_ID = 'stream' as DocumentId
+
 export interface DocumentMeta {
   readonly kind: DocumentKind
   /**

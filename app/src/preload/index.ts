@@ -15,8 +15,9 @@ import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
   ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
-  SpansRequest, WindowChangedMessage, WindowId, WindowSnapshot,
+  SpansRequest, WindowChangedMessage, WindowId, WindowInfo, WindowReport, WindowSnapshot,
 } from '../shared/ipc.ts'
+import type { NavTarget } from '../shared/pane-api.ts'
 import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
@@ -101,12 +102,29 @@ const tephra = {
      */
     open: (reference: Reference, from?: string): Promise<Followed> =>
       ipcRenderer.invoke(CHANNEL.navOpen, reference, from),
+    /** Every document there is, with what it calls itself — the Open… list. */
+    documents: (): Promise<readonly { id: DocumentId; title: string }[]> =>
+      ipcRenderer.invoke(CHANNEL.navDocuments),
     /** Something changed on disk that no window is holding open (D53). */
     onCorpusChanged(handler: Handler<readonly string[]>): () => void {
       const listener = (_e: unknown, paths: readonly string[]): void => handler(paths)
       ipcRenderer.on(CHANNEL.corpusChanged, listener)
       return () => ipcRenderer.removeListener(CHANNEL.corpusChanged, listener)
     },
+  },
+
+  /**
+   * This window, and the others (MC6).
+   *
+   * A renderer used to know what it was showing by being the only one; with a
+   * set of windows, which one this is is main's to say.
+   */
+  win: {
+    info: (): Promise<WindowInfo> => ipcRenderer.invoke(CHANNEL.windowInfo),
+    /** Fire and forget: losing a cursor position is cheap and self-correcting. */
+    report: (report: WindowReport): void => ipcRenderer.send(CHANNEL.windowReport, report),
+    create: (target?: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowCreate, target),
+    close: (): Promise<void> => ipcRenderer.invoke(CHANNEL.windowClose),
   },
 
   doc: {

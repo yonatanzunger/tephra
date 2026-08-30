@@ -23,10 +23,29 @@ export interface StoredCursor {
   readonly offset: number
 }
 
-export interface UiState {
-  readonly version: 1
+/**
+ * One window: what it was showing, and where it sat.
+ *
+ * **The unit of restoring is a WINDOW, not the app.** Someone who left a note
+ * open beside the stream left an arrangement, and reopening only the last one
+ * they touched throws the arrangement away (D54, MC6).
+ */
+export interface WindowState {
   readonly location: NavTarget
   readonly cursor: StoredCursor | null
+  /** Where the window sat on screen. Absent when the platform did not say. */
+  readonly bounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+}
+
+export interface UiState {
+  readonly version: 1
+  /**
+   * Every window that was open, in the order they were opened.
+   *
+   * Never empty when written; an empty set on read means "no session to
+   * restore", and the app opens the one window it opens on a first run.
+   */
+  readonly windows: readonly WindowState[]
   /** Vim on or off, which is a setting and not a position (D15). */
   readonly vim: boolean
   /**
@@ -37,10 +56,11 @@ export interface UiState {
   readonly theme: string
 }
 
+export const defaultWindowState: WindowState = { location: { kind: 'today' }, cursor: null }
+
 export const defaultUiState: UiState = {
   version: 1,
-  location: { kind: 'today' },
-  cursor: null,
+  windows: [defaultWindowState],
   vim: false,
   theme: DEFAULT_THEME_NAME,
 }
@@ -51,16 +71,32 @@ export function parseUiState(text: string | null): UiState {
   try {
     const parsed: unknown = JSON.parse(text)
     if (typeof parsed !== 'object' || parsed === null) return defaultUiState
-    const candidate = parsed as Partial<UiState>
-    if (candidate.version !== 1 || candidate.location === undefined) return defaultUiState
+    const candidate = parsed as Partial<UiState> & Partial<WindowState>
+    if (candidate.version !== 1) return defaultUiState
+
+    // **A file from before windows were a set still opens the window it named.**
+    // The alternative is losing the reader's place to a schema change, which is
+    // the one thing soft state is not allowed to cost.
+    const windows =
+      Array.isArray(candidate.windows) && candidate.windows.length > 0
+        ? candidate.windows.filter(isWindowState)
+        : candidate.location !== undefined
+          ? [{ location: candidate.location, cursor: candidate.cursor ?? null }]
+          : []
+    if (windows.length === 0) return defaultUiState
+
     return {
       version: 1,
-      location: candidate.location,
-      cursor: candidate.cursor ?? null,
+      windows,
       vim: candidate.vim === true,
       theme: typeof candidate.theme === 'string' && candidate.theme !== '' ? candidate.theme : DEFAULT_THEME_NAME,
     }
   } catch {
     return defaultUiState
   }
+}
+
+/** Lenient in the same way: one unreadable entry loses one window, not the set. */
+function isWindowState(value: unknown): value is WindowState {
+  return typeof value === 'object' && value !== null && 'location' in value
 }

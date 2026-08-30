@@ -355,7 +355,7 @@ separators; type, undo, and find both in the file; then go back to the stream.
 
 ---
 
-## MC6 — `AppWindow`
+## MC6 — `AppWindow` *(done)*
 
 **What changes.** Windows get identity and a name (the document's; the stream is
 `Notebook`), `createWindow(target)`, and the File menu: New, Open…, Open in New
@@ -368,6 +368,44 @@ find both windows where they were. Then edit the same document in both and watch
 each see the other's change (D45, through the Corpus).
 
 **Risk:** medium, mostly in the harness. Every existing scene assumes one window.
+
+**As built.** `main/windows.ts` holds the set; each renderer reports its own
+entry and main decides what is the machine's. That division is the whole design:
+a window knows what IT is showing, main knows which windows there are, and the
+theme is the machine's — two windows disagreeing about it is not a state the
+file can represent.
+
+`ui-state.json` holds `windows: [{location, cursor, bounds}]`, and reads an old
+single-location file as one window. That migration has its own tests: every
+notebook in existence has one of those files, and losing the reader's place to a
+shape change they never made is the one thing soft state may not cost.
+
+The File menu is New Window (main's — a window is an OS object), Open…, Open in
+New Window…, Notebook, Close Window, then Print. The two Opens are one chooser
+with a parameter rather than two dialogs that would have to be kept looking
+alike. It is a name-filtered list, not a file dialog: the corpus is a list of
+documents with names, and asking the OS to browse a directory tree would show
+someone their own notebook as `sections/_index.fileset.md`.
+
+`__view`/`__pane`/`__doc` became one `__tephra` per renderer, carrying the
+window's id — and that id is what lets a second window report under a `w2.`
+prefix instead of producing two indistinguishable copies of every answer. Two
+main-side fixes came with it: only the FIRST window's `VERIFY done` ends a run,
+and "first" is COUNTED rather than measured (the window is already in
+`getAllWindows()` by the time the hook is installed, so asking how many there
+are always answered "not the first").
+
+**The bug worth keeping.** A window opened on a note came back as a second
+stream. The renderer reported its state on first render — before `win.info()`
+had told it what window it was — and that report overwrote the very target it
+had been opened to show. A window has nothing to say about itself until it
+knows what it is, so reporting now waits for that.
+
+**And the ui-state leak from MC3b is closed by being answered, not moved.**
+`.tephra/` is MACHINERY — the WAL and the index cache live there and write
+directly too — and the floor rule is about corpus documents. Making ui-state a
+document would have bought a JSON kind nobody wanted in order to satisfy a rule
+that never applied to it.
 
 ---
 

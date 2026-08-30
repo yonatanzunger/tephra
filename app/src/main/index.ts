@@ -27,7 +27,8 @@ if (verifyMode()) {
       'oversized-window override and abrupt exit are all reachable. Never for ordinary use.',
   )
 }
-import { DocumentService, registerDocumentIpc, attachWindow } from './ipc.ts'
+import { DocumentService, registerDocumentIpc, registerWindowIpc } from './ipc.ts'
+import { Windows } from './windows.ts'
 
 // app.getAppPath() rather than import.meta.url: the built main process is CJS,
 // where import.meta does not exist, and this works in both.
@@ -56,6 +57,9 @@ async function captureAndQuit(win: BrowserWindow, to: string): Promise<void> {
   await writeFile(to, image.toPNG())
   app.quit()
 }
+
+/** How many windows this process has made, so the first one can be told apart. */
+let windowsMade = 0
 
 function createWindow(): BrowserWindow {
   // Width-dependent behaviour is the whole substance of D42 — the gutter folds
@@ -101,11 +105,19 @@ function createWindow(): BrowserWindow {
   })
 
   // Temporary: surface the renderer's self-check, and exit when it finishes.
+  //
+  // **Every window's output is forwarded; only the FIRST one's `done` quits.**
+  // A scene that opens a second window gets a second renderer running the same
+  // scene, and letting either of them end the run would cut the first one off
+  // mid-sentence (MC6).
   if (verifyEnv('TEPHRA_VERIFY') !== undefined) {
+    // Counted, not measured: `win` is already in `getAllWindows()` by the time
+    // this runs, so asking how many there are always said "not the first".
+    const primary = ++windowsMade === 1
     win.webContents.on('console-message', (_e, _level, message) => {
       if (!message.startsWith('VERIFY')) return
       console.log(message)
-      if (message === 'VERIFY done') {
+      if (message === 'VERIFY done' && primary) {
         setTimeout(() => {
           void win.webContents
             .capturePage()
@@ -151,6 +163,7 @@ ipcMain.handle('tephra:hello', () => ({
 
 let notebook: Notebook | null = null
 let service: DocumentService | null = null
+let windows: Windows | null = null
 
 app.whenReady().then(async () => {
   if (!DEV_SERVER) serveRenderer(outDir('renderer'))
@@ -194,7 +207,7 @@ app.whenReady().then(async () => {
   // The renderer owns the vim setting — it is loaded from ui-state.json and
   // saved per device (D30). The menu's checkmark is a view of that, kept honest
   // by the renderer reporting it, never a second copy that could disagree.
-  installMenu()
+  installMenu({ newWindow: () => windows?.open() })
   ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
   // The renderer owns the caret; main owns the menus. Each tells the other the
   // one thing it knows, which is what keeps a greyed-out item honest.
@@ -220,12 +233,13 @@ app.whenReady().then(async () => {
     return
   }
 
-  attachWindow(service, createWindow())
+  // The session, not a window: whatever was open last time comes back (MC6).
+  windows = new Windows(service, createWindow)
+  registerWindowIpc(windows)
+  await windows.restore()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && service !== null) {
-      attachWindow(service, createWindow())
-    }
+    if (BrowserWindow.getAllWindows().length === 0 && windows !== null) windows.open()
   })
 })
 
@@ -237,6 +251,9 @@ app.on('before-quit', async event => {
   const closing = notebook
   notebook = null
   try {
+    // The arrangement first: `stop()` releases the documents the windows name,
+    // and a window's bounds go with the window when it closes.
+    await windows?.flush()
     await service?.stop()
   } finally {
     await closing.close()

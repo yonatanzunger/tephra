@@ -11,6 +11,8 @@ import type {
   SessionGeneration, Span, SpanKind, TypedSpan, DocumentPosition,
 } from './document-api.ts'
 import type { Annotation, Marker, Prose } from './prose.ts'
+import type { StoredCursor, WindowState } from './ui-state.ts'
+import type { NavTarget } from './pane-api.ts'
 import type { WindowPosition, ProseOffset, ProseText } from './document-api.ts'
 
 /** Windows are addressed by handle; the objects themselves never cross. */
@@ -86,6 +88,14 @@ export const CHANNEL = {
   saveTheme: 'tephra:theme:save',
   loadUiState: 'tephra:ui:load',
   saveUiState: 'tephra:ui:save',
+  /** What THIS window is: which one, what it opens, and the settings (MC6). */
+  windowInfo: 'tephra:win:info',
+  /** What this window is showing now — main keeps the set (MC6). */
+  windowReport: 'tephra:win:report',
+  windowCreate: 'tephra:win:create',
+  /** Every document that could be opened, for the Open… chooser (MC6). */
+  navDocuments: 'tephra:nav:documents',
+  windowClose: 'tephra:win:close',
   /** renderer → main: the menu's checkmark follows the app, not the other way. */
   vimChanged: 'tephra:ui:vimChanged',
   /** main → renderer */
@@ -118,6 +128,37 @@ export interface DocumentInfo {
   readonly generation: SessionGeneration
   readonly today: DateKey
   readonly extent: { readonly first: DateKey; readonly last: DateKey } | null
+}
+
+/**
+ * What one window is, told to the renderer that IS it.
+ *
+ * **A renderer no longer knows what it is showing by being the only one.** With
+ * several windows the answer is per-process, and main is the only thing that
+ * can say which of them this is (MC6).
+ */
+export interface WindowInfo {
+  readonly id: number
+  readonly state: WindowState
+  readonly vim: boolean
+  readonly theme: string
+}
+
+/**
+ * What a window says about itself, whenever it changes.
+ *
+ * The window reports its own entry; MAIN owns the set and decides what is
+ * per-window (where you are, the caret) and what is the machine's (vim, the
+ * theme). Two windows disagreeing about the theme is not a state this can
+ * represent, which is the point.
+ */
+export interface WindowReport {
+  readonly location: NavTarget
+  readonly cursor: StoredCursor | null
+  /** What to call this window: the document's name, or `Notebook` for the stream. */
+  readonly name: string
+  readonly vim: boolean
+  readonly theme: string
 }
 
 /** Everything the renderer needs to serve the synchronous half of the API. */

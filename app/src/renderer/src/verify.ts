@@ -5,18 +5,90 @@
 // test what M0 actually claims: that nothing is lost across a quit.
 
 export async function runVerify(scene: string): Promise<void> {
-  const say = (key: string, value: unknown): void => console.log(`VERIFY ${key}: ${JSON.stringify(value)}`)
+  // **Every window runs this, so every window has to say which it is.** A
+  // scene that opens a second window would otherwise get two of every answer,
+  // indistinguishable in the log. The first window reports unprefixed, because
+  // it is the one every existing scene is written about (MC6).
+  const me = (globalThis as unknown as { __tephra: { id: number } }).__tephra
+  const mine = (key: string): string => (me.id <= 1 ? key : `w${me.id}.${key}`)
+  const say = (key: string, value: unknown): void =>
+    console.log(`VERIFY ${mine(key)}: ${JSON.stringify(value)}`)
   const settle = (ms = 200): Promise<void> => new Promise(r => setTimeout(r, ms))
+
+  /** The live view, asked for each time: navigation rebinds the surface. */
+  const live = (): EditorViewLike =>
+    (globalThis as unknown as { __tephra: { view: EditorViewLike } }).__tephra.view
 
   try {
     await settle(1800) // open, bind, restore, and let background growth finish
 
-    const view = (globalThis as unknown as { __view?: EditorViewLike }).__view
-    const pane = (globalThis as unknown as { __pane?: PaneLike }).__pane
-    if (view === undefined || pane === undefined) {
-      say('ERROR', `view=${view !== undefined} pane=${pane !== undefined}`)
-      console.log('VERIFY done')
+    const handle = (globalThis as unknown as {
+      __tephra: { view?: EditorViewLike; pane?: PaneLike }
+    }).__tephra
+    const view = handle.view
+    const pane = handle.pane
+    if (view === undefined || view === null || pane === undefined || pane === null) {
+      say('ERROR', `view=${view != null} pane=${pane != null}`)
+      if (me.id <= 1) console.log('VERIFY done')
       return
+    }
+
+    // A window that is not the first is a PARTICIPANT, not a driver: it reports
+    // what it is showing and lets the scene in window 1 do the asking. It never
+    // says `done` — ending the run is the first window's to decide.
+    if (me.id > 1) {
+      say('name', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('text', live().state.doc.toString())
+      // And again later, so that a change window 1 makes to the SAME document
+      // can be seen arriving here — which is the whole claim (D45, MC6).
+      await settle(6000)
+      say('nameLater', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('textLater', live().state.doc.toString())
+      return
+    }
+
+    if (scene === 'windows') {
+      // MC6: a window is a VIEW on a document, and the set of them is the
+      // session. Open a note in a second window and leave it open; what the
+      // next launch finds is the other half of the claim.
+      const documents = await window.tephra.nav.documents()
+      say('documents', documents.map(d => d.title))
+      const note = documents.find(d => (d.id as unknown as string).endsWith('offer.md'))
+      say('noteFound', note !== undefined)
+      if (note !== undefined) {
+        await window.tephra.win.create({ kind: 'document', id: note.id })
+      }
+      await settle(2500)
+      say('titleHere', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      // Long enough for the second window to boot, report, and be saved.
+      await settle(3000)
+    }
+
+    if (scene === 'windows-back') {
+      // The session came back. This window is the stream; the other is the note
+      // (window 2 reports for itself, under `w2.`).
+      say('titleHere', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('textHere', live().state.doc.toString())
+
+      // **The same document in two windows.** Both are views on one document in
+      // main, so an edit here has to arrive there without either window being
+      // told about the other (D45, through the Corpus).
+      const documents = await window.tephra.nav.documents()
+      const note = documents.find(d => (d.id as unknown as string).endsWith('offer.md'))
+      if (note !== undefined) {
+        await pane.goTo({ kind: 'document', id: note.id })
+        await settle(1200)
+        live().dispatch({
+          changes: { from: live().state.doc.length, insert: ' Countersigned.' },
+          userEvent: 'input.type',
+        })
+        await settle(1200)
+        say('typedHere', live().state.doc.toString())
+      }
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(4000) // let the other window report what it now shows
     }
 
     if (scene === 'write') {
@@ -255,7 +327,7 @@ export async function runVerify(scene: string): Promise<void> {
       // producing "SECOND. FIRST. " — two inverse deletes over overlapping
       // ranges, a shape real typing never makes because the caret advances.
       const live = (): EditorViewLike =>
-        (globalThis as unknown as { __view: EditorViewLike }).__view
+        live()
       view.dispatch({
         changes: { from: view.state.doc.length, insert: 'FIRST. ' },
         userEvent: 'input.type',
@@ -276,7 +348,7 @@ export async function runVerify(scene: string): Promise<void> {
 
       say('undoItemFound', await window.tephra.clickMenu('Undo'))
       await settle(900)
-      const once = (globalThis as unknown as { __view?: EditorViewLike }).__view?.state.doc.toString() ?? ''
+      const once = live()?.state.doc.toString() ?? ''
       say('afterUndo', { hasFirst: once.includes('FIRST.'), hasSecond: once.includes('SECOND.') })
 
       // Is it the menu path, or is undo itself not reaching the buffer? Call the
@@ -284,18 +356,20 @@ export async function runVerify(scene: string): Promise<void> {
       await window.tephra.doc.flush()
       say('flushedAfterUndo', true)
 
-      const docHandle = (globalThis as unknown as { __doc?: { undo(): Promise<unknown> } }).__doc
-      say('directUndoAvailable', docHandle !== undefined)
-      if (docHandle !== undefined) {
+      const docHandle = (globalThis as unknown as {
+        __tephra: { doc?: { undo(): Promise<unknown> } }
+      }).__tephra.doc
+      say('directUndoAvailable', docHandle !== undefined && docHandle !== null)
+      if (docHandle !== undefined && docHandle !== null) {
         await docHandle.undo()
         await settle(900)
-        const direct = (globalThis as unknown as { __view?: EditorViewLike }).__view?.state.doc.toString() ?? ''
+        const direct = live()?.state.doc.toString() ?? ''
         say('afterDirectUndo', { hasFirst: direct.includes('FIRST.'), hasSecond: direct.includes('SECOND.') })
       }
 
       say('redoItemFound', await window.tephra.clickMenu('Redo'))
       await settle(900)
-      const back = (globalThis as unknown as { __view?: EditorViewLike }).__view?.state.doc.toString() ?? ''
+      const back = live()?.state.doc.toString() ?? ''
       say('afterRedo', { hasFirst: back.includes('FIRST.'), hasSecond: back.includes('SECOND.') })
     }
 
@@ -353,7 +427,7 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(600)
 
       const live = (): EditorViewLike =>
-        (globalThis as unknown as { __view: EditorViewLike }).__view
+        live()
       const rendered = (): string =>
         [...document.querySelectorAll('.cm-line')].map(l => l.textContent ?? '').join('\n')
 
@@ -1149,11 +1223,6 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(400)
 
       const titleNow = (): string => document.querySelector('.titlebar .title')?.textContent ?? ''
-      // **Re-read the view every time.** Landing in another document rebinds the
-      // editor, so the object captured at the start of the run is a destroyed
-      // one holding the text we just navigated away from.
-      const live = (): EditorViewLike =>
-        (globalThis as unknown as { __view: EditorViewLike }).__view
       say('titleBefore', titleNow())
       say('streamText', live().state.doc.toString().includes('Yesterday'))
 
@@ -1181,7 +1250,7 @@ export async function runVerify(scene: string): Promise<void> {
       say('afterTyping', live().state.doc.toString())
       await window.tephra.doc.flush()
 
-      const pane = (globalThis as unknown as { __pane: { document: { undo: () => Promise<unknown> } } }).__pane
+      const pane = (globalThis as unknown as { __tephra: { pane: { document: { undo: () => Promise<unknown> } } } }).__tephra.pane
       await pane.document.undo()
       await settle(900)
       say('afterUndo', live().state.doc.toString())
@@ -1587,7 +1656,7 @@ export async function runVerify(scene: string): Promise<void> {
       const older = document.querySelectorAll('.nav-dates button')
       ;(older[older.length - 1] as HTMLButtonElement | undefined)?.click()
       await settle(1200)
-      const away = (globalThis as unknown as { __view: EditorViewLike }).__view
+      const away = live()
       say('navigatedAway', {
         location: pane.location,
         windowHasMarker: away.state.doc.toString().includes('MARKER-TEXT'),
@@ -1598,7 +1667,7 @@ export async function runVerify(scene: string): Promise<void> {
       // doc.undo() directly would bypass the very code being tested.
       const change = await window.tephra.clickMenu('Undo')
       await settle(1200)
-      const after = (globalThis as unknown as { __view: EditorViewLike }).__view.state.doc.toString()
+      const after = live().state.doc.toString()
       say('undoReturnedAChange', change !== null)
       say('afterUndo', {
         bufferChanged: before !== after,
@@ -1747,7 +1816,7 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(1500)
 
       const state = (label: string): void => {
-        const v = (globalThis as unknown as { __view?: EditorViewLike }).__view
+        const v = live()
         say(label, {
           docLength: v?.state.doc.length ?? -1,
           location: pane.location,
@@ -1773,11 +1842,11 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(1200)
       state('afterTodayAgain')
 
-      const live = (globalThis as unknown as { __view?: EditorViewLike }).__view
+      const now = live()
       say('after', {
-        docLength: live?.state.doc.length ?? -1,
+        docLength: now?.state.doc.length ?? -1,
         location: pane.location,
-        firstLine: live?.state.doc.toString().slice(0, 40) ?? '',
+        firstLine: now?.state.doc.toString().slice(0, 40) ?? '',
         editorsInDom: document.querySelectorAll('.cm-editor').length,
         linesInDom: document.querySelectorAll('.cm-line').length,
       })
@@ -1813,4 +1882,6 @@ interface EditorViewLike {
 }
 interface PaneLike {
   readonly location: unknown
+  /** Structural, like the rest of this file: the harness drives the real Pane. */
+  goTo(target: { kind: 'document'; id: unknown }): Promise<void>
 }

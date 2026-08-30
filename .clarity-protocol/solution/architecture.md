@@ -162,6 +162,12 @@ had three test suites broken exactly that way, and keeps a test whose only job
 is to catch it (`tests/unit/main/no-electron.test.ts`). The process boundary
 stays physical; the kind axis lives inside it.
 
+**`.tephra/` is machinery, and the floor rule does not reach it.** The WAL, the
+index cache and `ui-state.json` are how this machine runs the app, not documents
+in the corpus — they are excluded from git for the same reason. Writing them
+directly is right; what must go through a document is anything a person would
+recognise as their own writing (D54, MC6).
+
 ## Six rules that keep the layering honest
 
 **1. The split rule is specified by the format and merely implemented by storage.** D8 established that split points must be deterministic and content-derived, because merge sees them. Putting segmentation inside Document's storage implementation is correct, but it is exactly the arrangement in which the rule would quietly drift toward being size-based and runtime-chosen. The rule belongs to the format spec; the storage layer obeys it.

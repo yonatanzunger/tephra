@@ -9,6 +9,9 @@ import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
 import type { Followed, Reference } from '../shared/nav-api.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { DocumentId } from '../shared/document-api.ts'
+import type { Windows } from './windows.ts'
+import type { WindowReport } from '../shared/ipc.ts'
+import type { NavTarget } from '../shared/pane-api.ts'
 import type { RelPath } from './w/layout.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
@@ -73,6 +76,7 @@ export function registerDocumentIpc(service: DocumentService): void {
    * subject, a day — never arrives here, because going there is navigation and
    * not opening.
    */
+  ipcMain.handle(CHANNEL.navDocuments, () => service.documents())
   ipcMain.handle(CHANNEL.navOpen, async (_e, reference: Reference, from?: RelPath): Promise<Followed> => {
     if (reference.kind === 'url') {
       await shell.openExternal(reference.href)
@@ -179,6 +183,16 @@ export function registerDocumentIpc(service: DocumentService): void {
 }
 
 /** Push messages to a renderer for as long as its window lives. */
+/** The window half of the bridge: which window this is, and what it now shows. */
+export function registerWindowIpc(windows: Windows): void {
+  ipcMain.handle(CHANNEL.windowInfo, e => windows.infoFor(e.sender))
+  ipcMain.on(CHANNEL.windowReport, (e, report: WindowReport) => windows.report(e.sender, report))
+  ipcMain.handle(CHANNEL.windowCreate, (_e, target?: NavTarget) => {
+    windows.open(target)
+  })
+  ipcMain.handle(CHANNEL.windowClose, e => windows.close(e.sender))
+}
+
 export function attachWindow(service: DocumentService, window: BrowserWindow): void {
   const detach = service.addSink({
     send: (channel, message) => {

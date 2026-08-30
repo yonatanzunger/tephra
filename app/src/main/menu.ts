@@ -71,7 +71,25 @@ export function setMenuSelection(selection: SelectionState): void {
 }
 
 /** Rebuild the menu. Cheap, and the only way to move a checkmark in Electron. */
-export function installMenu(): void {
+/**
+ * What the menu can ask the app to do that no renderer can.
+ *
+ * Only one so far, and it is the one that matters: a window is an OS object, so
+ * making one is main's job however the gesture arrives (MC6).
+ */
+export interface MenuActions {
+  newWindow: () => void
+}
+
+/**
+ * Held, because the menu is REBUILT on every state change — a checkmark can
+ * only be moved in Electron by making the menu again — and a rebuild must not
+ * lose the actions it was installed with.
+ */
+let actions: MenuActions = { newWindow: () => undefined }
+
+export function installMenu(next?: MenuActions): void {
+  if (next !== undefined) actions = next
   const template: MenuItemConstructorOptions[] = [
     {
       label: app.name,
@@ -90,8 +108,40 @@ export function installMenu(): void {
       // For the stream that cannot mean "all of it" — all of it is twenty
       // years — so it asks which days first. Printing a selection is the
       // range operation, on `Cmd+Shift+P`, and lives in the Range menu.
+      //
+      // The rest of this menu is what having more than one document means: a
+      // way to reach another one, a way to get back to the notebook, and a
+      // second window to put one in (MC6). **`New Window` is main's**, because
+      // making a window is not something a renderer can do; the two `Open`s
+      // are the renderer's, because choosing is a dialog.
       label: 'File',
       submenu: [
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => actions.newWindow(),
+        },
+        { type: 'separator' },
+        {
+          label: 'Open…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => send(CHANNEL.menuCommand, 'openDocument'),
+        },
+        {
+          label: 'Open in New Window…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => send(CHANNEL.menuCommand, 'openDocumentInNewWindow'),
+        },
+        {
+          // The one document that is not a file, under the name everybody uses
+          // for it. `Cmd+0` because it is the zeroth thing, and because every
+          // other digit is free for whatever comes later.
+          label: 'Notebook',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
+        },
+        { type: 'separator' },
+        { role: 'close', label: 'Close Window' },
         {
           label: 'Print…',
           accelerator: 'CmdOrCtrl+P',

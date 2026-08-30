@@ -5,8 +5,8 @@ import type {
   WindowPosition, DateKey, DocumentChange, DocumentId, DocumentPosition, DocumentWindow, SegmentKey,
   SessionGeneration,
 } from '../../shared/document-api.ts'
-import { ONLY_SEGMENT } from '../../shared/document-api.ts'
-import { defaultUiState, type UiState } from '../../shared/ui-state.ts'
+import { ONLY_SEGMENT, STREAM_ID } from '../../shared/document-api.ts'
+import { defaultUiState, defaultWindowState, type StoredCursor } from '../../shared/ui-state.ts'
 import { Documents } from './x/documents'
 import type { RemoteStream } from './x/kinds/stream'
 import { Pane } from './pane/pane'
@@ -19,7 +19,10 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
+import { Chooser, type ChooserRequest } from './frame/Chooser'
+import { tephra } from './handle'
 import type { Located, Reference } from '../../shared/nav-api.ts'
+import type { NavTarget } from '../../shared/pane-api.ts'
 import { DateRange, type DateRangeRequest } from './frame/DateRange'
 import { MarkPanel } from './frame/MarkPanel'
 import { Rail } from './frame/Rail'
@@ -117,12 +120,15 @@ export function App(): React.JSX.Element {
   /** The STREAM, which is what the app opens with and what the title bar dates. */
   const [doc, setDoc] = useState<RemoteStream | null>(null)
   const [pane, setPane] = useState<Pane | null>(null)
+  /** Whether this window has learned what it is and gone there (MC6). */
+  const [ready, setReady] = useState(false)
   const [vim, setVim] = useState(false)
   const [themeName, setThemeName] = useState<string>(defaultUiState.theme)
   const [panelOpen, setPanelOpen] = useState(false)
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
+  const [chooser, setChooser] = useState<ChooserRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
   const [navGeneration, setNavGeneration] = useState(0)
@@ -167,19 +173,24 @@ export function App(): React.JSX.Element {
         setDoc(opened)
         setPane(p)
         // Temporary: the self-check drives this. Goes away with verify.ts.
-        ;(globalThis as unknown as { __pane: Pane }).__pane = p
-        ;(globalThis as unknown as { __doc: RemoteStream }).__doc = opened
+        tephra.pane = p
+        tephra.doc = opened
 
-        const state = await window.tephra.doc.loadUiState()
-        setVim(state.vim)
-        setThemeName(state.theme)
+        // **What THIS window is, asked of main.** A renderer used to know what
+        // it was showing by being the only one; with a set of windows, which
+        // one this is is main's to say (MC6).
+        const info = await window.tephra.win.info()
+        tephra.id = info.id
+        setVim(info.vim)
+        setThemeName(info.theme)
         // **The stored cursor no longer decides where the app opens.** Tephra
         // opens at the append position with yesterday above it, because that is
         // what continuing looks like; landing in the middle of something
         // already finished is the wrong default for a stream. It is still
         // recorded — a true fact about the session, and what navigation will
         // want when it learns to go back to where you were.
-        await p.goTo(state.location, { push: false })
+        await p.goTo(info.state.location, { push: false })
+        setReady(true)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
@@ -280,6 +291,27 @@ export function App(): React.JSX.Element {
             await window.tephra.doc.importText(at, text, original)
           })
           .catch(fail)
+      } else if (command === 'openDocument' || command === 'openDocumentInNewWindow') {
+        // **One chooser, two destinations.** Which window it lands in is the
+        // only difference, so it is one gesture with a parameter rather than
+        // two dialogs that would have to be kept looking alike (MC6).
+        const inNewWindow = command === 'openDocumentInNewWindow'
+        void window.tephra.nav
+          .documents()
+          .then(documents =>
+            setChooser({
+              title: inNewWindow ? 'Open in a new window' : 'Open',
+              documents,
+              onChoose: id => {
+                const target: NavTarget = id === STREAM_ID ? { kind: 'today' } : { kind: 'document', id }
+                if (inNewWindow) void window.tephra.win.create(target).catch(fail)
+                else void pane?.goTo(target).catch(fail)
+              },
+            }),
+          )
+          .catch(fail)
+      } else if (command === 'goToNotebook') {
+        void pane?.goToToday().catch(fail)
       } else if (command === 'printDocument') {
         // The extent is asked for HERE rather than held in state: it grows as
         // the day goes on, and a dialog offering "everything" that stops at
@@ -643,7 +675,7 @@ export function App(): React.JSX.Element {
   /** Day, heading chain and subjects around the caret — the sidebar's top line. */
   const [where, setWhere] = useState<Where>(EMPTY_WHERE)
 
-  const cursorRef = useRef<UiState['cursor']>(null)
+  const cursorRef = useRef<StoredCursor | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onCursor = useCallback(
     (at: DocumentPosition) => {
@@ -655,36 +687,62 @@ export function App(): React.JSX.Element {
         return keyOf(next) === keyOf(previous) ? previous : next
       })
       if (saveTimer.current !== null) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => {
-        void window.tephra.doc.saveUiState({
-          ...defaultUiState,
-          location: pane?.location ?? defaultUiState.location,
-          cursor: cursorRef.current,
-          vim,
-          theme: themeName,
-        })
-      }, 600)
+      saveTimer.current = setTimeout(() => reportRef.current(), 600)
     },
-    [pane, vim, themeName],
+    // `pane` stays: the where-you-are line is computed from the window this
+    // caret is in, and a stale closure over a null pane leaves it blank —
+    // which is what the empty foot of the panel was.
+    [pane],
   )
 
-  // The position must also survive a quit that beats the debounce.
+  // What the title bar says we are looking at. A day is its date; a document is
+  // whatever it calls itself, falling back to its filename, which is the only
+  // other name it has.
+  const title =
+    location?.kind === 'date'
+      ? location.date
+      : location?.kind === 'document'
+        ? (pane?.document.title ?? nameOf(location.id))
+        : (doc?.today ?? '…')
+
+  /**
+   * Tell main what this window is showing, and what to call it.
+   *
+   * **Its own entry, and nothing else's.** Main holds the set and decides what
+   * is the machine's — vim, the theme — from whatever changed last; a renderer
+   * that wrote the whole file would erase every other window each time the
+   * caret moved (MC6). The name is the title bar's, because a window is called
+   * what it is showing.
+   */
+  const reportRef = useRef<() => void>(() => undefined)
   useEffect(() => {
-    const flushState = (): void => {
-      void window.tephra.doc.saveUiState({
-        ...defaultUiState,
-        location: pane?.location ?? defaultUiState.location,
+    // **Nothing to say until it knows what it is.** The first render happens
+    // before `win.info()` comes back, when the pane still says "today" — and a
+    // report then overwrites the very target this window was opened to show.
+    // That is how a window opened on a note came back as a second stream.
+    if (!ready) return
+    reportRef.current = (): void => {
+      tephra.name = title
+      window.tephra.win.report({
+        location: location ?? defaultWindowState.location,
         cursor: cursorRef.current,
+        name: title === '…' ? 'Tephra' : title,
         vim,
         theme: themeName,
       })
     }
+    reportRef.current()
+  }, [ready, location, title, vim, themeName])
+
+  // The position must also survive a quit that beats the debounce.
+  useEffect(() => {
+    const flushState = (): void => reportRef.current()
     window.addEventListener('beforeunload', flushState)
     return () => {
       window.removeEventListener('beforeunload', flushState)
       flushState()
     }
-  }, [pane, vim, themeName])
+  }, [])
 
   if (error !== null) {
     return (
@@ -701,15 +759,6 @@ export function App(): React.JSX.Element {
   // in the registry rather than another flag inside the editor (D54).
   const Surface = docWindow === null ? null : surfaceFor(docWindow.document.meta.kind)
 
-  // What the title bar says we are looking at. A day is its date; a document is
-  // whatever it calls itself, falling back to its filename, which is the only
-  // other name it has.
-  const title =
-    location?.kind === 'date'
-      ? location.date
-      : location?.kind === 'document'
-        ? (pane?.document.title ?? nameOf(location.id))
-        : (doc?.today ?? '…')
 
   return (
     <div className="app">
@@ -855,6 +904,7 @@ export function App(): React.JSX.Element {
           />
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
+        {chooser !== null && <Chooser request={chooser} onClose={() => setChooser(null)} />}
         {range !== null && <DateRange request={range} onClose={() => setRange(null)} />}
         {railHost !== null &&
           createPortal(

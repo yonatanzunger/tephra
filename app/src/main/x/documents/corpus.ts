@@ -25,13 +25,15 @@ import { kindOf, type RelPath } from '../../w/layout.ts'
 import { StreamDocument } from './kinds/stream.ts'
 import { MarkdownDocument } from './kinds/markdown.ts'
 import { FilesetDocument } from './kinds/fileset.ts'
-import type {
-  Divergence, DocumentChange, DocumentId, DocumentKind, SegmentKey, Unsubscribe,
+import {
+  STREAM_ID,
+  type Divergence, type DocumentChange, type DocumentId, type DocumentKind,
+  type SegmentKey, type Unsubscribe,
 } from '../../../shared/document-api.ts'
 import type { JournalEdit, StoredDocument } from './stored.ts'
 
 /** The stream is a document whose id is not a path, because it is not a file. */
-export const STREAM_ID = 'stream' as DocumentId
+export { STREAM_ID } from '../../../shared/document-api.ts'
 
 /**
  * What kind of access a borrow is.

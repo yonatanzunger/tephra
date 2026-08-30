@@ -23,7 +23,7 @@ import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import { kindOf, parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { dateKeyAt } from '../shared/dates.ts'
@@ -651,6 +651,29 @@ export class DocumentService {
 
   async versions(limit = 50): Promise<readonly Version[]> {
     return (await this.history?.versions(limit)) ?? []
+  }
+
+  /**
+   * Every document a person could open, with what it is called (MC6).
+   *
+   * The stream comes first and is called the notebook: it is the one document
+   * that is not a file and the one everybody means by "the notebook".
+   *
+   * Borrowed for READING and not retained — a chooser is a sweep over the
+   * corpus, and a sweep that displaced the document being written in would be
+   * the buffer-cache mistake this borrow mode exists to avoid (D54).
+   */
+  async documents(): Promise<readonly { id: DocumentId; title: string }[]> {
+    const out: { id: DocumentId; title: string }[] = [{ id: STREAM_ID, title: 'Notebook' }]
+    for (const id of await this.#corpus.list()) {
+      if (id === STREAM_ID) continue
+      const title = await this.#corpus.use(id, doc => doc.titleOf(ONLY_SEGMENT), {
+        mode: 'read',
+        retain: false,
+      })
+      out.push({ id, title: title ?? basename(id as string) })
+    }
+    return out
   }
 
   /** The curated sections (D53) — the hand-made half of the sidebar. */
