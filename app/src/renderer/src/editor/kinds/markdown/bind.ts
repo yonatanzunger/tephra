@@ -80,7 +80,7 @@ export function bindEditor(options: BindOptions): Binding {
   // **Asked of the window, not passed in.** The window knows its document and
   // the document knows its kind; a `surface` prop threaded down from the app
   // would be a second answer to a question that already has one (D54).
-  const behaviour = optionsFor(docWindow.document.meta.kind)
+  const behaviour = optionsFor(docWindow.document.meta)
 
   const view = new EditorView({
     parent: options.parent,
@@ -104,6 +104,22 @@ export function bindEditor(options: BindOptions): Binding {
         syntaxHighlighting(proseHighlight, { fallback: true }),
         highlightSelectionMatches(),
         EditorView.lineWrapping,
+        // Read-only is enforced HERE as well as being shown.
+        //
+        // Three layers, because they stop different things: `editable` takes
+        // the caret out of the DOM, `readOnly` is what the commands consult,
+        // and the filter drops any change that arrives anyway. The third is not
+        // belt-and-braces — a programmatic dispatch (a paste command, a list
+        // indent, anything a keymap adds later) is not stopped by the other
+        // two, and it reached the document, which threw. A read-only surface
+        // should IGNORE an edit, not fail on one.
+        ...(behaviour.editable
+          ? []
+          : [
+              EditorState.readOnly.of(true),
+              EditorView.editable.of(false),
+              EditorState.transactionFilter.of(tr => (tr.docChanged ? [] : tr)),
+            ]),
         widgetExtensions(),
         ...(behaviour.annotations ? [tagExtents(docWindow)] : []),
         ...(behaviour.days ? [dayBoundaries(docWindow)] : []),

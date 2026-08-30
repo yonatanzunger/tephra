@@ -25,8 +25,11 @@ import { kindOf, type RelPath } from '../../w/layout.ts'
 import { StreamDocument } from './kinds/stream.ts'
 import { MarkdownDocument } from './kinds/markdown.ts'
 import { FilesetDocument } from './kinds/fileset.ts'
+import { ExternalDocument } from './kinds/external.ts'
+import { outsideExists } from '../../w/outside.ts'
 import {
   STREAM_ID,
+  isOutside,
   type Divergence, type DocumentChange, type DocumentId, type DocumentKind,
   type SegmentKey, type Unsubscribe,
 } from '../../../shared/document-api.ts'
@@ -178,9 +181,17 @@ export class Corpus {
     return out
   }
 
-  /** The paths of documents held in memory, whose files may not be written yet. */
+  /**
+   * The paths of documents held in memory, whose files may not be written yet.
+   *
+   * Outside documents are excluded: they are open, but they are not IN the
+   * corpus, and a list of what the notebook holds must not name a file that
+   * happens to be on screen (MC6).
+   */
   #openPaths(): readonly string[] {
-    return [...this.#opened.keys()].filter(id => id !== STREAM_ID) as unknown as string[]
+    return [...this.#opened.keys()].filter(
+      id => id !== STREAM_ID && !isOutside(id),
+    ) as unknown as string[]
   }
 
   /**
@@ -191,6 +202,7 @@ export class Corpus {
    */
   async exists(id: DocumentId): Promise<boolean> {
     if (id === STREAM_ID || this.#opened.has(id)) return true
+    if (isOutside(id)) return outsideExists(id as string)
     return this.#notebook.has(id as string as RelPath)
   }
 
@@ -254,12 +266,25 @@ export class Corpus {
     if (kind === null) {
       return Promise.reject(new Error(`${id} is not a document`))
     }
+
+    // **Outside is not a kind; it is a place.** The filename still says what
+    // the document IS — a downloaded `.todo.md` is a todo — so the surface is
+    // chosen the same way it is for everything else. What being outside decides
+    // is that it cannot be written (MC6).
+    if (isOutside(id)) {
+      return this.#track(id, new ExternalDocument(this.#notebook, id, kind))
+    }
     const doc: StoredDocument =
       kind === 'stream'
         ? new StreamDocument(this.#notebook)
         : kind === 'fileset'
           ? new FilesetDocument(this.#notebook, id)
           : new MarkdownDocument(this.#notebook, id, kind)
+    return this.#track(id, doc)
+  }
+
+  /** Subscribe to a newly made document, so its changes reach the Corpus's listeners. */
+  #track(id: DocumentId, doc: StoredDocument): Promise<StoredDocument> {
     this.#unsubscribe.set(id, [
       doc.onChanged(change => {
         for (const handler of this.#changed) handler(id, change)

@@ -5,7 +5,7 @@ import type {
   WindowPosition, DateKey, DocumentChange, DocumentId, DocumentPosition, DocumentWindow, SegmentKey,
   SessionGeneration,
 } from '../../shared/document-api.ts'
-import { ONLY_SEGMENT, STREAM_ID } from '../../shared/document-api.ts'
+import { isOutside, ONLY_SEGMENT, STREAM_ID } from '../../shared/document-api.ts'
 import { defaultUiState, defaultWindowState, type StoredCursor } from '../../shared/ui-state.ts'
 import { Documents } from './x/documents'
 import type { RemoteStream } from './x/kinds/stream'
@@ -682,6 +682,9 @@ export function App(): React.JSX.Element {
     [pane],
   )
 
+  /** Whether what is on screen can be read but not written (MC6). */
+  const readOnly = docWindow?.document.meta.readOnly === true
+
   // What the title bar says we are looking at. A day is its date; a document is
   // whatever it calls itself, falling back to its filename, which is the only
   // other name it has.
@@ -710,16 +713,20 @@ export function App(): React.JSX.Element {
     if (!ready) return
     reportRef.current = (): void => {
       tephra.name = title
+      const showing = pane?.document.id
       window.tephra.win.report({
         location: location ?? defaultWindowState.location,
         cursor: cursorRef.current,
         name: title === '…' ? 'Tephra' : title,
+        // What `Import` would act on, said by the window that knows: only a
+        // document from outside the notebook can be brought into it (MC6).
+        importable: showing !== undefined && isOutside(showing) ? showing : null,
         vim,
         theme: themeName,
       })
     }
     reportRef.current()
-  }, [ready, location, title, vim, themeName])
+  }, [ready, pane, location, title, vim, themeName])
 
   // The position must also survive a quit that beats the debounce.
   useEffect(() => {
@@ -765,6 +772,22 @@ export function App(): React.JSX.Element {
           <span aria-hidden="true">☰</span> Sections
         </button>
         <span className="title">{title}</span>
+        {/* **The constraint and the way out of it are the same control.** A
+            file from outside the notebook is read-only because this app cannot
+            keep its promises about a file it does not manage — no history, no
+            versions, no index. Saying so is only half of it; the other half is
+            that the fix is one click away, and it is here rather than buried in
+            a menu because this is where the reader learns they need it (MC6). */}
+        {readOnly && (
+          <button
+            type="button"
+            className="badge readonly"
+            title="This file is outside your notebook: it can be read, but not changed. Import it to keep it here."
+            onClick={() => void window.tephra.win.import().catch(fail)}
+          >
+            Read-only · Import
+          </button>
+        )}
         <button className="nav" onClick={() => void pane?.goToToday()}>
           today
         </button>

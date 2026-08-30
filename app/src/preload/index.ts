@@ -124,6 +124,8 @@ const tephra = {
     /** Fire and forget: losing a cursor position is cheap and self-correcting. */
     report: (report: WindowReport): void => ipcRenderer.send(CHANNEL.windowReport, report),
     create: (target?: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowCreate, target),
+    /** Bring in what this window is showing — the read-only badge's gesture. */
+    import: (): Promise<void> => ipcRenderer.invoke(CHANNEL.windowImport),
     /** Main picked a document for this window to show (File ▸ Open…). */
     onOpenDocument(handler: Handler<DocumentId>): () => void {
       const listener = (_e: unknown, id: DocumentId): void => handler(id)

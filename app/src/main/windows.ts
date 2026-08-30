@@ -17,6 +17,8 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import type { DocumentService } from './document-service.ts'
 import { attachWindow } from './ipc.ts'
+import { setMenuImportable } from './menu.ts'
+import type { DocumentId } from '../shared/document-api.ts'
 import type { WindowInfo, WindowReport } from '../shared/ipc.ts'
 import type { NavTarget } from '../shared/pane-api.ts'
 import { defaultUiState, defaultWindowState, type UiState, type WindowState } from '../shared/ui-state.ts'
@@ -25,6 +27,8 @@ interface Entry {
   readonly id: number
   readonly window: BrowserWindow
   state: WindowState
+  /** The outside document it is showing, if any — what `Import` would act on. */
+  importable: DocumentId | null
 }
 
 export class Windows {
@@ -66,10 +70,12 @@ export class Windows {
   #open(state: WindowState): BrowserWindow {
     const window = this.#make()
     const id = this.#nextId++
-    this.#entries.set(id, { id, window, state })
+    this.#entries.set(id, { id, window, state, importable: null })
     attachWindow(this.#service, window)
 
     if (state.bounds !== undefined) window.setBounds(state.bounds)
+    // The menu describes the FOCUSED window, so it changes when focus does.
+    window.on('focus', () => this.#syncMenu())
     window.on('closed', () => {
       // Its bounds are gone with it, so the entry goes too. Closing a window IS
       // saying you do not want it back — the alternative is a session that
@@ -96,8 +102,10 @@ export class Windows {
     const found = this.#entryFor(sender)
     if (found === undefined) return
     found.state = { location: report.location, cursor: report.cursor }
+    found.importable = report.importable
     this.#vim = report.vim
     this.#theme = report.theme
+    this.#syncMenu()
     if (!found.window.isDestroyed() && found.window.getTitle() !== report.name) {
       found.window.setTitle(report.name)
     }
@@ -106,6 +114,39 @@ export class Windows {
 
   close(sender: WebContents): void {
     this.#entryFor(sender)?.window.close()
+  }
+
+  /**
+   * What `Import` would act on, from the MENU: the focused window's document.
+   *
+   * The menu describes the focused window because that is what a menu bar is
+   * about, and the item is greyed when there is nothing to act on.
+   */
+  importable(): DocumentId | null {
+    return this.#focused()?.importable ?? null
+  }
+
+  /**
+   * The same question from a WINDOW, which does not have to guess which it is.
+   *
+   * **Focus is the wrong question when the asker is known.** The read-only
+   * badge is in a window; a window that is not focused — one shown without
+   * taking focus, or one whose click landed while a dialog had it — would
+   * otherwise be told there is nothing to import, about the file it is showing.
+   */
+  importableFor(sender: WebContents): DocumentId | null {
+    return this.#entryFor(sender)?.importable ?? null
+  }
+
+  #focused(): Entry | undefined {
+    for (const entry of this.#entries.values()) {
+      if (!entry.window.isDestroyed() && entry.window.isFocused()) return entry
+    }
+    return undefined
+  }
+
+  #syncMenu(): void {
+    setMenuImportable(this.importable() !== null)
   }
 
   /** Every window, with its live bounds — what the file should say right now. */

@@ -11,7 +11,7 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocumentService, type ServiceOptions } from '../../src/main/document-service.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import type { WindowPosition, DateKey, VersionId } from '../../src/shared/document-api.ts'
+import { ONLY_SEGMENT, type WindowPosition, type DateKey, type DocumentId, type VersionId } from '../../src/shared/document-api.ts'
 import { pt } from '../support/text.ts'
 
 const wp = (n: number): WindowPosition => n as WindowPosition
@@ -268,4 +268,99 @@ test('the documents list names every document, the notebook first', async t => {
     ['The house', 'plain.md'],
     'a title when it has one, and its filename when it does not',
   )
+})
+
+// ── files from outside the notebook (MC6) ─────────────────────────────────
+
+/** A file somewhere else on the machine, as a download would be. */
+async function downloaded(t: TestContext, name: string, text: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'tephra-outside-'))
+  const path = join(dir, name)
+  await writeFile(path, text)
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  return path
+}
+
+test('a file outside the notebook opens, and its id is its absolute path', async t => {
+  const { service } = await fixture(t)
+  const path = await downloaded(t, 'spec.md', '# A spec\n\nDownloaded, not mine.\n')
+
+  const id = await service.documentForFile(path)
+  assert.equal(id, path, 'named by where it is, which is what tells it from a corpus path')
+})
+
+test('and it opens READ-ONLY, refusing the edit rather than losing it later', async t => {
+  // The alternative is the bad one: accept keystrokes, then fail at save time,
+  // when what was typed is the only copy.
+  const { service } = await fixture(t)
+  const path = await downloaded(t, 'spec.md', 'Downloaded.\n')
+  const id = (await service.documentForFile(path)) as DocumentId
+
+  const meta = await service.info(id)
+  assert.equal(meta.meta.readOnly, true, 'and it says so, so the surface can too')
+  await assert.rejects(
+    () =>
+      service.corpus.use(id, async doc => {
+        const at = doc.positionAt(ONLY_SEGMENT, 0)
+        await doc.replace([{ span: { begin: at, end: at }, payload: 'no' as never }], 'user')
+      }),
+    /outside this notebook/,
+  )
+})
+
+test('its KIND still comes from its name, so the right surface shows it', async t => {
+  // Outside is a place, not a kind. A downloaded fileset is a fileset that
+  // happens to be unwritable, and the renderer picks its surface by kind.
+  const { service } = await fixture(t)
+  const path = await downloaded(t, 'reading.fileset.md', '- [A thing](../x.md)\n')
+  const id = (await service.documentForFile(path)) as DocumentId
+
+  assert.equal((await service.info(id)).meta.kind, 'fileset')
+})
+
+test('THE IMPORT: a copy comes in, and the original is left where it was', async t => {
+  const { service, root } = await fixture(t)
+  const path = await downloaded(t, 'spec.md', '# A spec\n\nWorth keeping.\n')
+  const outside = (await service.documentForFile(path)) as DocumentId
+
+  const brought = await service.importFile(outside)
+  await service.flush()
+
+  assert.equal(brought, 'notes/spec.md')
+  const copy = await readFile(join(root, 'notes', 'spec.md'), 'utf8')
+  assert.match(copy, /Worth keeping\./)
+  assert.match(copy, /^---\ntephra: 1\n/, 'and it is a document of ours now, frontmatter and all')
+  assert.match(copy, /source: .*spec\.md/, 'saying where it came from (D47)')
+  assert.equal(await readFile(path, 'utf8'), '# A spec\n\nWorth keeping.\n', 'the original is untouched')
+})
+
+test('and the copy is writable, because being inside is what that means', async t => {
+  const { service } = await fixture(t)
+  const path = await downloaded(t, 'spec.md', 'Worth keeping.\n')
+  const brought = await service.importFile((await service.documentForFile(path)) as DocumentId)
+
+  assert.equal((await service.info(brought)).meta.readOnly, undefined)
+  await service.corpus.use(brought, async doc => {
+    const at = doc.positionAt(ONLY_SEGMENT, 0)
+    await doc.replace([{ span: { begin: at, end: at }, payload: 'Mine now. ' as never }], 'user')
+  })
+})
+
+test('importing the same file twice makes two notes, not one overwrite', async t => {
+  // A second import is a second act. Silently replacing the first would throw
+  // away whatever had been done to it since.
+  const { service } = await fixture(t)
+  const path = await downloaded(t, 'spec.md', 'Downloaded.\n')
+  const outside = (await service.documentForFile(path)) as DocumentId
+
+  assert.equal(await service.importFile(outside), 'notes/spec.md')
+  assert.equal(await service.importFile(outside), 'notes/spec-2.md')
+})
+
+test('importing something already inside the notebook is a no-op, not a copy', async t => {
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'mine.md'), '---\ntephra: 1\nkind: markdown\n---\nMine.\n')
+
+  assert.equal(await service.importFile('notes/mine.md' as DocumentId), 'notes/mine.md')
 })

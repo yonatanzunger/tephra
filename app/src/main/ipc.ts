@@ -184,13 +184,15 @@ export function registerDocumentIpc(service: DocumentService): void {
 
 /** Push messages to a renderer for as long as its window lives. */
 /** The window half of the bridge: which window this is, and what it now shows. */
-export function registerWindowIpc(windows: Windows): void {
+export function registerWindowIpc(windows: Windows, onImport: (id: DocumentId | null) => void): void {
   ipcMain.handle(CHANNEL.windowInfo, e => windows.infoFor(e.sender))
   ipcMain.on(CHANNEL.windowReport, (e, report: WindowReport) => windows.report(e.sender, report))
   ipcMain.handle(CHANNEL.windowCreate, (_e, target?: NavTarget) => {
     windows.open(target)
   })
   ipcMain.handle(CHANNEL.windowClose, e => windows.close(e.sender))
+  // The badge and the File menu reach the same act; main owns it either way.
+  ipcMain.handle(CHANNEL.windowImport, e => onImport(windows.importableFor(e.sender)))
 }
 
 export function attachWindow(service: DocumentService, window: BrowserWindow): void {

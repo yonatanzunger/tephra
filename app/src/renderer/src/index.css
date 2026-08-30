@@ -507,6 +507,26 @@ body {
 }
 .titlebar .title { font-variant-numeric: tabular-nums; color: rgb(var(--text-heading)); }
 .titlebar .spacer { flex: 1; }
+
+/* **A statement of fact that is also the way out of it.** Read-only is not an
+   error, so it is not red; it is a condition of this file, and importing is
+   what changes the condition. Styled as a chip rather than a button so it reads
+   as a label first — which is what it is until you want it (MC6). */
+.titlebar .badge.readonly {
+  -webkit-app-region: no-drag;
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .15rem .5rem;
+  border: 1px solid rgb(var(--border));
+  border-radius: 999px;
+  background: rgb(var(--surface-muted));
+  color: rgb(var(--text-muted));
+  font: inherit; font-size: 11px; letter-spacing: .02em;
+  cursor: pointer;
+}
+.titlebar .badge.readonly:hover {
+  border-color: rgb(var(--accent));
+  color: rgb(var(--text));
+}
 .titlebar label, .titlebar input { -webkit-app-region: no-drag; }
 .toggle { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
 .saved { min-width: 4.5rem; text-align: right; }

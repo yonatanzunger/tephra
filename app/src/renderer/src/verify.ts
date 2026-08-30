@@ -4,7 +4,11 @@
 // prints what it found. Two launches against one notebook is the only way to
 // test what M0 actually claims: that nothing is lost across a quit.
 
-export async function runVerify(scene: string): Promise<void> {
+export async function runVerify(request: string): Promise<void> {
+  // **A scene may carry one argument, after a `|`.** Some claims are about a
+  // path the harness made up — a file outside the notebook, whose location is
+  // a temporary directory — and the scene cannot know it any other way.
+  const [scene = '', arg = ''] = request.split('|')
   // **Every window runs this, so every window has to say which it is.** A
   // scene that opens a second window would otherwise get two of every answer,
   // indistinguishable in the log. The first window reports unprefixed, because
@@ -1264,6 +1268,45 @@ export async function runVerify(scene: string): Promise<void> {
       await settle(1200)
       say('titleBack', titleNow())
       say('backInStream', live().state.doc.toString().includes('Yesterday'))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
+    if (scene === 'readonly') {
+      // MC6: a file from outside the notebook opens to be READ, says so, and
+      // the saying-so is the way to change it.
+      await pane.goTo({ kind: 'document', id: arg })
+      await settle(1400)
+
+      const badge = (): HTMLElement | null => document.querySelector('.titlebar .badge.readonly')
+      say('titleOutside', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('textOutside', live().state.doc.toString())
+      say('badgeShown', badge()?.textContent ?? '(none)')
+
+      // Typing must do nothing at all — not be accepted and refused later, when
+      // what was typed is the only copy of it.
+      live().dispatch({
+        changes: { from: 0, insert: 'SHOULD NOT LAND' },
+        userEvent: 'input.type',
+      })
+      await settle(500)
+      say('afterTyping', live().state.doc.toString())
+
+      // The badge IS the import gesture. One click, and this window is looking
+      // at the copy — which is an ordinary document of ours.
+      badge()?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(2000)
+      say('titleAfterImport', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('textAfterImport', live().state.doc.toString())
+      say('badgeAfterImport', badge()?.textContent ?? '(none)')
+
+      live().dispatch({
+        changes: { from: live().state.doc.length, insert: '\nAnd a note of my own.\n' },
+        userEvent: 'input.type',
+      })
+      await settle(800)
+      say('typedIntoCopy', live().state.doc.toString())
+      await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
     }

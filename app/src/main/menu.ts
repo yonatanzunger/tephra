@@ -29,9 +29,18 @@ export interface MenuState {
   vim: boolean
   /** What the caret is doing, mirrored for the same reason. */
   selection: SelectionState
+  /** Whether the focused window is showing a file that could be imported. */
+  importable: boolean
 }
 
-const state: MenuState = { vim: false, selection: NO_SELECTION }
+/** A window said whether what it is showing can be brought in (MC6). */
+export function setMenuImportable(importable: boolean): void {
+  if (state.importable === importable) return
+  state.importable = importable
+  installMenu()
+}
+
+const state: MenuState = { vim: false, selection: NO_SELECTION, importable: false }
 
 function send(channel: string, value: unknown): void {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -87,6 +96,11 @@ export interface MenuActions {
    * involved only when the answer lands in the window it already has (MC6).
    */
   open: (inNewWindow: boolean) => void
+  /**
+   * Bring a file in. `pick` asks which; without it, whatever the focused window
+   * is showing — which is the same act reached from the read-only indicator.
+   */
+  import: (pick: boolean) => void
 }
 
 /**
@@ -94,7 +108,11 @@ export interface MenuActions {
  * only be moved in Electron by making the menu again — and a rebuild must not
  * lose the actions it was installed with.
  */
-let actions: MenuActions = { newWindow: () => undefined, open: () => undefined }
+let actions: MenuActions = {
+  newWindow: () => undefined,
+  open: () => undefined,
+  import: () => undefined,
+}
 
 export function installMenu(next?: MenuActions): void {
   if (next !== undefined) actions = next
@@ -147,6 +165,19 @@ export function installMenu(next?: MenuActions): void {
           label: 'Notebook',
           accelerator: 'CmdOrCtrl+0',
           click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
+        },
+        { type: 'separator' },
+        {
+          // Enabled only when there is something to import, which is when the
+          // focused window is showing a file from outside the notebook.
+          label: 'Import',
+          enabled: state.importable,
+          click: () => actions.import(false),
+        },
+        {
+          label: 'Import…',
+          accelerator: 'CmdOrCtrl+Shift+I',
+          click: () => actions.import(true),
         },
         { type: 'separator' },
         { role: 'close', label: 'Close Window' },

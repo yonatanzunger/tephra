@@ -144,6 +144,18 @@ export abstract class SegmentedDocument implements StoredDocument {
   }
 
   /**
+   * Where this document was brought in from, if it was (D47, MC6).
+   *
+   * Beside the title and for the same reason: a fact about the document rather
+   * than a sentence in it. A person who wants it out deletes the line, which is
+   * what "unknown keys are preserved verbatim" is for.
+   */
+  async setSourceOf(key: SegmentKey, source: string): Promise<void> {
+    ;(await this.segment(key)).setExtra('source', source)
+    this.touch('operation')
+  }
+
+  /**
    * Say that something about this document changed which is not its text.
    *
    * The generation does NOT advance: a generation counts edits, and a renderer
@@ -475,7 +487,7 @@ export abstract class SegmentedDocument implements StoredDocument {
     for (const [date, list] of perSegment) {
       const segment = await this.segment(date)
       if (segment.readOnly) {
-        throw new Error(`${segment.rel} has frontmatter that could not be parsed; it is not rewritten`)
+        throw new Error(`${segment.readOnlyReason ?? segment.rel}; it is not written`)
       }
       if (segment.diverged) {
         throw new Error(`${segment.rel} changed on disk while you were editing it; it is not being written`)

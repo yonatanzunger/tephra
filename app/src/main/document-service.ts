@@ -12,9 +12,9 @@
 // document would be reordered relative to what the typist saw.
 
 import type { Anomaly } from '../shared/anomalies.ts'
-import { isStream, ONLY_SEGMENT, type Unsubscribe } from '../shared/document-api.ts'
+import { isOutside, isStream, ONLY_SEGMENT, type Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
-import type { DateKey, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
+import type { DateKey, DocumentId, DocumentPosition, DocumentText, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
 import { Wal, type WalRecord } from './w/wal.ts'
@@ -22,8 +22,9 @@ import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
-import { kindOf, parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
-import { basename, join } from 'node:path'
+import { kindOf, noteFile, parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
+import { outsideExists, readOutside } from './w/outside.ts'
+import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { dateKeyAt } from '../shared/dates.ts'
@@ -290,6 +291,18 @@ export class DocumentService {
    */
   async saveUiState(state: UiState): Promise<void> {
     await this.#notebook.write(LOCAL.uiState, JSON.stringify(state, null, 2) + '\n')
+  }
+
+  /**
+   * The document table, for callers that legitimately hold one document.
+   *
+   * Not a way around the service — every write still goes through a borrowed
+   * document, which is the invariant (D54). It exists because the service is
+   * the thing that HAS the corpus, and a test or a tool asking about a document
+   * should not have to build a second one beside it.
+   */
+  get corpus(): Corpus {
+    return this.#corpus
   }
 
   /** The stream itself, for the few callers that legitimately want it. */
@@ -849,6 +862,60 @@ export class DocumentService {
     if (rel === null || kindOf(rel) === null) return null
     const id = rel as string as DocumentId
     return (await this.#corpus.exists(id)) ? id : null
+  }
+
+  /**
+   * What document a FILE PICKER's answer names — inside the notebook or not.
+   *
+   * **Deliberately not `documentAt`.** That one answers about a link found in a
+   * document's text, which is untrusted data: `../../../..` in a line of prose
+   * can reach anywhere on the machine, and it is refused for exactly that
+   * reason. A person choosing a file in a dialog is an intention, not data, so
+   * this one may say yes to a path outside the notebook — and what comes back
+   * is an outside document, which is read-only and says so (MC6).
+   */
+  async documentForFile(path: string): Promise<DocumentId | null> {
+    const inside = await this.documentAt(path)
+    if (inside !== null) return inside
+    if (!isAbsolute(path) || kindOf(path as RelPath) === null) return null
+    return (await outsideExists(path)) ? (path as string as DocumentId) : null
+  }
+
+  /**
+   * Bring an outside file in: a COPY, and the original left alone.
+   *
+   * D47's rule, applied one level up. The import gesture keeps the file it came
+   * from untouched and puts a copy where this app can keep its promises — from
+   * the moment it lands it is versioned, indexed, watched and undoable, none of
+   * which is true of a file Tephra merely opened.
+   *
+   * The provenance goes in the frontmatter rather than in the text: it is a
+   * fact about the document, not a sentence somebody wrote, and `source:` is
+   * preserved verbatim on every rewrite like any other unknown key.
+   */
+  async importFile(id: DocumentId): Promise<DocumentId> {
+    if (!isOutside(id)) return id // already ours; importing it would be a second copy
+
+    const from = id as string
+    const text = await readOutside(from)
+    if (text === null) throw new Error(`${from} could not be read`)
+
+    const rel = await this.#freeNoteName(basename(from).replace(/\.md$/i, ''))
+    await this.#corpus.use(rel, async doc => {
+      await doc.setBodyOf(ONLY_SEGMENT, text as DocumentText)
+      await doc.setTitleOf(ONLY_SEGMENT, basename(from).replace(/\.md$/i, ''))
+      await doc.setSourceOf(ONLY_SEGMENT, from)
+    })
+    this.#touched()
+    return rel
+  }
+
+  /** A name nobody is using. Importing twice makes two notes, not one overwrite. */
+  async #freeNoteName(name: string): Promise<DocumentId> {
+    for (let n = 1; ; n++) {
+      const rel = noteFile(n === 1 ? name : `${name} ${n}`) as string as DocumentId
+      if (!(await this.#corpus.exists(rel))) return rel
+    }
   }
 
   async linkTarget(target: string, from?: RelPath): Promise<string | null> {

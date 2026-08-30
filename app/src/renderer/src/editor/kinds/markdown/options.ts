@@ -14,9 +14,19 @@
 // The plain settings are the default rather than an entry, so a kind nobody has
 // taught this about still opens as the markdown file it is (R26).
 
-import type { DocumentKind } from '../../../../../shared/document-api.ts'
+import type { DocumentMeta } from '../../../../../shared/document-api.ts'
 
 export interface MarkdownOptions {
+  /**
+   * Whether typing into it does anything.
+   *
+   * **Not a kind's property — the DOCUMENT's** (`meta.readOnly`), which is why
+   * this is set beside the per-kind flags rather than being one of them. A file
+   * from outside the notebook is an ordinary markdown document that cannot be
+   * written; the buffer should say so by not accepting keystrokes, rather than
+   * by letting someone type a paragraph and then refusing to save it (MC6).
+   */
+  readonly editable: boolean
   /** Day separators and the date gutter. The stream has days; nothing else does. */
   readonly days: boolean
   /**
@@ -37,9 +47,10 @@ export interface MarkdownOptions {
   readonly landing: 'append' | 'start'
 }
 
-const STREAM: MarkdownOptions = { days: true, annotations: true, landing: 'append' }
-const PLAIN: MarkdownOptions = { days: false, annotations: false, landing: 'start' }
+const STREAM: MarkdownOptions = { days: true, annotations: true, landing: 'append', editable: true }
+const PLAIN: MarkdownOptions = { days: false, annotations: false, landing: 'start', editable: true }
 
-export function optionsFor(kind: DocumentKind): MarkdownOptions {
-  return kind === 'stream' ? STREAM : PLAIN
+export function optionsFor(meta: DocumentMeta): MarkdownOptions {
+  const base = meta.kind === 'stream' ? STREAM : PLAIN
+  return meta.readOnly === true ? { ...base, editable: false } : base
 }

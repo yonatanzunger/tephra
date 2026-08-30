@@ -366,8 +366,28 @@ export type DocumentKind = 'stream' | 'markdown' | 'todo' | 'fileset'
  */
 export const STREAM_ID = 'stream' as DocumentId
 
+/**
+ * A document from OUTSIDE the notebook, named by its absolute path.
+ *
+ * Every other id is a path inside the corpus, so absoluteness is what tells the
+ * two apart — a notebook-relative path never starts at the root. Outside
+ * documents are read-only and get none of what being inside gives: no history,
+ * no versions, no index, no watching. Bringing one in is the `import` gesture,
+ * which is a copy and says so.
+ */
+export const isOutside = (id: DocumentId): boolean => (id as string).startsWith('/')
+
 export interface DocumentMeta {
   readonly kind: DocumentKind
+  /**
+   * Whether this document may be written to.
+   *
+   * **A property of the document, not of its kind.** A downloaded note is an
+   * ordinary markdown document that happens to live outside the notebook, so
+   * it reads exactly like one and simply cannot be saved — the surface shows
+   * that rather than discovering it at the first keystroke.
+   */
+  readonly readOnly?: boolean
   /**
    * No origin fields (D27). A branched document is not in the dated stream and
    * is not given a date to pretend otherwise; the link left behind in the

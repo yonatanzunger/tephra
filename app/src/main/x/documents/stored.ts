@@ -34,6 +34,9 @@ export interface StoredDocument extends Document {
   /** Name the document. Not an edit: no span, no undo entry, no moved position. */
   setTitleOf(key: SegmentKey, title: string): Promise<void>
 
+  /** Record where it was imported from. Also not an edit. */
+  setSourceOf(key: SegmentKey, source: string): Promise<void>
+
   /** Replace one segment's content, as an ordinary edit — undo and all. */
   setBodyOf(key: SegmentKey, body: DocumentText, origin?: EditOrigin): Promise<void>
 

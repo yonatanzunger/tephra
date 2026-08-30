@@ -33,6 +33,9 @@ export class Segment {
   /** Whether this segment is a day of the stream, and so covers itself (D51). */
   #dated = true
 
+  /** Set for a file this app does not own: outside the notebook (MC6). */
+  #frozen = false
+
   /** The file exactly as read. Never regenerated — spliced (format-spec). */
   #original: string
   #parsed: ParsedFile
@@ -65,6 +68,19 @@ export class Segment {
   static forFile(key: SegmentKey, rel: RelPath, fileText: string): Segment {
     const made = new Segment(key as DateKey, rel, fileText)
     made.#dated = false
+    return made
+  }
+
+  /**
+   * A file this app does not own: read for its text, never written back.
+   *
+   * Frontmatter is NOT stripped by pretending it is ours — an outside file is
+   * whatever it is, and if it happens to carry a `---` block that block is part
+   * of what the reader came to read.
+   */
+  static outside(key: SegmentKey, rel: RelPath, fileText: string): Segment {
+    const made = Segment.forFile(key, rel, fileText)
+    made.#frozen = true
     return made
   }
 
@@ -179,11 +195,22 @@ export class Segment {
   }
 
   /**
-   * A file whose frontmatter could not be parsed is READ-ONLY, permanently, for
-   * as long as that holds. Never overwrite what you could not read.
+   * Two reasons a file is not written back, and they mean different things.
+   *
+   * A file whose frontmatter could not be parsed is read-only for as long as
+   * that holds: never overwrite what you could not read. A file OUTSIDE the
+   * notebook is read-only because it is not ours — Tephra opened it to be read
+   * from, and writing it would be editing something the app does not manage.
    */
   get readOnly(): boolean {
-    return this.#parsed.unparseable
+    return this.#parsed.unparseable || this.#frozen
+  }
+
+  /** Why, in words a person can act on. Null when it is writable. */
+  get readOnlyReason(): string | null {
+    if (this.#frozen) return `${this.rel} is outside this notebook`
+    if (this.#parsed.unparseable) return `${this.rel} has frontmatter that could not be parsed`
+    return null
   }
 
   /** The date the file claims, which outranks its name (format-spec). */

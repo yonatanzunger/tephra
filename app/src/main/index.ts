@@ -14,12 +14,30 @@ import { Notebook } from './w/notebook.ts'
 import { listThemes, saveTheme, seedThemes } from './w/themes.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
+import { isOutside, type DocumentId } from '../shared/document-api.ts'
 import type { SelectionState } from '../shared/commands.ts'
 
 // Before anything reads it. Electron takes the app name from package.json's
 // `name` field, which is the npm package name — lower case, and not what
 // belongs in a menu bar.
 app.setName('Tephra')
+
+// **In a test run, an uncaught exception should END the run, not block it.**
+// Electron's default is a native modal dialog, which in a headless acceptance
+// run is a window nobody can dismiss: the harness waits out its whole timeout
+// and reports "timed out" for what was actually a stack trace. Gated, because
+// in the shipped app the dialog is the right answer — somebody is there to read
+// it, and swallowing a crash would be worse than showing one.
+if (verifyMode()) {
+  process.on('uncaughtException', error => {
+    try {
+      console.error(`TEPHRA: uncaught exception in main: ${error.stack ?? String(error)}`)
+    } catch {
+      // Even this can fail once the pipe is gone; exiting is still right.
+    }
+    app.exit(1)
+  })
+}
 
 if (verifyMode()) {
   console.warn(
@@ -61,6 +79,26 @@ async function captureAndQuit(win: BrowserWindow, to: string): Promise<void> {
 /** How many windows this process has made, so the first one can be told apart. */
 let windowsMade = 0
 
+/**
+ * Print a line for the harness, and never die trying.
+ *
+ * **A diagnostic must not be able to crash the app.** `console.log` writes to a
+ * pipe, and the pipe is gone once the harness has stopped reading — it killed
+ * the child, or the run ended and the process is on its way out. The write then
+ * throws EPIPE from inside an event handler, which is an UNCAUGHT exception,
+ * which Electron puts on screen as a native error dialog.
+ *
+ * A set of windows made it easy to reach: they all forward, and the first one's
+ * `VERIFY done` ends the run while the others are still talking (MC6).
+ */
+function forward(message: string): void {
+  try {
+    console.log(message)
+  } catch {
+    // The harness stopped listening. That is the end of the run, not a fault.
+  }
+}
+
 function createWindow(): BrowserWindow {
   // Width-dependent behaviour is the whole substance of D42 — the gutter folds
   // at one width, the capture stream is refused at another — and this desk's
@@ -101,7 +139,12 @@ function createWindow(): BrowserWindow {
     if (verifyMode()) win.showInactive()
     else win.show()
     const shot = verifyEnv('TEPHRA_SHOT')
-    if (shot !== undefined && shot !== '') void captureAndQuit(win, shot)
+    // One file per window: with a set of them, a single path means the last
+    // one to finish overwrites the others, and a window that came up blank is
+    // exactly the one you would never see (MC6).
+    if (shot !== undefined && shot !== '') {
+      void captureAndQuit(win, windowsMade <= 1 ? shot : shot.replace(/\.png$/, `-${windowsMade}.png`))
+    }
   })
 
   // Temporary: surface the renderer's self-check, and exit when it finishes.
@@ -116,7 +159,7 @@ function createWindow(): BrowserWindow {
     const primary = ++windowsMade === 1
     win.webContents.on('console-message', (_e, _level, message) => {
       if (!message.startsWith('VERIFY')) return
-      console.log(message)
+      forward(message)
       if (message === 'VERIFY done' && primary) {
         setTimeout(() => {
           void win.webContents
@@ -162,10 +205,14 @@ function createWindow(): BrowserWindow {
  * item's name was the mistake: it looked like Open… and behaved like neither.
  *
  * Rooted at the notebook, because that is where a person's documents are, and
- * filtered to markdown, because that is what a document is. Anything outside
- * the notebook is refused by NAME rather than silently doing nothing: opening
- * it would mean either editing a file this app does not manage or importing a
- * copy, and those are different acts that deserve to be asked for (R28, D47).
+ * filtered to markdown, because that is what a document is.
+ *
+ * **A file outside the notebook opens READ-ONLY** rather than being refused.
+ * Downloading something and wanting to read it here — and take a paragraph out
+ * of it — is an ordinary thing to want, and it costs nothing: the document
+ * layer can read anything. What it cannot do is keep its promises about a file
+ * it does not manage, so the window says so and offers the gesture that fixes
+ * it, which is import (MC6).
  */
 async function openDocument(inNewWindow: boolean): Promise<void> {
   if (service === null) return
@@ -179,12 +226,12 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
   const path = picked.filePaths[0]
   if (picked.canceled || path === undefined) return
 
-  const id = await service.documentAt(path)
+  const id = await service.documentForFile(path)
   if (id === null) {
     await dialog.showMessageBox({
       type: 'info',
-      message: 'That file is outside this notebook.',
-      detail: `Tephra opens documents kept in ${service.notebookRoot}.`,
+      message: 'Tephra cannot open that file.',
+      detail: 'It opens markdown documents — files ending in .md.',
       buttons: ['OK'],
     })
     return
@@ -193,6 +240,55 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
   if (inNewWindow) windows?.open({ kind: 'document', id })
   else parent?.webContents.send(CHANNEL.openDocument, id)
 }
+
+/**
+ * Import: bring a file in, and go to the copy.
+ *
+ * Two ways in, one act. `Import…` asks which file; `Import` acts on what the
+ * focused window is already showing, which is why the read-only indicator is a
+ * button — the file is in front of you and the gesture is right there (MC6).
+ */
+async function importDocument(pick: boolean, asked?: DocumentId | null): Promise<void> {
+  if (service === null) return
+  const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+
+  let id: DocumentId | null = null
+  if (pick) {
+    const picked = await dialog.showOpenDialog({
+      title: 'Import into the notebook',
+      defaultPath: app.getPath('downloads'),
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    const path = picked.filePaths[0]
+    if (picked.canceled || path === undefined) return
+    id = await service.documentForFile(path)
+  } else {
+    // What the ASKING window is showing when a window asked, and the focused
+    // one when the menu did. A window knows which it is; a menu does not.
+    id = asked ?? windows?.importable() ?? null
+  }
+
+  if (id === null) {
+    // Parented, so it is a sheet on the window it is about rather than an
+    // app-modal box that blocks the whole process — including, once, a test
+    // run that then sat there until it timed out.
+    if (parent !== undefined) {
+      await dialog.showMessageBox(parent, {
+        type: 'info',
+        message: 'There is nothing to import.',
+        detail: 'Import brings a file from outside the notebook in. This one is already inside it.',
+        buttons: ['OK'],
+      })
+    }
+    return
+  }
+
+  const brought = await service.importFile(id)
+  parent?.webContents.send(CHANNEL.openDocument, brought)
+}
+
+
 
 ipcMain.handle('tephra:hello', () => ({
   version: process.versions.electron,
@@ -251,6 +347,7 @@ app.whenReady().then(async () => {
   installMenu({
     newWindow: () => windows?.open(),
     open: inNewWindow => void openDocument(inNewWindow),
+    import: pick => void importDocument(pick),
   })
   ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
   // The renderer owns the caret; main owns the menus. Each tells the other the
@@ -279,7 +376,7 @@ app.whenReady().then(async () => {
 
   // The session, not a window: whatever was open last time comes back (MC6).
   windows = new Windows(service, createWindow)
-  registerWindowIpc(windows)
+  registerWindowIpc(windows, id => void importDocument(false, id))
   await windows.restore()
 
   app.on('activate', () => {

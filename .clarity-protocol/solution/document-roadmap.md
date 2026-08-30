@@ -401,6 +401,47 @@ had told it what window it was — and that report overwrote the very target it
 had been opened to show. A window has nothing to say about itself until it
 knows what it is, so reporting now waits for that.
 
+**MC6½ — files from outside the notebook.** Open… used to refuse them, which
+was the wrong answer to a reasonable thing to want: download something, read it
+here, take a paragraph out of it. So an outside file OPENS, read-only, and the
+window says so — and the saying-so is the button that imports it.
+
+- **`isOutside(id)`: an absolute path is a document from outside.** Every other
+  id is a path inside the corpus, so absoluteness is what tells them apart.
+- **`ExternalDocument` is one class for every kind, and that is a claim.** The
+  kind still comes from the filename, so a downloaded `.todo.md` reports `todo`
+  and gets the todo surface; what it does not get is any kind's VERBS, and it
+  cannot want them, because every one of them writes. WHAT it is chooses the
+  surface; WHERE it is decides whether it can be changed. The day that stops
+  being true is the day a kind has a READ verb its surface needs — and the fix
+  then is not a class per kind but moving the loader out of the kind, which is
+  one parameter away since `load()` is already the only abstract member.
+- **Read-only is on `DocumentMeta`, not a kind**, so `optionsFor` takes the meta
+  and the markdown surface turns off editing. Three layers enforce it: `editable`
+  takes the caret out of the DOM, `readOnly` is what commands consult, and a
+  transaction filter drops any change that arrives anyway — the third because a
+  programmatic dispatch is stopped by neither of the others and reached the
+  document, which threw. A read-only surface should IGNORE an edit, not fail.
+- **Import is a copy, and the original is left alone** (D47 one level up), into
+  `notes/`, with `source:` in the frontmatter — a fact about the document, not a
+  sentence in it. Importing twice makes two notes; importing something already
+  inside is a no-op.
+- **The badge is the gesture.** `Import` from the menu acts on the FOCUSED
+  window; from the badge it acts on the ASKING window, which does not have to
+  guess which it is. That distinction was found the hard way: a window shown
+  without focus was told there was nothing to import, about the file it was
+  displaying, in an app-modal dialog that blocked main until the run timed out.
+
+**And a diagnostic that could crash the app.** Forwarding a renderer's console
+line to the harness is a write to a pipe, and once the harness stops reading —
+it killed the child, or the run ended — that write throws EPIPE from inside an
+event handler, uncaught, which Electron puts on screen as a native error dialog.
+A set of windows made it easy to reach: they all forward, and the first one's
+`VERIFY done` ends the run while the others are still talking. Guarded now, and
+in verification mode an uncaught exception exits with a stack instead of opening
+a modal nobody can dismiss — a dialog in a headless run is a hang, and the
+harness reports it as a timeout for what was really a crash.
+
 **And the ui-state leak from MC3b is closed by being answered, not moved.**
 `.tephra/` is MACHINERY — the WAL and the index cache live there and write
 directly too — and the floor rule is about corpus documents. Making ui-state a

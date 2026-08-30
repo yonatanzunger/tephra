@@ -580,6 +580,71 @@ console.log('\n— windows —')
     `${first.appError} · ${back.appError}`)
 }
 
+// ── 7. a file from outside the notebook ─────────────────────────────────────
+//
+// Downloading something and wanting to read it here is an ordinary thing to
+// want. Tephra can read anything; what it cannot do is keep its promises about
+// a file it does not manage — no history, no versions, no index — so the window
+// says so, and the saying-so is the button that fixes it (MC6).
+console.log('\n— a file from outside —')
+{
+  const root = await week(['Today.\n', 'Yesterday.\n'])
+  const elsewhere = await mkdtemp(join(tmpdir(), 'tephra-downloads-'))
+  const outside = join(elsewhere, 'spec.md')
+  await writeFile(outside, 'A spec I downloaded.\n')
+
+  const r = report(await launch(`readonly|${outside}`, root))
+  const original = await readFile(outside, 'utf8')
+  const copy = await readFile(join(root, 'notes', 'spec.md'), 'utf8').catch(() => '')
+
+  check(
+    'an outside file opens, under its own name',
+    r.titleOutside === 'spec',
+    JSON.stringify(r.titleOutside),
+  )
+  check(
+    'and shows its text, which is what you came for',
+    typeof r.textOutside === 'string' && r.textOutside.includes('A spec I downloaded'),
+    JSON.stringify(r.textOutside),
+  )
+  check(
+    'the window says it is read-only, and offers the way out',
+    r.badgeShown === 'Read-only · Import',
+    JSON.stringify(r.badgeShown),
+  )
+  check(
+    'TYPING DOES NOTHING: refused now, not lost at save time',
+    typeof r.afterTyping === 'string' && !r.afterTyping.includes('SHOULD NOT LAND'),
+    JSON.stringify(r.afterTyping),
+  )
+  check(
+    'THE BADGE IS THE GESTURE: clicking it brings the file in',
+    typeof r.textAfterImport === 'string' && r.textAfterImport.includes('A spec I downloaded'),
+    JSON.stringify(r.textAfterImport),
+  )
+  check(
+    'and what is showing now is a document of ours, so the badge is gone',
+    r.badgeAfterImport === '(none)',
+    JSON.stringify(r.badgeAfterImport),
+  )
+  check(
+    'the copy is writable, because being inside is what that means',
+    typeof r.typedIntoCopy === 'string' && r.typedIntoCopy.includes('a note of my own'),
+    JSON.stringify(r.typedIntoCopy),
+  )
+  check(
+    'it landed in the notebook as a proper document, saying where it came from',
+    /^---\ntephra: 1\n/.test(copy) && /source: /.test(copy) && copy.includes('a note of my own'),
+    JSON.stringify(copy),
+  )
+  check(
+    'and the file it came from was not touched',
+    original === 'A spec I downloaded.\n',
+    JSON.stringify(original),
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

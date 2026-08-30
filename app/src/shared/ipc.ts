@@ -98,6 +98,8 @@ export const CHANNEL = {
   windowClose: 'tephra:win:close',
   /** Main chose a document — go there. Carries an id, which a command name cannot. */
   openDocument: 'tephra:doc:goto',
+  /** Bring the outside file this window is showing into the notebook (MC6). */
+  windowImport: 'tephra:win:import',
   /** renderer → main: the menu's checkmark follows the app, not the other way. */
   vimChanged: 'tephra:ui:vimChanged',
   /** main → renderer */
@@ -159,6 +161,14 @@ export interface WindowReport {
   readonly cursor: StoredCursor | null
   /** What to call this window: the document's name, or `Notebook` for the stream. */
   readonly name: string
+  /**
+   * The outside document this window is showing, if it is showing one (MC6).
+   *
+   * Reported rather than asked for, so `Import` can be enabled or greyed the
+   * moment focus moves — a menu item that has to wait for a round trip is a
+   * menu item that is briefly wrong.
+   */
+  readonly importable: DocumentId | null
   readonly vim: boolean
   readonly theme: string
 }
