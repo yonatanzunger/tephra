@@ -2,7 +2,7 @@
 // (Document, Corpus, History), per D37. The renderer holds Z and the live
 // CodeMirror buffer, and nothing else.
 
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection, setMenuVim } from './menu.ts'
 import { verifyMode, verifyEnv } from './verify-mode.ts'
@@ -153,6 +153,47 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+/**
+ * File ▸ Open…, which is the system's dialog and not one of ours.
+ *
+ * **A picker is a thing people already know how to use**, with their recents,
+ * their favourites, search and a path they can type. An in-app list of the
+ * corpus is a different gesture — a quick switcher — and giving it this menu
+ * item's name was the mistake: it looked like Open… and behaved like neither.
+ *
+ * Rooted at the notebook, because that is where a person's documents are, and
+ * filtered to markdown, because that is what a document is. Anything outside
+ * the notebook is refused by NAME rather than silently doing nothing: opening
+ * it would mean either editing a file this app does not manage or importing a
+ * copy, and those are different acts that deserve to be asked for (R28, D47).
+ */
+async function openDocument(inNewWindow: boolean): Promise<void> {
+  if (service === null) return
+  const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const picked = await dialog.showOpenDialog({
+    title: inNewWindow ? 'Open in a new window' : 'Open',
+    defaultPath: service.notebookRoot,
+    properties: ['openFile'],
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+  })
+  const path = picked.filePaths[0]
+  if (picked.canceled || path === undefined) return
+
+  const id = await service.documentAt(path)
+  if (id === null) {
+    await dialog.showMessageBox({
+      type: 'info',
+      message: 'That file is outside this notebook.',
+      detail: `Tephra opens documents kept in ${service.notebookRoot}.`,
+      buttons: ['OK'],
+    })
+    return
+  }
+
+  if (inNewWindow) windows?.open({ kind: 'document', id })
+  else parent?.webContents.send(CHANNEL.openDocument, id)
+}
+
 ipcMain.handle('tephra:hello', () => ({
   version: process.versions.electron,
   origin: DEV_SERVER ?? APP_ORIGIN,
@@ -207,7 +248,10 @@ app.whenReady().then(async () => {
   // The renderer owns the vim setting — it is loaded from ui-state.json and
   // saved per device (D30). The menu's checkmark is a view of that, kept honest
   // by the renderer reporting it, never a second copy that could disagree.
-  installMenu({ newWindow: () => windows?.open() })
+  installMenu({
+    newWindow: () => windows?.open(),
+    open: inNewWindow => void openDocument(inNewWindow),
+  })
   ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
   // The renderer owns the caret; main owns the menus. Each tells the other the
   // one thing it knows, which is what keeps a greyed-out item honest.

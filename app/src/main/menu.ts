@@ -79,6 +79,14 @@ export function setMenuSelection(selection: SelectionState): void {
  */
 export interface MenuActions {
   newWindow: () => void
+  /**
+   * Ask for a file, the way every other application asks for one.
+   *
+   * **Main's, all of it.** The dialog is the OS's, resolving a path to a
+   * document is the notebook's, and making a window is main's — the renderer is
+   * involved only when the answer lands in the window it already has (MC6).
+   */
+  open: (inNewWindow: boolean) => void
 }
 
 /**
@@ -86,7 +94,7 @@ export interface MenuActions {
  * only be moved in Electron by making the menu again — and a rebuild must not
  * lose the actions it was installed with.
  */
-let actions: MenuActions = { newWindow: () => undefined }
+let actions: MenuActions = { newWindow: () => undefined, open: () => undefined }
 
 export function installMenu(next?: MenuActions): void {
   if (next !== undefined) actions = next
@@ -125,12 +133,12 @@ export function installMenu(next?: MenuActions): void {
         {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
-          click: () => send(CHANNEL.menuCommand, 'openDocument'),
+          click: () => actions.open(false),
         },
         {
           label: 'Open in New Window…',
           accelerator: 'CmdOrCtrl+Shift+O',
-          click: () => send(CHANNEL.menuCommand, 'openDocumentInNewWindow'),
+          click: () => actions.open(true),
         },
         {
           // The one document that is not a file, under the name everybody uses

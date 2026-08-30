@@ -96,6 +96,8 @@ export const CHANNEL = {
   /** Every document that could be opened, for the Open… chooser (MC6). */
   navDocuments: 'tephra:nav:documents',
   windowClose: 'tephra:win:close',
+  /** Main chose a document — go there. Carries an id, which a command name cannot. */
+  openDocument: 'tephra:doc:goto',
   /** renderer → main: the menu's checkmark follows the app, not the other way. */
   vimChanged: 'tephra:ui:vimChanged',
   /** main → renderer */

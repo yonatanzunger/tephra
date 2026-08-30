@@ -4,7 +4,7 @@
 
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
@@ -214,4 +214,58 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   assert.equal(versions.length, 4)
   assert.match(versions[0]?.reason ?? '', /^Restored to/)
   assert.match((await service.readDay(versions[1]!.id, today)) ?? '', /regrettable/)
+})
+
+// ── what a path means, which is what File ▸ Open… asks (MC6) ───────────────
+
+test('an absolute path inside the notebook resolves to the document it is', async t => {
+  // The system dialog hands back an absolute path; the notebook is what turns
+  // one into a document. Untestable through the dialog itself — a native modal
+  // cannot be driven from the acceptance harness — so it is tested here, where
+  // the resolution actually lives.
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'offer.md'), '---\ntephra: 1\nkind: markdown\n---\nText.\n')
+
+  assert.equal(await service.documentAt(join(root, 'notes', 'offer.md')), 'notes/offer.md')
+})
+
+test('a path outside the notebook is not a document, and says so by being null', async t => {
+  // Opening it would mean either editing a file this app does not manage or
+  // importing a copy — different acts, both of which deserve to be asked for.
+  const { service, root } = await fixture(t)
+  const outside = join(root, '..', 'somewhere-else.md')
+  await writeFile(outside, '# Not in the notebook\n')
+  t.after(() => rm(outside, { force: true }))
+
+  assert.equal(await service.documentAt(outside), null)
+})
+
+test('and a file inside the notebook that is not a document is not one either', async t => {
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'attachments'), { recursive: true })
+  await writeFile(join(root, 'attachments', 'scan.png'), 'not really a png')
+
+  assert.equal(await service.documentAt(join(root, 'attachments', 'scan.png')), null)
+})
+
+test('the documents list names every document, the notebook first', async t => {
+  // What the sidebar's "Pin to…" chooser will ask for, and what the acceptance
+  // harness uses to find a document by name.
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n',
+  )
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'plain.md'), '---\ntephra: 1\nkind: markdown\n---\nNo title.\n')
+
+  const documents = await service.documents()
+  assert.equal(documents[0]?.title, 'Notebook', 'the one document that is not a file comes first')
+  assert.deepEqual(
+    documents.slice(1).map(d => d.title).sort(),
+    ['The house', 'plain.md'],
+    'a title when it has one, and its filename when it does not',
+  )
 })

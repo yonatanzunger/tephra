@@ -124,6 +124,12 @@ const tephra = {
     /** Fire and forget: losing a cursor position is cheap and self-correcting. */
     report: (report: WindowReport): void => ipcRenderer.send(CHANNEL.windowReport, report),
     create: (target?: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowCreate, target),
+    /** Main picked a document for this window to show (File ▸ Open…). */
+    onOpenDocument(handler: Handler<DocumentId>): () => void {
+      const listener = (_e: unknown, id: DocumentId): void => handler(id)
+      ipcRenderer.on(CHANNEL.openDocument, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.openDocument, listener)
+    },
     close: (): Promise<void> => ipcRenderer.invoke(CHANNEL.windowClose),
   },
 

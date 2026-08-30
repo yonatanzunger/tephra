@@ -19,10 +19,8 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
-import { Chooser, type ChooserRequest } from './frame/Chooser'
 import { tephra } from './handle'
 import type { Located, Reference } from '../../shared/nav-api.ts'
-import type { NavTarget } from '../../shared/pane-api.ts'
 import { DateRange, type DateRangeRequest } from './frame/DateRange'
 import { MarkPanel } from './frame/MarkPanel'
 import { Rail } from './frame/Rail'
@@ -128,7 +126,6 @@ export function App(): React.JSX.Element {
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
-  const [chooser, setChooser] = useState<ChooserRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
   const [navGeneration, setNavGeneration] = useState(0)
@@ -197,6 +194,15 @@ export function App(): React.JSX.Element {
     })()
     return () => created?.release()
   }, [])
+
+  // File ▸ Open… landed on a document. **Main picked it** — the dialog is the
+  // OS's and the resolution from a path to a document is the notebook's — so
+  // all that is left here is going there (MC6).
+  useEffect(() => {
+    return window.tephra.win.onOpenDocument(id => {
+      void pane?.goTo(id === STREAM_ID ? { kind: 'today' } : { kind: 'document', id }).catch(fail)
+    })
+  }, [pane])
 
   // A day changed on disk while we held unsaved edits to it. Surfaced, never
   // resolved (D12): both automatic answers destroy something. Writing to that
@@ -290,25 +296,6 @@ export function App(): React.JSX.Element {
                 : { content: board.html, ext: 'html' }
             await window.tephra.doc.importText(at, text, original)
           })
-          .catch(fail)
-      } else if (command === 'openDocument' || command === 'openDocumentInNewWindow') {
-        // **One chooser, two destinations.** Which window it lands in is the
-        // only difference, so it is one gesture with a parameter rather than
-        // two dialogs that would have to be kept looking alike (MC6).
-        const inNewWindow = command === 'openDocumentInNewWindow'
-        void window.tephra.nav
-          .documents()
-          .then(documents =>
-            setChooser({
-              title: inNewWindow ? 'Open in a new window' : 'Open',
-              documents,
-              onChoose: id => {
-                const target: NavTarget = id === STREAM_ID ? { kind: 'today' } : { kind: 'document', id }
-                if (inNewWindow) void window.tephra.win.create(target).catch(fail)
-                else void pane?.goTo(target).catch(fail)
-              },
-            }),
-          )
           .catch(fail)
       } else if (command === 'goToNotebook') {
         void pane?.goToToday().catch(fail)
@@ -904,7 +891,6 @@ export function App(): React.JSX.Element {
           />
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
-        {chooser !== null && <Chooser request={chooser} onClose={() => setChooser(null)} />}
         {range !== null && <DateRange request={range} onClose={() => setRange(null)} />}
         {railHost !== null &&
           createPortal(
