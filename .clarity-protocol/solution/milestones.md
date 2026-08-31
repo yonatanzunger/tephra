@@ -518,6 +518,22 @@ It rebuilds when anything under `src/` is newer than the built main process, so
 return a path string — the app then dies at startup with an error naming none of
 that, and it has cost an afternoon once already.
 
+```
+npm run test:full     typecheck, unit and integration, then m0–m3
+npm run install:app   package, then replace /Applications/Tephra.app
+```
+
+**Not `npm run install`.** A script called `install` is an npm LIFECYCLE hook: it
+would run on every `npm install`, so adding a dependency would package the app
+and overwrite the one in /Applications. The colon is what keeps it a command you
+ask for.
+
+`install:app` refuses while Tephra is running — replacing a running bundle works
+until the app reaches for a resource that moved, and then dies somewhere
+unrelated — and it REMOVES the old bundle rather than copying over it, since
+`cp -R` onto an existing `.app` copies *into* it and leaves stale resources
+inside a signed bundle. `--force` is there for when you know better.
+
 **Packaging exists**: `npm run package` builds `dist/Tephra-darwin-arm64/Tephra.app`
 with `@electron/packager` — a `.app` and nothing else, because one person on one
 machine needs no installer, no auto-update and no DMG.
