@@ -1079,3 +1079,47 @@ test('but a contentless day carrying hand-written frontmatter is left alone', as
   await doc.flush()
   assert.equal(await readFile(join(root, dayFile(DAY)), 'utf8'), original)
 })
+
+// ── a day must not lose the newline that ends it ──────────────────────────
+
+test('THE BUG: branching to the end of a day joins it to the next one', async t => {
+  // Reported from use: branch something out of an earlier day, and the date
+  // seam above today stops rendering — permanently, and typing does not bring
+  // it back. The window flattens segments with nothing between them, so a day
+  // whose body no longer ends in a newline runs into the first line of the day
+  // after it; the seam is then skipped, because a block widget cannot sit
+  // mid-line. The file was right the whole time, which is why it looked like a
+  // rendering fault rather than an edit that took one character too many.
+  const { doc, corpus } = await fixture(t, {
+    [dayFile(d('2026-03-01'))]: dayText('2026-03-01', 'Yesterday, all of it.\n'),
+    [dayFile(d('2026-03-02'))]: dayText('2026-03-02', 'Today, being written.\n'),
+  })
+  const first = await doc.segment(d('2026-03-01'))
+
+  // To the very end of the day, newline and all — which is what selecting a
+  // day's last paragraph and branching it does.
+  await doc.branch(
+    {
+      begin: doc.positionAt(d('2026-03-01'), 0),
+      end: doc.positionAt(d('2026-03-01'), first.length),
+    },
+    'Titration curves',
+  )
+
+  const at = doc.positionAt(d('2026-03-01'), 0)
+  const to = doc.positionAt(d('2026-03-02'), 0)
+  const window = await doc.read({ begin: at, end: to })
+  const text = window.text as string
+
+  assert.ok(
+    text.includes('Today, being written'),
+    'both days are in the window',
+  )
+  const todayAt = text.indexOf('Today, being written')
+  assert.equal(
+    text[todayAt - 1],
+    '\n',
+    'and the day after starts on a line of its own, so its seam can be drawn',
+  )
+  assert.equal(corpus !== undefined, true)
+})

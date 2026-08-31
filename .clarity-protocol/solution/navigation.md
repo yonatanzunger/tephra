@@ -447,3 +447,16 @@ Two things this turned up:
   written in, whether or not it exists. Folding them together made a derived
   entry resolve from a day file's depth, land outside the notebook, and report
   itself as missing: a correct link to a real file, in a row saying "not found".
+
+## ⌘-click opens a row elsewhere
+
+The one verb, with a modifier: a row names a *there*, and ⌘-click puts that there
+in a window of its own rather than moving the window you are reading in. The
+point is having both, so **this window does not follow** — and the row does not
+become the active one either, since stepping through a set is about the window
+you are reading in and the set has just gone to a different one.
+
+For a row that names a document, the new window opens that document. For a row
+that names a SET of places — a subject, a bookmark, a day — it opens the first
+of them, because a window shows one place and the rest are still here to step
+through.

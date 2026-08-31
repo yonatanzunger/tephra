@@ -1285,6 +1285,26 @@ export async function runVerify(request: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'cmdclick') {
+      // ⌘-click a sidebar row: the same there, in a window of its own.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 2) {
+        await settle(200)
+        waited += 200
+      }
+      const row = [...document.querySelectorAll('.nav-row')].find(r =>
+        (r.textContent ?? '').includes('The offer letter'),
+      ) as HTMLElement | undefined
+      say('rowFound', row !== undefined)
+      say('titleBefore', document.querySelector('.titlebar .title')?.textContent ?? '')
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, metaKey: true }))
+      await settle(2500)
+      // THE POINT: this window did NOT move. The other one has it.
+      say('titleAfter', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(3000)
+    }
+
     if (scene === 'themepanel') {
       // M3: theme management is reached where a person looks for it, and it can
       // reach everything a theme HAS — including the panel colour, which was

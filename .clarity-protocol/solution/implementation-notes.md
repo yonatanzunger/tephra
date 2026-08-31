@@ -1661,3 +1661,28 @@ The rule that follows, and that the acceptance now applies: **seed the states a
 notebook PASSES THROUGH, not only the one it starts in.** m3's pinning section
 now begins from a notebook that already has an order and a section in it, which
 is the state every notebook is in after its first day of use.
+
+## A branch ate the newline that ends a day
+
+Reported from use: branch a passage out of an earlier day, and the date seam
+above today stops rendering — permanently, and typing does not bring it back.
+The files were right the whole time, which is what made it look like a rendering
+fault.
+
+**The window flattens days with nothing between them** (`#rebuild`:
+`parts.join('')`), so a day whose body no longer ends in a newline runs into the
+first line of the day after it. The date seam is a BLOCK widget, and a block
+widget cannot sit mid-line, so `dayBoundaries` skips it — silently, and forever,
+because nothing about later typing puts the newline back.
+
+**The first fix was too broad and three tests said so.** Making every edit
+preserve a day's final newline broke the property that *every range in the window
+edits exactly as if the buffer were one string* — and that property is right: a
+deletion sweeping across midnight is a reader asking to join two days, and it
+should join them. What is not a deletion is a BRANCH. It moves a passage out and
+leaves a link behind, so it has no business consuming the separator, and the
+moved text is trimmed anyway.
+
+So the clamp lives in `branch`: a piece that reaches the end of a day stops one
+character short of a trailing newline. The lesson is the general one — when a
+fix breaks an invariant test, the invariant is usually the thing that was right.

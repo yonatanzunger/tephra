@@ -264,7 +264,23 @@ export class StreamDocument extends SegmentedDocument implements StreamDocumentA
     for (const date of await this.segmentsAcross(span)) {
       const segment = await this.segment(date)
       const from = date === (span.begin.segment as DateKey) ? (span.begin.offset as number) : 0
-      const to = date === (span.end.segment as DateKey) ? (span.end.offset as number) : segment.body.length
+      const wanted = date === (span.end.segment as DateKey) ? (span.end.offset as number) : segment.body.length
+      // **A day keeps the newline that ends it.**
+      //
+      // The window flattens days with nothing between them, so a day whose body
+      // stops without one runs into the first line of the day after it — and
+      // the date seam above that day is a BLOCK widget, which cannot sit
+      // mid-line, so it is silently skipped and never comes back. Reported from
+      // use as "branching made the date break stop rendering"; the files were
+      // right the whole time, and the branch had taken one character too many.
+      //
+      // A cross-midnight DELETION may do exactly that, and should: joining two
+      // days is what a reader asking to delete across the boundary means. A
+      // branch is not a deletion — it moves a passage out and leaves a link
+      // behind — so it has no business consuming the separator, and the moved
+      // text is trimmed anyway.
+      const to =
+        wanted === segment.body.length && segment.body.endsWith('\n') ? wanted - 1 : wanted
       if (to > from) pieces.push({ date, from, to, text: segment.body.slice(from, to) })
     }
     const moved = pieces.map(p => p.text).join('\n').trim()

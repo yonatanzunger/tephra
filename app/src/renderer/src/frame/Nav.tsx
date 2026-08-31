@@ -135,7 +135,7 @@ export function Nav({
    * from clicking the same thing twice.
    */
   const go = useCallback(
-    async (row: Row): Promise<void> => {
+    async (row: Row, elsewhere = false): Promise<void> => {
       // **Some destinations are not in the corpus.** A URL is the browser's and
       // a PDF is the OS's (D10), so "take me there" leaves the app rather than
       // moving the caret — the same verb, a different there.
@@ -143,13 +143,31 @@ export function Nav({
         const how = await window.tephra.nav.open(row.reference, row.from)
         // A document comes back as a document: the same verb, and the there is
         // inside the app after all (D54).
-        if (typeof how === 'object') onOpenDocument(how.document)
-        else if (how !== 'opened') onUnavailable(row.reference, how)
+        if (typeof how === 'object') {
+          if (elsewhere) void window.tephra.win.create({ kind: 'document', id: how.document })
+          else onOpenDocument(how.document)
+        } else if (how !== 'opened') onUnavailable(row.reference, how)
         return
       }
       const places =
         active?.key === row.key ? active.places : await window.tephra.nav.occurrences(row.reference)
       if (places.length === 0) return
+
+      // **⌘-click opens the FIRST place in a new window**, and does not take
+      // over this one: the point of a second window is to have both. It does
+      // not advance the active row either, because stepping through a set is
+      // about the window you are reading in, and this row's set belongs to the
+      // window that now has it.
+      if (elsewhere) {
+        const at = places[0] as Located
+        void window.tephra.win.create(
+          at.date === null
+            ? { kind: 'document', id: at.file as unknown as DocumentId }
+            : { kind: 'date', date: at.date as DateKey },
+        )
+        return
+      }
+
       const next = active?.key === row.key ? (active.at + 1) % places.length : 0
       setActive({ key: row.key, reference: row.reference, places, at: next })
       onActive(places, next, slotOf(row.reference))
@@ -401,7 +419,8 @@ function CuratedRows({
   entry: SectionRow
   depth: number
   active: { key: string; places: readonly Located[]; at: number } | null
-  onGo: (row: Row) => void
+  /** `elsewhere` is a ⌘-click: the same there, in a window of its own. */
+  onGo: (row: Row, elsewhere?: boolean) => void
   onUnpin: (reference: Reference, sectionPath: string) => void
   /** The PATH of the file this row lives in — what unpinning has to edit. */
   section: string | null
@@ -441,7 +460,8 @@ function CuratedRows({
         <button
           type="button"
           className={`nav-row${active?.key === row.key ? ' active' : ''}`}
-          onClick={() => void onGo(row)}
+          // ⌘-click (⌃-click elsewhere) opens it in a new window instead.
+          onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}
         >
           <span className="nav-label">{row.label}</span>
           {entry.summary !== null && <span className="nav-detail">{entry.summary}</span>}
@@ -495,7 +515,8 @@ function DayRows({
 }: {
   node: OutlineNode
   active: string | null
-  onGo: (row: Row) => void
+  /** `elsewhere` is a ⌘-click: the same there, in a window of its own. */
+  onGo: (row: Row, elsewhere?: boolean) => void
   today: DateKey | null
   here: DateKey | null
   open: boolean
@@ -530,7 +551,7 @@ function DayRows({
           type="button"
           className={`nav-row${active === row.key ? ' active' : ''}`}
           aria-current={node.title === here ? 'page' : undefined}
-          onClick={() => onGo(row)}
+          onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}
         >
           <span className="nav-label">{row.label}</span>
           {node.title === today && <span className="nav-detail">today</span>}
@@ -554,7 +575,8 @@ function HeadingRows({
   node: OutlineNode
   depth: number
   active: string | null
-  onGo: (row: Row) => void
+  /** `elsewhere` is a ⌘-click: the same there, in a window of its own. */
+  onGo: (row: Row, elsewhere?: boolean) => void
 }): React.JSX.Element {
   const row: Row = {
     key: `heading:${node.title}`,
@@ -569,7 +591,7 @@ function HeadingRows({
         type="button"
         className={`nav-row nav-nested${active === row.key ? ' active' : ''}`}
         style={{ paddingLeft: `${2.5 + (depth - 1) * 0.85}rem` }}
-        onClick={() => onGo(row)}
+        onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}
       >
         <span className="nav-label">{row.label}</span>
       </button>
@@ -589,7 +611,8 @@ function RowButton({
 }: {
   row: Row
   active: { key: string; places: readonly Located[]; at: number } | null
-  onGo: (row: Row) => void
+  /** `elsewhere` is a ⌘-click: the same there, in a window of its own. */
+  onGo: (row: Row, elsewhere?: boolean) => void
   onStep: (by: 1 | -1) => void
   onPin?: ((reference: Reference, label: string) => void) | undefined
 }): React.JSX.Element {
@@ -597,7 +620,7 @@ function RowButton({
   const many = (isActive ? active.places.length : row.count) > 1
   return (
     <div className={`nav-row-wrap${isActive ? ' active' : ''}`}>
-      <button type="button" className="nav-row" onClick={() => void onGo(row)}>
+      <button type="button" className="nav-row" onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}>
         <span className="nav-label">{row.label}</span>
         {row.detail !== undefined && <span className="nav-detail">{row.detail}</span>}
         {many && (

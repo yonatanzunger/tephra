@@ -697,6 +697,49 @@ console.log('\n\u2014 theme management \u2014')
   )
 }
 
+// ── 9. \u2318-click opens a row in its own window ──────────────────────────────
+//
+// The same verb with a modifier: a row names a there, and \u2318-click puts that
+// there in a window of its own instead of moving the one you are reading in.
+// The point is having BOTH, so this window must not follow.
+console.log('\n\u2014 \u2318-click \u2014')
+{
+  const root = await week(['Today.\n', 'Yesterday.\n'])
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'offer.md'),
+    '---\ntephra: 1\nkind: markdown\ntitle: The offer letter\n---\nWhat we offered.\n',
+  )
+  await writeFile(
+    join(root, 'sections', '_index.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: My sections\n---\n- [The house](tephra:section/house)\n',
+  )
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer letter](../notes/offer.md)\n',
+  )
+  const r = report(await launch('cmdclick', root))
+
+  check('the row is there to click', r.rowFound === true)
+  check(
+    'THE POINT: \u2318-click opens it in a second window',
+    r['w2.name'] === 'The offer letter',
+    String(r['w2.name']),
+  )
+  check(
+    'and showing the document, not a second copy of the stream',
+    typeof r['w2.text'] === 'string' && r['w2.text'].includes('What we offered'),
+    JSON.stringify(r['w2.text']),
+  )
+  check(
+    'while THIS window stays where it was \u2014 the point is having both',
+    r.titleAfter === r.titleBefore,
+    `${JSON.stringify(r.titleBefore)} \u2192 ${JSON.stringify(r.titleAfter)}`,
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)
