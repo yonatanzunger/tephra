@@ -282,14 +282,43 @@ across a quit, and a file from outside the notebook.
 - ✅ **`Now`**, the one row that is not a set of places: the end of the stream,
   where the next sentence goes. Not a fileset entry, because it is not a date —
   pinning today's date would be wrong tomorrow.
-- ⬜ **Themes gain colour, and the chrome gets designed.** Themes are typography
-  only today (D41): a theme names faces, sizes and measures, and the six
-  palette colours behind `themeTokens` are not authored per theme at all. The
-  sidebar is what made this pressing — it is the first surface that is mostly
-  chrome rather than mostly text, and the default palette reads as grey on grey
-  there. Three parts: colour schemes in the theme format, at least one good
-  light and one good dark, and a pass over the menus' layout and grouping now
-  that there are enough commands for the arrangement to matter.
+- ✅ **Themes gain colour, and the chrome gets designed.** The first two parts
+  had quietly already happened: a theme authors six palette colours, and there
+  are four on disk including a real dark one (`night`). What was left was that
+  the chrome had never been DESIGNED — the editor had typographic care and the
+  furniture around it did not, which is the contrast a reader actually sees.
+
+  The pass, and what each part was fixing:
+
+  - **The chrome is a surface, not a tint of the page.** `--surface-panel` and
+    `--border-strong` are derived from the authored paper and ink, so every
+    theme gets them at once and a dark theme gets a lighter panel without
+    anyone writing it twice.
+  - **Hierarchy in the title bar.** Everything in it was 12px at one weight, so
+    the loudest element was whichever happened to have a background — the
+    Sections toggle — and the subject of the window was the quietest thing in
+    its own title bar. The location leads now, marked with the accent; the
+    controls recede; a pressed toggle says "on" in the accent instead of
+    carrying a permanent grey fill.
+  - **The accent is a language, at two strengths.** Hover and active are the
+    same tint; a grey hover on a grey panel says only "something happened".
+  - **One date convention.** The bar wrote `2026-08-31` while the panel and the
+    footer beside it wrote `29 Aug` — the same app, the same moment, two ways
+    of saying a date. `dayLabel` in `shared/dates.ts` is now the only one, and
+    it adds the year exactly when the year is not the current one.
+  - **The title follows the CARET, not the location.** They disagree the moment
+    you scroll back: the location stays `today` while you read into last week,
+    and the bar went on claiming today with the footer correctly saying
+    otherwise, two feet away.
+  - **Scrollbars are themed** — on the dark ground the default was a bright
+    white bar down the edge of the page, the most visible element on screen and
+    belonging to none of it.
+  - **A stale line removed**: the panel said "Filesets and pinned sections are
+    next" while filesets and pinned sections were listed directly above it.
+  - **The menus grouped by what an act does to your notebook** — go somewhere,
+    another view, bring something in, put something out, close — which is the
+    only grouping a reader can predict. It was an accumulation until MC6 gave
+    the File menu enough commands for the arrangement to matter.
 - ⬜ **The `todo` kind**, which is the first real test of the shape rather than a
   description of it. `todo` is already a `DocumentKind` with nothing behind it,
   and after MC5½ adding one is *adding files*: an implementation in main, a

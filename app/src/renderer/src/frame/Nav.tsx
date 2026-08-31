@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { DateKey, DocumentId } from '../../../shared/document-api.ts'
+import { dayLabel } from '../../../shared/dates.ts'
 import { tagSlot } from '../../../shared/tags.ts'
 import type {
   IndexStatus, Located, OutlineNode, Reference, SectionRow, SectionTree, Subject, ThreadRow,
@@ -343,7 +344,6 @@ export function Nav({
         {status !== null && status.building && (
           <p className="nav-absent">Still looking through {status.total} files ({status.known} so far).</p>
         )}
-        <p className="nav-absent">Filesets and pinned sections are next.</p>
       </div>
 
       {/* **Where you are — at the FOOT, and that is a layout decision.** The
@@ -698,10 +698,5 @@ function Section({
 const slotOf = (reference: Reference): number | null =>
   reference.kind === 'tag' ? tagSlot(reference.subject) : null
 
-/** "21 Aug" — the year is noise in a list that rarely crosses one. */
-function shortDate(date: DateKey): string {
-  const [, month, day] = date.split('-')
-  if (month === undefined || day === undefined) return date
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  return `${Number(day)} ${months[Number(month) - 1] ?? month}`
-}
+/** "21 Aug" — shared, so the title bar and this list cannot drift apart. */
+const shortDate = (date: DateKey): string => dayLabel(date)

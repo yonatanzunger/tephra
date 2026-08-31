@@ -443,6 +443,13 @@ explicit because the suites depend on it), so nothing is given up — which is
 what makes it a better default rather than a compromise. `TEPHRA_SHOW` puts it
 back for when watching IS the point.
 
+**And one window was still getting through.** The PRINT PREVIEW makes its own
+`BrowserWindow`, so hiding the app's windows did not touch it — it surfaced AND
+took focus, several times per suite, over whatever the person at the keyboard
+was doing. Found the way these things are found: a run was interrupted by a ⌘Q
+aimed at the window that had just jumped in front. The PDF is written either
+way, which is what the suites actually assert.
+
 **And a diagnostic that could crash the app.** Forwarding a renderer's console
 line to the harness is a write to a pipe, and once the harness stops reading —
 it killed the child, or the run ended — that write throws EPIPE from inside an

@@ -283,6 +283,18 @@ export function themeTokens(theme: Theme): Readonly<Record<string, string>> {
     '--surface': paper,
     '--surface-ground': mixHex(paper, ink, 0.045),
     '--surface-muted': mixHex(paper, ink, 0.11),
+    /**
+     * The CHROME's own ground — the sidebar, the title bar, the stream panel.
+     *
+     * Deeper than `--surface-ground`, which is barely off the paper. The panel
+     * is a surface in its own right rather than a lightly tinted margin of the
+     * page, and one derived colour is what says so on every theme at once: it
+     * is mixed from the authored paper and ink, so a dark theme gets a lighter
+     * panel and a light theme a darker one without either being written twice.
+     */
+    '--surface-panel': mixHex(paper, ink, 0.085),
+    /** The edge where chrome meets page: firmer than a rule inside a list. */
+    '--border-strong': mixHex(paper, ink, 0.26),
     '--text': ink,
     '--text-heading': head,
     '--text-muted': faint,

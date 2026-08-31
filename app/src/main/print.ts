@@ -151,10 +151,18 @@ ${job.html}
       width: 860,
       height: 1000,
       title: job.title,
+      show: false,
+      paintWhenInitiallyHidden: true,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
     })
     await viewer.loadURL(pathToFileURL(at).href)
-    viewer.show()
+    // **Not shown in verification mode**, and this was the last way an
+    // acceptance run could reach across and take the machine: the main windows
+    // are hidden for the whole run, but the print preview made its own window
+    // and it both surfaced AND took focus — over whatever the person at the
+    // keyboard was doing, several times per suite. The PDF is written either
+    // way, which is what the suites actually assert.
+    if (!verifyMode()) viewer.show()
     return true
   } finally {
     offscreen.destroy()

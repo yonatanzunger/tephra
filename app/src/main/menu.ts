@@ -142,22 +142,13 @@ export function installMenu(next?: MenuActions): void {
       // are the renderer's, because choosing is a dialog.
       label: 'File',
       submenu: [
-        {
-          label: 'New Window',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => actions.newWindow(),
-        },
-        { type: 'separator' },
-        {
-          label: 'Open…',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => actions.open(false),
-        },
-        {
-          label: 'Open in New Window…',
-          accelerator: 'CmdOrCtrl+Shift+O',
-          click: () => actions.open(true),
-        },
+        // **Grouped by what the act DOES to your notebook**, which is the only
+        // grouping a reader can predict: go somewhere, bring something in, put
+        // something out, close. Ordered within each group by how often it is
+        // reached. The arrangement was an accumulation until there were enough
+        // commands for it to matter (M3).
+        //
+        // GO SOMEWHERE — the notebook, or a document in it.
         {
           // The one document that is not a file, under the name everybody uses
           // for it. `Cmd+0` because it is the zeroth thing, and because every
@@ -166,7 +157,26 @@ export function installMenu(next?: MenuActions): void {
           accelerator: 'CmdOrCtrl+0',
           click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
         },
+        {
+          label: 'Open…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => actions.open(false),
+        },
         { type: 'separator' },
+        // ANOTHER VIEW — a window is a view on a document (MC6), so New Window
+        // and Open in New Window belong together and not beside Open.
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => actions.newWindow(),
+        },
+        {
+          label: 'Open in New Window…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => actions.open(true),
+        },
+        { type: 'separator' },
+        // BRING SOMETHING IN — the two ways to reach one act.
         {
           // Enabled only when there is something to import, which is when the
           // focused window is showing a file from outside the notebook.
@@ -180,12 +190,14 @@ export function installMenu(next?: MenuActions): void {
           click: () => actions.import(true),
         },
         { type: 'separator' },
-        { role: 'close', label: 'Close Window' },
+        // PUT SOMETHING OUT.
         {
           label: 'Print…',
           accelerator: 'CmdOrCtrl+P',
           click: () => send(CHANNEL.menuCommand, 'printDocument'),
         },
+        { type: 'separator' },
+        { role: 'close', label: 'Close Window' },
       ],
     },
     {

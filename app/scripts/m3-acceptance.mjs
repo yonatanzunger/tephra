@@ -549,8 +549,8 @@ console.log('\n— windows —')
     JSON.stringify(first['w2.text']),
   )
   check(
-    'the window this one is stayed the notebook',
-    typeof first.titleHere === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(first.titleHere),
+    'the window this one is stayed the notebook, named as a person reads a day',
+    typeof first.titleHere === 'string' && /^\d{1,2} [A-Z][a-z]{2}( \d{4})?$/.test(first.titleHere),
     JSON.stringify(first.titleHere),
   )
   check(
@@ -567,7 +567,7 @@ console.log('\n— windows —')
   )
   check(
     'ACROSS A QUIT: both come back, each where it was',
-    typeof back.titleHere === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(back.titleHere) &&
+    typeof back.titleHere === 'string' && /^\d{1,2} [A-Z][a-z]{2}( \d{4})?$/.test(back.titleHere) &&
       back['w2.name'] === 'The offer letter',
     `${JSON.stringify(back.titleHere)} · ${JSON.stringify(back['w2.name'])}`,
   )

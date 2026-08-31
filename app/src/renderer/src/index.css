@@ -78,8 +78,8 @@ body {
   /* The panel manages its own scrolling now: the sections scroll and the
      status line at the foot stays put. */
   overflow: hidden;
-  background: rgb(var(--surface-ground));
-  border-right: 1px solid rgb(var(--border));
+  background: rgb(var(--surface-panel));
+  border-right: 1px solid rgb(var(--border-strong));
 }
 /* Hidden, not removed. Removing it would give its width back to the reading
    area and shift every line — the naive arrangement, measured at a 499px jump. */
@@ -106,8 +106,8 @@ body {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid rgb(var(--border));
-  background: rgb(var(--surface-ground));
+  border-left: 1px solid rgb(var(--border-strong));
+  background: rgb(var(--surface-panel));
 }
 /* Only when it is actually covering something does it need to read as being on
    top of it. Over slack, a shadow would be a claim about a depth that is not
@@ -144,7 +144,7 @@ body {
 /* ── nav ──────────────────────────────────────────────────────────────── */
 /* A column: the sections scroll, the "where you are" line does not. */
 .frame-nav { display: flex; flex-direction: column; height: 100%; font-size: 13px; }
-.nav-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 1rem 0 1rem; }
+.nav-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: .6rem 0 1rem; }
 .nav-section { margin-bottom: .2rem; }
 /* **Legibility, and where it went wrong.** `--text-muted` is the theme's
    authored FAINT colour, chosen against the paper for things that should
@@ -153,12 +153,15 @@ body {
    darkened — so faint-on-ground lost contrast twice and read as grey on grey.
    Rows are body text here. Only the secondary parts — counts, "today", a
    date beside a name — are allowed to be quiet. */
+/* A section header is a LABEL for a group, not a row you click to go somewhere,
+   so it reads as a different kind of thing: smaller, tracked out, and sitting
+   on a band of its own rather than floating between rows. */
 .nav-head {
   display: flex; align-items: center; gap: .45rem; width: 100%;
-  font: inherit; font-size: 10.5px; font-weight: 600; letter-spacing: .11em;
+  font: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: .12em;
   text-transform: uppercase;
   color: rgb(var(--text-heading)); background: none; border: 0;
-  padding: .55rem 1.1rem .35rem; cursor: pointer; text-align: left;
+  padding: .5rem 1.1rem .35rem; cursor: pointer; text-align: left;
 }
 .nav-head .caret { font-size: 15px; line-height: 1; color: rgb(var(--text-muted)); }
 .nav-head:hover, .nav-head:hover .caret { color: rgb(var(--accent)); }
@@ -180,8 +183,8 @@ body {
 .nav-here {
   flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem;
   margin: 0; padding: .55rem 1.1rem .7rem;
-  border-top: 1px solid rgb(var(--border));
-  background: rgb(var(--surface-ground));
+  border-top: 1px solid rgb(var(--border-strong));
+  background: rgb(var(--surface-panel));
   /* It may grow, but not without limit: a passage under six subjects should
      not take the panel. */
   max-height: 30%; overflow-y: auto;
@@ -226,7 +229,9 @@ body {
    occupying it. A subject has no caret, so it keeps the full one, and the two
    kinds of row line up. */
 .nav-caret + .nav-row { padding-left: .35rem; }
-.nav-row:hover { background: rgb(var(--surface-muted)); color: rgb(var(--text-heading)); }
+/* Hover and active are the SAME language at two strengths: the accent, tinted.
+   A grey hover on a grey panel says only "something happened here". */
+.nav-row:hover { background: rgb(var(--accent) / .10); color: rgb(var(--text-heading)); }
 .nav-row:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: -2px; }
 .nav-row-wrap.here .nav-row, .nav-row-wrap.active .nav-row {
   color: rgb(var(--text-heading)); border-left-color: rgb(var(--accent));
@@ -504,15 +509,27 @@ body {
   color: rgb(var(--text-muted));
 }
 
+/* **The chrome asserts, and the hierarchy is what lets it.** Everything here
+   used to be 12px and the same weight, so the loudest element was whichever
+   happened to have a background — the Sections toggle — and the subject of the
+   window was the quietest thing in its own title bar. */
 .titlebar {
-  display: flex; align-items: center; gap: 1rem;
-  padding: .5rem 1rem .5rem 5.5rem;   /* room for the traffic lights */
-  background: rgb(var(--surface-ground));
-  border-bottom: 1px solid rgb(var(--border));
+  display: flex; align-items: center; gap: .75rem;
+  padding: .45rem 1rem .45rem 5.5rem;   /* room for the traffic lights */
+  background: rgb(var(--surface-panel));
+  border-bottom: 1px solid rgb(var(--border-strong));
   font-size: 12px; color: rgb(var(--text-muted));
   -webkit-app-region: drag;
 }
-.titlebar .title { font-variant-numeric: tabular-nums; color: rgb(var(--text-heading)); }
+/* WHERE YOU ARE, and it leads. The one thing in the bar that names what the
+   window is looking at, so it carries the weight and the accent marker. */
+.titlebar .title {
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-heading));
+  font-size: 13.5px; font-weight: 600; letter-spacing: .005em;
+  padding-left: .55rem;
+  border-left: 2px solid rgb(var(--accent));
+}
 .titlebar .spacer { flex: 1; }
 
 /* **A statement of fact that is also the way out of it.** Read-only is not an
@@ -579,8 +596,13 @@ body {
    "≡ Sections" and it read better than the bare hamburger, which asks the
    reader to remember what it opens. */
 .titlebar .nav.labelled { display: inline-flex; align-items: center; gap: .35rem; }
-.titlebar .nav[aria-pressed='true'] { background: rgb(var(--surface-muted)); color: rgb(var(--text)); }
-.titlebar .nav:disabled { opacity: .35; cursor: default; }
+/* Pressed is the RESTING state of the panel toggle, so a filled background
+   there is a permanent highlight on a control nobody is looking at. The accent
+   says "on" without shouting it. */
+.titlebar .nav[aria-pressed='true'] { background: none; color: rgb(var(--accent)); }
+.titlebar .nav:hover { background: rgb(var(--accent) / .12); color: rgb(var(--text-heading)); }
+.titlebar .nav:disabled { opacity: .3; cursor: default; }
+.titlebar .nav:disabled:hover { background: none; color: rgb(var(--text-muted)); }
 
 .titlebar .nav {
   -webkit-app-region: no-drag;
@@ -786,3 +808,28 @@ body {
    as though the seam covered the span between the two. */
 .tx-daybreak-rule { align-self: stretch; height: 1px; background: rgb(var(--border)); margin: .1em 0; }
 .tx-daybreak-date { font-variant-numeric: tabular-nums; }
+
+
+/* ── scrollbars ───────────────────────────────────────────────────────────
+   **The one part of the chrome nobody had themed**, and on a dark ground the
+   default is a bright white bar down the edge of the page — the most visible
+   element on screen, belonging to none of it.
+
+   Thin, in the theme's own rule colour, and only solid enough to grab. The
+   page is the object; a scrollbar is a control for when you need one. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border-strong)) transparent;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-strong));
+  border-radius: 999px;
+  /* Inset by its own border so the thumb reads as narrower than the track it
+     is in, without the track needing a colour of its own. */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--text-muted)); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }

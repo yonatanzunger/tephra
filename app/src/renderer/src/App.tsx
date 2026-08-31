@@ -6,6 +6,7 @@ import type {
   SessionGeneration,
 } from '../../shared/document-api.ts'
 import { isOutside, ONLY_SEGMENT, STREAM_ID } from '../../shared/document-api.ts'
+import { dayLabel } from '../../shared/dates.ts'
 import { defaultUiState, defaultWindowState, type StoredCursor } from '../../shared/ui-state.ts'
 import { Documents } from './x/documents'
 import type { RemoteStream } from './x/kinds/stream'
@@ -685,15 +686,28 @@ export function App(): React.JSX.Element {
   /** Whether what is on screen can be read but not written (MC6). */
   const readOnly = docWindow?.document.meta.readOnly === true
 
-  // What the title bar says we are looking at. A day is its date; a document is
-  // whatever it calls itself, falling back to its filename, which is the only
-  // other name it has.
+  /**
+   * What the title bar says we are looking at.
+   *
+   * **The day the CARET is in, not the day we navigated to.** The two disagree
+   * the moment you scroll: the location stays `today` while you read back into
+   * last week, and the bar went on claiming today — with the panel's own footer
+   * correctly saying otherwise, two feet away. `where.date` is what that footer
+   * uses, so this is the same answer rather than a second one.
+   *
+   * A document is whatever it calls itself, falling back to its filename, which
+   * is the only other name it has.
+   */
   const title =
-    location?.kind === 'date'
-      ? location.date
-      : location?.kind === 'document'
-        ? (pane?.document.title ?? nameOf(location.id))
-        : (doc?.today ?? '…')
+    location?.kind === 'document'
+      ? (pane?.document.title ?? nameOf(location.id))
+      : where.date !== null
+        ? dayLabel(where.date as DateKey, doc?.today)
+        : location?.kind === 'date'
+          ? dayLabel(location.date, doc?.today)
+          : doc === null
+            ? '…'
+            : dayLabel(doc.today, doc.today)
 
   /**
    * Tell main what this window is showing, and what to call it.

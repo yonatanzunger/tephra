@@ -80,3 +80,25 @@ export function msUntilNextDay(at: Date = new Date()): number {
   const sinceMidnight = ((shifted % 86_400_000) + 86_400_000) % 86_400_000
   return 86_400_000 - sinceMidnight
 }
+
+/**
+ * A day as a person reads it: "21 Aug", or "21 Aug 2025" across a year.
+ *
+ * **One convention, because a window used to hold two.** The title bar wrote
+ * `2026-08-31` while the sidebar and the footer beside it wrote `29 Aug` — the
+ * same app, the same moment, two ways of saying a date. ISO is how a day is
+ * FILED (D8); this is how it is read.
+ *
+ * The year appears only when it differs from `now`, which is the same rule the
+ * sidebar already followed by leaving it out: in a list that rarely crosses a
+ * year the year is noise, and in the one place it does cross, its absence is a
+ * genuine ambiguity.
+ */
+export function dayLabel(date: DateKey, now?: DateKey): string {
+  const [year, month, day] = (date as string).split('-')
+  if (year === undefined || month === undefined || day === undefined) return date as string
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const label = `${Number(day)} ${months[Number(month) - 1] ?? month}`
+  const thisYear = now === undefined ? year : (now as string).slice(0, 4)
+  return year === thisYear ? label : `${label} ${year}`
+}
