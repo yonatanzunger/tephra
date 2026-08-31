@@ -57,7 +57,7 @@ Three rules, each one a floor the layer above stands on. Stated together because
 they are one idea at three depths, and because **two of them can be asserted by
 a test rather than remembered** — this codebase has already learned that a
 comment saying "do not import Electron here" does not prevent the third
-violation (`tests/unit/main/no-electron.test.ts`).
+violation (`tests/unit/main/layering.test.ts`).
 
 **1. The front end touches files only as documents.**
 A window hosts a pointer to a `Document`; an editor is chosen by that document's
@@ -159,7 +159,7 @@ surface — so the lookup is data rather than a switch that someone forgets.
 all four files for a kind in one directory reads better and would let main-only
 code into the renderer bundle by an ordinary-looking import: this project has
 had three test suites broken exactly that way, and keeps a test whose only job
-is to catch it (`tests/unit/main/no-electron.test.ts`). The process boundary
+is to catch it (`tests/unit/main/layering.test.ts`). The process boundary
 stays physical; the kind axis lives inside it.
 
 **`.tephra/` is machinery, and the floor rule does not reach it.** The WAL, the

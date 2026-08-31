@@ -119,7 +119,7 @@ both projects, for that reason.
 | Text is written to disk | `DocumentService` write tiers — quiescence **and** a ceiling |
 | The window never moves | `frame/metrics.ts` + `Frame.tsx` (D42) |
 | Type is decided | `shared/theme.ts` + `theme/useTheme.ts`; files in `config/themes/` |
-| Markup is hidden or revealed | `editor/widgets.ts` — and see **Q11**, unresolved |
+| Markup is hidden or revealed | `editor/kinds/markdown/widgets.ts` — and see **Q11**, unresolved |
 | Format problems surface | `main/x/anomalies.ts` → titlebar count → `frame/Anomalies.tsx` |
 
 ---

@@ -133,7 +133,7 @@ with it.
 
 **Restore is read-only in v1.** See item 3.
 
-## M2 — range operations
+## M2 — range operations ✅
 
 Select a range, then do something with it. Requirements 11–14 are one gesture
 wearing four hats — six, since R27 and R28 joined — and selection is the core
@@ -210,28 +210,48 @@ putting the commentary somewhere else to look at.
    the unit and integration suites and all obvious the moment a window was open.
 
 
-- Tag a range with a subject; untag
-- Bookmark a point
-- Print a range — the web layer renders, the shell supplies the panel
-  (Spike B; ~90 lines of shared JS already proven)
-- Branch a range into its own file, create → update references → delete (D13)
-- **Comment on a range, rendered in the reserved margin (R27)** — the same
-  gesture again, and per Q8 the storage question is open. MV reserves the space;
-  M2 fills it
-- **Import clipboard text to annotate (R28)**, the cheapest of the three inbound
-  paths and enough to answer Q9 by living with it. `.docx` follows; `.pdf` is v2,
-  because extraction is its own problem and not this one
-
-## MC — documents, kinds and windows
+## MC — documents, kinds and windows ✅
 
 **Inserted into M3, and its own milestone** (D54, `document-roadmap.md`): the
 Document API grows kinds, the `Corpus` becomes X's file system, and windows
 become views of documents. M3's remaining bullets all open or write documents,
 so they resume on top of it rather than being built twice.
 
+Seven phases plus two the work itself asked for, all verified by `npm run m3`
+and the suites below it. What changed, in one line each:
+
+- **MC1–MC2** — kinds, and the `Corpus`: a document table with scoped borrowing,
+  an LRU that never evicts what is dirty or watched, and the write tiers made
+  corpus-wide rather than one document's.
+- **MC3** — `SegmentedDocument` as the base every kind stands on, the index moved
+  INSIDE the floor (it scans bytes, which is what it is for), and the invariant
+  stack asserted by `layering.test.ts` instead of remembered.
+- **MC4** — the fileset kind, so a pin is a `replace` on a span: undoable,
+  journalled, versioned, and visible to a window with the same file open — four
+  things D53 claimed and none of which were true while pinning wrote files.
+- **MC5** — the renderer learns about kinds. One handle per document, a pane that
+  crosses documents, and a surface chosen by kind. `Reference{kind:'file'}`
+  resolves for the first time.
+- **MC5½** — *(unplanned)* the surface became a whole VIEW rather than a
+  configured editor: `bind.ts` and everything CodeMirror moved under the markdown
+  kind, and the registry answers with a component. **A boolean varies a view; a
+  file replaces one.**
+- **MC6** — `AppWindow`: the session is a SET of windows, restored where they
+  were, with the File menu that makes a second one reachable.
+- **MC6½** — *(unplanned)* files from outside the notebook open read-only, with a
+  badge that states the constraint and IS the import gesture.
+- **MC7** — restore through the Corpus. A version is corpus-wide, so a restore is
+  too; every document goes back through the open one, so a restore cannot be
+  undone by a buffer that outlived it.
+
 ## M3 — navigation and filesets
 
-- **Print the whole document**, on `Cmd+P` where every other application puts
+**Most of it is done**, and what is left is the part that is about how it LOOKS
+rather than what it does. Verified by `npm run m3`: printing, the sidebar,
+curated sections, pinning, opening a document that is not the stream, windows
+across a quit, and a file from outside the notebook.
+
+- ✅ **Print the whole document**, on `Cmd+P` where every other application puts
   it. For an ordinary document that is all of it; **for the stream it cannot
   be** — "the whole document" is twenty years of days — so it needs a chooser,
   and a date range is the natural axis since dates are how the stream is
@@ -239,12 +259,30 @@ so they resume on top of it rather than being built twice.
   navigation question wearing a printing hat: the same range-of-days idea the
   nav needs. The accelerator was freed in M2 so the habit never forms wrong —
   printing a range is `Cmd+Shift+P`.
-- Section/fileset index format, and the left nav of expandos (D10)
-- The default section, holding the pins, always present
-- Jump to a bookmark, a file, a URL, an external document by OS intent
-- Pinned lists and the events calendar, which are markdown files rather than
-  features (R18, R19)
-- **Themes gain colour, and the chrome gets designed.** Themes are typography
+- ✅ **Section/fileset index format, and the left nav of expandos** (D10). The
+  format is `shared/fileset.ts`, read by both processes because a fileset is a
+  document and the renderer meets one in the editor.
+- ✅ **The default section, holding the pins, always present.** Named `Pinned`
+  for what it holds rather than for its category — the top level orders the
+  groups, and this is a group.
+- ✅ **Jump to a bookmark, a file, a URL, an external document by OS intent.**
+  The file case was the one that had never worked: it needed documents other
+  than the stream (MC5) *and* the discovery that a link resolves relative to the
+  document it is written in, without which every correct relative link reported
+  itself as missing.
+- ✅ **Pinned lists, which are markdown files rather than features** (R18, R19).
+  A fileset IS the list, so there is nothing else to build. **An events calendar
+  is a markdown file somebody keeps** and needs nothing from the app beyond
+  being findable, which the directory sections below now make true.
+- ✅ **A section per directory**, so a document that arrives — imported,
+  branched, or dropped in by hand — can be found without anyone pinning it.
+  Derived from what is on disk rather than written, and curated by the same
+  `_index.fileset.md` rule as everywhere else: the order orders, it does not
+  gate.
+- ✅ **`Now`**, the one row that is not a set of places: the end of the stream,
+  where the next sentence goes. Not a fileset entry, because it is not a date —
+  pinning today's date would be wrong tomorrow.
+- ⬜ **Themes gain colour, and the chrome gets designed.** Themes are typography
   only today (D41): a theme names faces, sizes and measures, and the six
   palette colours behind `themeTokens` are not authored per theme at all. The
   sidebar is what made this pressing — it is the first surface that is mostly
@@ -252,7 +290,7 @@ so they resume on top of it rather than being built twice.
   there. Three parts: colour schemes in the theme format, at least one good
   light and one good dark, and a pass over the menus' layout and grouping now
   that there are enough commands for the arrangement to matter.
-- **The `todo` kind**, which is the first real test of the shape rather than a
+- ⬜ **The `todo` kind**, which is the first real test of the shape rather than a
   description of it. `todo` is already a `DocumentKind` with nothing behind it,
   and after MC5½ adding one is *adding files*: an implementation in main, a
   forwarder in the renderer, and a surface with checkboxes somebody can click —
@@ -260,6 +298,14 @@ so they resume on top of it rather than being built twice.
   this costs a directory of small files and no edits anywhere else; if they do
   not, this is where that shows, which is the point of doing it before a kind
   with more at stake (D54, `architecture.md`).
+
+**Deferred within M3, deliberately.** Section reordering and deletion — which
+need `tephra:builtin/*` sentinels so the built-in sections can be positioned
+among the curated ones — and a `Pin to…` chooser, for which
+`DocumentService.documents()` already exists. Also **making the sidebar
+focusable**, which is what would finally put a key on a fileset's undo: ⌘Z goes
+to the focused document, and while the editor is the only focusable surface, the
+stream is the honest answer (MC4).
 
 ## M4 — retrieval
 
