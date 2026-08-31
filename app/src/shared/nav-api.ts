@@ -84,8 +84,25 @@ export interface SectionRow {
 
 export interface SectionTree {
   readonly title: string
-  /** Null when the fileset itself is missing. */
+  /**
+   * The file to EDIT — null when there is none to edit.
+   *
+   * Null for a section that is missing, and for a directory's listing that
+   * nobody has curated: it is derived from what is in the directory, so there
+   * is no line anywhere to unpin (D53).
+   */
   readonly path: NotebookPath | null
+  /**
+   * What the entries are relative to.
+   *
+   * **Not the same question as `path`, and the difference is why this exists.**
+   * A relative link resolves against the file it is written in, which for a
+   * derived listing is the file it WOULD be written in — `notes/_index.
+   * fileset.md`, whether or not anyone has made it. Folding the two together
+   * meant a derived entry resolved from the stream's depth instead, landed
+   * outside the notebook, and reported itself as missing.
+   */
+  readonly base?: NotebookPath
   readonly entries: readonly SectionRow[]
 }
 

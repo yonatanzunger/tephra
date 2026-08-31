@@ -1268,6 +1268,20 @@ export async function runVerify(request: string): Promise<void> {
       await settle(1200)
       say('titleBack', titleNow())
       say('backInStream', live().state.doc.toString().includes('Yesterday'))
+
+      // And the SAME file reached through its directory, which nobody curated.
+      // Those entries resolve from the directory rather than from a day file's
+      // depth, and getting that wrong makes a correct link report itself as
+      // missing (D53).
+      const derived = [...document.querySelectorAll('.nav-row')].find(
+        r => (r.textContent ?? '').trim() === 'offer',
+      ) as HTMLElement | undefined
+      say('derivedRowFound', derived !== undefined)
+      say('derivedMissing', derived?.querySelector('.nav-missing') !== null)
+      derived?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1400)
+      say('afterDerived', live().state.doc.toString())
+
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
     }

@@ -15,7 +15,9 @@
 
 import type { Corpus } from './documents/corpus.ts'
 import { asFileset, type FilesetDocument } from './documents/kinds/fileset.ts'
-import { SECTIONS_DIR, relativeTo, sectionFile, type RelPath } from '../w/layout.ts'
+import {
+  SECTIONS_DIR, STREAM_DIR, relativePath, relativeTo, sectionFile, type RelPath,
+} from '../w/layout.ts'
 import {
   INDEX_SECTION, MAX_DEPTH, PINNED_SECTION, parseEntries, sameTarget,
 } from '../../shared/fileset.ts'
@@ -115,16 +117,121 @@ export class Filesets {
             missing: false,
           })),
         )),
+        // And a section per directory, after what someone curated: those are
+        // chosen, these are simply what is in the notebook (D10).
+        ...(await this.#directorySections()).map(section => ({
+          label: section.title,
+          summary: null,
+          target: { kind: 'section', name: section.title } as Reference,
+          children: section,
+          missing: false,
+        })),
       ],
     }
   }
 
-  /** Every section file, for a "pin to…" list. */
+  /**
+   * A section per DIRECTORY, so a file that arrives can be found (D10, D53).
+   *
+   * **The problem this solves is invisibility.** A note imported, branched or
+   * dropped into `notes/` by hand is a document in the corpus that nothing in
+   * the panel names — the curated sections list what someone chose to pin, and
+   * a file nobody has pinned yet is a file nobody can see.
+   *
+   * **Derived, not written.** The obvious alternative is to put an
+   * `_index.fileset.md` in every directory and append to it whenever a file
+   * appears. That costs a file in every directory of somebody's notebook that
+   * they did not ask for, a write on every arrival, and a watcher that has to
+   * not miss one — and it can be wrong, because a file can arrive while the app
+   * is closed. Reading the directory cannot be wrong: a file is listed because
+   * it is THERE.
+   *
+   * **The order orders; it does not gate** — the same rule as the top level,
+   * for the same reason (D53). If `<dir>/_index.fileset.md` exists it decides
+   * the order and the labels; everything else in the directory follows it, by
+   * name. So curating a directory is exactly as it is anywhere else, and until
+   * someone does, the listing is simply what is on disk.
+   */
+  async #directorySections(): Promise<readonly SectionTree[]> {
+    const byDirectory = new Map<string, RelPath[]>()
+    for (const id of await this.#corpus.list()) {
+      const rel = id as string as RelPath
+      const cut = rel.indexOf('/')
+      if (cut <= 0) continue // a document at the root belongs to no directory
+
+      const dir = rel.slice(0, cut)
+      // The stream is the Timeline, and `sections/` holds the sections
+      // themselves — a section listing the sections is the list twice.
+      if (dir === STREAM_DIR || dir === SECTIONS_DIR) continue
+      if (nameOf(rel) === '_index') continue // the listing is not in its own list
+
+      const held = byDirectory.get(dir)
+      if (held === undefined) byDirectory.set(dir, [rel])
+      else held.push(rel)
+    }
+
+    const out: SectionTree[] = []
+    for (const [dir, documents] of [...byDirectory].sort(([a], [b]) => a.localeCompare(b))) {
+      out.push(await this.#directory(dir, documents))
+    }
+    return out
+  }
+
+  /** One directory's section: its own order first, then whatever else is there. */
+  async #directory(dir: string, documents: readonly RelPath[]): Promise<SectionTree> {
+    const index = `${dir}/${nameOf(INDEX_SECTION)}.fileset.md` as RelPath
+    const curated = await this.#contents(index)
+
+    // Matched by what an entry POINTS AT, so a curated line keeps its label and
+    // its place: the same document reached two ways is one entry.
+    const listed = new Set(
+      (curated?.entries ?? []).flatMap(entry =>
+        entry.target.kind === 'file' ? [relativeTo(index, entry.target.path) ?? ''] : [],
+      ),
+    )
+    const rest = [...documents]
+      .filter(rel => !listed.has(rel))
+      .sort((a, b) => a.localeCompare(b))
+      .map(rel => ({
+        // The FILENAME, not the document's title. Reading a title means opening
+        // every document in the directory every time the panel draws, and the
+        // name on disk is the one the person chose anyway — a nicer label is
+        // what curating the directory is for.
+        label: nameOf(rel),
+        summary: null,
+        target: { kind: 'file', path: relativePath(index, rel) } as Reference,
+        children: null,
+        missing: false,
+      }))
+
+    return {
+      title: curated?.title ?? humanise(dir),
+      // Null until the file exists: a derived listing has no line to unpin,
+      // and offering the gesture would be offering to edit nothing. `base` is
+      // the other half — where the entries resolve FROM, which is that file
+      // whether or not it has been written yet.
+      path: curated === null ? null : index,
+      base: index,
+      entries: [...(curated?.entries ?? []), ...rest],
+    }
+  }
+
+  /**
+   * Every SECTION file, for a "pin to…" list.
+   *
+   * **A section is a fileset in `sections/`, not any fileset anywhere.** The
+   * two were the same thing until directories got their own listings: a
+   * `notes/_index.fileset.md` is a fileset, and it was being picked up here as
+   * a top-level section — so the directory appeared twice, once as itself and
+   * once as a curated section with only its curated entries in it. A fileset
+   * kept somewhere else is a document, and shows up as one.
+   */
   async all(): Promise<readonly { name: string; title: string; path: RelPath }[]> {
     const out: { name: string; title: string; path: RelPath }[] = []
     for (const id of await this.#corpus.list('fileset')) {
       const rel = id as string as RelPath
       if (rel === (INDEX_SECTION as RelPath)) continue
+      if (!rel.startsWith(`${SECTIONS_DIR}/`)) continue
       const title = await this.#peek(rel, doc => doc.titleOf(ONLY_SEGMENT))
       out.push({ name: nameOf(rel), title: title ?? nameOf(rel), path: rel })
     }

@@ -244,6 +244,7 @@ export function Nav({
               onGo={go}
               onUnpin={onUnpin}
               section={sections.path}
+              base={sections.base ?? sections.path ?? null}
             />
           ))}
 
@@ -275,6 +276,7 @@ export function Nav({
                     onGo={go}
                     onUnpin={onUnpin}
                     section={entry.children?.path ?? null}
+                    base={entry.children?.base ?? entry.children?.path ?? null}
                   />
                 ))}
               </Section>
@@ -394,6 +396,7 @@ function CuratedRows({
   onGo,
   onUnpin,
   section,
+  base,
 }: {
   entry: SectionRow
   depth: number
@@ -402,6 +405,8 @@ function CuratedRows({
   onUnpin: (reference: Reference, sectionPath: string) => void
   /** The PATH of the file this row lives in — what unpinning has to edit. */
   section: string | null
+  /** What its links resolve from, which a derived listing has without a file. */
+  base: string | null
 }): React.JSX.Element {
   // Open by default: a section someone curated is one they want to see.
   const [open, setOpen] = useState(true)
@@ -412,7 +417,9 @@ function CuratedRows({
     ...(entry.summary === null ? {} : { detail: entry.summary }),
     reference: entry.target,
     count: 1,
-    ...(section === null ? {} : { from: section }),
+    // Resolved from where the entries LIVE, edited where the file is: a
+    // derived listing has the first and not the second (D53).
+    ...(base === null ? {} : { from: base }),
   }
   return (
     <>
@@ -462,6 +469,7 @@ function CuratedRows({
           onGo={onGo}
           onUnpin={onUnpin}
           section={entry.children?.path ?? section}
+          base={entry.children?.base ?? entry.children?.path ?? base}
         />
       ))}
     </>

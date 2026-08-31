@@ -499,6 +499,16 @@ console.log('\n— opening another document —')
     r.backInStream === true,
     `${JSON.stringify(r.titleBack)} · ${r.backInStream}`,
   )
+  check(
+    'a file nobody pinned is listed under its DIRECTORY, and is not missing',
+    r.derivedRowFound === true && r.derivedMissing === false,
+    `found ${r.derivedRowFound} · missing ${r.derivedMissing}`,
+  )
+  check(
+    'and clicking it opens the file, because it resolves from its directory',
+    typeof r.afterDerived === 'string' && r.afterDerived.includes('What we offered'),
+    JSON.stringify(r.afterDerived),
+  )
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 

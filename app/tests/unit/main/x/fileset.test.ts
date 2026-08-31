@@ -78,6 +78,7 @@ import { join } from 'node:path'
 import { Notebook } from '../../../../src/main/w/notebook.ts'
 import { Filesets } from '../../../../src/main/x/fileset.ts'
 import { Corpus } from '../../../../src/main/x/documents/corpus.ts'
+import { dirname } from 'node:path'
 import { asFileset, type FilesetDocument } from '../../../../src/main/x/documents/kinds/fileset.ts'
 import {
   ONLY_SEGMENT, type DocumentId, type DocumentOffset, type DocumentPosition,
@@ -389,4 +390,130 @@ it('a note is not a fileset, and says so instead of being coerced', async t => {
     () => corpus.use('a-note.md' as DocumentId, async doc => asFileset(doc).entries()),
     /is not a fileset/,
   )
+})
+
+// ── a section per directory, so a file that arrives can be found ───────────
+
+/** A notebook with documents in directories, not only in `sections/`. */
+async function withFiles(t: TestContext, files: Record<string, string>) {
+  const made = await sections(t, {})
+  for (const [rel, body] of Object.entries(files)) {
+    await mkdir(join(made.root, dirname(rel)), { recursive: true })
+    await writeFile(join(made.root, rel), body)
+  }
+  return made
+}
+
+it('THE POINT: a file nobody pinned is still findable, under its directory', async t => {
+  // An imported or branched note lands in `notes/` and nothing in the panel
+  // names it: the curated sections list what someone CHOSE, and a file nobody
+  // has chosen yet is a file nobody can see.
+  const { filesets } = await withFiles(t, {
+    'notes/offer.md': '---\ntephra: 1\nkind: markdown\n---\nThe offer.\n',
+    'notes/spec.md': '---\ntephra: 1\nkind: markdown\n---\nA spec.\n',
+  })
+  const tree = await filesets.tree()
+  const notes = tree.entries.find(e => e.label === 'Notes')
+
+  assert.notEqual(notes, undefined, 'the directory is a section')
+  assert.deepEqual(notes?.children?.entries.map(e => e.label), ['offer', 'spec'])
+  assert.deepEqual(notes?.children?.entries.map(e => e.target.kind), ['file', 'file'])
+})
+
+it('and a file that arrives later is simply there, with nothing to notice it', async t => {
+  // Derived rather than written: a file can arrive while the app is closed, so
+  // anything that had to SEE it arrive would already be wrong.
+  const { filesets, root } = await withFiles(t, {
+    'notes/first.md': '---\ntephra: 1\nkind: markdown\n---\nOne.\n',
+  })
+  await writeFile(join(root, 'notes', 'later.md'), '---\ntephra: 1\nkind: markdown\n---\nTwo.\n')
+
+  const notes = (await filesets.tree()).entries.find(e => e.label === 'Notes')
+  assert.deepEqual(notes?.children?.entries.map(e => e.label), ['first', 'later'])
+})
+
+it('the entries are relative to the directory, so clicking one resolves', async t => {
+  const { filesets } = await withFiles(t, {
+    'notes/deep/buried.md': '---\ntephra: 1\nkind: markdown\n---\nDown here.\n',
+  })
+  const notes = (await filesets.tree()).entries.find(e => e.label === 'Notes')
+  const [entry] = notes?.children?.entries ?? []
+
+  assert.equal(entry?.target.kind === 'file' ? entry.target.path : null, 'deep/buried.md')
+})
+
+it("A DIRECTORY'S OWN ORDER ORDERS IT, and does not gate it (D53)", async t => {
+  // The same rule as the top level. What is named comes first, in the order it
+  // is named and under the label someone gave it; everything else follows.
+  const { filesets } = await withFiles(t, {
+    'notes/a.md': '---\ntephra: 1\nkind: markdown\n---\nA.\n',
+    'notes/b.md': '---\ntephra: 1\nkind: markdown\n---\nB.\n',
+    'notes/z.md': '---\ntephra: 1\nkind: markdown\n---\nZ.\n',
+    'notes/_index.fileset.md':
+      '---\ntephra: 1\nkind: fileset\ntitle: My notes\n---\n- [The last one](z.md) — read this first\n',
+  })
+  const notes = (await filesets.tree()).entries.find(e => e.label === 'My notes')
+
+  assert.notEqual(notes, undefined, 'and the directory takes the name its index gives it')
+  assert.deepEqual(
+    notes?.children?.entries.map(e => e.label),
+    ['The last one', 'a', 'b'],
+    'the named one first, under its own label; the rest after it, by name',
+  )
+  assert.equal(notes?.children?.entries[0]?.summary, 'read this first')
+})
+
+it('a curated entry is not listed twice, however it was written', async t => {
+  const { filesets } = await withFiles(t, {
+    'notes/a.md': '---\ntephra: 1\nkind: markdown\n---\nA.\n',
+    'notes/_index.fileset.md': '---\ntephra: 1\nkind: fileset\n---\n- [A](./a.md)\n',
+  })
+  const notes = (await filesets.tree()).entries.find(e => e.children?.entries.length === 1)
+  assert.deepEqual(notes?.children?.entries.map(e => e.label), ['A'])
+})
+
+it('the stream is not a directory section, because it is the Timeline', async t => {
+  // And `sections/` is not one either: a section listing the sections is the
+  // list twice.
+  const { filesets } = await withFiles(t, {
+    'notes/a.md': '---\ntephra: 1\nkind: markdown\n---\nA.\n',
+    'sections/house.fileset.md': '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [x](../notes/a.md)\n',
+  })
+  const labels = (await filesets.tree()).entries.map(e => e.label)
+
+  assert.equal(labels.includes('Stream'), false)
+  assert.equal(labels.includes('Sections'), false)
+  assert.deepEqual(labels, ['The house', 'Notes'], 'curated first, then the directories')
+})
+
+it('a directory with nothing a document in it is not a section', async t => {
+  // Attachments and config are files, not documents. An empty section would be
+  // a row that says nothing and opens nothing.
+  const { filesets } = await withFiles(t, {
+    'attachments/2026/03/scan.png': 'not a document',
+    'config/whatever.json': '{}',
+  })
+  assert.deepEqual((await filesets.tree()).entries, [])
+})
+
+it('a derived listing offers no unpin, because there is no line to remove', async t => {
+  const { filesets } = await withFiles(t, {
+    'notes/a.md': '---\ntephra: 1\nkind: markdown\n---\nA.\n',
+  })
+  const notes = (await filesets.tree()).entries.find(e => e.label === 'Notes')
+  assert.equal(notes?.children?.path, null, 'no file yet, so nothing to edit')
+})
+
+it('a derived entry resolves from the directory, not from the stream', async t => {
+  // THE TRAP: `path` is null for a derived listing (nothing to unpin), and if
+  // that is also what the links resolve from, they resolve from a day file's
+  // depth instead — outside the notebook, reported as missing. A correct link
+  // to a real file, in a row that says "not found".
+  const { filesets } = await withFiles(t, {
+    'notes/offer.md': '---\ntephra: 1\nkind: markdown\n---\nThe offer.\n',
+  })
+  const notes = (await filesets.tree()).entries.find(e => e.label === 'Notes')
+
+  assert.equal(notes?.children?.path, null, 'no file to edit')
+  assert.equal(notes?.children?.base, 'notes/_index.fileset.md', 'but a place to resolve from')
 })

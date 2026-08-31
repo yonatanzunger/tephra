@@ -404,3 +404,46 @@ on the last line with the whole screen above it being what you already read.
 
 Landing at the top is the same rule that made centring right in the first place.
 You arrive at the thing, and you read forward from it.
+
+## A section per directory
+
+**The problem is invisibility.** A note that arrives — imported, branched, or
+dropped into `notes/` by hand — is a document in the corpus that nothing in the
+panel names. The curated sections list what somebody chose to pin, and a file
+nobody has pinned yet is a file nobody can see.
+
+So every directory under the notebook root that holds documents is a section,
+named for the directory, listing what is in it. `stream/` is not one — that is
+the Timeline — and neither is `sections/`, because a section listing the
+sections is the list twice. A directory holding no documents (`attachments/`,
+`config/`) is not a section either: an empty row that opens nothing.
+
+**Derived, not written.** The alternative is to put an `_index.fileset.md` in
+every directory and append to it whenever a file appears. That costs a file in
+every directory of somebody's notebook that they did not ask for, a write on
+every arrival, and a watcher that must not miss one — and it can still be wrong,
+because a file can arrive while the app is closed. Reading the directory cannot
+be wrong: a file is listed because it is there.
+
+**The order orders; it does not gate.** The same rule as the top level, and for
+the same reason (D53). If `<dir>/_index.fileset.md` exists it decides the order,
+the labels and the section's title; everything else in the directory follows it
+by name. Curating a directory is therefore exactly what curating anything else
+is, and until someone does, the listing is simply what is on disk.
+
+**Labels are filenames.** Reading each document's own title would mean opening
+every document in the directory every time the panel draws. The name on disk is
+the one the person chose anyway, and a better label is what curating is for.
+
+Two things this turned up:
+
+- **A section is a fileset in `sections/`, not any fileset anywhere.** They were
+  the same thing until directories had listings; a `notes/_index.fileset.md` was
+  being picked up as a top-level section, so the directory appeared twice — once
+  as itself, and once as a curated section holding only its curated entries.
+- **`path` and `base` are different questions.** `path` is the file to edit,
+  and is null for a derived listing because there is no line anywhere to unpin.
+  `base` is what the entries resolve FROM, which is the file they WOULD be
+  written in, whether or not it exists. Folding them together made a derived
+  entry resolve from a day file's depth, land outside the notebook, and report
+  itself as missing: a correct link to a real file, in a row saying "not found".
