@@ -244,12 +244,13 @@ and the suites below it. What changed, in one line each:
   too; every document goes back through the open one, so a restore cannot be
   undone by a buffer that outlived it.
 
-## M3 — navigation and filesets
+## M3 — navigation and filesets ✅
 
-**Most of it is done**, and what is left is the part that is about how it LOOKS
-rather than what it does. Verified by `npm run m3`: printing, the sidebar,
-curated sections, pinning, opening a document that is not the stream, windows
-across a quit, and a file from outside the notebook.
+**Done**, and verified by `npm run m3`: printing, the sidebar, curated sections,
+pinning, opening a document that is not the stream, windows across a quit, a
+file from outside the notebook, and theme management. What remains under this
+heading is deliberately deferred rather than unfinished — see the two notes
+after the list.
 
 - ✅ **Print the whole document**, on `Cmd+P` where every other application puts
   it. For an ordinary document that is all of it; **for the stream it cannot
@@ -403,14 +404,24 @@ across a quit, and a file from outside the notebook.
     another view, bring something in, put something out, close — which is the
     only grouping a reader can predict. It was an accumulation until MC6 gave
     the File menu enough commands for the arrangement to matter.
-- ⬜ **The `todo` kind**, which is the first real test of the shape rather than a
-  description of it. `todo` is already a `DocumentKind` with nothing behind it,
-  and after MC5½ adding one is *adding files*: an implementation in main, a
-  forwarder in the renderer, and a surface with checkboxes somebody can click —
-  the first surface that is not the markdown one. If the four artifacts hold,
-  this costs a directory of small files and no edits anywhere else; if they do
-  not, this is where that shows, which is the point of doing it before a kind
-  with more at stake (D54, `architecture.md`).
+**The `todo` kind was here, and went back to the backlog.** It was added as a
+cheap test of the four-artifacts shape — a kind ought to be *adding files* after
+MC5½ — and reading the record back, that framing was wrong twice.
+
+**It is a v3 promotion, gated on evidence nobody has collected.** v1 runs the
+plain-file stand-in deliberately, so that promotion answers a recorded failure
+(D4, D6, `feature-backlog.md`): items lost, deadlines missed, scanning cost. And
+the reason to build it at all is R16 — *ranking by urgency so the eye never has
+to scan* — not checkboxes. Era 2 HAD due dates, hand-drawn; they failed by
+scale, which storing them again would not fix.
+
+**And it would not have been a cheap test of the shape.** `file-documents.md`
+already predicts todo as **record-shaped** — "an edit is a field, and history is
+per item" — which is precisely the case the four artifacts do not cover: no
+character spans, no `SegmentedDocument`, history per item rather than per
+segment. A genuinely interesting test, and a milestone rather than a bullet.
+
+Whatever tests the shape first should be a kind that is still TEXT.
 
 **Deferred within M3, deliberately.** Section reordering and deletion — which
 need `tephra:builtin/*` sentinels so the built-in sections can be positioned
