@@ -315,6 +315,90 @@ across a quit, and a file from outside the notebook.
     belonging to none of it.
   - **A stale line removed**: the panel said "Filesets and pinned sections are
     next" while filesets and pinned sections were listed directly above it.
+  - **Theme management is a panel, not a typography sheet.** It was
+    `View ▸ Typography…`: the wrong menu, a name for one of the things it held
+    rather than for the thing itself, and — worst — it could reach the type and
+    nothing else. The palette needed a text editor, and the chrome's own ground
+    could not be changed at all, because it was mixed in code. **A control panel
+    that reaches half of what it names is worse than none: it teaches you the
+    other half is not adjustable.** It is `Settings…` on `⌘,` now, and it holds
+    the name, the note, all seven colours, the tag depth and lightness with the
+    eight hues shown live beneath them, the face, and Duplicate and Delete.
+  - **`panel` is an authored colour** (`ThemePalette`), so the sidebar's ground
+    is a decision somebody makes rather than paper mixed toward ink by a
+    constant. The four built-ins each choose their own, and the strong edge is
+    mixed from the panel rather than the paper, so a chosen panel takes its own
+    border with it.
+  - **Derived ONCE, when a theme is read** — not on every paint. A file written
+    before the field existed is given a panel from its own paper and ink at
+    parse time, so everything downstream sees an ordinary colour and needs to
+    know nothing: the painter, the swatch, and any duplicate made from it. An
+    "empty means derive it later" would have had to be understood by all three
+    forever, and a duplicate would have carried a blank field, to save writing
+    six characters once.
+  - **And seeding tops up a key a file never had an opinion about.** Seeding is
+    non-destructive by rule — finding your edit silently restored teaches you
+    never to trust the directory again — but a file written before `panel`
+    existed does not DISAGREE about it. Filling in an absent key adds what its
+    author never chose and never touches what they did; without it, every
+    notebook that ran an older Tephra keeps the derived grey for a value the
+    built-in now chooses deliberately, which is the whole complaint.
+  - **The chrome has its own text colour** (`panelInk`), because the ink is
+    chosen against the PAPER. A panel much darker than the page — which is the
+    whole reason `panel` is authorable — leaves the sidebar's words set in a
+    colour picked for a surface they are no longer on, and the darker the panel
+    the worse it gets, until the chrome is unreadable while the text beside it
+    is perfect. One authored colour, with the heading, body and quiet tiers
+    mixed from it TOWARD the panel, so all three hold their relationship to
+    each other and to whatever ground they are on.
+  - **A newline continues a paragraph, and the spacing says so.** Four knobs
+    had grown around one confusion: whether the editor shows a RAW markdown file
+    or a RENDERED one. `leading` and a gap-per-source-line were editor-model
+    quantities; a paragraph's trailing space and a blank line's height were
+    markdown-model ones, and for blank-separated paragraphs the last two added
+    into a single visible gap, so neither number meant anything alone.
+
+    **The ambiguity had already produced a defect.** Print runs the text through
+    a markdown parser, so three consecutive lines became one `<p>` whose
+    newlines HTML collapses to spaces: on screen they were three lines, on paper
+    one flowing paragraph. The question had been answered twice, differently, by
+    two halves of the app.
+
+    Settled toward markdown. Consecutive lines are one paragraph, spaced by
+    `leading` and nothing else; the blank line IS the gap between paragraphs and
+    is the only control for it. Two knobs, one job each, and paper now agrees
+    with the screen about structure. Each built-in's gap was set to what its two
+    numbers used to sum to, so the model got simpler and nothing moved.
+
+  - **Justified or ragged, as a switch.** There is no right answer: a justified
+    column is the book page this app takes its margins from, ragged right is
+    easier on a screen and never opens a river of white down a paragraph, and
+    which wins depends on the measure, the face and the reader — all three
+    already theirs to set. Hyphenation travels with justification rather than
+    being a second switch, because unhyphenated justified text at a reading
+    measure is what gives justification its bad name.
+
+    **Paper follows it**, which is the one thing paper takes from the theme.
+    Print does not inherit a theme by design — its colour, measure and margins
+    belong to the medium — but justification is a preference about how a column
+    is set rather than a property of paper, and a screen flush on both edges
+    beside paper running ragged would be one document arriving two ways.
+
+    A wrapped line's LAST row stays ragged, which is correct for the last line
+    of a block and unavoidable here: forcing it would stretch every short
+    line-per-thought line across the full measure. So this pays off most on
+    imported markdown with real paragraphs, and does little on a day written a
+    thought per line.
+
+    **What this cannot do is REFLOW.** Each source line is its own block in the
+    editing surface, so the words still break where they were typed rather than
+    at the measure. Structure follows markdown; wrapping waits for the rendered
+    editing surface (M5), which is where "raw or rendered" stops being a
+    question at all.
+  - **A built-in cannot be deleted, and the button says so.** Seeding writes any
+    built-in whose file is missing, so deleting one would delete it until the
+    next launch and then quietly bring it back — a control that appears to work
+    and does not. Duplicate it and edit the copy; the copy IS deletable.
   - **The menus grouped by what an act does to your notebook** — go somewhere,
     another view, bring something in, put something out, close — which is the
     only grouping a reader can predict. It was an accumulation until MC6 gave

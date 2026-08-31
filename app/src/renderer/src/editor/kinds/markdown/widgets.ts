@@ -346,18 +346,16 @@ function buildInline(view: EditorView): DecorationSet {
       if (isBlockLine(state, n)) continue
       const cursorHere = overlapsCursor(state, line.from, line.to)
 
-      // Spacing within a paragraph and between paragraphs are separate knobs.
+      // **The blank line IS the space between paragraphs**, and it is the only
+      // thing that is. A newline continues a paragraph in markdown and Tephra
+      // follows markdown, so the lines within one are spaced by `leading` and
+      // by nothing else; there is no "end of a paragraph" to decorate, because
+      // the gap belongs to the blank line that made it.
       //
-      // Within: line-height alone. Between: the end of a paragraph carries a
-      // deliberate gap, and the blank line separating them is set SHORT — it is
-      // structural whitespace, not a line of text, and letting it occupy a full
-      // line makes the gap the accidental sum of two things rather than one
-      // chosen amount. It stays clickable, which is why it is shortened rather
-      // than hidden.
+      // It keeps a real height rather than collapsing, because the caret has to
+      // be able to go there.
       if (text.trim() === '') {
         decos.push({ from: line.from, to: line.from, line: Decoration.line({ class: 'tx-blank' }) })
-      } else if (n === state.doc.lines || state.doc.line(n + 1).text.trim() === '') {
-        decos.push({ from: line.from, to: line.from, line: Decoration.line({ class: 'tx-para-end' }) })
       }
 
       const heading = HEADING.exec(text)

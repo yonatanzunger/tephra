@@ -95,6 +95,7 @@ export const CHANNEL = {
   windowCreate: 'tephra:win:create',
   /** Every document that could be opened, for the Open… chooser (MC6). */
   navDocuments: 'tephra:nav:documents',
+  deleteTheme: 'tephra:theme:delete',
   windowClose: 'tephra:win:close',
   /** Main chose a document — go there. Carries an id, which a command name cannot. */
   openDocument: 'tephra:doc:goto',

@@ -122,6 +122,16 @@ export function installMenu(next?: MenuActions): void {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
+        {
+          // **Where a person looks for it**, which is the application menu on
+          // `Cmd+,` and not View. It was `View ▸ Typography…`, which was doubly
+          // wrong: the wrong menu, and a name for one of the things it holds
+          // rather than for the thing itself (M3).
+          label: 'Settings…',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => send(CHANNEL.menuCommand, 'typography'),
+        },
+        { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
         { role: 'unhide' },
@@ -238,12 +248,6 @@ export function installMenu(next?: MenuActions): void {
     {
       label: 'View',
       submenu: [
-        {
-          label: 'Typography…',
-          accelerator: 'CmdOrCtrl+Alt+T',
-          click: () => send(CHANNEL.menuCommand, 'typography'),
-        },
-        { type: 'separator' },
         {
           label: 'Vim Mode',
           type: 'checkbox',

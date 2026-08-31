@@ -225,6 +225,23 @@ export function readable(date: string, sameYear: boolean): string {
  * one ends the stylesheet in the middle and the error lands on a line of CSS
  * that is perfectly fine. It has happened twice.
  */
+/**
+ * The printed page's own stylesheet, plus the one thing it takes from the theme.
+ *
+ * **Paper does not inherit the theme** (see the header): its colour, measure and
+ * margins are the medium's, not the screen's. Justification is the exception,
+ * and for a reason rather than by exception: it is not a property of paper but a
+ * preference about how a column is set, and having the screen flush both edges
+ * while the paper runs ragged would be one document arriving two ways — the
+ * disagreement `lineSpace` and the markdown model were just settled to end.
+ *
+ * Paper already hyphenates unconditionally, which is why justification only has
+ * to add the alignment here.
+ */
+export function printCss(justify: boolean): string {
+  return justify ? `${PRINT_CSS}\n  main { text-align: justify; }\n` : PRINT_CSS
+}
+
 export const PRINT_CSS = `
   @page { margin: 20mm 18mm; }
   html { font-size: 11pt; }

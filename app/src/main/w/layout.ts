@@ -6,6 +6,8 @@
 
 import type { DateKey, DocumentKind } from '../../shared/document-api.ts'
 import { asDateKey } from '../../shared/dates.ts'
+import { slug } from '../../shared/slug.ts'
+export { slug }
 
 import { dirname, join, posix, relative, resolve, sep } from 'node:path'
 
@@ -156,21 +158,6 @@ export function isMachinery(rel: RelPath): boolean {
   return isLocal(rel) || rel === GIT_DIR || rel.startsWith(`${GIT_DIR}/`)
 }
 
-/**
- * Filesystem-safe, readable, and stable. Not reversible, and not meant to be:
- * the file's own frontmatter is authoritative for its title (format-spec), so
- * the name only has to be a usable handle.
- */
-export function slug(name: string): string {
-  const s = name
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
-  return s === '' ? 'untitled' : s
-}
 
 /**
  * What kind of document a path holds (D3, D54).

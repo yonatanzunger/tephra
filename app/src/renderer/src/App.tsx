@@ -31,7 +31,7 @@ import type { CommentAnchor } from './editor/annotations.ts'
 import type { MarkInfo } from './editor/annotations.ts'
 import {
   printPage, printRangePage, rangeTitle, needsPages,
-  PAPER_CLEAN, PAPER_FOOTNOTES, PAPER_MARGIN, PAPER_NOTES, PRINT_CSS,
+  PAPER_CLEAN, PAPER_FOOTNOTES, PAPER_MARGIN, PAPER_NOTES, printCss,
 } from './print/page.ts'
 import type { AnnotationChoice } from './frame/DateRange'
 import type { Presentation } from '../../shared/presentation.ts'
@@ -322,7 +322,7 @@ export function App(): React.JSX.Element {
                     const how = POLICIES[annotations]
                     const ok = await window.tephra.doc.print({
                       ...printRangePage(days, rangeTitle(days), how),
-                      css: PRINT_CSS,
+                      css: printCss(theme.draft.justify),
                       paginate: needsPages(how),
                       // Relative links resolve from a day directory, and every
                       // day in the stream sits at the same depth — so the first
@@ -429,7 +429,7 @@ export function App(): React.JSX.Element {
         void window.tephra.doc
           .print({
             ...printPage(selection.lines, day),
-            css: PRINT_CSS,
+            css: printCss(theme.draft.justify),
             segment: day,
           })
           .then(ok => {

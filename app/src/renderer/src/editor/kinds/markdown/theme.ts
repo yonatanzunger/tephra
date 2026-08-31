@@ -55,9 +55,35 @@ export function tephraTheme(t: Typography): Extension {
       caretColor: 'rgb(var(--accent))',
     },
     // Per-paragraph, not per-line: see the note in widgets.ts.
-    '.cm-line': { padding: '0' },
-    '.cm-line.tx-para-end': { paddingBottom: `${t.paragraphSpace}em` },
-    '.cm-line.tx-blank': { height: `${(t.blankLine * t.leading).toFixed(3)}em`, lineHeight: `${(t.blankLine * t.leading).toFixed(3)}em` },
+    //
+    // **Justified, or ragged right.** Hyphenation travels with it rather than
+    // being a second switch: unhyphenated justified text at a reading measure
+    // is what gives justification its bad name, opening rivers of white where
+    // the spaces stretch to fill the line.
+    '.cm-line': {
+      padding: '0',
+      textAlign: t.justify ? 'justify' : 'left',
+      hyphens: t.justify ? 'auto' : 'manual',
+      WebkitHyphens: t.justify ? 'auto' : 'manual',
+    },
+    // **Nothing between the lines of a paragraph.** A newline continues a
+    // paragraph in markdown, and Tephra follows markdown, so consecutive lines
+    // are one paragraph and a gap between them would be a gap inside one. How
+    // far apart they sit is `leading`, which is the whole of that question.
+    //
+    // What the source editor cannot do is REFLOW them: the words break where
+    // they were typed rather than at the measure, because each source line is
+    // its own block. Structure agrees with markdown; wrapping waits for the
+    // rendered surface (M5).
+    // **The blank line IS the gap between paragraphs.** One quantity, because a
+    // reader sees one space; it was the sum of a padding and a height, so
+    // neither number meant anything on its own. It keeps a real height rather
+    // than collapsing, because the caret has to be able to go there.
+    '.cm-line.tx-blank': {
+      paddingBottom: '0',
+      height: `${t.paragraphSpace.toFixed(3)}em`,
+      lineHeight: `${t.paragraphSpace.toFixed(3)}em`,
+    },
     '.cm-cursor, .cm-dropCursor': { borderLeftWidth: '2px', borderLeftColor: 'rgb(var(--accent))' },
     '.cm-fat-cursor': { background: 'rgb(var(--accent)) !important', color: 'rgb(var(--surface)) !important' },
     // Styled twice because there are two mechanisms: the drawn layer, which

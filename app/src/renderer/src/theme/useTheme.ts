@@ -9,11 +9,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  BUILT_IN_THEMES,
   builtInTheme,
   defaultTheme,
   themeTokens,
   type Theme,
+  type ThemePalette,
 } from '../../../shared/theme.ts'
+import { slug } from '../../../shared/slug.ts'
 import type { Typography } from '../editor/typography.ts'
 
 /**
@@ -53,8 +56,25 @@ export interface ThemeControl {
   readonly saving: boolean
   select(name: string): void
   update(change: Partial<Theme>): void
+  /** One palette colour at a time — the rest of the palette is left alone. */
+  paint(change: Partial<ThemePalette>): void
   revert(): void
   save(): void
+
+  /**
+   * A new theme, copied from the one on screen.
+   *
+   * **Always a copy, never a blank.** A theme has twenty numbers in it and
+   * starting from nothing means twenty decisions before you can read a line;
+   * starting from what you are looking at means changing the one thing you
+   * wanted to change. It is saved immediately, because a theme that exists only
+   * in this panel is one a restart loses.
+   */
+  duplicate(label: string): void
+  /** Only a theme somebody made. A built-in returns on the next launch (D41). */
+  remove(): void
+  /** Whether the theme on screen is one of the built-ins, and so undeletable. */
+  readonly builtIn: boolean
 }
 
 export function useTheme(activeName: string, onSelect: (name: string) => void): ThemeControl {
@@ -147,6 +167,58 @@ export function useTheme(activeName: string, onSelect: (name: string) => void): 
 
   const revert = useCallback(() => setDraft(saved), [saved])
 
+  const paint = useCallback((change: Partial<ThemePalette>) => {
+    setDraft(previous => ({ ...previous, palette: { ...previous.palette, ...change } }))
+  }, [])
+
+  const builtIn = useMemo(
+    () => BUILT_IN_THEMES.some(theme => theme.name === draft.name),
+    [draft.name],
+  )
+
+  const duplicate = useCallback(
+    (label: string) => {
+      const wanted = label.trim() === '' ? `${draft.label} copy` : label.trim()
+      // The filename IS the identity (D41), so a name nobody is using — and a
+      // suffix rather than an overwrite, since the second "Evening" someone
+      // makes is a second theme and not a correction of the first.
+      const taken = new Set(themes.map(theme => theme.name))
+      const base = slug(wanted)
+      let name = base
+      for (let n = 2; taken.has(name); n++) name = `${base}-${n}`
+
+      const made: Theme = { ...draft, name, label: wanted, note: '' }
+      setSaving(true)
+      void (async () => {
+        try {
+          await window.tephra.doc.saveTheme(made)
+          setThemes(previous =>
+            [...previous, made].sort((a, b) => a.label.localeCompare(b.label)),
+          )
+          setDraft(made)
+          onSelect(made.name)
+        } finally {
+          setSaving(false)
+        }
+      })()
+    },
+    [draft, themes, onSelect],
+  )
+
+  const remove = useCallback(() => {
+    const going = draft.name
+    void (async () => {
+      if (!(await window.tephra.doc.deleteTheme(going))) return
+      const left = themes.filter(theme => theme.name !== going)
+      setThemes(left)
+      // Somewhere to land: the first theme left, which always exists because a
+      // built-in cannot be deleted.
+      const next = left[0] ?? defaultTheme()
+      setDraft(next)
+      onSelect(next.name)
+    })()
+  }, [draft.name, themes, onSelect])
+
   const save = useCallback(() => {
     setSaving(true)
     void (async () => {
@@ -162,7 +234,21 @@ export function useTheme(activeName: string, onSelect: (name: string) => void): 
     })()
   }, [draft])
 
-  return { face, themes: themes.length > 0 ? themes : [saved], draft, dirty, saving, select, update, revert, save }
+  return {
+    face,
+    themes: themes.length > 0 ? themes : [saved],
+    draft,
+    dirty,
+    saving,
+    builtIn,
+    select,
+    update,
+    paint,
+    revert,
+    save,
+    duplicate,
+    remove,
+  }
 }
 
 /**
@@ -183,6 +269,6 @@ export function typographyOf(theme: Theme, face: string): Typography {
     gutterGap: theme.gutterGap,
     leading: theme.leading,
     paragraphSpace: theme.paragraphSpace,
-    blankLine: theme.blankLine,
+    justify: theme.justify,
   }
 }

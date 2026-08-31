@@ -1,4 +1,4 @@
-// Live typographic controls (D41).
+// The theme panel: everything a theme is, editable while you look at it (D41).
 //
 // This exists because the four proof-sheet arrangements could only be judged by
 // looking at them, and the same is true of the numbers between them. Every
@@ -6,7 +6,15 @@
 // explicit, and writes a plain JSON file into `config/themes/`.
 //
 // It is a panel and not a modal on purpose: you are choosing a measure by
-// reading, so the reading must stay visible while you choose.
+// reading, so the reading must stay visible while you choose. The same argument
+// applies to colour twice over — a ground is judged against the text on it.
+//
+// **Everything a theme HAS is here.** It began as typography alone, which meant
+// the palette could only be changed by editing JSON by hand, and the one colour
+// the chrome most needed — the panel's own ground — could not be changed at all
+// because it was derived in code. A control panel that can reach half of what
+// it names is a worse instrument than none: it teaches you the other half is
+// not adjustable.
 
 import type { Theme } from '../../../shared/theme.ts'
 import type { ThemeControl } from './useTheme'
@@ -25,12 +33,12 @@ export function ThemePanel({
   occlusion: OcclusionNote
   onClose: () => void
 }): React.JSX.Element {
-  const { themes, draft, dirty, saving } = control
+  const { themes, draft, dirty, saving, builtIn } = control
 
   return (
-    <aside className="theme-panel" aria-label="Typography">
+    <aside className="theme-panel" aria-label="Theme">
       <header>
-        <span>Typography</span>
+        <span>Theme</span>
         <button type="button" className="link" onClick={onClose} aria-label="Close">
           ✕
         </button>
@@ -46,8 +54,108 @@ export function ThemePanel({
           ))}
         </select>
       </label>
-      {draft.note !== '' && <p className="theme-note">{draft.note}</p>}
 
+      {/* **Duplicate, not New.** A theme is twenty numbers; starting from blank
+          is twenty decisions before you can read a line, and starting from what
+          is on screen is one. */}
+      <div className="theme-manage">
+        <button type="button" onClick={() => control.duplicate(`${draft.label} copy`)}>
+          Duplicate
+        </button>
+        <button
+          type="button"
+          className="link"
+          onClick={control.remove}
+          disabled={builtIn}
+          title={
+            builtIn
+              ? 'A built-in theme is written back the next time Tephra starts, so deleting it would not stay deleted. Duplicate it and edit the copy.'
+              : `Delete ${draft.label}`
+          }
+        >
+          Delete
+        </button>
+      </div>
+
+      <label className="field">
+        <span>Name</span>
+        <input
+          type="text"
+          value={draft.label}
+          spellCheck={false}
+          onChange={e => control.update({ label: e.target.value })}
+        />
+      </label>
+      <label className="field">
+        <span>Note</span>
+        <input
+          type="text"
+          value={draft.note}
+          placeholder="What this theme is for"
+          onChange={e => control.update({ note: e.target.value })}
+        />
+      </label>
+
+      {/* ── colour ────────────────────────────────────────────────────────
+          Named for what each one IS on the page rather than for its token, so
+          that choosing them is a design decision and not a CSS one. */}
+      <h3 className="theme-heading">Colour</h3>
+      <Swatch label="Paper" hint="the page itself" value={draft.palette.paper}
+        onChange={paper => control.paint({ paper })} />
+      <Swatch label="Panel" hint="the sidebar and title bar" value={draft.palette.panel}
+        onChange={panel => control.paint({ panel })} />
+      <Swatch label="Panel text" hint="words on the panel" value={draft.palette.panelInk}
+        onChange={panelInk => control.paint({ panelInk })} />
+      <Swatch label="Ink" hint="body text" value={draft.palette.ink}
+        onChange={ink => control.paint({ ink })} />
+      <Swatch label="Headings" hint="titles, and what leads" value={draft.palette.head}
+        onChange={head => control.paint({ head })} />
+      <Swatch label="Quiet" hint="counts, dates, asides" value={draft.palette.faint}
+        onChange={faint => control.paint({ faint })} />
+      <Swatch label="Rules" hint="lines and edges" value={draft.palette.rule}
+        onChange={rule => control.paint({ rule })} />
+      <Swatch label="Accent" hint="where you are" value={draft.palette.accent}
+        onChange={accent => control.paint({ accent })} />
+
+      {/* A subject's HUE comes from its name and never changes; these two decide
+          whether that hue reads as a quiet mark on cream or a legible line on
+          black, which is a property of the page (D44). */}
+      <Slider label="Tag depth" unit="%" min={0} max={100} step={1}
+        value={draft.tagSaturation}
+        onChange={tagSaturation => control.update({ tagSaturation })} />
+      <Slider label="Tag lightness" unit="%" min={0} max={100} step={1}
+        value={draft.tagLightness}
+        onChange={tagLightness => control.update({ tagLightness })} />
+      <p className="theme-tags">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map(slot => (
+          <span key={slot} className="theme-tag" style={{ background: `rgb(var(--tag-${slot}))` }} />
+        ))}
+      </p>
+
+      <h3 className="theme-heading">Type</h3>
+      <label className="field">
+        <span>Face</span>
+        <input
+          type="text"
+          value={draft.face}
+          spellCheck={false}
+          onChange={e => control.update({ face: e.target.value })}
+        />
+      </label>
+
+      {/* A switch, not a slider: there are two ways to set a column and no
+          continuum between them. */}
+      <label className="field toggle-field">
+        <span>
+          Justified
+          <em>{draft.justify ? 'flush both edges, hyphenated' : 'ragged right'}</em>
+        </span>
+        <input
+          type="checkbox"
+          checked={draft.justify}
+          onChange={e => control.update({ justify: e.target.checked })}
+        />
+      </label>
       <Slider
         label="Measure"
         unit="ch"
@@ -74,22 +182,16 @@ export function ThemePanel({
         value={draft.leading}
         onChange={leading => control.update({ leading })}
       />
+      {/* Up to three lines: this is now the WHOLE gap between paragraphs, not
+          the smaller of two numbers that added into one. */}
       <Slider
-        label="Paragraph"
+        label="Between paragraphs"
         unit="em"
         min={0}
-        max={2}
+        max={3}
         step={0.05}
         value={draft.paragraphSpace}
         onChange={paragraphSpace => control.update({ paragraphSpace })}
-      />
-      <Slider
-        label="Blank line"
-        min={0}
-        max={1.5}
-        step={0.05}
-        value={draft.blankLine}
-        onChange={blankLine => control.update({ blankLine })}
       />
       <Slider
         label="Gutter"
@@ -157,6 +259,42 @@ export function ThemePanel({
         <span className="theme-where">config/themes/{draft.name}.json</span>
       </div>
     </aside>
+  )
+}
+
+/**
+ * One colour, as a swatch you can click and a hex you can type.
+ *
+ * Both, because they are different acts: the picker is for finding a colour and
+ * the field is for using one you already have — a value out of a palette
+ * somebody else made, or the one from the theme next to this.
+ */
+function Swatch({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint: string
+  value: string
+  onChange: (value: string) => void
+}): React.JSX.Element {
+  return (
+    <label className="field swatch">
+      <span>
+        {label}
+        <em>{hint}</em>
+      </span>
+      <input type="color" value={value} onChange={e => onChange(e.target.value)} aria-label={label} />
+      <input
+        type="text"
+        className="hex"
+        value={value}
+        spellCheck={false}
+        onChange={e => onChange(e.target.value)}
+      />
+    </label>
   )
 }
 

@@ -191,7 +191,6 @@ export async function runVerify(request: string): Promise<void> {
       await settle(500)
       const lines = [...document.querySelectorAll('.cm-line')].map(el => ({
         blank: el.classList.contains('tx-blank'),
-        end: el.classList.contains('tx-para-end'),
         height: Math.round(el.getBoundingClientRect().height),
       }))
       say('lineBoxes', lines.slice(0, 8))
@@ -1283,6 +1282,39 @@ export async function runVerify(request: string): Promise<void> {
       say('afterDerived', live().state.doc.toString())
 
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
+    if (scene === 'themepanel') {
+      // M3: theme management is reached where a person looks for it, and it can
+      // reach everything a theme HAS — including the panel colour, which was
+      // derived in code and so unreachable by any amount of editing.
+      say('clicked', await window.tephra.clickMenu('Settings…'))
+      await settle(1500)
+      say('panelOpen', document.querySelector('.theme-panel') !== null)
+      say('colours', [...document.querySelectorAll('.field.swatch > span')].map(e =>
+        (e.firstChild?.textContent ?? '').trim()))
+      say('deleteDisabled', (document.querySelector('.theme-manage .link') as HTMLButtonElement | null)?.disabled)
+
+      // THE POINT: change the panel colour and watch the sidebar follow.
+      const before = getComputedStyle(document.documentElement).getPropertyValue('--surface-panel').trim()
+      const hex = [...document.querySelectorAll('.field.swatch .hex')].find(
+        (_, i) => i === 1,
+      ) as HTMLInputElement | undefined
+      if (hex !== undefined) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(hex, '#123456')
+        hex.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(600)
+      }
+      // A field on the panel takes a ground lifted off the PANEL. Taking the
+      // page's paper put light text on cream — unreadable, and only once
+      // somebody made a panel that differs from their paper.
+      const swatchHex = document.querySelector('.field.swatch .hex')
+      say('fieldGround', swatchHex === null ? 'none' : getComputedStyle(swatchHex).backgroundColor)
+      say('pageGround', getComputedStyle(document.documentElement).getPropertyValue('--surface').trim())
+      say('panelBefore', before)
+      say('panelAfter', getComputedStyle(document.documentElement).getPropertyValue('--surface-panel').trim())
       await settle(600)
     }
 

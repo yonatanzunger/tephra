@@ -655,6 +655,48 @@ console.log('\n— a file from outside —')
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── 8. theme management ─────────────────────────────────────────────────────
+//
+// M3's last visual claim: a theme is editable, all of it, from where a person
+// looks for settings. The panel used to be `View \u25b8 Typography\u2026` and could reach
+// the type and nothing else \u2014 the palette needed a text editor, and the chrome's
+// own ground could not be changed at all, because it was mixed in code.
+console.log('\n\u2014 theme management \u2014')
+{
+  const root = await week(['Today.\n', 'Yesterday.\n'])
+  const r = report(await launch('themepanel', root))
+
+  check('Settings\u2026 is in the application menu, on \u2318,', r.clicked === true)
+  check('and it opens the theme panel', r.panelOpen === true)
+  check(
+    'which can reach every colour a theme has, the panel among them',
+    Array.isArray(r.colours) &&
+      ['Paper', 'Panel', 'Ink', 'Headings', 'Quiet', 'Rules', 'Accent'].every(c =>
+        r.colours.includes(c),
+      ),
+    JSON.stringify(r.colours),
+  )
+  check(
+    'a built-in cannot be deleted, because seeding would bring it back',
+    r.deleteDisabled === true,
+    String(r.deleteDisabled),
+  )
+  check(
+    'a field on the panel is derived from the PANEL, not borrowed from the page',
+    // Not a fixed value: what it lifts TO depends on the theme's panel text,
+    // which this fixture leaves at the page's ink. What must never happen is
+    // the page's paper behind text mixed for the panel — white on cream.
+    typeof r.fieldGround === 'string' &&
+      r.fieldGround !== `rgb(${String(r.pageGround).split(' ').join(', ')})`,
+    `${JSON.stringify(r.fieldGround)} on a page of ${JSON.stringify(r.pageGround)}`,
+  )
+  check(
+    'THE POINT: changing the panel colour changes the chrome',
+    r.panelBefore !== r.panelAfter && r.panelAfter === '18 52 86',
+    `${JSON.stringify(r.panelBefore)} \u2192 ${JSON.stringify(r.panelAfter)}`,
+  )
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

@@ -18,8 +18,8 @@ export interface Typography {
   leading: number
   /** Extra space at a paragraph's end, in ems. */
   paragraphSpace: number
-  /** Height of a blank line, as a fraction of a text line. */
-  blankLine: number
+  /** Justified, with hyphenation — or ragged right. */
+  justify: boolean
 }
 
 export const defaultTypography: Typography = {
@@ -30,5 +30,5 @@ export const defaultTypography: Typography = {
   gutterGap: 3,
   leading: 1.55,
   paragraphSpace: 0.5,
-  blankLine: 0.55,
+  justify: false,
 }

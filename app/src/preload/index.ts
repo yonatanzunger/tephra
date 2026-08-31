@@ -196,6 +196,8 @@ const tephra = {
     anomalies: (): Promise<readonly Anomaly[]> => ipcRenderer.invoke(CHANNEL.anomalies),
     listThemes: (): Promise<readonly Theme[]> => ipcRenderer.invoke(CHANNEL.listThemes),
     saveTheme: (theme: Theme): Promise<void> => ipcRenderer.invoke(CHANNEL.saveTheme, theme),
+    /** Only a theme somebody made: a built-in comes back on the next launch. */
+    deleteTheme: (name: string): Promise<boolean> => ipcRenderer.invoke(CHANNEL.deleteTheme, name),
 
     /** Tell the menu what vim is set to, so its checkmark is a view and not a copy. */
     vimChanged: (vim: boolean): void => ipcRenderer.send(CHANNEL.vimChanged, vim),

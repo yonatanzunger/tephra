@@ -24,6 +24,37 @@ export interface ThemePalette {
   readonly faint: string
   readonly rule: string
   readonly accent: string
+  /**
+   * The chrome's ground: the sidebar, the title bar, the stream panel.
+   *
+   * **Authored, because it was the one thing a person could not fix.** It was
+   * derived as paper mixed toward ink, which gives every light theme a slightly
+   * grey panel whether or not that suits it — and no amount of editing the
+   * theme could change it, because the number was in the code. A panel is a
+   * design decision about the app's furniture, so it is a colour somebody
+   * chooses.
+   *
+   * **Always a real colour.** A file that omits it is given one when it is
+   * READ, derived from its own paper and ink; a "derive it later" empty string
+   * would have to be understood by everything downstream — the painter, the
+   * swatch, and every copy made from it — forever, to save writing six
+   * characters once.
+   */
+  readonly panel: string
+  /**
+   * Text ON the panel, which is not the same question as text on the page.
+   *
+   * **The ink is chosen against the paper.** A panel much darker than the page
+   * — which is the whole reason `panel` is authorable — leaves the sidebar's
+   * words set in a colour picked for a surface they are no longer on, and the
+   * darker the panel the worse it gets, until the chrome is unreadable while
+   * the text beside it is perfect.
+   *
+   * One colour, not three: the heading, body and quiet tiers are mixed from it
+   * toward the panel, so they stay in step with each other and with whatever
+   * ground they are on.
+   */
+  readonly panelInk: string
 }
 
 export interface Theme {
@@ -43,10 +74,39 @@ export interface Theme {
   /** Space between measure and gutter, in characters. */
   readonly gutterGap: number
   readonly leading: number
-  /** Extra space at a paragraph's end, in ems. */
+  /**
+   * The gap between paragraphs, in ems — which is the height of a blank line.
+   *
+   * **One quantity, because a reader sees one gap.** There used to be two knobs
+   * either side of it: extra padding under the last line of a paragraph, and a
+   * height for the blank line itself. The space you actually saw was their sum,
+   * so neither number meant anything on its own and moving one to fix the gap
+   * moved the other's meaning too.
+   */
   readonly paragraphSpace: number
-  /** A blank line's height, as a fraction of a text line. */
-  readonly blankLine: number
+  /**
+   * Whether prose is justified, or set ragged right.
+   *
+   * **A choice, because there is no right answer.** A justified column is the
+   * book page this app takes its margins from and reads as a finished object;
+   * ragged right is easier on a screen and never opens a river of white down
+   * the middle of a paragraph. Which one wins depends on the measure, the face
+   * and the person, and all three are already theirs to set.
+   *
+   * Justification brings hyphenation with it rather than leaving it a second
+   * switch: unhyphenated justified text at this measure is what gives
+   * justification its bad name, and nobody wants one without the other.
+   */
+  readonly justify: boolean
+  /*
+   * `lineSpace` was here, and is gone on purpose.
+   *
+   * It put a gap after every source line, which is right if a newline breaks a
+   * paragraph and wrong if it continues one. **Markdown says it continues one**,
+   * and Tephra follows markdown: consecutive lines are one paragraph, so a gap
+   * between them is a gap inside a paragraph. What is left of that idea is
+   * `leading`, which is how far apart the lines of one paragraph sit.
+   */
 
   // Per-script sizing (D41). Hebrew reads uncomfortably small beside Latin at
   // the same nominal size: its letters all sit at x-height, so the eye gets no
@@ -91,8 +151,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.72,
-    paragraphSpace: 0.7,
-    blankLine: 0.55,
+    paragraphSpace: 1.65,
+    justify: false,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 46,
@@ -104,6 +164,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
       faint: '#8a8175',
       rule: '#c9c0b1',
       accent: '#7a6a4f',
+      panel: '#f2ece0',
+      panelInk: '#23201b',
     },
   },
   {
@@ -117,8 +179,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.58,
-    paragraphSpace: 0.5,
-    blankLine: 0.55,
+    paragraphSpace: 1.37,
+    justify: false,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 42,
@@ -130,6 +192,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
       faint: '#8a8380',
       rule: '#d6d3d1',
       accent: '#059669',
+      panel: '#f1f0ee',
+      panelInk: '#292524',
     },
   },
   {
@@ -143,8 +207,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.66,
-    paragraphSpace: 0.6,
-    blankLine: 0.55,
+    paragraphSpace: 1.51,
+    justify: false,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 52,
@@ -156,6 +220,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
       faint: '#7e8790',
       rule: '#333a42',
       accent: '#93a7bd',
+      panel: '#1a1d22',
+      panelInk: '#d5d2cc',
     },
   },
   {
@@ -169,8 +235,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.76,
-    paragraphSpace: 0.8,
-    blankLine: 0.55,
+    paragraphSpace: 1.77,
+    justify: false,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 46,
@@ -182,6 +248,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
       faint: '#7f858c',
       rule: '#cfd3d8',
       accent: '#3f6d8c',
+      panel: '#eef1f4',
+      panelInk: '#1f2124',
     },
   },
 ]
@@ -222,6 +290,14 @@ export function parseTheme(text: string, name: string): Theme | null {
   const str = (value: unknown, fallback: string): string =>
     typeof value === 'string' && value.trim() !== '' ? value : fallback
 
+  // **Derived HERE, once, rather than everywhere it is used.** A theme written
+  // before the panel was a colour omits it; giving it one at the moment it is
+  // read means every consumer afterwards — the painter, the swatch, a duplicate
+  // made from it — sees an ordinary colour and needs to know nothing.
+  const paper = str(raw.palette?.paper, base.palette.paper)
+  const ink = str(raw.palette?.ink, base.palette.ink)
+  const panel = str(raw.palette?.panel, mixHex(paper, ink, 0.085))
+
   return {
     version: 1,
     name,
@@ -238,16 +314,22 @@ export function parseTheme(text: string, name: string): Theme | null {
     gutterGap: num(raw.gutterGap, base.gutterGap, 0, 12),
     leading: num(raw.leading, base.leading, 1, 3),
     paragraphSpace: num(raw.paragraphSpace, base.paragraphSpace, 0, 4),
-    blankLine: num(raw.blankLine, base.blankLine, 0, 3),
+    justify: raw.justify === true,
     hebrewFace: str(raw.hebrewFace, base.hebrewFace),
     hebrewScale: num(raw.hebrewScale, base.hebrewScale, 50, 250),
     palette: {
-      paper: str(raw.palette?.paper, base.palette.paper),
-      ink: str(raw.palette?.ink, base.palette.ink),
+      paper,
+      ink,
       head: str(raw.palette?.head, base.palette.head),
       faint: str(raw.palette?.faint, base.palette.faint),
       rule: str(raw.palette?.rule, base.palette.rule),
       accent: str(raw.palette?.accent, base.palette.accent),
+      // From this theme's OWN paper and ink, not the default theme's panel: a
+      // dark theme that predates the field must not be handed a cream panel.
+      panel,
+      // The page's ink until somebody says otherwise, which is what every theme
+      // looked like before the panel could differ from the paper.
+      panelInk: str(raw.palette?.panelInk, ink),
     },
   }
 }
@@ -278,7 +360,7 @@ export function mixHex(a: string, b: string, t: number): string {
  * colours. Values are the space-separated triples `rgb(var(--x) / a)` needs.
  */
 export function themeTokens(theme: Theme): Readonly<Record<string, string>> {
-  const { paper, ink, head, faint, rule, accent } = theme.palette
+  const { paper, ink, head, faint, rule, accent, panel, panelInk } = theme.palette
   const tokens: Record<string, string> = {
     '--surface': paper,
     '--surface-ground': mixHex(paper, ink, 0.045),
@@ -292,9 +374,32 @@ export function themeTokens(theme: Theme): Readonly<Record<string, string>> {
      * is mixed from the authored paper and ink, so a dark theme gets a lighter
      * panel and a light theme a darker one without either being written twice.
      */
-    '--surface-panel': mixHex(paper, ink, 0.085),
-    /** The edge where chrome meets page: firmer than a rule inside a list. */
-    '--border-strong': mixHex(paper, ink, 0.26),
+    '--surface-panel': panel,
+    /**
+     * The chrome's three text tiers, mixed from one authored colour toward the
+     * panel it sits on — so they hold their relationship to each other and to
+     * the ground on a pale panel and a near-black one alike.
+     */
+    '--panel-text-heading': panelInk,
+    '--panel-text': mixHex(panel, panelInk, 0.88),
+    '--panel-text-muted': mixHex(panel, panelInk, 0.58),
+    /**
+     * A field ON the panel: an input, a select, a slider's trough.
+     *
+     * Lifted off the panel rather than borrowed from the page. Using the page's
+     * paper here put a light field behind text mixed for a dark panel — white
+     * on cream, which is not dim but genuinely unreadable — and it only shows
+     * up once somebody makes a panel that differs from their paper, which is
+     * the entire reason the colour is authorable.
+     */
+    '--panel-field': mixHex(panel, panelInk, 0.09),
+    /**
+     * The edge where chrome meets page: firmer than a rule inside a list.
+     *
+     * Mixed from the PANEL rather than the paper, so that a chosen panel colour
+     * takes its own edge with it instead of keeping the page's.
+     */
+    '--border-strong': mixHex(panel, ink, 0.26),
     '--text': ink,
     '--text-heading': head,
     '--text-muted': faint,

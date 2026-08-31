@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
 import { Notebook } from './w/notebook.ts'
-import { listThemes, saveTheme, seedThemes } from './w/themes.ts'
+import { deleteTheme, listThemes, saveTheme, seedThemes } from './w/themes.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import { isOutside, type DocumentId } from '../shared/document-api.ts'
@@ -351,6 +351,9 @@ app.whenReady().then(async () => {
   ipcMain.handle(CHANNEL.listThemes, () => (notebook === null ? [] : listThemes(notebook)))
   ipcMain.handle(CHANNEL.saveTheme, (_e, theme: Theme) =>
     notebook === null ? undefined : saveTheme(notebook, theme),
+  )
+  ipcMain.handle(CHANNEL.deleteTheme, (_e, name: string) =>
+    notebook === null ? false : deleteTheme(notebook, name),
   )
 
   // The renderer owns the vim setting — it is loaded from ui-state.json and

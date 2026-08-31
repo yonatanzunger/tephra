@@ -11,6 +11,7 @@ import {
   rgbTriple,
   serialiseTheme,
   themeTokens,
+  type Theme,
 } from '../../src/shared/theme.ts'
 
 test('every built-in theme survives a round trip', () => {
@@ -126,4 +127,140 @@ test('a dark theme derives a darker ground, not a lighter one', () => {
   const luma = (triple: string): number =>
     triple.split(' ').map(Number).reduce((a, b) => a + b, 0)
   assert.ok(luma(ground) > luma(surface), 'Night mixes toward its light ink')
+})
+
+// ── the panel colour, and what "not chosen" means (M3) ────────────────────
+
+test('a theme that does not name a panel is GIVEN one when it is read', () => {
+  // Derived once, at the moment of reading, so that everything downstream sees
+  // an ordinary colour: the painter, the swatch, and any duplicate made from
+  // it. A "derive it later" empty string would have to be understood by all
+  // three forever, to save writing six characters once.
+  const theme = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#ffffff', ink: '#000000' } }),
+    'plain',
+  )
+  assert.notEqual(theme, null)
+  assert.match(theme?.palette.panel ?? '', /^#[0-9a-f]{6}$/, 'a real colour, not a blank')
+  assert.notEqual(theme?.palette.panel, theme?.palette.paper, 'and it is not the page')
+})
+
+test('and it comes from that theme\'s own paper, not the default theme\'s panel', () => {
+  // A dark theme written before the field existed must not be handed a cream
+  // panel because the built-in it fell back to happened to be light.
+  const dark = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#101010', ink: '#eeeeee' } }),
+    'dark',
+  )
+  const light = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#ffffff', ink: '#000000' } }),
+    'light',
+  )
+  assert.notEqual(dark?.palette.panel, light?.palette.panel)
+  // Toward the ink, which on a dark page means lighter than the paper.
+  assert.notEqual(dark?.palette.panel, defaultTheme().palette.panel)
+})
+
+test('a duplicate carries a real panel colour, because there are no blanks', () => {
+  // What "derive later" cost in practice: duplicating a theme copied an empty
+  // field, and the copy's panel control had nothing in it.
+  const original = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#ffffff', ink: '#000000' } }),
+    'original',
+  ) as Theme
+  const copy: Theme = { ...original, name: 'copy', label: 'Copy' }
+  assert.equal(copy.palette.panel, original.palette.panel)
+  assert.match(copy.palette.panel, /^#[0-9a-f]{6}$/)
+})
+
+test('a theme that names one is obeyed, which is the whole point', () => {
+  // THE BUG THIS FIXES: the sidebar's ground was mixed in code, so no amount of
+  // editing a theme could change it — the one colour the chrome most needed was
+  // the one a person could not reach.
+  const theme = parseTheme(
+    JSON.stringify({
+      version: 1,
+      palette: { paper: '#ffffff', ink: '#000000', panel: '#123456' },
+    }),
+    'chosen',
+  )
+  assert.equal(themeTokens(theme as Theme)['--surface-panel'], '18 52 86')
+})
+
+test('the edge follows the panel, not the paper', () => {
+  // A chosen panel takes its own border with it; otherwise a dark panel on a
+  // light page keeps the page's hairline and reads as unfinished.
+  const light = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#ffffff', ink: '#000000', panel: '#ffffff' } }),
+    'a',
+  )
+  const dark = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#ffffff', ink: '#000000', panel: '#222222' } }),
+    'b',
+  )
+  assert.notEqual(
+    themeTokens(light as Theme)['--border-strong'],
+    themeTokens(dark as Theme)['--border-strong'],
+  )
+})
+
+test('every built-in chooses its own panel rather than settling for a mix', () => {
+  for (const theme of BUILT_IN_THEMES) {
+    assert.notEqual(theme.palette.panel.trim(), '', theme.name)
+  }
+})
+
+// ── the chrome's own text, and the gap between thoughts ───────────────────
+
+test('the panel gets its own text tiers, mixed toward the ground it sits on', () => {
+  // The ink is chosen against the PAPER. A panel much darker than the page —
+  // which is the whole reason `panel` is authorable — leaves the sidebar's
+  // words set in a colour picked for a surface they are no longer on.
+  const theme = parseTheme(
+    JSON.stringify({
+      version: 1,
+      palette: { paper: '#ffffff', ink: '#000000', panel: '#101010', panelInk: '#eeeeee' },
+    }),
+    'dark-panel',
+  ) as Theme
+  const tokens = themeTokens(theme)
+
+  assert.equal(tokens['--panel-text-heading'], '238 238 238', 'the authored colour, at full strength')
+  assert.notEqual(tokens['--panel-text'], tokens['--text'], 'and not the page\'s ink')
+  // Body sits between the heading and the quiet tier, all three toward the panel.
+  assert.notEqual(tokens['--panel-text'], tokens['--panel-text-muted'])
+  assert.notEqual(tokens['--panel-text-muted'], tokens['--surface-panel'])
+})
+
+test('a theme that says nothing about panel text keeps using its ink', () => {
+  // Which is what every theme looked like before the panel could differ from
+  // the paper — so nothing moves for a light theme that never asked.
+  const theme = parseTheme(
+    JSON.stringify({ version: 1, palette: { paper: '#ffffff', ink: '#222222' } }),
+    'plain',
+  ) as Theme
+  assert.equal(theme.palette.panelInk, '#222222')
+})
+
+test('the space between paragraphs is ONE number, not the sum of two', () => {
+  // It was a padding under the last line plus a height for the blank line, so
+  // the gap a reader saw was their sum and neither meant anything alone. A
+  // newline continues a paragraph (markdown), so there is nothing to set
+  // between the lines of one — `leading` is that question, entire.
+  const theme = parseTheme(JSON.stringify({ version: 1, paragraphSpace: 0.9 }), 'spaced') as Theme
+  assert.equal(theme.paragraphSpace, 0.9)
+  assert.equal('lineSpace' in theme, false, 'gone, because a gap inside a paragraph is not a thing')
+  assert.equal('blankLine' in theme, false, 'folded into the one gap it was half of')
+})
+
+test('justification is a switch, and every built-in starts ragged', () => {
+  // Which one is right depends on the measure, the face and the reader, all of
+  // which are already theirs to set — so it is a choice, not a default with an
+  // opinion. Ragged is what the themes have always looked like.
+  for (const built of BUILT_IN_THEMES) assert.equal(built.justify, false, built.name)
+
+  assert.equal((parseTheme(JSON.stringify({ version: 1, justify: true }), 'j') as Theme).justify, true)
+  // Anything that is not `true` is false: a hand-edited "yes" is not a boolean,
+  // and guessing at one would be worse than ignoring it.
+  assert.equal((parseTheme(JSON.stringify({ version: 1, justify: 'yes' }), 'j') as Theme).justify, false)
 })
