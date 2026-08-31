@@ -432,6 +432,17 @@ window says so — and the saying-so is the button that imports it.
   without focus was told there was nothing to import, about the file it was
   displaying, in an app-modal dialog that blocked main until the run timed out.
 
+**And the suites stopped taking over the machine.** The window was shown
+without focus in verification mode, which solved half the problem — a run opens
+a real, focusable editor, and a person working while it ran had their keystrokes
+captured by it, typed into the notebook under test. The other half is that four
+suites take minutes and put a window on the desk for every launch. In
+verification mode the window is now not shown at all: a hidden window still lays
+out, still paints and still photographs (`paintWhenInitiallyHidden`, made
+explicit because the suites depend on it), so nothing is given up — which is
+what makes it a better default rather than a compromise. `TEPHRA_SHOW` puts it
+back for when watching IS the point.
+
 **And a diagnostic that could crash the app.** Forwarding a renderer's console
 line to the harness is a write to a pipe, and once the harness stops reading —
 it killed the child, or the run ended — that write throws EPIPE from inside an

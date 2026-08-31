@@ -116,6 +116,11 @@ function createWindow(): BrowserWindow {
     // be bigger than the screen it is on.
     enableLargerThanScreen: oversize,
     show: false,
+    // **Explicit because the suites depend on it.** A window that is never
+    // shown still runs its renderer and still paints while this is true; with
+    // it false, an acceptance run would go quiet in a way that looks like the
+    // app hanging rather than like a setting.
+    paintWhenInitiallyHidden: true,
     title: 'Tephra',
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#faf9f8',
@@ -128,16 +133,23 @@ function createWindow(): BrowserWindow {
   })
 
   win.once('ready-to-show', () => {
-    // In verification mode the window appears WITHOUT taking focus.
+    // **In verification mode the window is not shown at all.**
     //
-    // Not cosmetic: an acceptance run opens a real, focusable editor, and a
-    // person working while it runs has their keystrokes captured by it — typed
-    // into the notebook under test, changing the thing being asserted about.
-    // That produced a run reporting three failures that never reproduced.
-    // **A test harness that can eat the operator's keystrokes is a bad
-    // harness**, however correct the code under it.
-    if (verifyMode()) win.showInactive()
-    else win.show()
+    // It used to appear without taking focus, which solved half the problem:
+    // an acceptance run opens a real, focusable editor, and a person working
+    // while it runs had their keystrokes captured by it — typed into the
+    // notebook under test, changing the thing being asserted about. That
+    // produced a run reporting three failures that never reproduced.
+    //
+    // The other half is that four suites take minutes and put a window on the
+    // desk for every launch, which makes the machine unusable while they run.
+    // A hidden window still lays out, still paints and still photographs
+    // (`paintWhenInitiallyHidden`), so nothing is given up by not showing it —
+    // **which is what makes this a better default and not a compromise.**
+    //
+    // `TEPHRA_SHOW` puts it back, for when the thing you want IS to watch.
+    if (!verifyMode()) win.show()
+    else if (verifyEnv('TEPHRA_SHOW') !== undefined) win.showInactive()
     const shot = verifyEnv('TEPHRA_SHOT')
     // One file per window: with a set of them, a single path means the last
     // one to finish overwrites the others, and a window that came up blank is
