@@ -834,6 +834,11 @@ export function App(): React.JSX.Element {
             where={where}
             onGo={at => void goToLocated(at)}
             onOpenDocument={id => void pane?.goTo({ kind: 'document', id }).catch(fail)}
+            // Straight to the append position. `goToToday` reopens the window
+            // even when today is already showing, and the stream's surface
+            // lands at the end — which is the whole of what "now" means, and
+            // why this needs no special case in the editor (MC6, Q7).
+            onNow={() => void pane?.goToToday().catch(fail)}
             onActive={(places, current, slot) => setTrack({ places, current, slot })}
             onPin={(reference, label) => {
               void window.tephra.nav

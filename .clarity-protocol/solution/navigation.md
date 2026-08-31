@@ -373,3 +373,34 @@ default in a component.
   caller turns up that genuinely wants the corpus-wide answer without the cache
   — and is not a diagnostic, which `verify()` covers — then the flag earns its
   place and this is wrong.
+
+## Now
+
+**One row that is not a set of places.** Every other row in the panel names a
+set and is written down somewhere — in a fileset, or derived from the index
+(D51, D53). `Now` names the single place that is written down nowhere, because
+it is not a place in the corpus at all: the end of the stream, where the next
+sentence goes. It sits above the filesets and outside them for that reason.
+
+A person could pin today's date and get something that looks like this, and it
+would be wrong tomorrow. "Now" is not a date; it is wherever writing continues,
+which is why the app opens there and why this cannot be a fileset entry.
+
+**It looks like every other row.** Being unmanaged is a fact about where it
+comes from, not about what it is for, and dressing it up would tell the reader
+it is a different kind of thing to click. What it lacks is what it cannot have:
+no caret, because there is nothing to disclose, and no unpin, because there is
+no line in a file to take out.
+
+## Landing at the top
+
+A jump from the panel puts its target at the TOP of the screen, not centred.
+
+Centring reads well in the middle of a long document and fails at both ends —
+and one of those ends is where the panel usually sends you. A recent comment or
+a subject from this week is near the end of the stream, where there is nothing
+below to centre against: the viewport stops, and the thing you were sent to sits
+on the last line with the whole screen above it being what you already read.
+
+Landing at the top is the same rule that made centring right in the first place.
+You arrive at the thing, and you read forward from it.

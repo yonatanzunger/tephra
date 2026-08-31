@@ -204,6 +204,13 @@ body {
    of the panel: a heading shorter than the sidebar left the rest of its line
    dead, which makes a list feel unreliable to click at. */
 .nav-row-wrap { display: flex; align-items: center; width: 100%; }
+/* **Now** is an ordinary row and takes `.nav-row` for everything. What it does
+   NOT have is a caret and an unpin — it has nothing to disclose and no line in
+   a file to remove — and that absence is the whole of the difference. Only the
+   breathing room below it is its own, so the first section header does not sit
+   flush against it (D51). */
+.nav-now { margin-bottom: .25rem; }
+
 .nav-row {
   display: flex; align-items: baseline; gap: .4rem; flex: 1; width: 100%;
   min-width: 0; box-sizing: border-box;

@@ -223,11 +223,22 @@ export function bindEditor(options: BindOptions): Binding {
       const where = Math.max(0, Math.min(at, view.state.doc.length))
       view.dispatch({
         selection: { anchor: where },
-        // Centred, and through `scrollIntoView` rather than by measuring: a jump
-        // across a month lands outside the rendered range, where `coordsAtPos`
-        // answers null and any measurement of our own is a guess (see the
-        // landing notes).
-        effects: EditorView.scrollIntoView(where, { y: 'center' }),
+        // **At the TOP, with what follows below it.** Centring reads well in the
+        // middle of a long document and fails at both ends: near the end of the
+        // stream — which is where a recent comment or subject always is — there
+        // is nothing below to centre against, so the viewport stops and the
+        // thing you were sent to sits on the last line, with the whole screen
+        // above it being what you already read.
+        //
+        // Landing at the top is the same rule that made centring right in the
+        // first place: you arrive at the thing, and you read forward from it.
+        // The margin is breathing room, not a heading — a line flush against
+        // the chrome reads as clipped.
+        //
+        // Through `scrollIntoView` rather than by measuring: a jump across a
+        // month lands outside the rendered range, where `coordsAtPos` answers
+        // null and any measurement of our own is a guess (see the landing notes).
+        effects: EditorView.scrollIntoView(where, { y: 'start', yMargin: 24 }),
       })
       view.focus()
     },

@@ -46,6 +46,8 @@ export interface NavProps {
   readonly onUnavailable: (target: Reference, why: 'missing' | 'unsupported') => void
   /** A destination that turned out to be a document in the corpus (D54). */
   readonly onOpenDocument: (id: DocumentId) => void
+  /** The end of the stream, in append position — the one place that is not a place. */
+  readonly onNow: () => void
   readonly onActive: (
     places: readonly Located[],
     current: number,
@@ -79,7 +81,7 @@ const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
 export function Nav({
-  today, here, where, generation, onGo, onActive, onUnavailable, onOpenDocument, onPin, onUnpin,
+  today, here, where, generation, onGo, onActive, onUnavailable, onOpenDocument, onNow, onPin, onUnpin,
 }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
@@ -200,6 +202,32 @@ export function Nav({
   return (
     <nav className="frame-nav" aria-label="Sections">
       <div className="nav-scroll">
+        {/* **Now, and it is not a pin.**
+            
+            Every other row in this panel names a set of places and is written
+            down somewhere — in a fileset, or derived from the index (D51, D53).
+            This one names the single place that is not written down anywhere
+            because it is not a place in the corpus at all: the end of the
+            stream, where the next sentence goes.
+            
+            It sits above the filesets and outside them for that reason. A
+            person could pin today's date and get something that looks like
+            this, and it would be wrong tomorrow — "now" is not a date, it is
+            wherever writing continues, which is why the app opens there and why
+            this cannot be a fileset entry.
+            
+            **It LOOKS like every other row, though.** Being unmanaged is a fact
+            about where it comes from, not about what it is for; dressing it up
+            would say "this is a different kind of thing to click", which it is
+            not. What it lacks is what it cannot have — no caret, because there
+            is nothing to disclose, and no unpin, because there is no line in a
+            file to take out. Not `.nav-row-wrap`, for the same reason: that
+            wrapper is what a pin lives in. */}
+        <button type="button" className="nav-row nav-now" onClick={onNow}>
+          <span className="nav-label">Now</span>
+          <span className="nav-detail">where you left off writing</span>
+        </button>
+
         {/* **The top level is the list of GROUPS, not a group.** A curated
             section is a section beside Timeline and Subjects — same header,
             same expando, same standing — because that is what "the sidebar is
