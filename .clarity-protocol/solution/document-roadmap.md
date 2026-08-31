@@ -461,7 +461,7 @@ that never applied to it.
 
 ---
 
-## MC7 — Restore through the Corpus
+## MC7 — Restore through the Corpus *(done)*
 
 **What changes.** A restore reloads the documents it rewrote, because the Corpus
 is what knows which are open. (The commit half landed in MC2, where the second
@@ -481,6 +481,38 @@ each one either machinery, or a bug.
 
 **Risk:** low in code, high in consequence — this is the phase where getting it
 wrong loses text, so it gets the same treatment M1 gave the write tiers.
+
+**As built.** Three things, and the first was larger than the plan said.
+
+**A version is corpus-wide, so a restore is too.** Restore put back only the
+days — right while the stream was the only document there was, and quietly wrong
+since: "restored to the 14th" meant the days are from the 14th and your notes
+and sections are from now. Half a restore, reported as a whole one (D32). It now
+puts back every document at that version and removes every document that did not
+exist then, by the same rule a day is removed rather than emptied.
+
+**`restoreTo` moved onto `SegmentedDocument`**, generic over segment keys, with
+`removeSegment` as the hook a kind overrides — the stream's override is the one
+that knows a day can be several files, and that removing only the first leaves
+the rest to be read back as its tail. Every restored document goes through
+`corpus.use`, so the reset of its windows is the SAME ACT as the write. A file
+written under an open document leaves it holding the buffer it had a moment ago,
+and the next write tier puts it straight back.
+
+**The audit found one real bypass, and it is a test now.** `branch` wrote its new
+note straight to disk: a document nothing had opened, and — if something had —
+one whose buffer would win the next time a tier ran. Documents cannot hold the
+Corpus (it is what builds them), so the Corpus hands each one `useCreator`, the
+single verb `branch` needs. Two things fell out of routing it through a document:
+the creator must WRITE before returning, because `branch` then rewrites the
+stream to link to a file that has to exist and to a name the unused-name rule has
+to see; and the title travels beside the body rather than inside it, because
+frontmatter is the document's and composing one by hand writes it twice — the
+same trap the filesets hit in MC3b.
+
+Everything else that writes a file is `w/` (which IS the file system), a document
+writing itself, or machinery under `.tephra/`. `layering.test.ts` asserts it, so
+the audit is kept rather than done once.
 
 ---
 

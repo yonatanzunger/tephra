@@ -274,14 +274,17 @@ export class StreamDocument extends SegmentedDocument implements StreamDocumentA
     //    giving it one to pretend otherwise is the contortion D27 refuses. The
     //    title is carried in frontmatter because the slug is not reversible.
     const rel = await this.#unusedNoteFile(title)
-    const header = renderFrontmatter({
-      tephra: 1,
-      date: null,
-      part: null,
-      kind: 'markdown',
-      extra: [['title', title]],
-    })
-    await this.notebook.write(rel, `${header}\n${moved}\n`)
+    // **Through a document, not around one.** Writing the file here would leave
+    // the corpus with a document nothing had opened — and if something HAD it
+    // open, its buffer would win the next time a write tier ran. The Corpus
+    // hands every document this verb because it is the only thing that can
+    // (MC7).
+    //
+    // The title travels beside the body rather than inside it: frontmatter is
+    // the document's, and composing one here writes it twice. No date, ever —
+    // a branched file is not in the dated stream, and giving it one to pretend
+    // otherwise is the contortion D27 refuses.
+    await this.createDocument(rel as string as DocumentId, `\n${moved}\n` as DocumentText, title)
 
     // 2. UPDATE REFERENCES. Nothing to update yet — see above.
 
@@ -342,34 +345,20 @@ export class StreamDocument extends SegmentedDocument implements StreamDocumentA
    * silent corruption; the recovery path if a restore was wrong is another
    * restore, not ⌘Z.
    */
-  async restoreTo(target: ReadonlyMap<DateKey, DocumentText | null>): Promise<RestoreReport> {
-    let restored = 0
-    let removed = 0
-
-    for (const [date, body] of target) {
-      if (body === null) {
-        // Every part, not just the first: a day that had been split leaves the
-        // rest behind otherwise, and they would be read back as its tail.
-        for (let part = 1; part <= MAX_PARTS; part++) {
-          const rel = dayFile(date, part)
-          if (!(await this.notebook.has(rel))) break
-          await this.notebook.remove(rel)
-        }
-        this.segments.delete(date)
-        removed++
-        continue
-      }
-      const segment = await this.segment(date)
-      if (segment.body !== body) restored++
-      segment.setBody(body)
+  /**
+   * A day is several files when it has been split, and all of them go.
+   *
+   * Removing only the first leaves the rest behind, to be read back as that
+   * day's tail — a day that was restored to nothing, still holding half of what
+   * it said (D20).
+   */
+  protected override async removeSegment(key: SegmentKey): Promise<void> {
+    const date = key as DateKey
+    for (let part = 1; part <= MAX_PARTS; part++) {
+      const rel = dayFile(date, part)
+      if (!(await this.notebook.has(rel))) break
+      await this.notebook.remove(rel)
     }
-
-    this.undoStack.length = 0
-    this.redoStack.length = 0
-    this.gen = (this.gen + 1) as SessionGeneration
-    for (const window of this.windows) window.reset()
-
-    return { version: '' as VersionId, restored, removed }
   }
 
   /** The date a new note goes to, in the reference zone (D38). */

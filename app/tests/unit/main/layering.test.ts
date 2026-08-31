@@ -223,3 +223,47 @@ test('only the markdown surface holds the editor', async () => {
     'the editor belongs to the markdown surface; ask it through SurfaceProps instead',
   )
 })
+
+/**
+ * **Every write that is a DOCUMENT goes through one** (D54, MC7).
+ *
+ * The audit MC7 called for, kept rather than done once. A file written around
+ * the document layer is undone by the buffer of anything holding that document
+ * open — silently, on the next write tier, which is the failure a restore
+ * exists to prevent wearing different clothes.
+ *
+ * Three kinds of caller are allowed to write files, and each is allowed for a
+ * reason rather than by exception:
+ *
+ *  - `w/` IS the file system, and writing is what it is for.
+ *  - `x/documents/` is a document writing ITSELF — `writeDirty`, `removeSegment`
+ *    and the Corpus's creator are the document layer, not a way around it.
+ *  - MACHINERY: `.tephra/` holds the WAL, the index cache and `ui-state.json`,
+ *    which are how this machine runs the app rather than documents in the
+ *    corpus. They are excluded from git for the same reason.
+ *
+ * `branch` used to be a fourth: it wrote its new note straight to disk, and was
+ * the last write in the app that went around a document. It is the Corpus's
+ * creator now.
+ */
+test('nothing writes a document behind the document layer', async () => {
+  const WRITES = /\b(notebook|store)\.(write|remove)\s*\(/
+  const offenders: string[] = []
+  for (const rel of await sources('main')) {
+    if (rel.startsWith('w/') || rel.startsWith('x/documents/')) continue
+    const text = await readFile(join(ROOT, 'main', rel), 'utf8')
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    for (const line of code.split('\n')) {
+      if (!WRITES.test(line)) continue
+      // Machinery is named by the constant it writes to, so the exemption is
+      // visible at the call site rather than kept in a list here.
+      if (line.includes('LOCAL.')) continue
+      offenders.push(`${rel}: ${line.trim()}`)
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'ask the Corpus for the document and write through it — see this test\'s comment',
+  )
+})

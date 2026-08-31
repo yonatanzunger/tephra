@@ -103,6 +103,16 @@ const MAX_PARTS = 64
 
 import type { StoredDocument } from './stored.ts'
 
+/**
+ * How a document makes ANOTHER document (D13, MC7).
+ *
+ * **Branching creates a file, and every file that is a document must be written
+ * through one.** A document cannot hold the Corpus — the Corpus is what builds
+ * documents, so that would be a cycle — so what it gets is the one verb it
+ * needs, handed to it by the Corpus at construction.
+ */
+export type CreateDocument = (id: DocumentId, body: DocumentText, title?: string) => Promise<void>
+
 export abstract class SegmentedDocument implements StoredDocument {
   abstract readonly id: DocumentId
   abstract readonly meta: DocumentMeta
@@ -238,8 +248,25 @@ export abstract class SegmentedDocument implements StoredDocument {
   /** Windows that need telling when something else changes the text. */
   protected readonly windows = new Set<LocalWindow>()
 
+  /**
+   * How this document makes another one, when a kind's verb needs to.
+   *
+   * Only `branch` does today. It throws rather than falling back to writing the
+   * file itself: a silent bypass of the document layer is the exact failure MC7
+   * audited for, and one that only appears in a code path nobody tests is
+   * worse than one that stops.
+   */
+  protected createDocument: CreateDocument = () => {
+    throw new Error('this document was built without a way to create another')
+  }
+
   constructor(notebook: Notebook) {
     this.notebook = notebook
+  }
+
+  /** Called by the Corpus, which is the only thing that can supply it. */
+  useCreator(create: CreateDocument): void {
+    this.createDocument = create
   }
 
   get generation(): SessionGeneration {
@@ -1083,6 +1110,59 @@ export abstract class SegmentedDocument implements StoredDocument {
   ): () => void {
     this.journalHandlers.add(handler)
     return () => this.journalHandlers.delete(handler)
+  }
+
+  /**
+   * Make this document equal what it was, and take the undo stack with it.
+   *
+   * **Not an edit, and deliberately not undoable.** A restore is a jump across
+   * a distance nothing can map positions through, so mapping an undo through it
+   * would be a wrong answer offered confidently; the way back from a bad restore
+   * is another restore (D32). Every window is reset rather than patched, for the
+   * same reason.
+   *
+   * **Through the document, which is what makes a restore hold.** Writing the
+   * files under an open document would leave that document holding the buffer
+   * it had a moment ago — and the next write tier would put it straight back,
+   * so the version would take and then be overwritten by memory. Doing it here
+   * means the reset is the same act as the write (D54, MC7).
+   */
+  async restoreTo(target: ReadonlyMap<SegmentKey, DocumentText | null>): Promise<RestoreReport> {
+    let restored = 0
+    let removed = 0
+
+    for (const [key, body] of target) {
+      if (body === null) {
+        await this.removeSegment(key)
+        this.segments.delete(key as DateKey)
+        removed++
+        continue
+      }
+      const segment = await this.segment(key)
+      if (segment.body !== body) restored++
+      segment.setBody(body)
+    }
+
+    this.undoStack.length = 0
+    this.redoStack.length = 0
+    this.gen = (this.gen + 1) as SessionGeneration
+    for (const window of this.windows) window.reset()
+
+    return { version: '' as VersionId, restored, removed }
+  }
+
+  /**
+   * Take a segment's file off disk — what "it did not exist then" means.
+   *
+   * One file for one segment, which is the ordinary case. The stream overrides
+   * it because a day can be several files, and removing only the first leaves
+   * the rest to be read back as its tail.
+   */
+  protected async removeSegment(key: SegmentKey): Promise<void> {
+    const held = this.segments.get(key as DateKey)
+    if (held !== undefined && (await this.notebook.has(held.rel))) {
+      await this.notebook.remove(held.rel)
+    }
   }
 
   async reload(): Promise<void> {

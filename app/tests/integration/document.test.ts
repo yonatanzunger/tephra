@@ -9,6 +9,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
+import { Corpus } from '../../src/main/x/documents/corpus.ts'
+import { STREAM_ID } from '../../src/shared/document-api.ts'
 import { dayFile, resolveInsideNotebook } from '../../src/main/w/layout.ts'
 import type { WindowPosition, DateKey, DocumentWindow } from '../../src/shared/document-api.ts'
 import { pt, rt } from '../support/text.ts'
@@ -25,9 +27,13 @@ async function fixture(t: TestContext, files: Record<string, string> = {}) {
     await mkdir(join(root, rel, '..'), { recursive: true })
     await writeFile(join(root, rel), text)
   }
-  const doc = new StreamDocument(nb)
+  // Through the Corpus, which is how the app builds every document — and the
+  // only thing that can hand one a way to create another, which `branch` needs
+  // (MC7).
+  const corpus = new Corpus(nb)
+  const doc = (await corpus.use(STREAM_ID, async d => d)) as StreamDocument
   t.after(() => nb.close())
-  return { nb, doc, root }
+  return { nb, doc, corpus, root }
 }
 
 const dayText = (date: string, body: string) =>

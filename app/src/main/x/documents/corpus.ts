@@ -28,6 +28,7 @@ import { FilesetDocument } from './kinds/fileset.ts'
 import { ExternalDocument } from './kinds/external.ts'
 import { outsideExists } from '../../w/outside.ts'
 import {
+  ONLY_SEGMENT,
   STREAM_ID,
   isOutside,
   type Divergence, type DocumentChange, type DocumentId, type DocumentKind,
@@ -285,6 +286,23 @@ export class Corpus {
 
   /** Subscribe to a newly made document, so its changes reach the Corpus's listeners. */
   #track(id: DocumentId, doc: StoredDocument): Promise<StoredDocument> {
+    // How it makes another document, which only this object can supply: it is
+    // what builds them, so a document holding one would be a cycle (MC7).
+    doc.useCreator(async (made, body, title) => {
+      await this.use(made, async fresh => {
+        // The BODY, and the title beside it: frontmatter is the document's, and
+        // a caller composing its own gets it written twice — once by hand and
+        // once by the document underneath (D54).
+        await fresh.setBodyOf(ONLY_SEGMENT, body)
+        if (title !== undefined) await fresh.setTitleOf(ONLY_SEGMENT, title)
+        // **Written before this returns**, unlike an ordinary edit. The caller
+        // is `branch`, which then rewrites the stream to link to the new file:
+        // a document that existed only in memory would be linked to by a day
+        // that IS on disk, and the next thing to look for the file — including
+        // the naming rule that picks an unused one — would not find it (D13).
+        await fresh.writeDirty()
+      })
+    })
     this.#unsubscribe.set(id, [
       doc.onChanged(change => {
         for (const handler of this.#changed) handler(id, change)

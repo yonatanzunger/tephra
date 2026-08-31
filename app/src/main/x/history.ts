@@ -16,13 +16,17 @@
 // object ids, and **the mapping between them stops here** — nothing above this
 // layer learns that a day is a file (`architecture.md`).
 
-import { dayFile, parseDayFile, STREAM_DIR, type RelPath } from '../w/layout.ts'
+import { dayFile, isMachinery, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../w/layout.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
 import type { StreamDocument } from './documents/kinds/stream.ts'
 import type { RestoreReport } from '../../shared/history-api.ts'
 import { parseFile } from './frontmatter.ts'
 import type { Repository } from '../w/repository.ts'
-import type { DateKey, DocumentText, VersionId } from '../../shared/document-api.ts'
+import {
+  ONLY_SEGMENT, STREAM_ID,
+  type DateKey, type DocumentId, type DocumentText, type SegmentKey, type VersionId,
+} from '../../shared/document-api.ts'
+import type { Corpus } from './documents/corpus.ts'
 import type { Version } from '../../shared/history-api.ts'
 
 /** Enough parts to cover any real day; the split threshold is 1 MB (D20). */
@@ -99,17 +103,74 @@ export class StreamHistory {
    * "restored, plus some blank days", and a reader could not tell which of the
    * two happened.
    *
-   * Takes the document rather than a `DocumentId`: resolving an id would need a
-   * registry that does not exist, for a v1 that has one document.
+   * **A VERSION IS CORPUS-WIDE, so a restore is too** (D32, MC7). It used to
+   * put back only the days, which was right while the stream was the only
+   * document there was: "restored to the 14th" then quietly meant "the days
+   * are from the 14th, and your notes and sections are from now" — half a
+   * restore, reported as a whole one.
+   *
+   * **And every document goes back through the Corpus**, never around it. A
+   * file written under an open document leaves that document holding the buffer
+   * it had a moment ago, and the next write tier puts it straight back: the
+   * version takes, and is then overwritten by memory. Since MC5 a window can be
+   * holding a note, so this stopped being hypothetical (D54).
    */
-  async restore(version: VersionId, doc: StreamDocument): Promise<RestoreReport> {
+  async restore(version: VersionId, corpus: Corpus): Promise<RestoreReport> {
+    const report = await this.#restoreStream(version, corpus)
+    const documents = await this.#restoreDocuments(version, corpus)
+    return {
+      version,
+      restored: report.restored + documents.restored,
+      removed: report.removed + documents.removed,
+    }
+  }
+
+  /** The days, which are one document made of many files. */
+  async #restoreStream(version: VersionId, corpus: Corpus): Promise<RestoreReport> {
     const then = await this.daysAt(version)
-    const now = await doc.dates()
 
-    const target = new Map<DateKey, DocumentText | null>()
-    for (const date of then) target.set(date, ((await this.readDay(version, date)) ?? '') as DocumentText)
-    for (const date of now) if (!target.has(date)) target.set(date, null)
+    return corpus.use(STREAM_ID, async doc => {
+      const stream = doc as StreamDocument
+      const target = new Map<SegmentKey, DocumentText | null>()
+      for (const date of then) {
+        target.set(date, ((await this.readDay(version, date)) ?? '') as DocumentText)
+      }
+      for (const date of await stream.dates()) if (!target.has(date)) target.set(date, null)
+      return stream.restoreTo(target)
+    })
+  }
 
-    return { ...(await doc.restoreTo(target)), version }
+  /**
+   * Every other document: one file, one segment, whole-body.
+   *
+   * A document that exists NOW and not THEN is removed rather than emptied —
+   * the same rule as a day, for the same reason. Leaving an empty file behind
+   * would make a restore mean "and some blank documents", which a reader cannot
+   * tell from a document somebody emptied on purpose.
+   */
+  async #restoreDocuments(version: VersionId, corpus: Corpus): Promise<RestoreReport> {
+    const then = new Map<DocumentId, DocumentText>()
+    for (const rel of await this.#repo.filesAt(version)) {
+      if (isMachinery(rel) || kindOf(rel) === null || kindOf(rel) === 'stream') continue
+      const text = await this.#repo.contentAt(version, rel)
+      if (text !== null) then.set(rel as string as DocumentId, parseFile(text).body as DocumentText)
+    }
+
+    const target = new Map<DocumentId, DocumentText | null>(then)
+    for (const id of await corpus.list()) {
+      if (id === STREAM_ID || target.has(id)) continue
+      target.set(id, null)
+    }
+
+    let restored = 0
+    let removed = 0
+    for (const [id, body] of target) {
+      const one = await corpus.use(id, doc =>
+        doc.restoreTo(new Map<SegmentKey, DocumentText | null>([[ONLY_SEGMENT, body]])),
+      )
+      restored += one.restored
+      removed += one.removed
+    }
+    return { version, restored, removed }
   }
 }

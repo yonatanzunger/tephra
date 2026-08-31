@@ -13,6 +13,8 @@ import { GitRepository } from '../../src/main/w/git-repository.ts'
 import { StreamHistory } from '../../src/main/x/history.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
 import { Notebook } from '../../src/main/w/notebook.ts'
+import { Corpus } from '../../src/main/x/documents/corpus.ts'
+import { ONLY_SEGMENT, STREAM_ID, type DocumentId } from '../../src/shared/document-api.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -43,7 +45,11 @@ async function withDocument(t: TestContext) {
   const base = await history(t)
   const notebook = await Notebook.open({ root: base.dir, lock: false, watch: false })
   t.after(() => notebook.close())
-  return { ...base, root: base.dir, doc: new StreamDocument(notebook) }
+  // Through the Corpus, because that is how a restore reaches documents now:
+  // the stream is one of them, and the open ones are the point (MC7).
+  const corpus = new Corpus(notebook)
+  const doc = (await corpus.use(STREAM_ID, async d => d)) as StreamDocument
+  return { ...base, root: base.dir, corpus, doc }
 }
 
 /** Replace a whole day through the document, so its segments are live. */
@@ -144,7 +150,7 @@ test('an empty repository has no versions, and that is not an error', async t =>
 })
 
 test('restore puts every day back the way it was at a version', async t => {
-  const { doc, hist, repo, root } = await withDocument(t)
+  const { doc, corpus, hist, repo, root } = await withDocument(t)
 
   await setDay(doc, DAY, 'The first draft, which will be replaced.\n')
   await doc.flush()
@@ -155,7 +161,7 @@ test('restore puts every day back the way it was at a version', async t => {
   await doc.flush()
   await repo.save('second')
 
-  const report = await hist.restore(first, doc)
+  const report = await hist.restore(first, corpus)
   await doc.flush()
 
   assert.equal(report.version, first)
@@ -167,7 +173,7 @@ test('restore puts every day back the way it was at a version', async t => {
 })
 
 test('a restore is a new version, not a rewrite of the old ones', async t => {
-  const { doc, hist, repo } = await withDocument(t)
+  const { doc, corpus, hist, repo } = await withDocument(t)
   await setDay(doc, DAY, 'One.\n')
   await doc.flush()
   const first = (await repo.save('first')) as VersionId
@@ -175,7 +181,7 @@ test('a restore is a new version, not a rewrite of the old ones', async t => {
   await doc.flush()
   await repo.save('second')
 
-  await hist.restore(first, doc)
+  await hist.restore(first, corpus)
   await doc.flush()
   await repo.save('restored')
 
@@ -187,7 +193,7 @@ test('a restore is a new version, not a rewrite of the old ones', async t => {
 })
 
 test('a restore truncates the undo stack', async t => {
-  const { doc, hist, repo } = await withDocument(t)
+  const { doc, corpus, hist, repo } = await withDocument(t)
   await setDay(doc, DAY, 'One.\n')
   await doc.flush()
   const first = (await repo.save('first')) as VersionId
@@ -196,9 +202,109 @@ test('a restore truncates the undo stack', async t => {
   assert.notEqual(await doc.undo(), null, 'there is something to undo before the restore')
   await setDay(doc, DAY, 'Three.\n')
 
-  await hist.restore(first, doc)
+  await hist.restore(first, corpus)
   // Mapping an undo through a change of this size is not well defined, and a
   // wrong answer is silent corruption. The way back from a bad restore is
   // another restore.
   assert.equal(await doc.undo(), null, 'undo should have nothing to say after a restore')
+})
+// ── a restore reaches every document, and the open ones too (MC7) ──────────
+
+/** A note beside the stream, written through its document like anything else. */
+async function setNote(corpus: Corpus, id: string, body: string): Promise<void> {
+  await corpus.use(id as DocumentId, async doc => {
+    await doc.setBodyOf(ONLY_SEGMENT, body as never)
+  })
+}
+
+test('A VERSION IS CORPUS-WIDE, so a restore puts the notes back too', async t => {
+  // It used to restore only the days: "restored to the 14th" quietly meant the
+  // days are from the 14th and your notes are from now — half a restore,
+  // reported as a whole one (D32).
+  const { doc, corpus, hist, repo, root } = await withDocument(t)
+  await setDay(doc, DAY, 'The day, first draft.\n')
+  await setNote(corpus, 'notes/plan.md', 'The plan, first draft.\n')
+  await corpus.flushAll()
+  const first = (await repo.save('first')) as VersionId
+
+  await setDay(doc, DAY, 'The day, regrettably edited.\n')
+  await setNote(corpus, 'notes/plan.md', 'The plan, regrettably edited.\n')
+  await corpus.flushAll()
+  await repo.save('second')
+
+  await hist.restore(first, corpus)
+  await corpus.flushAll()
+
+  assert.match(await readFile(join(root, dayFile(DAY)), 'utf8'), /first draft/)
+  assert.match(await readFile(join(root, 'notes', 'plan.md'), 'utf8'), /The plan, first draft/)
+})
+
+test('a document that did not exist then is removed, not emptied', async t => {
+  // The same rule as a day. An empty file left behind cannot be told from a
+  // document somebody emptied on purpose.
+  const { doc, corpus, hist, repo, root } = await withDocument(t)
+  await setDay(doc, DAY, 'Something, so there is a version.\n')
+  await corpus.flushAll()
+  const first = (await repo.save('first')) as VersionId
+
+  await setNote(corpus, 'notes/later.md', 'Written after the version.\n')
+  await corpus.flushAll()
+  await repo.save('second')
+  assert.equal(existsSync(join(root, 'notes', 'later.md')), true)
+
+  await hist.restore(first, corpus)
+  await corpus.flushAll()
+  assert.equal(existsSync(join(root, 'notes', 'later.md')), false)
+})
+
+test('THE POINT OF MC7: a restore beats the buffer of a document held open', async t => {
+  // **The failure this exists to stop.** A window holds a note; the restore
+  // writes the old text to the file; the document still holds the new text, and
+  // the next write tier puts it straight back. The version took, and was then
+  // overwritten by memory — which is exactly what "a restore is committed
+  // immediately" was written to prevent, wearing different clothes.
+  const { doc, corpus, hist, repo, root } = await withDocument(t)
+  await setDay(doc, DAY, 'A day.\n')
+  await setNote(corpus, 'notes/plan.md', 'The good plan.\n')
+  await corpus.flushAll()
+  const first = (await repo.save('first')) as VersionId
+
+  await setNote(corpus, 'notes/plan.md', 'A regrettable rewrite.\n')
+  await corpus.flushAll()
+  await repo.save('second')
+
+  // HELD OPEN across the restore, the way a window holds one (D54).
+  const release = corpus.watch('notes/plan.md' as DocumentId)
+  t.after(release)
+
+  await hist.restore(first, corpus)
+  // Flushed AFTER the restore: this is the write that used to undo it.
+  await corpus.flushAll()
+
+  assert.equal(await readFile(join(root, 'notes', 'plan.md'), 'utf8'), '---\ntephra: 1\nkind: markdown\n---\nThe good plan.\n')
+  const held = await corpus.use('notes/plan.md' as DocumentId, doc2 => doc2.bodyOf(ONLY_SEGMENT))
+  assert.equal(held, 'The good plan.\n', 'and the document in memory agrees with the file')
+})
+
+test('and a window on that document is reset rather than left stale', async t => {
+  // A window patched through a restore would be mapping positions across a
+  // distance nothing can map through. It is reset instead, and re-reads.
+  const { doc, corpus, hist, repo } = await withDocument(t)
+  await setDay(doc, DAY, 'A day.\n')
+  await setNote(corpus, 'notes/plan.md', 'The good plan.\n')
+  await corpus.flushAll()
+  const first = (await repo.save('first')) as VersionId
+  await setNote(corpus, 'notes/plan.md', 'A regrettable rewrite.\n')
+  await corpus.flushAll()
+  await repo.save('second')
+
+  let reset = 0
+  const window = await corpus.use('notes/plan.md' as DocumentId, async d => {
+    const at = d.positionAt(ONLY_SEGMENT, 0)
+    return d.read({ begin: at, end: at })
+  })
+  ;(window as unknown as { onReset(h: () => void): void }).onReset(() => (reset += 1))
+
+  await hist.restore(first, corpus)
+  assert.equal(reset, 1, 'the window was told to start again')
 })

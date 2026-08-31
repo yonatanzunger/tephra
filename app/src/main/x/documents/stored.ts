@@ -9,8 +9,9 @@
 // Everything here is durability; everything a person can do to a document is
 // already in `Document`.
 
+import type { RestoreReport } from '../../../shared/history-api.ts'
 import type {
-  Document, DocumentText, EditOrigin, SegmentKey, Unsubscribe,
+  Document, DocumentId, DocumentText, EditOrigin, SegmentKey, Unsubscribe,
 } from '../../../shared/document-api.ts'
 import type { RelPath } from '../../w/layout.ts'
 
@@ -36,6 +37,23 @@ export interface StoredDocument extends Document {
 
   /** Record where it was imported from. Also not an edit. */
   setSourceOf(key: SegmentKey, source: string): Promise<void>
+
+  /**
+   * Make this document equal what it was at a version (D32, MC7).
+   *
+   * On the stored contract because a restore is a WRITE, and because it has to
+   * go through the open document — a file written underneath one is undone by
+   * the buffer that outlived it.
+   */
+  restoreTo(target: ReadonlyMap<SegmentKey, DocumentText | null>): Promise<RestoreReport>
+
+  /**
+   * Given a way to make another document — `branch` needs one (D13, MC7).
+   *
+   * Supplied by the Corpus at construction, because a document holding the
+   * Corpus would be a cycle: the Corpus is what builds documents.
+   */
+  useCreator(create: (id: DocumentId, body: DocumentText, title?: string) => Promise<void>): void
 
   /** Replace one segment's content, as an ordinary edit — undo and all. */
   setBodyOf(key: SegmentKey, body: DocumentText, origin?: EditOrigin): Promise<void>

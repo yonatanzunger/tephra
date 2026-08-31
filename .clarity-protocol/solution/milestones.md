@@ -252,6 +252,14 @@ so they resume on top of it rather than being built twice.
   there. Three parts: colour schemes in the theme format, at least one good
   light and one good dark, and a pass over the menus' layout and grouping now
   that there are enough commands for the arrangement to matter.
+- **The `todo` kind**, which is the first real test of the shape rather than a
+  description of it. `todo` is already a `DocumentKind` with nothing behind it,
+  and after MC5½ adding one is *adding files*: an implementation in main, a
+  forwarder in the renderer, and a surface with checkboxes somebody can click —
+  the first surface that is not the markdown one. If the four artifacts hold,
+  this costs a directory of small files and no edits anywhere else; if they do
+  not, this is where that shows, which is the point of doing it before a kind
+  with more at stake (D54, `architecture.md`).
 
 ## M4 — retrieval
 

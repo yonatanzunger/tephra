@@ -720,8 +720,9 @@ export class DocumentService {
   async restore(version: VersionId): Promise<RestoreReport> {
     const history = this.history
     if (history === null) throw new Error('this notebook has no history to restore from')
-    const stream = await this.#stream
-    const report = await this.#serial(() => history.restore(version, stream))
+    // Through the Corpus, which is what knows which documents are open: a
+    // restore that wrote files under one would be undone by its buffer (MC7).
+    const report = await this.#serial(() => history.restore(version, this.#corpus))
     this.#unsavedWork = true
     await this.flush()
     await this.#repo?.save(`Restored to ${version.slice(0, 7)}`)
