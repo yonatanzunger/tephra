@@ -113,6 +113,8 @@ export class Filesets {
             label: section.title,
             summary: null,
             target: { kind: 'section', name: section.name } as Reference,
+            document: section.path as string as DocumentId,
+            pinned: false, // a section the order does not name — present, not listed
             children: await this.#read(section.path, new Set(), 1),
             missing: false,
           })),
@@ -123,6 +125,12 @@ export class Filesets {
           label: section.title,
           summary: null,
           target: { kind: 'section', name: section.title } as Reference,
+          // **A directory is not a document.** Its listing is derived from what
+          // is on disk rather than written anywhere, so there is nothing to
+          // rename or delete — which is exactly what a null says, and why the
+          // panel offers those verbs on a curated section and not on this.
+          document: null,
+          pinned: false,
           children: section,
           missing: false,
         })),
@@ -200,6 +208,10 @@ export class Filesets {
         label: nameOf(rel),
         summary: null,
         target: { kind: 'file', path: relativePath(index, rel) } as Reference,
+        document: rel as string as DocumentId,
+        // The derived half of the listing: here because the document is in the
+        // directory, not because a line names it.
+        pinned: false,
         children: null,
         missing: false,
       }))
@@ -330,6 +342,13 @@ export class Filesets {
    * the new link is written relative to the file it is going into.
    */
   async retarget(from: RelPath, to: RelPath): Promise<number> {
+    // **A section is named, not linked**, so the same rename has two shapes to
+    // rewrite. `_index` says `tephra:section/house`; a note is `../notes/x.md`.
+    // Handling only the second was enough until sections could be renamed, and
+    // would then have left the top-level order naming a file that had moved —
+    // the exact dangle this whole method exists to prevent.
+    const renamedSection = isSectionFile(from) && isSectionFile(to) ? nameOf(from) : null
+
     let changed = 0
     for (const id of await this.#corpus.list('fileset')) {
       const path = id as string as RelPath
@@ -337,14 +356,26 @@ export class Filesets {
       if (entries === null) continue
 
       for (const entry of entries) {
+        if (entry.target.kind === 'section') {
+          if (renamedSection === null || entry.target.name !== renamedSection) continue
+          await this.#use(path, doc =>
+            doc.rewrite(entry.target, { target: { kind: 'section', name: nameOf(to) } }),
+          )
+          changed++
+          continue
+        }
         if (entry.target.kind !== 'file') continue
         if (relativeTo(path, entry.target.path) !== from) continue
         // Through the document, so the rewrite is an ordinary edit: undoable,
         // journalled, and visible to a window with that section open (D54).
-        await this.#use(path, async doc => {
-          await doc.unpin(entry.target)
-          await doc.pin({ kind: 'file', path: relativePath(path, to) }, entry.label, entry.summary ?? undefined)
-        })
+        //
+        // **Where it stands.** Removing the line and appending a new one is the
+        // same set in a different order, and a curated list's order is the part
+        // somebody chose — a rename would have moved the renamed document to
+        // the bottom of every section naming it.
+        await this.#use(path, doc =>
+          doc.rewrite(entry.target, { target: { kind: 'file', path: relativePath(path, to) } }),
+        )
         changed++
       }
     }
@@ -365,6 +396,23 @@ export class Filesets {
     return this.#use(path, doc => doc.unpin(reference))
   }
 
+  /**
+   * Change what an entry is CALLED, leaving what it points at alone (D53).
+   *
+   * The label is the one part of a row that is nobody's business but the
+   * person who wrote it: the target is a fact about the notebook, the summary
+   * is prose, and the label is what they decided to call this thing HERE. The
+   * same document is "The offer" in one section and "Counter" in another, and
+   * that is a feature of a curated list rather than an inconsistency to fix.
+   */
+  async relabel(reference: Reference, label: string, from: string): Promise<boolean> {
+    const path = from as RelPath
+    const wanted = label.trim()
+    if (wanted === '') return false
+    if (!(await this.#corpus.exists(path as string as DocumentId))) return false
+    return this.#use(path, doc => doc.rewrite(reference, { label: wanted }))
+  }
+
   async #read(path: RelPath, seen: ReadonlySet<string>, depth: number): Promise<SectionTree> {
     const found = await this.#contents(path)
     if (found === null) return { title: nameOf(path), path: null, entries: [] }
@@ -375,7 +423,8 @@ export class Filesets {
 
     for (const entry of section.entries) {
       if (entry.target.kind !== 'section') {
-        entries.push({ ...entry, missing: await this.#absent(entry.target, path) })
+        const document = await this.#resolve(entry.target, path)
+        entries.push({ ...entry, document, missing: entry.target.kind === 'file' && document === null })
         continue
       }
       const child = sectionFile(entry.target.name)
@@ -384,6 +433,13 @@ export class Filesets {
       const expandable = depth + 1 < MAX_DEPTH && !within.has(child)
       entries.push({
         ...entry,
+        // A section IS a document — a fileset in `sections/` — and naming it
+        // here is what lets a section be renamed and deleted like anything
+        // else. What that does to the entries inside it is the caller's
+        // problem, and D7's answer: they dangle, visibly.
+        document: (await this.#corpus.exists(child as string as DocumentId))
+          ? (child as string as DocumentId)
+          : null,
         children: expandable ? await this.#read(child, within, depth + 1) : null,
         missing: !(await this.#corpus.exists(child as string as DocumentId)),
       })
@@ -392,17 +448,22 @@ export class Filesets {
   }
 
   /**
-   * Only the targets this layer can check. Names resolve through the index.
+   * What document an entry names, if any. Names resolve through the index.
    *
    * **A file entry is relative to the SECTION it is written in**, the way a
-   * markdown link is relative to its own file. Checking it against the notebook
-   * root instead made every correct `../notes/x.md` report itself as missing —
-   * a real file, a good link, and a row that said "not found".
+   * markdown link is relative to its own file. Resolving it against the
+   * notebook root instead made every correct `../notes/x.md` report itself as
+   * missing — a real file, a good link, and a row that said "not found".
+   *
+   * Null covers both "not a file" and "not there", which the caller separates:
+   * only a file target that resolves to nothing is MISSING. A tag or an anchor
+   * is not a document and is not missing either.
    */
-  async #absent(target: Reference, from: RelPath): Promise<boolean> {
-    if (target.kind !== 'file') return false
+  async #resolve(target: Reference, from: RelPath): Promise<DocumentId | null> {
+    if (target.kind !== 'file') return null
     const at = relativeTo(from, target.path)
-    return at === null || !(await this.#corpus.exists(at as string as DocumentId))
+    if (at === null || !(await this.#corpus.exists(at as string as DocumentId))) return null
+    return at as string as DocumentId
   }
 }
 
@@ -414,6 +475,10 @@ function defaultTitle(path: RelPath): string {
 
 const humanise = (name: string): string =>
   name.replace(/[-_]+/g, ' ').replace(/^./, first => first.toUpperCase())
+
+/** A section is a fileset in `sections/` — not any fileset anywhere (see `all`). */
+const isSectionFile = (path: string): boolean =>
+  path.startsWith(`${SECTIONS_DIR}/`) && path.endsWith('.fileset.md')
 
 const nameOf = (path: string): string =>
   (path.split('/').pop() ?? path).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')

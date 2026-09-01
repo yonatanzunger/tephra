@@ -70,6 +70,35 @@ export interface SectionRow {
   /** The human-authored text after the link. Never regenerated (R20). */
   readonly summary: string | null
   readonly target: Reference
+  /**
+   * The document this row names, when it names one.
+   *
+   * **A link is text; a document is a thing you can rename.** The row already
+   * carries a path relative to the section it is written in, which is enough to
+   * follow and not enough to act on — every verb in the lifecycle takes a
+   * `DocumentId`, and working one out from a relative path is a job for the
+   * layer that owns the corpus rather than for the panel. Resolving it here
+   * costs nothing: the walk resolves the path anyway to find out whether the
+   * entry is missing.
+   *
+   * Null for a target that is not a file, and for one whose file is not there.
+   */
+  readonly document: DocumentId | null
+  /**
+   * Somebody wrote this line, as against the row being here because the file is.
+   *
+   * **The order orders; it does not gate** (D53) — so a section's rows come
+   * from two places, and only one of them can be edited. A curated entry is a
+   * line in a fileset: it has a label somebody chose, it can be relabelled, and
+   * it can be unpinned. A derived row is the fact that a document is in the
+   * directory: its label is the filename, there is no line to rewrite, and
+   * unpinning it would be unpinning nothing.
+   *
+   * The panel needs this because the two look identical, sit in the same list,
+   * and until this existed were offered the same controls — one of which
+   * quietly did nothing.
+   */
+  readonly pinned: boolean
   /** A section entry's contents, once resolved. Null when it is not one. */
   readonly children: SectionTree | null
   /**

@@ -94,6 +94,13 @@ const tephra = {
     /** Take one out again — the same act, one line removed (D53). */
     unpin: (reference: Reference, section?: string): Promise<boolean> =>
       ipcRenderer.invoke(CHANNEL.navUnpin, reference, section),
+    /**
+     * Change what an entry is CALLED here, without moving it or touching what
+     * it points at. The section is required rather than defaulted: relabelling
+     * is always done to a row you are looking at, which knows the file it is in.
+     */
+    relabel: (reference: Reference, label: string, section: string): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNEL.navRelabel, reference, label, section),
     /** Follow a reference that leaves the app: a URL, or a file the OS owns. */
     /**
      * `from` is the document the reference was READ IN, because a relative link
@@ -198,6 +205,23 @@ const tephra = {
     saveTheme: (theme: Theme): Promise<void> => ipcRenderer.invoke(CHANNEL.saveTheme, theme),
     /** Only a theme somebody made: a built-in comes back on the next launch. */
     deleteTheme: (name: string): Promise<boolean> => ipcRenderer.invoke(CHANNEL.deleteTheme, name),
+    /** A new document: a real file from the first keystroke, named later. */
+    /**
+     * A new document, named now or named later.
+     *
+     * `section` is the file a section is written in — the new document is made
+     * where that section's files live, and named in it when it has a line to
+     * write. Both absent is the File menu's version: `untitled`, in `notes/`.
+     */
+    newDocument: (label?: string, section?: string): Promise<DocumentId> =>
+      ipcRenderer.invoke(CHANNEL.newDocument, label, section),
+    /** Returns the NEW id — a document's identity is its path, so the old one is gone. */
+    renameDocument: (id: DocumentId, label: string): Promise<DocumentId> =>
+      ipcRenderer.invoke(CHANNEL.renameDocument, id, label),
+    duplicateDocument: (id: DocumentId, label: string): Promise<DocumentId> =>
+      ipcRenderer.invoke(CHANNEL.duplicateDocument, id, label),
+    deleteDocument: (id: DocumentId): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.deleteDocument, id),
 
     /** Tell the menu what vim is set to, so its checkmark is a view and not a copy. */
     vimChanged: (vim: boolean): void => ipcRenderer.send(CHANNEL.vimChanged, vim),

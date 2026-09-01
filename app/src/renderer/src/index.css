@@ -326,6 +326,50 @@ body {
 .tx-track-beyond.earlier { top: 0; }
 .tx-track-beyond.later { bottom: 0; }
 
+/* ── renaming a row where it sits ───────────────────────
+   The field takes the row's own metrics — same font, same size, same padding
+   — so the list does not shift by a pixel when a name goes from being read to
+   being typed. Only the outline says anything has changed. */
+.nav-rename {
+  display: flex; flex: 1; width: 100%; min-width: 0; box-sizing: border-box;
+  font: inherit; font-size: 13px; font-family: var(--font-ui);
+  color: rgb(var(--panel-text-heading));
+  background: rgb(var(--surface));
+  padding: calc(.22rem - 1px) 1.1rem calc(.22rem - 1px) calc(1.9rem - 2px);
+  border: 1px solid rgb(var(--accent) / .55);
+  border-left: 2px solid rgb(var(--accent));
+  border-radius: 3px;
+}
+.nav-caret + .nav-rename { padding-left: .35rem; }
+.nav-rename:focus { outline: 2px solid rgb(var(--accent) / .3); outline-offset: -3px; }
+
+/* ── the row menu ────────────────────────────────────
+   `fixed`, because the panel scrolls and clips: a menu in that flow would be
+   cut off by the row below it. The scrim is what closes it — a click anywhere
+   that is not an item is a click meaning "not that". */
+.row-menu-scrim { position: fixed; inset: 0; z-index: 8; }
+.row-menu {
+  position: fixed; min-width: 12rem;
+  display: flex; flex-direction: column; padding: .25rem;
+  font-family: var(--font-ui); font-size: 12.5px;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 7px;
+  box-shadow: 0 14px 38px rgb(0 0 0 / .22);
+}
+.row-menu button {
+  font: inherit; text-align: left; cursor: pointer;
+  color: rgb(var(--text)); background: none; border: 0; border-radius: 4px;
+  padding: .3rem .6rem;
+}
+.row-menu button:hover, .row-menu button:focus-visible {
+  background: rgb(var(--accent) / .14); outline: 0;
+}
+.row-menu button.destructive { color: rgb(var(--status-error)); }
+.row-menu button.destructive:hover, .row-menu button.destructive:focus-visible {
+  background: rgb(var(--status-error) / .12);
+}
+.row-menu hr { height: 0; margin: .25rem .4rem; border: 0; border-top: 1px solid rgb(var(--border)); }
+
 /* ── prompt ───────────────────────────────────────────────────────────────
    One short string, asked for and answered. Small on purpose: a range
    operation should feel like a keystroke and a word, not a form. */
@@ -899,4 +943,11 @@ body {
 .theme-code-sample code {
   font-family: var(--font-code); font-size: 11px; line-height: 1.5;
   white-space: pre; display: block; color: rgb(var(--panel-text));
+}
+
+/* A destructive answer is coloured as one, and is never the keyboard default —
+   see `Confirm`, where focus lands on Cancel. */
+.prompt-actions button.destructive {
+  background: rgb(var(--status-error));
+  border-color: transparent;
 }

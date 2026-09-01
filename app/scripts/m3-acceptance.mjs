@@ -13,6 +13,7 @@
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -845,6 +846,170 @@ console.log('\n\u2014 bullet lists \u2014')
     `wrapped row at ${r.secondRowLeft}px, text at ${r.firstTextLeft}px`,
   )
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
+// ── 13. the file lifecycle ──────────────────────────────────────────────────
+//
+// Rename, Save a Copy and Delete, from the File menu. The one that matters is
+// rename: a fileset links by relative path, so renaming without rewriting those
+// links leaves every section naming the document pointing at nothing. This is
+// D13's "update references" step, which was present and empty from M2 until the
+// sections it needed existed.
+console.log('\n\u2014 the file lifecycle \u2014')
+{
+  const root = await week(['Today.\n'])
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'offer.md'),
+    '---\ntephra: 1\nkind: markdown\n---\nWhat we offered.\n',
+  )
+  await writeFile(
+    join(root, 'sections', '_index.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: My sections\n---\n- [The house](tephra:section/house)\n',
+  )
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer](../notes/offer.md) \u2014 worth keeping\n',
+  )
+  const r = report(await launch('lifecycle', root))
+  const section = await readFile(join(root, 'sections', 'house.fileset.md'), 'utf8').catch(() => '')
+
+  check('a document opens from the sidebar', r.opened === 'offer', JSON.stringify(r.opened))
+  check('Rename\u2026 is offered, prefilled with the name it has', r.renamePrefilled === 'offer',
+    JSON.stringify(r.renamePrefilled))
+  check(
+    'renaming moves the window to the document under its new name',
+    r.titleAfterRename === 'counter-offer',
+    JSON.stringify(r.titleAfterRename),
+  )
+  check(
+    'THE POINT: the section that named it points at the new name',
+    /\.\.\/notes\/counter-offer\.md/.test(section) && !/notes\/offer\.md/.test(section),
+    JSON.stringify(section),
+  )
+  check('and keeps the label and summary somebody wrote', /The offer/.test(section) && /worth keeping/.test(section))
+  check(
+    'Save a Copy leaves you in the document you were working in',
+    r.titleAfterCopy === 'counter-offer',
+    JSON.stringify(r.titleAfterCopy),
+  )
+  check(
+    // The copy, and only the copy: the original is deleted further down this
+    // same scene, so asserting it survives would be asserting against the test
+    // that follows.
+    'the copy is a second file of its own',
+    existsSync(join(root, 'notes', 'second-thoughts.md')),
+  )
+  check('Delete asks first, and says what will happen', r.confirmShown === true)
+  check(
+    'and afterwards the file is gone and the window is back in the notebook',
+    !existsSync(join(root, 'notes', 'counter-offer.md')) &&
+      /^\d{1,2} [A-Z][a-z]{2}( \d{4})?$/.test(String(r.titleAfterDelete)),
+    `${existsSync(join(root, 'notes', 'counter-offer.md'))} \u00b7 ${JSON.stringify(r.titleAfterDelete)}`,
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
+// ── 14. the same acts, from the list ────────────────────────────────────────
+//
+// The sidebar is where a person is already looking at their documents, so the
+// lifecycle has to be reachable there and not only from the menu bar. What is
+// its own here is the distinction the panel has to make and the menu bar never
+// does: a row can be a LINE somebody wrote, or the bare fact that a document is
+// in a directory. They look identical and only one of them can be relabelled.
+console.log('\n\u2014 the sidebar\'s own gestures \u2014')
+{
+  const root = await week(['Today.\n'])
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'offer.md'),
+    '---\ntephra: 1\nkind: markdown\n---\nWhat we offered.\n',
+  )
+  // In the same directory and named by nobody: the derived half of a listing.
+  await writeFile(
+    join(root, 'notes', 'loose-note.md'),
+    '---\ntephra: 1\nkind: markdown\n---\nDropped in by hand.\n',
+  )
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer](../notes/offer.md) \u2014 worth keeping\n',
+  )
+  const r = report(await launch('sidebar', root))
+  const section = await readFile(join(root, 'sections', 'house.fileset.md'), 'utf8').catch(() => '')
+  const items = (list) => (Array.isArray(list) ? list.join(' \u00b7 ') : String(list))
+
+  check(
+    'a listed row offers the label and the file as separate things',
+    Array.isArray(r.curatedMenu) &&
+      r.curatedMenu.includes('Edit Label') &&
+      r.curatedMenu.includes('Rename File\u2026') &&
+      r.curatedMenu.includes('Remove from Section'),
+    items(r.curatedMenu),
+  )
+  check('the name is typed in the row, not in a dialog', r.editingInPlace === true)
+  check('and the row takes the new label', r.rowAfterRelabel === true)
+  check(
+    'THE POINT: renaming the FILE leaves the label alone',
+    r.rowKeptItsLabel === true && /Their first number/.test(section),
+    JSON.stringify(section),
+  )
+  check(
+    // FIRST, not last: a new file is pinned after it further down this scene,
+    // so what this is watching for is the renamed entry having been cut and
+    // re-appended — which would put it below the one made afterwards.
+    'and the entry keeps its place in the list rather than moving to the end',
+    (section.split('\n').find(line => line.startsWith('- ')) ?? '').includes('counter-offer'),
+    JSON.stringify(section.split('\n').find(line => line.startsWith('- ')) ?? ''),
+  )
+  check(
+    'a derived row has no label to edit, so it renames the file itself',
+    Array.isArray(r.derivedMenu) &&
+      r.derivedMenu.includes('Rename') &&
+      !r.derivedMenu.includes('Edit Label') &&
+      !r.derivedMenu.includes('Remove from Section'),
+    items(r.derivedMenu),
+  )
+  check(
+    'and that is a real rename on disk',
+    r.rowAfterRename === true &&
+      existsSync(join(root, 'notes', 'tidied-note.md')) &&
+      !existsSync(join(root, 'notes', 'loose-note.md')),
+  )
+  check(
+    'a new file lands in the section it was asked for from',
+    /Survey report/.test(section) && r.titleAfterNew === 'Survey report',
+    `${JSON.stringify(r.titleAfterNew)} \u00b7 ${JSON.stringify(section)}`,
+  )
+  check('deleting from a row asks first', r.confirmShown === true)
+  check(
+    'and afterwards the file is gone while the entry naming it stays, dangling',
+    !existsSync(join(root, 'notes', 'counter-offer.md')) && /Their first number/.test(section),
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+
+  // The field replaces the row's text and must occupy exactly its box. A list
+  // that shifts when a name goes from being read to being typed is a list you
+  // have to find your place in again — the reflow this project has ruled out
+  // everywhere else (D42).
+  const fresh = await week(['Today.\n'])
+  await mkdir(join(fresh, 'sections'), { recursive: true })
+  await mkdir(join(fresh, 'notes'), { recursive: true })
+  await writeFile(
+    join(fresh, 'notes', 'offer.md'),
+    '---\ntephra: 1\nkind: markdown\n---\nWhat we offered.\n',
+  )
+  await writeFile(
+    join(fresh, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer](../notes/offer.md) \u2014 worth keeping\n',
+  )
+  const e = report(await launch('rowmenu|edit', fresh))
+  check(
+    'the field sits exactly where the row\'s name did',
+    e.rowTop === e.fieldTop && e.rowHeight === e.fieldHeight && e.rowHeight > 0,
+    `top ${e.rowTop}/${e.fieldTop} \u00b7 height ${e.rowHeight}/${e.fieldHeight}`,
+  )
 }
 
 const failed = checks.filter(c => !c.ok)

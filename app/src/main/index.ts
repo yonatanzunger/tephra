@@ -254,6 +254,20 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
 }
 
 /**
+ * A new document, in a window of its own.
+ *
+ * **Named later, and real immediately.** It is `notes/untitled.md` from the
+ * first keystroke — versioned, journalled, recoverable — because Tephra has no
+ * unsaved state and the newest thing is the worst one to be able to lose. The
+ * name is the only part deferred, which is right: it is the part you do not
+ * know before writing the thing.
+ */
+async function newDocument(): Promise<void> {
+  if (service === null) return
+  windows?.open({ kind: 'document', id: await service.newDocument() })
+}
+
+/**
  * Import: bring a file in, and go to the copy.
  *
  * Two ways in, one act. `Import…` asks which file; `Import` acts on what the
@@ -363,6 +377,7 @@ app.whenReady().then(async () => {
     newWindow: () => windows?.open(),
     open: inNewWindow => void openDocument(inNewWindow),
     import: pick => void importDocument(pick),
+    newFile: () => void newDocument(),
   })
   ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
   // The renderer owns the caret; main owns the menus. Each tells the other the

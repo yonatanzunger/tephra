@@ -17,7 +17,7 @@
 import type { BrowserWindow, WebContents } from 'electron'
 import type { DocumentService } from './document-service.ts'
 import { attachWindow } from './ipc.ts'
-import { setMenuImportable } from './menu.ts'
+import { setMenuTargets } from './menu.ts'
 import type { DocumentId } from '../shared/document-api.ts'
 import type { WindowInfo, WindowReport } from '../shared/ipc.ts'
 import type { NavTarget } from '../shared/pane-api.ts'
@@ -29,6 +29,8 @@ interface Entry {
   state: WindowState
   /** The outside document it is showing, if any — what `Import` would act on. */
   importable: DocumentId | null
+  /** The corpus document it is showing, if Rename and Delete apply. */
+  renamable: DocumentId | null
 }
 
 export class Windows {
@@ -70,7 +72,7 @@ export class Windows {
   #open(state: WindowState): BrowserWindow {
     const window = this.#make()
     const id = this.#nextId++
-    this.#entries.set(id, { id, window, state, importable: null })
+    this.#entries.set(id, { id, window, state, importable: null, renamable: null })
     attachWindow(this.#service, window)
 
     if (state.bounds !== undefined) window.setBounds(state.bounds)
@@ -103,6 +105,7 @@ export class Windows {
     if (found === undefined) return
     found.state = { location: report.location, cursor: report.cursor }
     found.importable = report.importable
+    found.renamable = report.renamable
     this.#vim = report.vim
     this.#theme = report.theme
     this.#syncMenu()
@@ -126,6 +129,11 @@ export class Windows {
     return this.#focused()?.importable ?? null
   }
 
+  /** What Rename, Save a Copy and Delete would act on. */
+  renamable(): DocumentId | null {
+    return this.#focused()?.renamable ?? null
+  }
+
   /**
    * The same question from a WINDOW, which does not have to guess which it is.
    *
@@ -146,7 +154,7 @@ export class Windows {
   }
 
   #syncMenu(): void {
-    setMenuImportable(this.importable() !== null)
+    setMenuTargets({ importable: this.importable() !== null, renamable: this.renamable() !== null })
   }
 
   /** Every window, with its live bounds — what the file should say right now. */

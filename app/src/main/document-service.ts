@@ -23,7 +23,8 @@ import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import {
-  kindOf, noteFile, parseDayFile, resolveInsideNotebook, slug, type RelPath,
+  kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath, resolveInsideNotebook, SECTIONS_DIR, slug,
+  type RelPath,
 } from './w/layout.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { basename, isAbsolute, join } from 'node:path'
@@ -861,9 +862,21 @@ export class DocumentService {
    * about it is real from the first keystroke — versioned, journalled,
    * recoverable — which an unsaved buffer would not be.
    */
-  async newDocument(): Promise<DocumentId> {
-    const id = await this.#freeNoteName('untitled')
-    await this.#corpus.create(id)
+  async newDocument(label?: string, section?: string): Promise<DocumentId> {
+    const wanted = label?.trim() ?? ''
+    const id = await this.#freeNoteName(wanted === '' ? 'untitled' : slug(wanted), directoryFor(section))
+    await this.#corpus.create(id, wanted === '' ? undefined : wanted)
+
+    // **Made where you asked for it, which for a list means IN the list.** A
+    // file made from a directory's listing is in that directory and shows up
+    // because it is there; a file made from a curated section is in `notes/`
+    // and shows up because a line was written for it. The gesture is the same
+    // one and the answer to "where did it go" is the same: the section you were
+    // looking at. Only a section with a file has a line to write (D53).
+    if (section !== undefined && (await this.#corpus.exists(section as DocumentId))) {
+      await this.#filesets.pin({ kind: 'file', path: relativePath(section as RelPath, id as string as RelPath) },
+        wanted === '' ? nameOf(id) : wanted, section)
+    }
     this.#touched()
     return id
   }
@@ -1005,9 +1018,10 @@ export class DocumentService {
   }
 
   /** A name nobody is using. Importing twice makes two notes, not one overwrite. */
-  async #freeNoteName(name: string): Promise<DocumentId> {
+  async #freeNoteName(name: string, directory = NOTES_DIR): Promise<DocumentId> {
     for (let n = 1; ; n++) {
-      const rel = noteFile(n === 1 ? name : `${name} ${n}`) as string as DocumentId
+      const wanted = n === 1 ? name : `${name} ${n}`
+      const rel = (directory === NOTES_DIR ? noteFile(wanted) : `${directory}/${slug(wanted)}.md`) as DocumentId
       if (!(await this.#corpus.exists(rel))) return rel
     }
   }
@@ -1142,3 +1156,21 @@ export class DocumentService {
   }
 }
 
+/**
+ * Which directory a section's new files go in.
+ *
+ * A directory's listing is the directory, so a file made there belongs in it. A
+ * curated section is a LIST rather than a place — `sections/` holds the lists
+ * themselves, and a note dropped in beside them would read as another section —
+ * so its files go where notes go, and the section names one.
+ */
+function directoryFor(section?: string): string {
+  if (section === undefined) return NOTES_DIR
+  const cut = section.lastIndexOf('/')
+  const dir = cut < 0 ? '' : section.slice(0, cut)
+  return dir === '' || dir === SECTIONS_DIR ? NOTES_DIR : dir
+}
+
+/** A path's filename, with the extensions this app puts on documents taken off. */
+const nameOf = (path: string): string =>
+  (path.split('/').pop() ?? path).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')

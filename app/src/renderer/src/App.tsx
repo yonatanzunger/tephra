@@ -20,6 +20,7 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
+import { Confirm, type ConfirmRequest } from './frame/Confirm'
 import { tephra } from './handle'
 import type { Located, Reference } from '../../shared/nav-api.ts'
 import { DateRange, type DateRangeRequest } from './frame/DateRange'
@@ -127,6 +128,7 @@ export function App(): React.JSX.Element {
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
   const [navGeneration, setNavGeneration] = useState(0)
@@ -298,6 +300,19 @@ export function App(): React.JSX.Element {
             await window.tephra.doc.importText(at, text, original)
           })
           .catch(fail)
+      } else if (command === 'renameFile' || command === 'duplicateFile') {
+        // **Both are "give it a name", and differ only in what keeps it.**
+        // Rename moves this document and rewrites the sections pointing at it;
+        // Save a Copy leaves the original exactly where it was.
+        const showing = pane?.document
+        if (showing === undefined) return
+        const named = showing.title ?? nameOf(showing.id)
+        if (command === 'renameFile') askRename(showing.id, named)
+        else askCopy(showing.id, named)
+      } else if (command === 'deleteFile') {
+        const showing = pane?.document
+        if (showing === undefined) return
+        askDelete(showing.id, showing.title ?? nameOf(showing.id))
       } else if (command === 'goToNotebook') {
         void pane?.goToToday().catch(fail)
       } else if (command === 'printDocument') {
@@ -664,6 +679,96 @@ export function App(): React.JSX.Element {
     setError(err instanceof Error ? err.message : String(err))
   }, [])
 
+  // ── the file lifecycle, wherever it is asked for ─────────────────────────
+  //
+  // **One implementation, two ways in.** The File menu acts on the document
+  // this window is showing; the sidebar acts on the row you right-clicked. That
+  // is the only difference between them, and it is entirely in WHICH document
+  // gets passed — so these take one and neither knows which gesture called it.
+  //
+  // Two implementations would be two chances for only one of them to rewrite
+  // the sections pointing at a renamed file, which is the failure this whole
+  // milestone exists to prevent (D13).
+
+  /** The stream is not a file, and a file outside the notebook is not ours. */
+  const ours = (id: DocumentId): boolean => id !== STREAM_ID && !isOutside(id)
+
+  const rename = (id: DocumentId, label: string): void => {
+    if (!ours(id)) return
+    void window.tephra.doc
+      .renameDocument(id, label)
+      .then(async made => {
+        // **The window follows the document it is SHOWING, and only that one.**
+        // A rename changes a document's identity, so a window left on the old
+        // id is looking at nothing — but renaming a file from the sidebar while
+        // reading a different one is not a reason to leave the one you are
+        // reading.
+        if (pane?.document?.id === id) await pane.goTo({ kind: 'document', id: made })
+        setNavGeneration(n => n + 1)
+      })
+      .catch(fail)
+  }
+
+  /**
+   * The same rename, for the callers who have to ask for the name first.
+   *
+   * The File menu acts on a document whose name is not being typed anywhere, so
+   * it needs a field to type it in; the sidebar's in-place edit already has
+   * one, and calls `rename` directly.
+   */
+  const askRename = (id: DocumentId, name: string): void => {
+    if (!ours(id)) return
+    setPrompt({
+      title: 'Rename this to',
+      initial: name,
+      submitLabel: 'Rename',
+      onSubmit: label => rename(id, label),
+    })
+  }
+
+  const askCopy = (id: DocumentId, name: string): void => {
+    if (!ours(id)) return
+    setPrompt({
+      title: 'Save a copy called',
+      initial: name,
+      submitLabel: 'Save a Copy',
+      onSubmit: label => {
+        void window.tephra.doc
+          .duplicateDocument(id, label)
+          // Nowhere to go: `Save a Copy` leaves you in the document you were
+          // working in, which is what the name says and what makes it different
+          // from `Save As`.
+          .then(() => setNavGeneration(n => n + 1))
+          .catch(fail)
+      },
+    })
+  }
+
+  const askDelete = (id: DocumentId, name: string): void => {
+    if (!ours(id)) return
+    setConfirm({
+      title: `Delete ${name}?`,
+      // Said plainly, because it is true and it is the thing a person wants to
+      // know: the file goes, and the sections naming it will say so rather than
+      // quietly losing the entry (D7).
+      detail:
+        'The file is removed from your notebook. Any section that names it will ' +
+        'show the entry as not found, rather than dropping it.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () => {
+        void window.tephra.doc
+          .deleteDocument(id)
+          .then(async () => {
+            // Only the window that was reading it has to leave.
+            if (pane?.document?.id === id) await pane.goToToday()
+            setNavGeneration(n => n + 1)
+          })
+          .catch(fail)
+      },
+    })
+  }
+
   // How to ask the editor what is selected, for as long as one is mounted.
   const editorRef = useRef<EditorHandle | null>(null)
 
@@ -742,6 +847,10 @@ export function App(): React.JSX.Element {
         // What `Import` would act on, said by the window that knows: only a
         // document from outside the notebook can be brought into it (MC6).
         importable: showing !== undefined && isOutside(showing) ? showing : null,
+        // Rename and Delete apply to a document of OURS: not the stream, which
+        // is not a file, and not one from outside, which is not ours to move.
+        renamable:
+          showing !== undefined && showing !== STREAM_ID && !isOutside(showing) ? showing : null,
         vim,
         theme: themeName,
       })
@@ -875,6 +984,35 @@ export function App(): React.JSX.Element {
                 .then(() => setNavGeneration(n => n + 1))
                 .catch(fail)
             }}
+            // The same acts the File menu drives, on the row you asked from.
+            onAskRename={askRename}
+            onRename={rename}
+            onCopy={askCopy}
+            onDelete={askDelete}
+            onRelabel={(reference, label, section) => {
+              void window.tephra.nav
+                .relabel(reference, label, section)
+                .then(() => setNavGeneration(n => n + 1))
+                .catch(fail)
+            }}
+            onNewFile={section => {
+              setPrompt({
+                title: 'Call the new file',
+                placeholder: 'what this one is about',
+                submitLabel: 'Create',
+                onSubmit: label => {
+                  void window.tephra.doc
+                    .newDocument(label, section ?? undefined)
+                    // **Straight into it.** A file you just made is one you are
+                    // about to write in, and the sidebar shows where it went.
+                    .then(async id => {
+                      await pane?.goTo({ kind: 'document', id })
+                      setNavGeneration(n => n + 1)
+                    })
+                    .catch(fail)
+                },
+              })
+            }}
             onUnavailable={(target, why) =>
               setError(
                 why === 'missing'
@@ -940,6 +1078,7 @@ export function App(): React.JSX.Element {
           />
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
+        {confirm !== null && <Confirm request={confirm} onClose={() => setConfirm(null)} />}
         {range !== null && <DateRange request={range} onClose={() => setRange(null)} />}
         {railHost !== null &&
           createPortal(

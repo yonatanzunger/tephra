@@ -414,6 +414,186 @@ export async function runVerify(request: string): Promise<void> {
       say('familyInUse', getComputedStyle(document.documentElement).getPropertyValue('--font-body').slice(0, 40))
     }
 
+    if (scene === 'lifecycle') {
+      // New, rename, copy, delete — through the real menu items, which is where
+      // the accelerators live and what a keystroke actually reaches.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const row = [...document.querySelectorAll('.nav-row')].find(r =>
+        (r.textContent ?? '').includes('offer'),
+      ) as HTMLElement | undefined
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      await settle(1400)
+      say('opened', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      const type = async (value: string): Promise<void> => {
+        const input = document.querySelector('.prompt input') as HTMLInputElement | null
+        if (input === null) return
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, value)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1400)
+      }
+
+      say('renameClicked', await window.tephra.clickMenu('Rename…'))
+      await settle(600)
+      say('renamePrefilled', (document.querySelector('.prompt input') as HTMLInputElement | null)?.value ?? '')
+      await type('Counter offer')
+      say('titleAfterRename', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      say('copyClicked', await window.tephra.clickMenu('Save a Copy…'))
+      await settle(600)
+      await type('Second thoughts')
+      // Save a Copy leaves you where you were — that is what the name means.
+      say('titleAfterCopy', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      say('deleteClicked', await window.tephra.clickMenu('Delete…'))
+      await settle(600)
+      say('confirmShown', document.querySelector('.prompt [role], .prompt-actions .destructive') !== null)
+      ;(document.querySelector('.prompt-actions .destructive') as HTMLElement | null)?.click()
+      await settle(1600)
+      say('titleAfterDelete', document.querySelector('.titlebar .title')?.textContent ?? '')
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
+    if (scene === 'rowmenu') {
+      // Open a row's menu and leave it open, so the shot at the end of the run
+      // has something to show. This project has found the invisible selection,
+      // the cut-off sheet and the sans-serif Hebrew by looking at pixels.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const row = [...document.querySelectorAll('.nav-row')].find(r =>
+        (r.textContent ?? '').includes('The offer'),
+      ) as HTMLElement | undefined
+      const box = row?.getBoundingClientRect()
+      row?.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          clientX: Math.round((box?.left ?? 0) + 90),
+          clientY: Math.round((box?.top ?? 0) + 10),
+        }),
+      )
+      await settle(600)
+      say('items', [...document.querySelectorAll('.row-menu button')].map(b => b.textContent ?? ''))
+
+      // The field has to sit exactly where the row's text did — a list that
+      // jumps when a name goes from being read to being typed is a list that
+      // makes you find your place again.
+      if (arg === 'edit') {
+        const before = row?.getBoundingClientRect()
+        ;([...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '') === 'Edit Label',
+        ) as HTMLElement | undefined)?.click()
+        await settle(500)
+        const field = document.querySelector('.nav-rename') as HTMLElement | null
+        const after = field?.getBoundingClientRect()
+        say('rowTop', Math.round(before?.top ?? -1))
+        say('fieldTop', Math.round(after?.top ?? -1))
+        say('rowHeight', Math.round(before?.height ?? -1))
+        say('fieldHeight', Math.round(after?.height ?? -1))
+      }
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+    }
+
+    if (scene === 'sidebar') {
+      // The same three acts, asked for from the list rather than from the menu
+      // bar — plus the two that only exist here: relabelling a row, and making
+      // a file in the section you are looking at.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+
+      const rowFor = (text: string): HTMLElement | undefined =>
+        [...document.querySelectorAll('.nav-row')].find(r =>
+          (r.textContent ?? '').includes(text),
+        ) as HTMLElement | undefined
+
+      /** Right-click a row and read back what its menu offers. */
+      const menuOn = async (text: string): Promise<readonly string[]> => {
+        const row = rowFor(text)
+        row?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 200 }),
+        )
+        await settle(400)
+        return [...document.querySelectorAll('.row-menu button')].map(b => b.textContent ?? '')
+      }
+
+      const choose = async (label: string): Promise<boolean> => {
+        const item = [...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '') === label,
+        ) as HTMLElement | undefined
+        item?.click()
+        await settle(500)
+        return item !== undefined
+      }
+
+      /** Type into whichever field is asking — the row's own, or the prompt's. */
+      const type = async (selector: string, value: string): Promise<void> => {
+        const input = document.querySelector(selector) as HTMLInputElement | null
+        if (input === null) return
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, value)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1400)
+      }
+
+      // ── a listed entry: it has a label of its own, and a file behind it ──
+      say('curatedMenu', await menuOn('The offer'))
+      say('editLabelChosen', await choose('Edit Label'))
+      say('editingInPlace', document.querySelector('.nav-rename') !== null)
+      await type('.nav-rename', 'Their first number')
+      say('rowAfterRelabel', rowFor('Their first number') !== undefined)
+
+      // ── and the file it names is renamed separately, by its own name ──
+      await menuOn('Their first number')
+      say('renameFileChosen', await choose('Rename File…'))
+      say('renamePrefilled', (document.querySelector('.prompt input') as HTMLInputElement | null)?.value ?? '')
+      await type('.prompt input', 'counter offer')
+      // The label somebody wrote survives a rename of the file under it.
+      say('rowKeptItsLabel', rowFor('Their first number') !== undefined)
+
+      // ── a derived row has no line, so the same gesture renames the file ──
+      say('derivedMenu', await menuOn('loose-note'))
+      say('renameChosen', await choose('Rename'))
+      await type('.nav-rename', 'tidied note')
+      say('rowAfterRename', rowFor('tidied-note') !== undefined)
+
+      // ── a new file, made in the section that was asked ──
+      const header = [...document.querySelectorAll('.nav-head')].find(h =>
+        (h.textContent ?? '').includes('The house'),
+      ) as HTMLElement | undefined
+      header?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 120, clientY: 160 }))
+      await settle(400)
+      say('newFileChosen', await choose('New File…'))
+      await type('.prompt input', 'Survey report')
+      say('titleAfterNew', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      // ── and deleting one, from the row ──
+      await menuOn('Their first number')
+      say('deleteChosen', await choose('Delete File…'))
+      say('confirmShown', document.querySelector('.prompt-actions .destructive') !== null)
+      ;(document.querySelector('.prompt-actions .destructive') as HTMLElement | null)?.click()
+      await settle(1600)
+
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'lists') {
       // A wrapped bullet hangs under its own text, and the marker is drawn as a
       // bullet over the hyphen the file keeps.

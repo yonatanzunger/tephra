@@ -10,7 +10,8 @@
 // A set with more than one element earns apparatus rather than a second verb —
 // `3 of 7` and a pair of steppers on the active row.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { RowMenu, type MenuEntry, type RowMenuRequest } from './RowMenu'
 import type { DateKey, DocumentId } from '../../../shared/document-api.ts'
 import { dayLabel } from '../../../shared/dates.ts'
 import { tagSlot } from '../../../shared/tags.ts'
@@ -43,6 +44,42 @@ export interface NavProps {
   readonly onPin: (reference: Reference, label: string) => void
   /** Take one out of the file it is in — a PATH, because names are slugged. */
   readonly onUnpin: (reference: Reference, sectionPath: string) => void
+  /**
+   * The document lifecycle, from the row that names the document (D13).
+   *
+   * **The same three acts as the File menu**, and deliberately the same
+   * implementation on the other side of these props: a person renaming a file
+   * from the sidebar and one renaming it from the menu are doing one thing, and
+   * two code paths would be two chances for only one of them to rewrite the
+   * sections that point at it.
+   *
+   * The name is passed because the panel has one and the prompt needs one —
+   * asking main for the title of a document whose row is already on screen
+   * showing it would be asking a question we know the answer to.
+   */
+  readonly onAskRename: (id: DocumentId, name: string) => void
+  readonly onCopy: (id: DocumentId, name: string) => void
+  readonly onDelete: (id: DocumentId, name: string) => void
+  /**
+   * Rename it to this, with nothing to confirm.
+   *
+   * **Separate from `onAskRename`, because asking and doing are two acts.** A
+   * name typed into the row IS the answer — putting a dialog up to ask for a
+   * name somebody has just finished typing is asking a question already
+   * answered. The menu item ends in an ellipsis and this does not, which is
+   * what the ellipsis has always meant.
+   */
+  readonly onRename: (id: DocumentId, name: string) => void
+  /**
+   * Change what a row is called HERE — one line in the section it is written in.
+   *
+   * Not the same act as renaming the document, and the menu says so: the label
+   * is what somebody decided to call this thing in this list, and the same
+   * document is "The offer" in one section and "Counter" in another (D53).
+   */
+  readonly onRelabel: (reference: Reference, label: string, sectionPath: string) => void
+  /** A new document, made where the section it was asked for from keeps files. */
+  readonly onNewFile: (sectionPath: string | null) => void
   /** A destination that could not be reached, and why. */
   readonly onUnavailable: (target: Reference, why: 'missing' | 'unsupported') => void
   /** A destination that turned out to be a document in the corpus (D54). */
@@ -81,8 +118,32 @@ interface Row {
 const FIRST_DAYS = 5
 const MORE_DAYS = 15
 
+/**
+ * What can be done TO a row, as one thing, because the tree recurses.
+ *
+ * Six callbacks threaded through four levels of nesting one at a time is six
+ * chances to drop one on a branch and not notice: a menu item that is simply
+ * absent looks like a design decision. Bundled, the whole set arrives or none
+ * of it does.
+ */
+interface RowActs {
+  readonly onAskRename: (id: DocumentId, name: string) => void
+  readonly onRename: (id: DocumentId, name: string) => void
+  readonly onCopy: (id: DocumentId, name: string) => void
+  readonly onDelete: (id: DocumentId, name: string) => void
+  readonly onRelabel: (reference: Reference, label: string, sectionPath: string) => void
+  readonly onUnpin: (reference: Reference, sectionPath: string) => void
+  readonly onNewFile: (sectionPath: string | null) => void
+  /** Open the row menu where the pointer is. */
+  readonly onMenu: (request: RowMenuRequest) => void
+  /** Which row is having its name typed, and how that is started and finished. */
+  readonly editing: string | null
+  readonly onEdit: (key: string | null) => void
+}
+
 export function Nav({
   today, here, where, generation, onGo, onActive, onUnavailable, onOpenDocument, onNow, onPin, onUnpin,
+  onAskRename, onRename, onCopy, onDelete, onRelabel, onNewFile,
 }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
   const [shown, setShown] = useState(FIRST_DAYS)
@@ -94,6 +155,17 @@ export function Nav({
   const [threads, setThreads] = useState<readonly ThreadRow[]>([])
   const [status, setStatus] = useState<IndexStatus | null>(null)
   const [sections, setSections] = useState<SectionTree | null>(null)
+
+  const [menu, setMenu] = useState<RowMenuRequest | null>(null)
+  /**
+   * Which row's name is being typed, by key.
+   *
+   * **Held here rather than in the row**, because the panel re-reads whenever
+   * anything changes and a row's own state would go with it — and because one
+   * at a time is the rule: two rows in edit is a state with no way to say which
+   * one Return belongs to.
+   */
+  const [editing, setEditing] = useState<string | null>(null)
 
   // The active row, and how far through its set we are. One at a time: it owns
   // the steppers, and it is what "next" is relative to.
@@ -187,6 +259,13 @@ export function Nav({
     [active, onGo, onActive],
   )
 
+  const acts: RowActs = {
+    onAskRename, onRename, onCopy, onDelete, onRelabel, onUnpin, onNewFile,
+    onMenu: setMenu,
+    editing,
+    onEdit: setEditing,
+  }
+
   const toggle = (key: string): void =>
     setOpen(previous => {
       const next = new Set(previous)
@@ -261,7 +340,7 @@ export function Nav({
               depth={0}
               active={active}
               onGo={go}
-              onUnpin={onUnpin}
+              acts={acts}
               section={sections.path}
               base={sections.base ?? sections.path ?? null}
             />
@@ -285,6 +364,26 @@ export function Nav({
                 onToggle={() => toggle(`closed:${name}`)}
                 missing={entry.missing}
                 summary={entry.summary}
+                onMenu={e => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  acts.onMenu({
+                    at: { x: e.clientX, y: e.clientY },
+                    about: entry.label,
+                    // **One item, and it is the one this header can answer.**
+                    // A section's own name and whether it exists are the order's
+                    // business, which is deferred with the rest of section
+                    // management; where a new file goes is this header's, and
+                    // it is the question a person right-clicking a list asks.
+                    items: [
+                      {
+                        label: 'New File…',
+                        onChoose: () =>
+                          acts.onNewFile(entry.children?.base ?? entry.children?.path ?? null),
+                      },
+                    ],
+                  })
+                }}
               >
                 {entry.children?.entries.map((row, i) => (
                   <CuratedRows
@@ -293,7 +392,7 @@ export function Nav({
                     depth={0}
                     active={active}
                     onGo={go}
-                    onUnpin={onUnpin}
+                    acts={acts}
                     section={entry.children?.path ?? null}
                     base={entry.children?.base ?? entry.children?.path ?? null}
                   />
@@ -364,6 +463,8 @@ export function Nav({
         )}
       </div>
 
+      {menu !== null && <RowMenu request={menu} onClose={() => setMenu(null)} />}
+
       {/* **Where you are — at the FOOT, and that is a layout decision.** The
           annotations covering the caret are already in the window's prose
           (D50), so this line costs nothing to compute; what it did cost was a
@@ -412,7 +513,7 @@ function CuratedRows({
   depth,
   active,
   onGo,
-  onUnpin,
+  acts,
   section,
   base,
 }: {
@@ -421,7 +522,7 @@ function CuratedRows({
   active: { key: string; places: readonly Located[]; at: number } | null
   /** `elsewhere` is a ⌘-click: the same there, in a window of its own. */
   onGo: (row: Row, elsewhere?: boolean) => void
-  onUnpin: (reference: Reference, sectionPath: string) => void
+  acts: RowActs
   /** The PATH of the file this row lives in — what unpinning has to edit. */
   section: string | null
   /** What its links resolve from, which a derived listing has without a file. */
@@ -440,11 +541,71 @@ function CuratedRows({
     // derived listing has the first and not the second (D53).
     ...(base === null ? {} : { from: base }),
   }
+
+  /**
+   * The line this row is written in, when there is one.
+   *
+   * A derived row — a document that is in the directory but that nobody has
+   * listed — has no line, so it cannot be relabelled and cannot be unpinned.
+   * Offering either was the silent no-op this replaced (D53).
+   */
+  const line = entry.pinned ? section : null
+
+  /**
+   * **You edit the name where the name is written.** For a listed entry that
+   * is the label in the section, which is what the row shows and the only part
+   * of it nobody else decides. For a derived row there is no line, and the
+   * label IS the filename — so the same typing renames the document, which is
+   * again the place the name came from.
+   */
+  const rename = (typed: string): void => {
+    const wanted = typed.trim()
+    acts.onEdit(null)
+    if (wanted === '' || wanted === entry.label) return
+    if (line !== null) acts.onRelabel(entry.target, wanted, line)
+    else if (entry.document !== null) acts.onRename(entry.document, wanted)
+  }
+
+  const openMenu = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    const id = entry.document
+    const items: MenuEntry[] = []
+    if (!entry.missing) items.push({ label: 'Open in New Window', onChoose: () => void onGo(row, true) })
+    if (line !== null || id !== null) {
+      if (items.length > 0) items.push('rule')
+      // Named for what it changes. On a listed entry the row's text is a label
+      // somebody chose and the file has a name of its own, so those are two
+      // items; on a derived row they are the same act under one name.
+      items.push({
+        label: line === null ? 'Rename' : 'Edit Label',
+        onChoose: () => acts.onEdit(row.key),
+      })
+    }
+    if (id !== null) {
+      // The ellipsis is the difference: this one asks, the in-place edit above
+      // does not.
+      if (line !== null) items.push({ label: 'Rename File…', onChoose: () => acts.onAskRename(id, entry.label) })
+      items.push({ label: 'Save a Copy…', onChoose: () => acts.onCopy(id, entry.label) })
+      items.push({ label: 'Delete File…', destructive: true, onChoose: () => acts.onDelete(id, entry.label) })
+    }
+    if (line !== null) {
+      if (items.length > 0) items.push('rule')
+      // **Not destructive, and it is the one that looks it.** Taking a row out
+      // of a list removes a line from a markdown file; the file it named is
+      // untouched, and D7 would show it again in the directory's own listing.
+      items.push({ label: 'Remove from Section', onChoose: () => acts.onUnpin(entry.target, line) })
+    }
+    if (items.length === 0) return
+    acts.onMenu({ at: { x: e.clientX, y: e.clientY }, about: entry.label, items })
+  }
+
   return (
     <>
       <div
         className={`nav-row-wrap${entry.missing ? ' missing' : ''}`}
         style={{ paddingLeft: `${depth * 0.85}rem` }}
+        onContextMenu={openMenu}
       >
         {entry.target.kind === 'section' && (
           <button
@@ -457,24 +618,28 @@ function CuratedRows({
             {open ? '▾' : '▸'}
           </button>
         )}
-        <button
-          type="button"
-          className={`nav-row${active?.key === row.key ? ' active' : ''}`}
-          // ⌘-click (⌃-click elsewhere) opens it in a new window instead.
-          onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}
-        >
-          <span className="nav-label">{row.label}</span>
-          {entry.summary !== null && <span className="nav-detail">{entry.summary}</span>}
-          {/* Never hidden, and it says why it is dim (D53). */}
-          {entry.missing && <span className="nav-count nav-missing">not found</span>}
-        </button>
-        {section !== null && entry.target.kind !== 'section' && (
+        {acts.editing === row.key ? (
+          <RowName initial={entry.label} onDone={rename} onCancel={() => acts.onEdit(null)} />
+        ) : (
+          <button
+            type="button"
+            className={`nav-row${active?.key === row.key ? ' active' : ''}`}
+            // ⌘-click (⌃-click elsewhere) opens it in a new window instead.
+            onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}
+          >
+            <span className="nav-label">{row.label}</span>
+            {entry.summary !== null && <span className="nav-detail">{entry.summary}</span>}
+            {/* Never hidden, and it says why it is dim (D53). */}
+            {entry.missing && <span className="nav-count nav-missing">not found</span>}
+          </button>
+        )}
+        {line !== null && entry.target.kind !== 'section' && acts.editing !== row.key && (
           <button
             type="button"
             className="nav-pin"
             aria-label={`Unpin ${entry.label}`}
             title={`Unpin ${entry.label}`}
-            onClick={() => onUnpin(entry.target, section)}
+            onClick={() => acts.onUnpin(entry.target, line)}
           >
             −
           </button>
@@ -487,12 +652,69 @@ function CuratedRows({
           depth={depth + 1}
           active={active}
           onGo={onGo}
-          onUnpin={onUnpin}
+          acts={acts}
           section={entry.children?.path ?? section}
           base={entry.children?.base ?? entry.children?.path ?? base}
         />
       ))}
     </>
+  )
+}
+
+/**
+ * A row's name, being typed.
+ *
+ * **In the row, in the row's own type.** The alternative is the prompt the File
+ * menu uses, and for renaming a file that is right — it is a considered act
+ * with a dialog's weight. Fixing a name in a list is not: you are looking at
+ * the list, the name is wrong, and a dialog that covers the list to ask about
+ * one line in it is in the way.
+ *
+ * Return keeps it, Escape drops it, and clicking away keeps it — which is what
+ * every list that renames in place does, and what a person who clicked away
+ * having typed a name means.
+ */
+function RowName({
+  initial,
+  onDone,
+  onCancel,
+}: {
+  initial: string
+  onDone: (typed: string) => void
+  onCancel: () => void
+}): React.JSX.Element {
+  const field = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const node = field.current
+    if (node === null) return
+    node.focus()
+    // Selected, not merely focused: the common case is replacing the name
+    // outright, and the rarer one — a correction — only costs an arrow key.
+    node.select()
+  }, [])
+
+  return (
+    <input
+      className="nav-row nav-rename"
+      ref={field}
+      defaultValue={initial}
+      aria-label={`Rename ${initial}`}
+      onBlur={e => onDone(e.currentTarget.value)}
+      onKeyDown={e => {
+        // Stopped here in every case: the panel is inside a window with menu
+        // accelerators and an editor, and a name with an "i" in it must not
+        // toggle italics somewhere else.
+        e.stopPropagation()
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          onDone(e.currentTarget.value)
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          onCancel()
+        }
+      }}
+    />
   )
 }
 
@@ -662,6 +884,7 @@ function Section({
   count,
   open,
   onToggle,
+  onMenu,
   missing,
   summary,
   children,
@@ -671,6 +894,12 @@ function Section({
   count: number
   open: boolean
   onToggle: (id: string) => void
+  /**
+   * The header's own menu, for the acts that are about the SECTION rather than
+   * about a row in it. Absent on the built-in sections, which are not files and
+   * have nothing to make a document in.
+   */
+  onMenu?: ((e: React.MouseEvent) => void) | undefined
   /** A section named in the order but whose file is gone (D53). */
   missing?: boolean
   /**
@@ -687,7 +916,7 @@ function Section({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <div className="nav-section">
+    <div className="nav-section" onContextMenu={onMenu}>
       <button
         type="button"
         className={`nav-head${missing === true ? ' missing' : ''}`}

@@ -33,16 +33,23 @@ export interface MenuState {
   selection: SelectionState
   /** Whether the focused window is showing a file that could be imported. */
   importable: boolean
+  /** Whether it is showing a document of ours, which Rename and Delete need. */
+  renamable: boolean
 }
 
-/** A window said whether what it is showing can be brought in (MC6). */
-export function setMenuImportable(importable: boolean): void {
-  if (state.importable === importable) return
-  state.importable = importable
+/**
+ * A window said what its document affords: importing, renaming, both or
+ * neither. One call because they change together — focus moves once and both
+ * answers move with it, and two setters would rebuild the menu twice.
+ */
+export function setMenuTargets(targets: { importable: boolean; renamable: boolean }): void {
+  if (state.importable === targets.importable && state.renamable === targets.renamable) return
+  state.importable = targets.importable
+  state.renamable = targets.renamable
   installMenu()
 }
 
-const state: MenuState = { vim: false, selection: NO_SELECTION, importable: false }
+const state: MenuState = { vim: false, selection: NO_SELECTION, importable: false, renamable: false }
 
 function send(channel: string, value: unknown): void {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -109,6 +116,8 @@ export interface MenuActions {
    * is showing — which is the same act reached from the read-only indicator.
    */
   import: (pick: boolean) => void
+  /** A new document, in a window of its own. */
+  newFile: () => void
 }
 
 /**
@@ -120,6 +129,7 @@ let actions: MenuActions = {
   newWindow: () => undefined,
   open: () => undefined,
   import: () => undefined,
+  newFile: () => undefined,
 }
 
 export function installMenu(next?: MenuActions): void {
@@ -163,10 +173,11 @@ export function installMenu(next?: MenuActions): void {
         // **Making and unmaking documents**, then bringing them in, then
         // putting them out. Reading order is the order somebody works in.
         {
+          // Main's, because it makes a WINDOW as well as a document, and a
+          // window is an OS object no renderer can conjure.
           label: 'New File',
           accelerator: 'CmdOrCtrl+N',
-          enabled: false,
-          click: () => send(CHANNEL.menuCommand, 'newFile'),
+          click: () => actions.newFile(),
         },
         {
           label: 'Open…',
@@ -188,11 +199,14 @@ export function installMenu(next?: MenuActions): void {
         {
           label: 'Save a Copy…',
           accelerator: 'CmdOrCtrl+Shift+S',
-          enabled: false,
+          enabled: state.renamable,
           click: () => send(CHANNEL.menuCommand, 'duplicateFile'),
         },
-        { label: 'Rename…', enabled: false, click: () => send(CHANNEL.menuCommand, 'renameFile') },
-        { label: 'Delete…', enabled: false, click: () => send(CHANNEL.menuCommand, 'deleteFile') },
+        // Naming is the renderer's: a name needs a text field, and this app
+        // asks in-app rather than in a native box, for the reason `Prompt` was
+        // written — `window.prompt` blocks the renderer's whole event loop.
+        { label: 'Rename…', enabled: state.renamable, click: () => send(CHANNEL.menuCommand, 'renameFile') },
+        { label: 'Delete…', enabled: state.renamable, click: () => send(CHANNEL.menuCommand, 'deleteFile') },
         { type: 'separator' },
         ...commandItem('branch'),
         { type: 'separator' },

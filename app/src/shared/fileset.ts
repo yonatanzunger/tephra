@@ -78,6 +78,13 @@ export function scanEntries(body: string): readonly ScannedEntry[] {
         label: (item[1] as string).trim(),
         summary: item[4]?.trim() ?? null,
         target,
+        // The parser reads a LINE; whether that line points at a document is a
+        // question about the corpus, which this file cannot see. `Filesets`
+        // fills it in while it walks (D53).
+        document: null,
+        // Read from a line, so by construction: this parser only ever sees the
+        // written ones.
+        pinned: true,
         children: null,
         missing: false,
       },

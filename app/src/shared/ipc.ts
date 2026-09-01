@@ -48,6 +48,7 @@ export const CHANNEL = {
   navOpen: 'tephra:nav:open',
   navPin: 'tephra:nav:pin',
   navUnpin: 'tephra:nav:unpin',
+  navRelabel: 'tephra:nav:relabel',
   /**
    * A corpus file changed on disk that no document is holding open.
    *
@@ -96,6 +97,12 @@ export const CHANNEL = {
   /** Every document that could be opened, for the Open… chooser (MC6). */
   navDocuments: 'tephra:nav:documents',
   deleteTheme: 'tephra:theme:delete',
+  // The file lifecycle. Naming is the renderer's — a name needs a text field,
+  // and this app does its asking in-app rather than in a native box (Prompt).
+  newDocument: 'tephra:doc:new',
+  renameDocument: 'tephra:doc:rename',
+  duplicateDocument: 'tephra:doc:duplicate',
+  deleteDocument: 'tephra:doc:delete',
   windowClose: 'tephra:win:close',
   /** Main chose a document — go there. Carries an id, which a command name cannot. */
   openDocument: 'tephra:doc:goto',
@@ -170,6 +177,12 @@ export interface WindowReport {
    * menu item that is briefly wrong.
    */
   readonly importable: DocumentId | null
+  /**
+   * The document this window is showing, when it is one Tephra may rename or
+   * delete — so not the stream, which is not a file, and not a document from
+   * outside the notebook, which is not ours.
+   */
+  readonly renamable: DocumentId | null
   readonly vim: boolean
   readonly theme: string
 }

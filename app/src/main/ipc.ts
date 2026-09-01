@@ -66,6 +66,9 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.navUnpin, (_e, reference: Reference, section?: string) =>
     service.sections.unpin(reference, section),
   )
+  ipcMain.handle(CHANNEL.navRelabel, (_e, reference: Reference, label: string, section: string) =>
+    service.sections.relabel(reference, label, section),
+  )
 
   /**
    * Follow a reference that leaves the app (D10's third and fourth kinds).
@@ -77,6 +80,16 @@ export function registerDocumentIpc(service: DocumentService): void {
    * not opening.
    */
   ipcMain.handle(CHANNEL.navDocuments, () => service.documents())
+  ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string) =>
+    service.newDocument(label, section),
+  )
+  ipcMain.handle(CHANNEL.renameDocument, (_e, id: DocumentId, label: string) =>
+    service.renameDocument(id, label),
+  )
+  ipcMain.handle(CHANNEL.duplicateDocument, (_e, id: DocumentId, label: string) =>
+    service.duplicateDocument(id, label),
+  )
+  ipcMain.handle(CHANNEL.deleteDocument, (_e, id: DocumentId) => service.deleteDocument(id))
   ipcMain.handle(CHANNEL.navOpen, async (_e, reference: Reference, from?: RelPath): Promise<Followed> => {
     if (reference.kind === 'url') {
       await shell.openExternal(reference.href)

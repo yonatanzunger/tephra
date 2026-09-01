@@ -506,12 +506,12 @@ segment. A genuinely interesting test, and a milestone rather than a bullet.
 
 Whatever tests the shape first should be a kind that is still TEXT.
 
-## The file lifecycle *(next)*
+## The file lifecycle *(done)*
 
-The four File-menu items that are present and disabled — **New File**, **Save a
-Copy**, **Rename**, **Delete** — plus the same acts reached from the sidebar,
-where a person is already looking at the list of documents: rename in place,
-and a context menu that makes a file or deletes one.
+**Done**, and verified by `npm run m3`. The four File-menu items — **New File**,
+**Save a Copy**, **Rename**, **Delete** — plus the same acts reached from the
+sidebar, where a person is already looking at the list of documents: rename in
+place, and a context menu that makes a file or deletes one.
 
 **The expensive part is shared, and it is why these are one piece rather than
 four.** A fileset links to a document by relative path, so renaming a file
@@ -527,6 +527,28 @@ Two rules already decided that this has to honour:
 - **A reference that cannot be resolved dangles VISIBLY** (D7). So delete may
   turn out to need no reference rewriting at all — the panel already renders a
   missing entry as "not found" — while rename certainly does.
+
+Both held. Delete rewrites nothing and the entry says "not found"; rename
+rewrites through `Filesets.retarget`, which grew two things while this was
+built:
+
+- **It rewrites the line where it stands.** It had been `unpin` then `pin`,
+  which produces the same set in a different order — so renaming a document
+  would have quietly moved it to the bottom of every section naming it. The
+  order of a curated list is the part somebody chose (D53).
+- **A section is NAMED, not linked**, so the same rename has two shapes to
+  rewrite: `_index` says `tephra:section/house` where a note says
+  `../notes/x.md`. Handling only the second was enough until sections could be
+  renamed at all.
+
+**The sidebar's own distinction**, which the menu bar never has to make: a row
+is either a LINE somebody wrote or the bare fact that a document is in a
+directory, and the two look identical. Only a written one has a label to edit or
+a line to unpin — offering either on a derived row was a control that silently
+did nothing, which `SectionRow.pinned` now prevents. The rule the panel states
+once: **you edit the name where the name is written.** For a listed entry that
+is the label in the section; for a derived row there is no line and the label IS
+the filename, so the same typing renames the document.
 
 **Deferred within M3, deliberately.** Section reordering and deletion — which
 need `tephra:builtin/*` sentinels so the built-in sections can be positioned

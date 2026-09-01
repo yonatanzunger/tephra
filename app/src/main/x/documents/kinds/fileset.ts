@@ -64,6 +64,41 @@ export class FilesetDocument extends MarkdownDocument {
     return true
   }
 
+  /**
+   * Rewrite an entry where it stands — a new name, a new summary, a new target.
+   *
+   * **In place, and that is the whole reason this is not `unpin` then `pin`.**
+   * Appending gives the same SET with a different order, and the order of a
+   * curated list is the part somebody chose: renaming a document would have
+   * quietly moved every section that names it to the bottom of its list. One
+   * line replaced by one line, in one batch, so it is one undo step.
+   *
+   * An absent field is one left alone. A summary is cleared by passing null,
+   * which is why it is `null` rather than absent that means "no summary".
+   */
+  async rewrite(
+    target: Reference,
+    to: { label?: string; summary?: string | null; target?: Reference },
+  ): Promise<boolean> {
+    const found = (await this.#scan()).find(entry => sameTarget(entry.row.target, target))
+    if (found === undefined) return false
+
+    const line = entryLine(
+      to.label ?? found.row.label,
+      to.target ?? found.row.target,
+      (to.summary === undefined ? found.row.summary : to.summary) ?? undefined,
+    )
+    if (line === (await this.bodyOf(ONLY_SEGMENT)).slice(found.from, found.to)) return true
+
+    await this.#edit([
+      {
+        span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, found.to) },
+        payload: line as DocumentText,
+      },
+    ])
+    return true
+  }
+
   /** Take out whatever is at a position in the list. */
   async remove(index: number): Promise<boolean> {
     const found = (await this.#scan())[index]
