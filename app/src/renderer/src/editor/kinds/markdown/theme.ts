@@ -87,6 +87,16 @@ export function tephraTheme(t: Typography): Extension {
     // they were typed rather than at the measure, because each source line is
     // its own block. Structure agrees with markdown; wrapping waits for the
     // rendered surface (M5).
+    // A list is a different reading task from a paragraph — the eye is scanning
+    // for items rather than reading through — so it gets its own density, and
+    // the gap between items is a separate number from the gap inside one. The
+    // hanging indent itself is per line and comes from `lists.ts`, because it
+    // depends on the width of that item's own marker.
+    '.cm-line.tx-list': {
+      lineHeight: `${t.listLeading}`,
+      paddingBottom: `${t.listSpace}em`,
+    },
+
     // ── code ─────────────────────────────────────────────────────────────
     //
     // **A block reaches its own measure, past the prose column.** Code is

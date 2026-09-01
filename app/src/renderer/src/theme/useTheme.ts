@@ -274,6 +274,8 @@ export function typographyOf(theme: Theme, face: string): Typography {
     leading: theme.leading,
     paragraphSpace: theme.paragraphSpace,
     justify: theme.justify,
+    listLeading: theme.listLeading,
+    listSpace: theme.listSpace,
     codeFace: theme.codeFace,
     codeSize: theme.codeSize,
     codeLeading: theme.codeLeading,

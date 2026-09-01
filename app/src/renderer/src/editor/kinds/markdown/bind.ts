@@ -20,7 +20,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
-import { listIndent } from './lists.ts'
+import { listIndent, listLayout } from './lists.ts'
 import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
 import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../../../shared/document-api.ts'
 import { fromBuffer } from '../../../../../shared/prose.ts'
@@ -139,6 +139,7 @@ export function bindEditor(options: BindOptions): Binding {
             ]),
         widgetExtensions(),
         codeBlocks(),
+        listLayout(),
         ...(behaviour.annotations ? [tagExtents(docWindow)] : []),
         ...(behaviour.days ? [dayBoundaries(docWindow)] : []),
         ...(behaviour.annotations

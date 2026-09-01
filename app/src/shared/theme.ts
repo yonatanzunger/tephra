@@ -99,6 +99,18 @@ export interface Theme {
    */
   readonly justify: boolean
 
+  // ── lists ─────────────────────────────────────────────────
+  /**
+   * Leading WITHIN one bullet — between the lines a single item wrapped onto.
+   *
+   * Separate from the body's, because a list is a different reading task: the
+   * eye is scanning for items rather than reading a paragraph, and the two want
+   * different densities.
+   */
+  readonly listLeading: number
+  /** The gap BETWEEN successive items, in ems. Nothing to do with the above. */
+  readonly listSpace: number
+
   // ── code ──────────────────────────────────────────────────
   /**
    * The face for code: fenced blocks and inline spans.
@@ -184,6 +196,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.72,
+    listLeading: 1.72,
+    listSpace: 0,
     paragraphSpace: 1.65,
     justify: false,
     codeFace: "'JetBrains Mono', ui-monospace, monospace",
@@ -217,6 +231,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.58,
+    listLeading: 1.58,
+    listSpace: 0,
     paragraphSpace: 1.37,
     justify: false,
     codeFace: "'JetBrains Mono', ui-monospace, monospace",
@@ -250,6 +266,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.66,
+    listLeading: 1.66,
+    listSpace: 0,
     paragraphSpace: 1.51,
     justify: false,
     codeFace: "'JetBrains Mono', ui-monospace, monospace",
@@ -283,6 +301,8 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     gutter: 19,
     gutterGap: 3,
     leading: 1.76,
+    listLeading: 1.76,
+    listSpace: 0,
     paragraphSpace: 1.77,
     justify: false,
     codeFace: "'JetBrains Mono', ui-monospace, monospace",
@@ -368,6 +388,8 @@ export function parseTheme(text: string, name: string): Theme | null {
     leading: num(raw.leading, base.leading, 1, 3),
     paragraphSpace: num(raw.paragraphSpace, base.paragraphSpace, 0, 4),
     justify: raw.justify === true,
+    listLeading: num(raw.listLeading, base.listLeading, 1, 3),
+    listSpace: num(raw.listSpace, base.listSpace, 0, 3),
     codeFace: str(raw.codeFace, base.codeFace),
     codeSize: num(raw.codeSize, base.codeSize, 0.4, 2),
     codeLeading: num(raw.codeLeading, base.codeLeading, 1, 3),

@@ -20,6 +20,9 @@ export interface Typography {
   paragraphSpace: number
   /** Justified, with hyphenation — or ragged right. */
   justify: boolean
+  /** A list has its own leading, and its own gap between items. */
+  listLeading: number
+  listSpace: number
   /** Code has its own face, size, leading, measure and inset. */
   codeFace: string
   codeSize: number
@@ -37,6 +40,8 @@ export const defaultTypography: Typography = {
   leading: 1.55,
   paragraphSpace: 0.5,
   justify: false,
+  listLeading: 1.6,
+  listSpace: 0,
   codeFace: "'JetBrains Mono', ui-monospace, monospace",
   codeSize: 0.85,
   codeLeading: 1.45,

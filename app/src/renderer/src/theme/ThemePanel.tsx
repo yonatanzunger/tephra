@@ -233,6 +233,14 @@ export function ThemePanel({
         </p>
       </div>
 
+      <h3 className="theme-heading">Lists</h3>
+      {/* Two different questions that look like one: how tight the lines of a
+          single item are, and how far apart two items sit. */}
+      <Slider label="Leading" unit="" min={1} max={2.6} step={0.02}
+        value={draft.listLeading} onChange={listLeading => control.update({ listLeading })} />
+      <Slider label="Between items" unit="em" min={0} max={2} step={0.05}
+        value={draft.listSpace} onChange={listSpace => control.update({ listSpace })} />
+
       <h3 className="theme-heading">Code</h3>
       <label className="field">
         <span>Face</span>

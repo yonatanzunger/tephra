@@ -414,6 +414,38 @@ export async function runVerify(request: string): Promise<void> {
       say('familyInUse', getComputedStyle(document.documentElement).getPropertyValue('--font-body').slice(0, 40))
     }
 
+    if (scene === 'lists') {
+      // A wrapped bullet hangs under its own text, and the marker is drawn as a
+      // bullet over the hyphen the file keeps.
+      await settle(1200)
+      const rows = [...document.querySelectorAll('.cm-line.tx-list')]
+      say('listLines', rows.length)
+      say('bullets', document.querySelectorAll('.tx-bullet').length)
+
+      // The alignment: where the SECOND visual row of a wrapped item starts,
+      // against where the first row's text starts. A DOM range over the item's
+      // text gives both, because a wrapped line is one element with two rects.
+      const wrapped = rows.find(l => (l.textContent ?? '').includes('wrap onto a second line'))
+      let firstText = 0
+      let secondRow = 0
+      if (wrapped !== undefined) {
+        // **A Range, not the element.** `.cm-line` is a block, so its own rects
+        // are one box around both wrapped rows; a range over its text yields
+        // one rect per visual row, which is the thing being measured. The range
+        // starts after the bullet widget, so rect 0 is where the TEXT begins.
+        const node = wrapped.lastChild ?? wrapped
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        const rects = [...range.getClientRects()]
+        firstText = rects.length > 0 ? Math.round((rects[0] as DOMRect).left) : 0
+        secondRow = rects.length > 1 ? Math.round((rects[1] as DOMRect).left) : 0
+      }
+      say('firstTextLeft', firstText)
+      say('secondRowLeft', secondRow)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(400)
+    }
+
     if (scene === 'code') {
       // A fenced block is a place with its own typography, and its language is
       // parsed — a `python` fence is Python, not one run of monospace.

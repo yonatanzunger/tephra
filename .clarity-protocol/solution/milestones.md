@@ -408,6 +408,30 @@ after the list.
     at the measure. Structure follows markdown; wrapping waits for the rendered
     editing surface (M5), which is where "raw or rendered" stops being a
     question at all.
+  - **A wrapped bullet hangs under its own text.** A second line running back to
+    the page margin puts it under the marker, where it reads as a new item
+    rather than as the rest of this one — the shape of a list lost at the point
+    a reader most needs it. A negative `text-indent` against an equal
+    `padding-left`, per line, because the width depends on the item: `- ` and
+    `1. ` differ, and a nested item carries its own indentation as well.
+
+    **Measured in pixels, in the face the line is actually set in.** `ch` is the
+    width of a zero, and in a serif `- ` is narrower than that — near enough to
+    look like an alignment somebody tried and failed at, which is worse than not
+    trying. Measured on what is DISPLAYED rather than what is stored, since a
+    bullet is wider than a hyphen.
+
+    **The marker is drawn as `•` over the hyphen the file keeps**, and the space
+    after it belongs to the marker rather than to the sentence. Leaving that
+    space in the text made an item's text begin with a space, which renders — it
+    still aligned, because the hang counted the space too, but nobody reading
+    the DOM could tell that, and it cost a wrong measurement in a test before it
+    cost anything else. Not revealed under the caret, unlike a heading's `##`: a
+    `##` says what level you are editing and a `-` says nothing the bullet does
+    not, so revealing it would only make the line twitch as the caret passed.
+
+    A list also gets **two leading controls, because they are two questions**:
+    how tight the lines of one item are, and how far apart two items sit.
   - **Code has typography of its own, and a parser.** Neither existed: the mono
     face was a constant in `index.css` — unreachable by any theme, the same
     shape as the panel colour — and a fenced block parsed as a single `CodeText`

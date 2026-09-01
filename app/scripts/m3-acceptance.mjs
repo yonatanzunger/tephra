@@ -816,6 +816,37 @@ console.log('\n\u2014 code blocks \u2014')
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── 12. bullet lists ────────────────────────────────────────────────────────
+//
+// A wrapped item hangs under its own TEXT, not under its marker: a second line
+// running back to the page margin reads as a new item rather than as the rest
+// of this one, which is the shape of a list lost at the point a reader needs
+// it. And the marker is drawn as a bullet over the hyphen the file keeps.
+console.log('\n\u2014 bullet lists \u2014')
+{
+  const root = await week(['Placeholder.\n'])
+  const day = DAY
+  const [yy, mm] = day.split('-')
+  await writeFile(
+    join(root, 'stream', yy, mm, `${day}.md`),
+    `---\ntephra: 1\ndate: ${day}\nkind: stream\n---\n\n` +
+      'Things to fix:\n\n' +
+      '- A short one\n' +
+      '- A separate font selector for monospace, as well as different size, leading and measure, ' +
+      'which is long enough to wrap onto a second line\n',
+  )
+  const r = report(await launch('lists', root))
+
+  check('the items are marked as list lines', Number(r.listLines) >= 2, String(r.listLines))
+  check('and the marker is drawn as a bullet', Number(r.bullets) >= 2, String(r.bullets))
+  check(
+    'THE HANG: a wrapped line starts where the text does, not at the margin',
+    Number(r.secondRowLeft) > 0 && Math.abs(Number(r.secondRowLeft) - Number(r.firstTextLeft)) <= 2,
+    `wrapped row at ${r.secondRowLeft}px, text at ${r.firstTextLeft}px`,
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)
