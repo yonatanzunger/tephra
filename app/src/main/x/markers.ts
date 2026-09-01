@@ -38,6 +38,17 @@ export type MarkerKind =
   | 'comment-end'
   /** Identifies a thread block. Sits at the END of its byline, never the start. */
   | 'comment'
+  /**
+   * A TODO item's identity, at the end of its line (D56).
+   *
+   * **Here so that the generic marker machinery knows it is a marker**, not
+   * because anything in this file interprets it: `scanSpans` contributes no
+   * span for it, and what the fields inside it mean is `shared/kinds/todo.ts`'s.
+   * What being known buys is that a todo file opened in the markdown surface —
+   * which is what happens until the todo surface exists (MT3) — has its item
+   * markers recognised as markers rather than treated as prose.
+   */
+  | 'item'
 
 export interface DocumentMarker {
   readonly kind: MarkerKind
@@ -49,7 +60,7 @@ export interface DocumentMarker {
   readonly level: number
 }
 
-const MARKER = /<!--tephra:(mark|tag-start|tag-end|comment-start|comment-end|comment)[ \t]+([^\n]*?)-->/g
+const MARKER = /<!--tephra:(mark|tag-start|tag-end|comment-start|comment-end|comment|item)[ \t]+([^\n]*?)-->/g
 const ATX = /^(#{1,6})[ \t]+(.*?)[ \t]*$/
 
 /**

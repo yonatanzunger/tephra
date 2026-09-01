@@ -942,11 +942,7 @@ export class DocumentService {
     const rel = id as string as RelPath
     const cut = rel.lastIndexOf('/')
     const dir = cut < 0 ? '' : rel.slice(0, cut)
-    const suffix = rel.endsWith('.fileset.md')
-      ? '.fileset.md'
-      : rel.endsWith('.todo.md')
-        ? '.todo.md'
-        : '.md'
+    const suffix = rel.endsWith('.fileset.md') ? '.fileset.md' : '.md'
 
     for (let n = 1; ; n++) {
       const name = n === 1 ? slug(label) : `${slug(label)}-${n}`

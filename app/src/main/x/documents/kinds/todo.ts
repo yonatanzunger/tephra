@@ -1,0 +1,356 @@
+// A TODO list: days for segments, the working set carried forward (D55).
+//
+// **The same shape as the stream, and that is the whole discovery.**
+// `file-documents.md` predicted this kind would be record-shaped — an edit is a
+// field, history is per item — which is what you conclude from listing what an
+// item has. Asking instead what anybody DOES with a task list gives three
+// motions, none of which asks when one item's status last flipped; they all ask
+// what the list looked like. So an item is a line, history is per day, and
+// everything below `load` and `keys` is inherited: edits, undo, spans, the
+// journal, the WAL, windows, divergence, versioning, restore.
+//
+// **Each day's file holds that day's working set in full**, and the carry is
+// automatic (D55 as revised). The morning walk reviews a file that already
+// exists rather than producing it — because the walk is offered and never
+// compelled (T11), and a storage invariant that depends on an optional habit is
+// one that comes apart the first week away from the desk. The carry protects
+// the data; the walk protects the attention.
+//
+// Every verb here is one `replace()` on one line, which is what makes each an
+// ordinary edit: undoable, journalled, and visible to a window with the same
+// day open. The one exception is `carry`, which writes a whole segment because
+// materialising a day IS writing a whole segment.
+
+import type { Notebook } from '../../../w/notebook.ts'
+import { compareDateKeys, dateKeyAt } from '../../../../shared/dates.ts'
+import { dayFile, parseDayFile, type RelPath } from '../../../w/layout.ts'
+import { SegmentedDocument } from '../segmented.ts'
+import { Segment } from '../../segment.ts'
+import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
+import {
+  isLive, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId,
+  type ScannedItem, type TodoItem, type TodoStatus,
+} from '../../../../shared/kinds/todo.ts'
+import type {
+  DateKey, DocumentId, DocumentMeta, DocumentText, SegmentKey, Span,
+} from '../../../../shared/document-api.ts'
+
+/** An item, and which day's file it was read from. */
+export interface LocatedItem {
+  readonly item: TodoItem
+  readonly date: DateKey
+}
+
+export class TodoDocument extends SegmentedDocument {
+  readonly id: DocumentId
+  readonly meta: DocumentMeta & { readonly kind: 'todo' } = { kind: 'todo' }
+
+  /** The `.todo` directory this list lives in — its id, and its files' root. */
+  readonly #root: RelPath
+
+  constructor(notebook: Notebook, id: DocumentId) {
+    super(notebook)
+    this.id = id
+    this.#root = id as string as RelPath
+  }
+
+  protected async load(date: SegmentKey): Promise<Segment> {
+    const rel = dayFile(date, 1, this.#root)
+    const text = await this.notebook.read(rel)
+    return text === null
+      ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'todo')))
+      : Segment.load(date, rel, text)
+  }
+
+  /** Every day this list has a file for, ascending. A scan; never on the hot path. */
+  async keys(): Promise<readonly SegmentKey[]> {
+    const found: DateKey[] = []
+    for (const rel of await this.notebook.list(this.#root)) {
+      const ref = parseDayFile(rel)
+      // Its own days only. A list nested inside another document's directory
+      // would otherwise claim that document's days as its own.
+      if (ref !== null && ref.part === 1 && ref.root === this.#root) found.push(ref.date)
+    }
+    for (const [date, segment] of this.segments) {
+      if (segment.dirty && !found.includes(date)) found.push(date)
+    }
+    return found.sort(compareDateKeys)
+  }
+
+  // ── reading ────────────────────────────────────────────────
+
+  /** What one day held. The working view is this, for today. */
+  async itemsOn(date: DateKey): Promise<readonly TodoItem[]> {
+    return (await this.#scan(date)).map(found => found.item)
+  }
+
+  /**
+   * Where an item is NOW: its newest instance, which is its current state.
+   *
+   * The inverse of `tephra:mark/<name>`, which resolves to the first in date
+   * order — a bookmark means where something was first said and an item means
+   * what it is now (D56).
+   */
+  async find(id: string): Promise<LocatedItem | null> {
+    for (const date of [...(await this.keys())].reverse()) {
+      const found = (await this.#scan(date as DateKey)).find(s => s.item.id === id)
+      if (found !== undefined) return { item: found.item, date: date as DateKey }
+    }
+    return null
+  }
+
+  // ── the carry (D55) ────────────────────────────────────────
+
+  /**
+   * Materialise a day from the most recent one before it, and adopt what is there.
+   *
+   * **Automatic and idempotent.** It runs on the first touch of a day and does
+   * nothing on the second, so opening the list twice, or walking it twice, or
+   * skipping three days and opening on the fourth all reach the same place —
+   * Thursday's set from Monday's, once.
+   *
+   * What carries is what is still yours: done, nevermind and backlogged items
+   * stay in the day they were finished. **Nothing evicts them** — they simply
+   * are not carried, which is the answer copy-forward gives to a question the
+   * design would otherwise have had to invent a rule for (Q3b).
+   *
+   * Returns the number of items carried, or -1 when the day already existed.
+   */
+  async carry(date: DateKey = TodoDocument.today()): Promise<number> {
+    const already = await this.#exists(date)
+    if (already) {
+      await this.adopt(date)
+      return -1
+    }
+
+    const source = [...(await this.keys())]
+      .filter(key => compareDateKeys(key as DateKey, date) < 0)
+      .sort(compareDateKeys)
+      .pop() as DateKey | undefined
+
+    const carried =
+      source === undefined
+        ? []
+        : (await this.#scan(source)).filter(found => isLive(found.item.status)).map(found => found.item)
+
+    // One write, so it is one undo step: a carry that came back as thirty edits
+    // would let an undo leave the day half-materialised, which is a working set
+    // that silently lost items.
+    // **Verbatim.** A carried item keeps its identity, its ctime and its mtime;
+    // the only thing that changed is which day it is in, and that is the file
+    // it is written to. Copying is not modifying.
+    const body = carried.map(item => itemLine(item)).join('\n')
+    await this.setBodyOf(date, (body === '' ? '' : `${body}\n`) as DocumentText)
+    await this.adopt(date)
+    return carried.length
+  }
+
+  /**
+   * Give an id to every line that has not got one (flow 9, D56).
+   *
+   * **This is what "adopted on the next read" means.** A line somebody typed
+   * into the file by hand is an item; it becomes one the app can act on when
+   * the day is next written, because every verb addresses an item by id and an
+   * unmarked line cannot be addressed at all.
+   *
+   * Relative due dates resolve here too, for the same reason and at the same
+   * moment: `DUE FRIDAY` sitting in a file would mean something different every
+   * week (T16).
+   */
+  async adopt(date: DateKey): Promise<number> {
+    const found = await this.#scan(date)
+    const taken = new Set(found.flatMap(s => (s.item.id === null ? [] : [s.item.id])))
+    const now = nowSeconds()
+    const edits: { span: Span; payload: DocumentText }[] = []
+
+    for (const scanned of found) {
+      const resolved = resolveDue(scanned.item.text, date)
+      const needsId = scanned.item.id === null
+      if (!needsId && resolved === scanned.item.text) continue
+
+      const id = scanned.item.id ?? unusedItemId(taken)
+      if (needsId) taken.add(id)
+      const line = itemLine({
+        ...scanned.item,
+        text: resolved,
+        id,
+        ctime: scanned.item.ctime ?? now,
+        mtime: scanned.item.mtime ?? now,
+      })
+      edits.push({
+        span: { begin: this.at(date, scanned.from), end: this.at(date, scanned.to) },
+        payload: line as DocumentText,
+      })
+    }
+    if (edits.length === 0) return 0
+    await this.replace(edits, 'operation')
+    return edits.length
+  }
+
+  // ── the verbs, each one line ───────────────────────────────
+
+  /**
+   * A new item, from a single string — the one verb flow 1 calls from outside.
+   *
+   * Everything else about it is defaulted because none of it is known at the
+   * moment of noticing: status is *not started*, ctime is now, and the tags and
+   * the due date are whatever the string already said (T13, T16).
+   */
+  async add(text: string, date: DateKey = TodoDocument.today()): Promise<string> {
+    await this.carry(date)
+    const now = nowSeconds()
+    const found = await this.#scan(date)
+    const id = unusedItemId(new Set(found.flatMap(s => (s.item.id === null ? [] : [s.item.id]))))
+    // **Flattened first.** A quick-add box and a share sheet both hand over
+    // whatever was selected, and an item is a line — a newline in the middle of
+    // one would silently become two items, the second of them unmarked.
+    const flat = resolveDue(text.replace(/\s*\n\s*/g, ' ').trim(), date)
+    const parsed = parseItem(`- [ ] ${flat}`)
+    const item: TodoItem = { ...(parsed ?? EMPTY_ITEM), id, ctime: now, mtime: now }
+
+    const body = await this.bodyOf(date)
+    // Appended after what is WRITTEN, not at the end of the file: a day may end
+    // in blank lines, and pushing the item past them puts a gap in the list.
+    const written = body.replace(/\s*$/, '')
+    const payload = `${written === '' ? '' : '\n'}${itemLine(item)}${body.slice(written.length).includes('\n') ? '' : '\n'}`
+    await this.replace(
+      [{ span: { begin: this.at(date, written.length), end: this.at(date, written.length) }, payload: payload as DocumentText }],
+      'operation',
+    )
+    return id
+  }
+
+  /** Check it off, start it, block it, put it down. One line, one edit. */
+  async setStatus(id: string, status: TodoStatus, note?: string): Promise<boolean> {
+    return this.#rewrite(id, item => ({
+      ...item,
+      status,
+      // A reason is kept only where it means something, which is the same rule
+      // the grammar reads by (T4).
+      note: status === 'blocked' ? (note ?? item.note) : null,
+    }))
+  }
+
+  /**
+   * Give it a date, or take one away.
+   *
+   * The date lives IN the line (T16), so this edits the text rather than a
+   * field beside it — which is what keeps the file what it appears to be.
+   */
+  async setDue(id: string, due: DateKey | null): Promise<boolean> {
+    return this.#rewrite(id, item => {
+      const without =
+        item.dueSpan === null ? item.text : cut(item.text, item.dueSpan.from, item.dueSpan.to)
+      return { ...item, text: due === null ? without : `${without} DUE ${due}`.trim() }
+    })
+  }
+
+  /**
+   * Tag an item, and untag it. **`tagItem`, not `tag`**, and the name matters.
+   *
+   * `SegmentedDocument` already has `tag(span, subject)`: that is prose
+   * tagging, which marks a RANGE of writing with a subject somebody will look
+   * for years later. A TODO tag applies to a whole item, is its own namespace,
+   * and turns over on a timescale of about a week (T5, R17). Overriding the
+   * inherited verb would be claiming the two are one act, and the requirement
+   * exists precisely because they are not.
+   */
+  async tagItem(id: string, name: string): Promise<boolean> {
+    return this.#rewrite(id, item =>
+      item.tags.includes(name) ? item : { ...item, text: `${item.text} ${written(name)}`.trim() },
+    )
+  }
+
+  async untagItem(id: string, name: string): Promise<boolean> {
+    return this.#rewrite(id, item => {
+      const at = item.tags.indexOf(name)
+      const span = item.tagSpans[at]
+      if (at < 0 || span === undefined) return item
+      return { ...item, text: cut(item.text, span.from, span.to) }
+    })
+  }
+
+  /**
+   * The committed row edit: text, tags and date together, in one `replace()`.
+   *
+   * **This is why mtime can be exact without anybody paying for it** (D56). A
+   * row is edited by a gesture that commits once rather than being a live text
+   * field, so a text change is an operation like any other and the stamp rides
+   * along — where keeping it exact through free-text typing would mean writing
+   * into the line the cursor is in, on every keystroke.
+   */
+  async edit(id: string, text: string): Promise<boolean> {
+    return this.#rewrite(id, (item, date) => ({ ...item, text: resolveDue(text.trim(), date) }))
+  }
+
+  /** The day a new item goes to, in the reference zone (D38). */
+  static today(): DateKey {
+    return dateKeyAt()
+  }
+
+  // ── internals ──────────────────────────────────────────────
+
+  /**
+   * Find an item by id in the day it is live in, and rewrite its line.
+   *
+   * **The newest instance**, because that is what the item IS now (D56); the
+   * older ones are its history and are never edited in place.
+   */
+  async #rewrite(id: string, change: (item: TodoItem, date: DateKey) => TodoItem): Promise<boolean> {
+    for (const key of [...(await this.keys())].reverse()) {
+      const date = key as DateKey
+      const found = (await this.#scan(date)).find(s => s.item.id === id)
+      if (found === undefined) continue
+
+      const next = change(found.item, date)
+      const line = itemLine({ ...next, mtime: nowSeconds() })
+      const body = await this.bodyOf(date)
+      if (line === body.slice(found.from, found.to)) return true
+
+      await this.replace(
+        [{ span: { begin: this.at(date, found.from), end: this.at(date, found.to) }, payload: line as DocumentText }],
+        'operation',
+      )
+      return true
+    }
+    return false
+  }
+
+  async #scan(date: DateKey): Promise<readonly ScannedItem[]> {
+    return scanItems(await this.bodyOf(date))
+  }
+
+  /** Is there a file, or a segment somebody has written to but not flushed? */
+  async #exists(date: DateKey): Promise<boolean> {
+    if (this.segments.get(date)?.dirty === true) return true
+    return this.notebook.has(dayFile(date, 1, this.#root))
+  }
+
+  // ── the two that make new documents, which this kind does not ──
+
+  async branch(_span: Span, _name: string): Promise<DocumentId> {
+    throw new Error('branching out of a todo list is not a thing')
+  }
+
+  async importText(): Promise<string> {
+    throw new Error('importing into a todo list is not built yet')
+  }
+}
+
+const EMPTY_ITEM: TodoItem = {
+  id: null, status: 'todo', ctime: null, mtime: null,
+  text: '', tags: [], due: null, note: null, tagSpans: [], dueSpan: null,
+}
+
+/** How a tag is written down. The inverse of the grammar's two spellings. */
+const written = (name: string): string => (/\s/.test(name) ? `#'${name}'` : `#${name}`)
+
+/**
+ * Take a piece out of a line's text, and close the gap it leaves.
+ *
+ * Removing `#house` from `ring the bank #house today` must not leave two
+ * spaces where it was: the file is read by people, and a verb that tidies after
+ * itself is the difference between a list and a list with scars.
+ */
+const cut = (text: string, from: number, to: number): string =>
+  `${text.slice(0, from)}${text.slice(to)}`.replace(/\s{2,}/g, ' ').trim()

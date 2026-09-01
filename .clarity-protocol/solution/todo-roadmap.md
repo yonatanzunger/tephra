@@ -78,7 +78,36 @@ old layout and then opens it. What the phase actually taught:
 
 **Does not do:** anything about todo.
 
-## MT2 — The kind: format, ids, carry
+## MT2 — The kind: format, ids, carry *(done)*
+
+**Done**, and verified by 32 tests that draw nothing. What the phase settled
+beyond what was planned:
+
+- **The status glyphs are era 1's, in markdown's own checkbox slot** — `[ ]`,
+  `[/]`, `[?]`, `[x]`, `[-]`, and `[>]` for backlog, which is literally the
+  paper log's *migrated forward*. They render as task-list checkboxes where a
+  renderer understands them and as legible text where it does not.
+- **A blocked reason is a trailing `— …` clause, read only on a blocked item.**
+  Otherwise "call the surveyor — the one from Tuesday" acquires a reason it does
+  not have and loses half its text. The cost is an edge case on hand-editing,
+  which flow 9 already accepts.
+- **Item spans are relative to the item's TEXT, not to its line.** The first
+  cut reported line offsets and every verb then had to reconstruct where the
+  text began — arithmetic that was wrong before it was written down. Text-
+  relative makes `untag` a slice; `ScannedItem.textFrom` is the one place the
+  conversion to body offsets lives, for the row that will draw chips (MT3).
+- **`tagItem`, not `tag`.** `SegmentedDocument` already has `tag(span,
+  subject)` for prose, and T5 says the two namespaces are separate. The
+  collision was a compile error, and it was the right one: overriding would have
+  claimed the two are one act.
+- **`resolveDue` is on the write path and cannot be part of the parse.**
+  Resolution needs to know what day it is, and a parse that took the day would
+  report the 11th on Tuesday and the 18th the following Tuesday from a file
+  that never changed — the drift T16 forbids, moved out of the file and into
+  the reader where nothing can see it.
+- **`.todo.md` as a single-file kind is retired.** A todo list is a `.todo`
+  directory (D59) and there is no lightweight second form, so a lone
+  `.todo.md` is an ordinary note whose name happens to say todo.
 
 **The one-way door, and it is testable with no UI at all** — which is the point
 of doing it here. A todo file opens in the markdown surface meanwhile, because

@@ -25,6 +25,7 @@ import { documentRoot, kindOf, STREAM_DIR, type RelPath } from '../../w/layout.t
 import { StreamDocument } from './kinds/stream.ts'
 import { MarkdownDocument } from './kinds/markdown.ts'
 import { FilesetDocument } from './kinds/fileset.ts'
+import { TodoDocument } from './kinds/todo.ts'
 import { ExternalDocument } from './kinds/external.ts'
 import { outsideExists } from '../../w/outside.ts'
 import {
@@ -396,9 +397,11 @@ export class Corpus {
     const doc: StoredDocument =
       kind === 'stream'
         ? new StreamDocument(this.#notebook)
-        : kind === 'fileset'
-          ? new FilesetDocument(this.#notebook, id)
-          : new MarkdownDocument(this.#notebook, id, kind)
+        : kind === 'todo'
+          ? new TodoDocument(this.#notebook, id)
+          : kind === 'fileset'
+            ? new FilesetDocument(this.#notebook, id)
+            : new MarkdownDocument(this.#notebook, id, kind)
     return this.#track(id, doc)
   }
 
