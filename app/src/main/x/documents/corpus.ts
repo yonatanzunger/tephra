@@ -32,7 +32,7 @@ import {
   STREAM_ID,
   isOutside,
   type Divergence, type DocumentChange, type DocumentId, type DocumentKind,
-  type SegmentKey, type Unsubscribe,
+  type DocumentText, type SegmentKey, type Unsubscribe,
 } from '../../../shared/document-api.ts'
 import type { JournalEdit, StoredDocument } from './stored.ts'
 
@@ -205,6 +205,99 @@ export class Corpus {
     if (id === STREAM_ID || this.#opened.has(id)) return true
     if (isOutside(id)) return outsideExists(id as string)
     return this.#notebook.has(id as string as RelPath)
+  }
+
+  // ── the lifecycle: making and unmaking documents ─────────────
+
+  /**
+   * A new, empty document at `id`.
+   *
+   * **A real file from the first keystroke**, not an unsaved buffer. Tephra has
+   * no unsaved state — the write tiers and the WAL are what make that true — so
+   * a buffer with no file behind it would be the one losable thing in the app,
+   * and it would be the newest thing, which is the worst one to lose.
+   */
+  async create(id: DocumentId, title?: string): Promise<DocumentId> {
+    await this.use(id, async doc => {
+      await doc.setBodyOf(ONLY_SEGMENT, '' as DocumentText)
+      if (title !== undefined) await doc.setTitleOf(ONLY_SEGMENT, title)
+      await doc.writeDirty()
+    })
+    return id
+  }
+
+  /**
+   * The same document under a new name.
+   *
+   * **The file moves; the document does not.** Anything holding the old id —
+   * a window, a borrow in flight — is holding a document whose identity IS its
+   * path (D41's rule for themes, and the same here), so the old id is closed
+   * and the new one opens fresh rather than being quietly re-keyed underneath
+   * its holders. Callers move their windows; the Corpus does not move them.
+   *
+   * Rewriting the references that point at the old name is NOT done here: which
+   * documents may name another is a question about filesets (D13), and the
+   * Corpus does not know what a fileset is.
+   */
+  async rename(from: DocumentId, to: DocumentId): Promise<void> {
+    if (from === to) return
+    if (await this.exists(to)) throw new Error(`${to} already exists`)
+
+    const text = await this.#fileOf(from)
+    if (text === null) throw new Error(`${from} is not there to rename`)
+    await this.#notebook.write(to as string as RelPath, text)
+    await this.#forget(from)
+    await this.#notebook.remove(from as string as RelPath)
+  }
+
+  /** A second document with the same content, under a name nobody is using. */
+  async duplicate(from: DocumentId, to: DocumentId): Promise<DocumentId> {
+    if (await this.exists(to)) throw new Error(`${to} already exists`)
+    const text = await this.#fileOf(from)
+    if (text === null) throw new Error(`${from} is not there to copy`)
+    await this.#notebook.write(to as string as RelPath, text)
+    return to
+  }
+
+  /**
+   * Remove a document.
+   *
+   * References to it are left to dangle, and VISIBLY (D7): a fileset entry
+   * pointing at a document that is gone renders as "not found", which is a true
+   * statement about the notebook and better than an entry silently deleted from
+   * a list somebody curated.
+   */
+  async remove(id: DocumentId): Promise<void> {
+    await this.#forget(id)
+    await this.#notebook.remove(id as string as RelPath)
+  }
+
+  /**
+   * The file as it stands, including what has not been written yet.
+   *
+   * Flushed first rather than read behind the document's back: a rename that
+   * moved yesterday's bytes would lose whatever had been typed since the last
+   * write tier ran.
+   */
+  async #fileOf(id: DocumentId): Promise<string | null> {
+    if (this.#opened.has(id)) {
+      await this.use(id, doc => doc.writeDirty(), { retain: false })
+    }
+    return this.#notebook.read(id as string as RelPath)
+  }
+
+  /** Drop a document from the table, unsubscribing whatever was listening. */
+  async #forget(id: DocumentId): Promise<void> {
+    const opening = this.#opened.get(id)
+    if (opening !== undefined) {
+      const doc = await opening.catch(() => null)
+      await doc?.release()
+    }
+    for (const off of this.#unsubscribe.get(id) ?? []) off()
+    this.#unsubscribe.delete(id)
+    this.#opened.delete(id)
+    this.#borrowed.delete(id)
+    this.#watched.delete(id)
   }
 
   /**

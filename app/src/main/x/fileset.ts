@@ -314,6 +314,44 @@ export class Filesets {
   }
 
   /**
+   * Point every entry that named `from` at `to` instead.
+   *
+   * **This is D13's "update references" step**, which has been present and
+   * empty since `branch` was built, with a note saying sections are the finite
+   * set that must be rewritten and that they arrive in M3. They have.
+   *
+   * Finite is what makes it possible: a fileset is the only kind of document
+   * that names another ON PURPOSE, as data rather than as prose. A link typed
+   * into a day is a sentence, and rewriting somebody's sentences because a file
+   * moved is a larger and more frightening act than renaming was.
+   *
+   * Each entry is compared by what it RESOLVES to, not by its text: the same
+   * document is `../notes/x.md` from one section and `x.md` from another, and
+   * the new link is written relative to the file it is going into.
+   */
+  async retarget(from: RelPath, to: RelPath): Promise<number> {
+    let changed = 0
+    for (const id of await this.#corpus.list('fileset')) {
+      const path = id as string as RelPath
+      const entries = await this.#peek(path, doc => doc.entries())
+      if (entries === null) continue
+
+      for (const entry of entries) {
+        if (entry.target.kind !== 'file') continue
+        if (relativeTo(path, entry.target.path) !== from) continue
+        // Through the document, so the rewrite is an ordinary edit: undoable,
+        // journalled, and visible to a window with that section open (D54).
+        await this.#use(path, async doc => {
+          await doc.unpin(entry.target)
+          await doc.pin({ kind: 'file', path: relativePath(path, to) }, entry.label, entry.summary ?? undefined)
+        })
+        changed++
+      }
+    }
+    return changed
+  }
+
+  /**
    * Take a reference out of a section (D53).
    *
    * The inverse of `pin`, and the same kind of act: **one line removed from a

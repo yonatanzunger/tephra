@@ -22,7 +22,9 @@ import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
-import { kindOf, noteFile, parseDayFile, resolveInsideNotebook, type RelPath } from './w/layout.ts'
+import {
+  kindOf, noteFile, parseDayFile, resolveInsideNotebook, slug, type RelPath,
+} from './w/layout.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
@@ -849,6 +851,97 @@ export class DocumentService {
    * layering telling the truth: what a link means is a question about the
    * notebook, and opening a file is a question about the desktop.
    */
+  // ── the file lifecycle ───────────────────────────────────────
+
+  /**
+   * A new document, named for what it is not yet.
+   *
+   * `untitled`, `untitled-2`: a name is the one thing deferred, because it is
+   * the one thing you do not know before writing the thing. Everything else
+   * about it is real from the first keystroke — versioned, journalled,
+   * recoverable — which an unsaved buffer would not be.
+   */
+  async newDocument(): Promise<DocumentId> {
+    const id = await this.#freeNoteName('untitled')
+    await this.#corpus.create(id)
+    this.#touched()
+    return id
+  }
+
+  /**
+   * Rename a document, and fix what pointed at it.
+   *
+   * **The references are the point.** A fileset links by relative path, so a
+   * rename without this leaves every section that names the document pointing
+   * at nothing — and D7 says such an entry dangles visibly, which is right for
+   * a file somebody deleted and wrong for one they merely renamed.
+   *
+   * Returns the new id. The caller moves whatever was looking at the old one: a
+   * document's identity is its path, so the old id is genuinely gone.
+   */
+  async renameDocument(id: DocumentId, label: string): Promise<DocumentId> {
+    const wanted = label.trim()
+    if (wanted === '') throw new Error('a document needs a name')
+    if (isOutside(id)) throw new Error('a file outside the notebook is not ours to rename')
+
+    const to = await this.#freeName(id, wanted)
+    if (to === id) return id
+    await this.#corpus.rename(id, to)
+    // **A titled document is renamed too, not only moved.** The filename is the
+    // identity and the frontmatter title is what it is CALLED; leaving the old
+    // title behind would make Rename appear to do nothing, since the panel
+    // shows the title when there is one.
+    await this.#corpus.use(to, async doc => {
+      if ((await doc.titleOf(ONLY_SEGMENT)) !== null) await doc.setTitleOf(ONLY_SEGMENT, wanted)
+    })
+    await this.#filesets.retarget(id as string as RelPath, to as string as RelPath)
+    this.#touched()
+    return to
+  }
+
+  /** The same content under a new name; the original is left alone. */
+  async duplicateDocument(id: DocumentId, label: string): Promise<DocumentId> {
+    const wanted = label.trim()
+    if (wanted === '') throw new Error('a copy needs a name')
+    const to = await this.#freeName(id, wanted)
+    await this.#corpus.duplicate(id, to)
+    this.#touched()
+    return to
+  }
+
+  /**
+   * Delete a document. Entries that named it are left to dangle, VISIBLY (D7).
+   *
+   * Deliberately not the same as rename: an entry pointing at a document
+   * somebody deleted is a true statement about the notebook, and quietly
+   * removing it would edit a list they curated on the strength of a guess about
+   * what they meant.
+   */
+  async deleteDocument(id: DocumentId): Promise<void> {
+    if (id === STREAM_ID) throw new Error('the notebook itself cannot be deleted')
+    if (isOutside(id)) throw new Error('a file outside the notebook is not ours to delete')
+    await this.#corpus.remove(id)
+    this.#touched()
+  }
+
+  /** A name nobody is using, in the directory the document already lives in. */
+  async #freeName(id: DocumentId, label: string): Promise<DocumentId> {
+    const rel = id as string as RelPath
+    const cut = rel.lastIndexOf('/')
+    const dir = cut < 0 ? '' : rel.slice(0, cut)
+    const suffix = rel.endsWith('.fileset.md')
+      ? '.fileset.md'
+      : rel.endsWith('.todo.md')
+        ? '.todo.md'
+        : '.md'
+
+    for (let n = 1; ; n++) {
+      const name = n === 1 ? slug(label) : `${slug(label)}-${n}`
+      const candidate = (dir === '' ? `${name}${suffix}` : `${dir}/${name}${suffix}`) as string as DocumentId
+      if (candidate === id || !(await this.#corpus.exists(candidate))) return candidate
+    }
+  }
+
   /**
    * What DOCUMENT a link names, if it names one.
    *

@@ -1080,7 +1080,12 @@ export abstract class SegmentedDocument implements StoredDocument {
         continue
       }
 
-      if (!segment.dirty) continue
+      // **A segment with no file is dirty by definition.** Clean means matching
+      // what is on disk, and nothing on disk is not a match — without this, a
+      // document created and not yet typed into is never written, so `New File`
+      // makes a document that exists only in memory. Which is the one state
+      // this app does not have.
+      if (!segment.dirty && (await this.notebook.has(segment.rel))) continue
       const files = segment.files()
       for (const file of files) {
         await this.notebook.write(file.rel, file.text)

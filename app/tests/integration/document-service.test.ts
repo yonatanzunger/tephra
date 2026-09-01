@@ -5,13 +5,17 @@
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocumentService, type ServiceOptions } from '../../src/main/document-service.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
-import { ONLY_SEGMENT, type WindowPosition, type DateKey, type DocumentId, type VersionId } from '../../src/shared/document-api.ts'
+import {
+  ONLY_SEGMENT, STREAM_ID,
+  type WindowPosition, type DateKey, type DocumentId, type VersionId,
+} from '../../src/shared/document-api.ts'
 import { pt } from '../support/text.ts'
 
 const wp = (n: number): WindowPosition => n as WindowPosition
@@ -363,4 +367,125 @@ test('importing something already inside the notebook is a no-op, not a copy', a
   await writeFile(join(root, 'notes', 'mine.md'), '---\ntephra: 1\nkind: markdown\n---\nMine.\n')
 
   assert.equal(await service.importFile('notes/mine.md' as DocumentId), 'notes/mine.md')
+})
+
+// ── the file lifecycle (D13's update-references step, filled in) ───────────
+
+test('a new document is a real file from the first keystroke', async t => {
+  // Not an unsaved buffer: Tephra has no unsaved state, so a buffer with no
+  // file behind it would be the one losable thing in the app — and it would be
+  // the newest thing, which is the worst one to lose.
+  const { service, root } = await fixture(t)
+  const id = await service.newDocument()
+
+  assert.equal(id, 'notes/untitled.md')
+  assert.match(await readFile(join(root, 'notes', 'untitled.md'), 'utf8'), /^---\ntephra: 1\n/)
+  assert.equal(await service.newDocument(), 'notes/untitled-2.md', 'and the second is its own')
+})
+
+test('THE POINT: renaming rewrites the sections that pointed at it', async t => {
+  // A fileset links by relative path, so a rename without this leaves every
+  // section naming the document pointing at nothing. This is the step that has
+  // been present and empty in `branch` since M2 (D13).
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(join(root, 'notes', 'offer.md'), '---\ntephra: 1\nkind: markdown\n---\nText.\n')
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer](../notes/offer.md) — worth keeping\n',
+  )
+
+  const to = await service.renameDocument('notes/offer.md' as DocumentId, 'Counter offer')
+  await service.flush()
+
+  assert.equal(to, 'notes/counter-offer.md')
+  assert.equal(existsSync(join(root, 'notes', 'offer.md')), false, 'the old file is gone')
+  const section = await readFile(join(root, 'sections', 'house.fileset.md'), 'utf8')
+  assert.match(section, /\.\.\/notes\/counter-offer\.md/, 'and the section points at the new name')
+  assert.doesNotMatch(section, /notes\/offer\.md/, 'not at the old one')
+  assert.match(section, /The offer/, 'keeping the label somebody chose')
+  assert.match(section, /worth keeping/, 'and the summary they wrote')
+})
+
+test('the rewritten link is relative to the SECTION, not to the notebook', async t => {
+  // The same document is `../notes/x.md` from one section and `x.md` from
+  // another, so an entry is matched by what it resolves to and rewritten for
+  // the file it is going into.
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'sections', 'deep'), { recursive: true })
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'a.md'), '---\ntephra: 1\nkind: markdown\n---\nA.\n')
+  await writeFile(
+    join(root, 'sections', 'deep', 'nested.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\n---\n- [A](../../notes/a.md)\n',
+  )
+
+  await service.renameDocument('notes/a.md' as DocumentId, 'Renamed')
+  await service.flush()
+  const section = await readFile(join(root, 'sections', 'deep', 'nested.fileset.md'), 'utf8')
+  assert.match(section, /\.\.\/\.\.\/notes\/renamed\.md/, 'two levels up, as it was')
+})
+
+test('a name already taken is not overwritten, it is numbered', async t => {
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'plan.md'), '---\ntephra: 1\nkind: markdown\n---\nThe plan.\n')
+  await writeFile(join(root, 'notes', 'other.md'), '---\ntephra: 1\nkind: markdown\n---\nOther.\n')
+
+  assert.equal(await service.renameDocument('notes/other.md' as DocumentId, 'Plan'), 'notes/plan-2.md')
+  assert.match(await readFile(join(root, 'notes', 'plan.md'), 'utf8'), /The plan/, 'untouched')
+})
+
+test('a rename carries unwritten edits with it', async t => {
+  // The file is flushed before it moves. Moving yesterday's bytes would lose
+  // whatever had been typed since the last write tier ran.
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'draft.md'), '---\ntephra: 1\nkind: markdown\n---\nOld.\n')
+  await service.corpus.use('notes/draft.md' as DocumentId, async doc => {
+    await doc.setBodyOf(ONLY_SEGMENT, 'Typed, not yet written.\n' as never)
+  })
+
+  await service.renameDocument('notes/draft.md' as DocumentId, 'Kept')
+  assert.match(await readFile(join(root, 'notes', 'kept.md'), 'utf8'), /Typed, not yet written/)
+})
+
+test('a duplicate is a second document; the original is left alone', async t => {
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(join(root, 'notes', 'plan.md'), '---\ntephra: 1\nkind: markdown\n---\nThe plan.\n')
+
+  const copy = await service.duplicateDocument('notes/plan.md' as DocumentId, 'Plan v2')
+  assert.equal(copy, 'notes/plan-v2.md')
+  assert.match(await readFile(join(root, 'notes', 'plan-v2.md'), 'utf8'), /The plan/)
+  assert.equal(existsSync(join(root, 'notes', 'plan.md')), true)
+})
+
+test('DELETING leaves the entry that named it dangling, and visibly (D7)', async t => {
+  // Not the same as rename. An entry pointing at a document somebody deleted is
+  // a true statement about the notebook; removing it would edit a curated list
+  // on the strength of a guess about what they meant.
+  const { service, root } = await fixture(t)
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await mkdir(join(root, 'sections'), { recursive: true })
+  await writeFile(join(root, 'notes', 'gone.md'), '---\ntephra: 1\nkind: markdown\n---\nText.\n')
+  await writeFile(
+    join(root, 'sections', 'house.fileset.md'),
+    '---\ntephra: 1\nkind: fileset\n---\n- [Was here](../notes/gone.md)\n',
+  )
+
+  await service.deleteDocument('notes/gone.md' as DocumentId)
+  await service.flush()
+
+  assert.equal(existsSync(join(root, 'notes', 'gone.md')), false)
+  const tree = await service.sections.tree()
+  const entry = tree.entries.flatMap(e => e.children?.entries ?? []).find(e => e.label === 'Was here')
+  assert.notEqual(entry, undefined, 'the entry is still there')
+  assert.equal(entry?.missing, true, 'and it says it cannot be found')
+})
+
+test('the notebook itself cannot be deleted', async t => {
+  const { service } = await fixture(t)
+  await assert.rejects(() => service.deleteDocument(STREAM_ID), /cannot be deleted/)
 })
