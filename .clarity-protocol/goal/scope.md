@@ -15,10 +15,12 @@ Three native types, each with its own UX. Everything else in the directory is ei
 | Type | UX |
 |---|---|
 | **Markdown** (`.md`) | The reading and editing surface. The notebook stream, branched documents, and pinned lists are all this type. Possible later export to docx and similar. |
-| **TODO** | Seen *only* through the TODO experience — urgency ranking, statuses, due dates. Never edited as raw text in normal use. |
+| **TODO** | Seen *only* through the TODO experience — the live list, a tag pivot, an urgency pivot, a link directory (`goal/todo.md`). Never edited as raw text in normal use. A notebook may hold several; one at the top level is distinguished, as one stream is. |
 | **Fileset** | A directory with a master index. Entries are URLs, file pointers, and **bookmarks into markdown files**. Browse, open individually or en masse, annotate, snapshot. |
 
 **One syntax family.** All three types are markdown, leniently parsed — a TODO file stays sensible to a plain reader even though it is only ever *seen* through the TODO UX. A bespoke syntax (YAML is the likely candidate for TODO) remains available at promotion time, when the UX's real requirements are known; converting a markdown TODO to YAML is a script, so nothing is foreclosed. Until then there is one parser and one merge story.
+
+> **The TODO promotion is now live** (`goal/todo.md`), so this is no longer hypothetical: the wire format is explicitly an implementation detail for `solution/todo.md` to settle, constrained only by R26 and by T2 — the user-perceived model is one ever-growing list, and the storage need not mirror it.
 
 **Type is declared by name, not inferred.** Portal found the failure this prevents: a mutable list mistyped as append-only notebook content merges with append-union semantics and *silently duplicates edited lines* — no error, the file quietly fills with near-duplicate paragraphs. Explicit typing is what makes merge safe.
 

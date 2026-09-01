@@ -19,6 +19,7 @@ Derived from `problem.md` and `precedent.md`. The ordering is deliberate: the ex
 8. **Automatic dating**, so passages carry their date whether or not the user stamped them.
 9. **Bookmarks**, both short-lived and long-lived, with fast navigation to them.
 10. **Full-text search.** Era 1's gap; now load-bearing rather than convenient, since a subject view *is* a filtered view.
+10a. **A directory of every link in the corpus**, reverse-chronological by last appearance, searchable, each entry carrying enough surrounding text to recognise it and a reference back to where it was written. **Search's sibling: search finds text you remember writing, this finds documents you remember opening.** It arrived as a TODO feature — *"where is that doc I was working on Tuesday?"* is the second most common thing a task list is asked (`goal/todo.md`) — but the need is not specific to task lists and the machinery does not care which file a link was found in. Links from completed and abandoned work are kept, which is most of the value: the document you want is usually attached to something you already finished.
 11. **Print a selected range.**
 
 ## R3 — Range operations
@@ -31,10 +32,7 @@ Derived from `problem.md` and `precedent.md`. The ordering is deliberate: the ex
 
 ## R4 — Lists
 
-15. **TODO items** with: text (always), status ∈ {not started, in progress, done, nevermind} (always), due date (sometimes), links to docs or contacts (sometimes), grouping(s) (sometimes), and a **last-touched timestamp** (always, recorded from day one).
-16. **The default TODO view ranks and surfaces by urgency, so the eye never has to scan.** Era 2 had due dates — hand-drawn boxes around `DUE 5/4` — and they failed precisely by *scale*: the visual worked until there were too many dated items to take in at a glance. Storing due dates is not the requirement; ordering by them is.
-16a. **Nothing may foreclose a periodic forced review.** Era 2's filling page compelled live items to be transcribed forward and let the rest die by omission — a confirmed feature, and a different job from due dates: a deadline says *"this has a date,"* a review asks *"is this still alive."* The digital form is to be found by experiment, which is why the last-touched timestamp in R15 is recorded now: no staleness mechanism can be added later without it, and backfilling makes every item look equally fresh.
-17. **TODO groupings are dynamic sets and are *not* the same as subjects.** Stated explicitly; they should not be unified without evidence that they are the same thing for the same reason.
+15–17, 16a. **Superseded by `goal/todo.md`**, which holds the TODO requirements as T1–T15. A closer reading of the twenty-year record (`notes/03 the todo feature.md`) changed enough to warrant a document rather than four bullets: the three interactions a list actually serves, the daily walk as a *priming* ritual rather than a review, the soft cap as a separate mechanism from it, and a link directory as a first-class view. The core of R16 survives as T9 (order by urgency, do not merely store due dates); R16a's forced review survives as T11; R17 survives as T5, now with the evidence it asked for.
 18. **Pinned lists** — recurring editable artifacts, reachable in one gesture from the top-level view.
 19. **An events calendar** of major commitments: a date or date range, location, short summary, contact person, optional link to notes. Complements Google Calendar; does not replace it. **In v1 this is not a feature — it is one pinned list file (R18).** Its precedent is era 3's Excel sheet, which worked precisely because it was a plain table kept separate with no ceremony; the requirement asks for no date arithmetic, no reminders, no calendar view. **If R18 exists, R19 is already satisfied.** Anything beyond that must be earned by use.
 

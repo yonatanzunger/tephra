@@ -506,6 +506,20 @@ segment. A genuinely interesting test, and a milestone rather than a bullet.
 
 Whatever tests the shape first should be a kind that is still TEXT.
 
+> **Both reasons fell on 2026-09-01** (D55–D58), one day later. The kind *is*
+> still text — an item is a line, tags and dates are inline markers, history is
+> per day — so it extends `SegmentedDocument` keyed by `DateKey` like the stream,
+> and the record-shaped prediction it was deferred on was simply wrong. And the
+> evidence gate turned out never to have been exercised: the plain checkbox
+> stand-in was never really used, so it had returned nothing rather than a "no."
+>
+> **What was right here is the part about R16.** The reason to build it is not
+> checkboxes, and storing due dates again would not fix era 2's failure. Working
+> the requirement properly (`goal/todo.md`) went further in the same direction:
+> even *urgency ranking* is not the core — the three interactions a list actually
+> serves are, and the second of them (finding a link from three days ago) had
+> never been served in any era and is not a TODO feature at all (R10a, D57).
+
 ## The file lifecycle *(done)*
 
 **Done**, and verified by `npm run m3`. The four File-menu items — **New File**,

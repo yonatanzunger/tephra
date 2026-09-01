@@ -1,6 +1,6 @@
 # Open Questions
 
-Five genuine unknowns, ordered by how much they constrain everything else. **Q1 and Q4 are now resolved by Spike 01** (`discovery/spike-01-findings.md`); Q2 should be resolved before any substantial building.
+Genuine unknowns, ordered by how much they constrain everything else. **Q1 and Q4 are resolved by Spike 01** (`discovery/spike-01-findings.md`); **Q3 is resolved by `goal/todo.md`**, which split it into two mechanisms and left Q3a–Q3c behind; Q3b and Q3c are now resolved too, leaving only **Q3a** (the backlog). Q2 should be resolved before any substantial building.
 
 ## Q1: Can one editing surface be vim-compatible *and* render figures, equations and tables inline?
 
@@ -45,6 +45,21 @@ The staging in the original analysis survives untouched: ship raw+vim and render
 
 ## Q3: What replaces the filling page?
 
+**Status: RESOLVED — the question contained a wrong premise, and splitting it answered it.** See `goal/todo.md`.
+
+**The filling page was doing two jobs, and this question only ever saw one.** It killed stale items when it filled, *and* its finitude made adding an item feel expensive. The decisive evidence was in the record the whole time: era 2 reviewed **daily** — far more often than era 1's page-turn — and its list still grew far larger. So the forced review was never what kept era 1 short. Entry cost was. Review kills stale items; it does not prevent accumulation.
+
+**So there are two mechanisms, not one, and neither is "the forced review."**
+
+- **The soft cap** (T12) does the finitude job: the working view holds N items and the rest are reachable but not in front of you. A hard cap would be infuriating within a week; a soft one still works, because an item you know you will not see is one you think twice about writing.
+- **The daily walk** (T11) turns out not to be a review at all. It is valuable *independent of list length* — it is how the list gets loaded into the head at the start of a day. Its output is attention; pruning is a side effect of having looked at everything.
+
+**And they are coupled.** The cap works by degrading visibility; the success criterion forbids ever forgetting an item that is on the list. The walk is what reconciles them, because it is what guarantees the whole list still gets seen. Neither ships without the other.
+
+The last-touched timestamp this question asked for is kept (T3), and is still un-backfillable.
+
+<details><summary>Original analysis, kept for its reasoning</summary>
+
 **Status:** open — but half of it resolved, and the two halves turn out to be different jobs
 
 **Resolved: due dates are genuinely needed, and the era-2 failure tells us what the feature must do.** They existed in era 2, hand-implemented as `DUE 5/4` in a drawn box, relying on the visual to catch the eye. That worked at small scale and **degraded as the number of dated tasks rose** — a scanning mechanism that fails when there is too much to scan. So the digital requirement is not merely to *store* due dates but to **rank and surface by urgency so the eye never has to scan**, which is what R16 asks for and now has a reason and a known failure mode behind it.
@@ -54,6 +69,36 @@ The staging in the original analysis survives untouched: ship raw+vim and render
 **The intent is to experiment as the tool evolves**, which makes this a design constraint rather than a design: nothing should foreclose a review rhythm later. **One cheap thing to do now:** record a *last-touched* timestamp on every TODO item from the start. No mechanism can ask "what has gone stale" without it, and adding it retroactively means every existing item looks equally fresh. Marker now, mechanism later.
 
 **Strategy:** thinking, then experimentation in use.
+
+</details>
+
+## Q3a: What makes a backlog useful rather than a graveyard?
+
+**Status:** open, and **deliberately deferred to a later milestone** (2026-09-01) — to be answered from use, once the rest of the TODO system is running.
+
+**The deferral passes the rule, and unconditionally.** *Data cannot be backfilled; mechanisms can be deferred* — safe when what is deferred is a mechanism over data already being recorded. Every input any plausible resurfacing rule could want is recorded from day one by D55's copy-forward: backlog status exists from the start (T4); *when* an item was backlogged is the last day file it appears in; tag recency is which day a tag last appeared anywhere; and even a rule with memory — "offer this at most once a fortnight" — is covered, because declining is an edit and every edit is dated by construction. There is no version of this question whose answer needs data we are not already keeping.
+
+**What ships in the meantime is a drawer, not a mechanism.** Backlogged items are reachable and counted — *37 backlogged* — as a mode of the surface, which is one filter over an index being built anyway. That is not resurfacing and does not pretend to be; it is the difference between a drawer and a hole. **Running without the mechanism is running with a known graveyard**, and the point of saying so here is that it should be noticed in use rather than discovered later.
+
+`problem.md` credits eras 1 and 2's *lack* of a backlog for keeping them honest; "someday, I suppose" is the graveyard with a comfortable place to live. The need is nonetheless real — cancelling an item outright is the wrong verb for something genuinely deferred — so the backlog goes in, and something has to make backlogged items come back into view. Candidates: an expiry after which an item is re-presented or auto-cancelled; a slot in the daily walk that surfaces a small rotating sample; resurfacing on tag activity, so backlogged items reappear when their project does. Untested; the last is the most promising because it costs no discipline.
+
+**Strategy:** thinking, then experimentation in use.
+
+## Q3b: How long do resolved items stay, and what evicts them?
+
+**Status: RESOLVED — nothing evicts them, because nothing carries them.** See `solution/todo.md` §2.
+
+If each day's file holds that day's working set and the morning walk writes it by carrying items forward, a finished item is simply not carried: it stays in the day it was finished, forever, and leaves the working view without being deleted from anything. "Recently resolved" in the tag pivot is a lookback over the last few days' files. The question dissolved once the wire format was chosen.
+
+## Q3c: Do TODO items have stable identity?
+
+**Status: RESOLVED — yes, and it costs less than the question assumed.** See `solution/todo.md` §3 and D55.
+
+Carrying items forward across days only works if tomorrow's line can be recognised as today's item, and text-matching breaks the moment an item is reworded. So an item carries an id, minted at creation and carried with it.
+
+**The question was framed as a conflict with the "no ids" rule, and on a closer reading there is no conflict.** That rule is **D20**, not D21, and what it forbids is storing spans *beside* the text. An item id lives **in** the text as a marker, so the document is still a pure function of its bytes. Comment threads already do exactly this — machine-minted ids, inline, with `unusedCommentId` issuing them. The only new constraint is that an item's id is mandatory and corpus-unique.
+
+What survives of the worry is sequencing: ids are cheap from day one and expensive to retrofit onto a year of carried-forward lines, the same class of hazard as R15's timestamps.
 
 ## Q4: What stack, given that OS integration is a real cost?
 

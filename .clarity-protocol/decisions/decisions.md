@@ -2017,3 +2017,132 @@ way.
 `solution/document-api.md` (`extent` and `dateAt` on the common interface),
 `shared/ui-state.ts` (one location and cursor becomes a SET of windows),
 `decisions.md` D53 (pinning becomes a document edit, as it claimed to be).
+
+## D55: TODO is a text kind; days are segments and the working set is carried forward
+
+**Date:** 2026-09-01
+**Status:** decided
+**Detail:** `solution/todo.md`, `goal/todo.md`
+
+**Decision.** `TodoDocument extends SegmentedDocument`, segments keyed by
+`DateKey`, one list per directory: `todo/<list>/YYYY/MM/YYYY-MM-DD.todo.md`,
+with `todo/main/` distinguished by name rather than by any special case in the
+layout. **Each day's file holds that day's working set in full**, written by the
+morning walk carrying items forward. All TODO lists share one format; there is
+no lightweight second form.
+
+**This reverses `file-documents.md`'s prediction and the M3 deferral built on
+it.** Todo was predicted to be "record-shaped: an edit is a field, and history
+is per item," which made it an expensive first test of the four-artifact shape
+and sent it back to the backlog on 2026-08-31. Reading the twenty-year record
+closely (`notes/03 the todo feature.md`) says otherwise: an item is a line, tags
+and dates are inline markers, and none of the three interactions a list actually
+serves asks when one item's status last flipped — they ask what the *list*
+looked like. History is per day.
+
+**Copy-forward is era 2's morning ritual minus the retyping, and it pays for
+itself five times.** The walk's designated working set needs no representation
+because it *is* the day's file — persistence, standing across skipped days, and
+idempotence on a second walk all fall out. Scrubbing to a past day is opening a
+file. ctime and mtime stop being metadata someone must maintain and become facts
+about the corpus, so R15's "recorded from day one, never backfilled" is
+structurally guaranteed. Nothing evicts resolved items because nothing carries
+them. And every verb is a `replace()` on a body, so undo, the WAL, divergence
+and versioning arrive free.
+
+**The cost is duplication and it is negligible**: a ~30-line working set copied
+daily is ~220k lines over twenty years, ~15 MB, against the stream's own
+0.4–0.9 GB. The duplication *is* the history.
+
+**What this makes stale.** `solution/file-documents.md` (the record-shaped
+prediction, and the claim that the first non-text kind forks `Document`);
+`solution/milestones.md` (the M3 rejection's second reason); D4 (below).
+
+## D56: TODO items carry ids, which D20 already permits
+
+**Date:** 2026-09-01
+**Status:** decided
+**Detail:** `solution/todo.md` §3
+
+**Decision.** Every TODO item carries a machine-minted id, corpus-unique,
+written inline as a trailing marker and carried forward with the item. Identity
+is what makes copy-forward work at all — text-matching breaks the moment an item
+is reworded — and it is also what ctime/mtime derive from, what the link
+directory points back at, and what backlog resurfacing would track.
+
+**This was drafted as a departure from the "no ids" rule and is not one.** The
+rule is D20's, and D20 forbids storing spans *beside* the text. An id in the
+text is not beside it: the document stays a pure function of its bytes, and
+hand-editing stays satisfied structurally rather than by care. **Comment threads
+already do exactly this** — machine-minted ids living inline, issued by
+`unusedCommentId` — so the mechanism exists and has a year of precedent. The only
+new constraint is that an item's id is mandatory and unique across the corpus
+rather than within one document.
+
+**Addressing follows D53's vocabulary directly.** `tephra:todo/<id>` names one
+item and opens at its **newest** instance, which is its current state — the
+inverse of `tephra:mark/<name>`, which resolves to the first in date order,
+because a bookmark means where something was first said and an item means what
+it is now.
+
+**An unasked-for capability falls out.** The instances sharing an id *are* the
+item's day-by-day history. `goal/todo.md` explicitly did not ask for per-item
+history and `file-documents.md` predicted it would have to be built; it is a
+by-product of the storage. Worth a view eventually, worth building nothing for.
+
+**The hazard is sequencing, not principle.** Ids are cheap from day one and
+expensive to retrofit onto a year of carried-forward lines — R15's class.
+
+## D57: The link directory is a corpus capability, not a TODO feature
+
+**Date:** 2026-09-01
+**Status:** decided
+**Detail:** `solution/todo.md` §5, R10a
+
+**Decision.** One index over **every link in the corpus**, whatever file it was
+found in — reverse-chronological by last appearance, searchable, each entry
+carrying enough surrounding text to recognise it and a reference back to where
+it was written. Links from completed and abandoned work are retained. The TODO
+surface's link mode is a filter over it; the stream gets the same view free.
+
+**It arrived scoped to the TODO list, and the scoping was wrong.** *"Where is
+that doc I was working on Tuesday?"* is the second most common thing a task list
+is asked (`goal/todo.md`), which is why it surfaced there — but it is asked of
+the notebook at least as often, and the machinery does not care which file a
+link came from. `CorpusIndex` already sweeps every file by `stat` stamp;
+`Reference` already has a `url` variant; `architecture.md` already reserves the
+pattern. Building it TODO-only is the same work aimed at less.
+
+**Its sibling is search, not the TODO list**: search finds text you remember
+writing, this finds documents you remember opening. Hence R10a's placement.
+
+**It is separable and should probably ship first.** It needs no item ids, no
+walk, and no surface beyond a list — the one piece of this design that pays for
+itself on its own.
+
+## D58: The TODO promotion gate is met by the historical record, not by a stand-in failure
+
+**Date:** 2026-09-01
+**Status:** decided — supersedes D4's gate for TODO; D6 reopened
+**Detail:** `goal/todo.md`
+
+**Decision.** D4 held that v1 would deliberately run a plain checkbox file so
+that promotion answered a recorded failure rather than an argument. That gate is
+**not met and is superseded anyway.** The stand-in was never really used — notes
+went into Tephra much as they had gone into M365 — so no failure was recorded
+against it. What replaced it is stronger: a close reading of twenty years across
+three eras, which produced the three interactions, the entry-cost finding, and
+the walk/cap split, none of which a few weeks of a checkbox file would have
+produced.
+
+**D6 is reopened as intended, and answers differently than it expected.** D6
+named YAML as the likely bespoke syntax at promotion time. The notation chosen
+instead is inline and visible — `#tag` and `DUE <date>`, left in the line — which
+keeps one parser, one merge story, and a file that is what it appears to be.
+
+**The general lesson is worth more than the decision.** An evidence gate is only
+as good as the instrument behind it, and this one was never switched on. **A gate
+that was never exercised has not returned a negative result** — it has returned
+nothing, and treating silence as evidence would have deferred the work
+indefinitely for no reason. This is the instruments discipline in `notes.md`
+applied to a process control rather than to a measurement.

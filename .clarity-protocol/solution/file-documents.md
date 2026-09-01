@@ -414,10 +414,24 @@ deals in the interface.
 
 | Likely kind | Why |
 |---|---|
-| **stream, markdown, fileset** | text with positions; extend the base |
+| **stream, markdown, fileset, todo** | text with positions; extend the base |
 | **PDF, image** | positions are pages and rectangles; annotations are not character spans; nothing in the base applies |
-| **todo / calendar**, if R15–R19 ever stop being plain files | record-shaped: an edit is a field, and history is per item |
 | **a saved query or filtered view** | zero files. Content is computed from other documents and writes are written THROUGH to them; there is no `load` and nothing to `writeDirty` |
+
+> **Correction (D55): todo was in the record-shaped row, and that was wrong.**
+> It was predicted here as "an edit is a field, and history is per item," and M3
+> deferred it partly on that basis. Designing it against the twenty-year record
+> (`goal/todo.md`) says the opposite: an item is a line, tags and dates are
+> inline markers left in the line, and nothing anyone actually does with a list
+> asks when one item's status last flipped — the questions are about what the
+> *list* looked like, so history is per **day**. It is `SegmentedDocument` keyed
+> by `DateKey`, like the stream.
+>
+> **The general form is worth keeping**, because this file predicted four kinds
+> and got the first one it met wrong: *a kind looks record-shaped when you
+> enumerate the fields an item has, and text-shaped when you ask what the user
+> does with it.* Enumerating fields is the easier exercise and the misleading
+> one. Calendar is still in this row and has not had that test applied to it.
 
 And the contrast that draws the line: **the shreddable notebook (D46) is not a
 new kind.** Encrypted bytes and opaque names are a different STORAGE for the

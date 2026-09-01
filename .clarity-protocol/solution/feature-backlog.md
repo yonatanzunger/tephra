@@ -6,9 +6,11 @@ Each entry records what it competes with and what evidence would promote it. Evi
 
 | Candidate | Competes with | What would promote it |
 |---|---|---|
-| **TODO type and UX** (R15–R17) | A pinned markdown file with checkboxes | Specific recorded failures of the plain file: items lost, deadlines missed, scanning cost. Urgency ranking (R16) is the reason to build it at all. Promotion doubles as the first forced review (D6). **Considered and re-deferred during M3** (2026-08-31): the document layer could now carry it, which is not the same as the evidence being in — and it is record-shaped (`file-documents.md`), so it is a milestone rather than a small kind. |
-| **Urgency ranking** (R16) | Reading the list top to bottom | Enough dated items that scanning fails — the exact way Era 2's due dates degraded. |
-| **The forced review** (R16a) | Nothing; no stand-in exists | Observed rot: items in the list nobody has touched or decided about. Requires last-touched data, which begins at TODO promotion. |
+| ~~**TODO type and UX**~~ (R15–R17) | — | **Left the backlog on 2026-09-01** (D55–D58). Both reasons for the M3 re-deferral fell: the record-shaped prediction was wrong (it is a text kind), and D4's evidence gate was never exercised, so its silence was not a "no". Designed in `goal/todo.md` and `solution/todo.md`. |
+| ~~**Urgency ranking**~~ (R16) | — | Absorbed as T9. |
+| ~~**The forced review**~~ (R16a) | — | Dissolved: the premise was wrong. It became two mechanisms — the soft cap (T12) and the daily walk (T11) — neither of which is a forced review. See Q3. |
+| **The link directory** (R10a) | Scrolling back through the notebook by hand | Nothing; the need is established (`goal/todo.md`, interaction 2) and the machinery is a sweep `CorpusIndex` already performs. **Separable and cheap** — no item ids, no walk, no surface beyond a list — so it is the one piece of the TODO design that could ship on its own (D57). |
+| **Backlog resurfacing** (T14, Q3a) | Cancelling outright, or a list nobody rereads | The mechanism is undecided, which is the whole of Q3a. Everything else in the TODO design is settled. |
 | **Filesets** (R20–R22) | A directory plus a notes file | Specific failures of the directory: summaries not kept, en-masse opening painful, snapshots not taken. |
 | **URL snapshotting** (R22) | Saving a PDF by hand | Links found dead when it mattered. |
 | **Browser extension** (R23) | Copy and paste | Frequency — the friction only counts if capture is frequent enough to matter. |

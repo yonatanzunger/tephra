@@ -24,6 +24,8 @@ A model that *deletes* the hardest requirement rather than solving it is usually
 
 **TODO stops being hard.** Lists with state, due dates and urgency are a text feature. The genuinely difficult part in Portal — the cross-project unified view — was what forced ambient mode, cross-project writes and the `extract` argument, and it is simply not needed.
 
+> **Half-retracted (`goal/todo.md`).** The *storage* is indeed a text feature, and the prediction that it would be record-shaped was wrong. What is hard is nothing to do with representation: a list must make its owner think twice before adding, and must never let an item it holds go unseen, and those two pull opposite ways. That is the design problem, and it was invisible until the eras were read closely.
+
 **The integration architecture mostly evaporates**, since this is one app over one folder rather than a shell hosting six typed plugins.
 
 ## Open at the moment of the split
@@ -423,3 +425,86 @@ outcome, stop observing the event and interrogate the wreckage.**
 
 This is also the sixth entry in the instruments list, and the second where the
 instrument's own presence was the problem rather than its honesty.
+
+## A ritual can have a job other than the one it looks like
+
+Era 2's morning copy-and-trim of the TODO list looked like a review — prune the
+dead, carry the living. It was read that way for the whole life of this project,
+and R16a and Q3 were both built on that reading.
+
+It was wrong, and the evidence was sitting in the same record. Era 2 groomed
+**daily**; era 1 groomed only when a two-page spread filled, which was far less
+often. Era 2's list grew much larger. A more frequent review produced a longer
+list, so the review was not what kept era 1 short — *entry cost* was. Review
+kills stale items; it does not prevent accumulation.
+
+And the ritual's real value turned out to be something else again: it is how the
+list gets loaded into the head at the start of a day, which is worth doing when
+the list is short and nothing needs pruning at all.
+
+**Before designing a mechanism to replace a practice that worked, ask what job
+it was doing — the practice's stated purpose is often not the load-bearing one.**
+The corollary bit here twice: the same finding also says a stated requirement
+("nothing may foreclose a periodic forced review") can encode a misreading, and
+inherit false authority from being written down early.
+
+## Two mechanisms that conflict may be a pair, not a choice
+
+`goal/todo.md` needs a soft cap (items past N are not in front of you) and needs
+never to let an item on the list be forgotten. Those contradict.
+
+The resolution was not to weaken either one. It was to notice that the daily
+walk — introduced for an unrelated reason — is exactly what makes the cap safe,
+because it guarantees the whole list is seen regardless of what the working view
+shows. Two features that each looked optional turn out to be one mechanism with
+two halves, and shipping either alone is worse than shipping neither.
+
+**When two requirements conflict, check whether some third thing already in the
+design reconciles them before trading one away.**
+
+## Scope note: the graveyard problem is a separate project
+
+`problem.md` names project neglect as the larger cost, and the TODO list has
+been carrying that weight by association since Portal. They are distinct: the
+graveyard is about *projects* dying, and no flat item list has addressed it in
+three eras of evidence. Splitting them let the TODO design get sharp.
+
+`[for: problem-clarification]` The graveyard problem — "projects die by decision,
+not neglect; I always know which threads are alive" — is unstarted and wants its
+own clarification. It descends from Portal's "projects as concepts" and from
+era 1's third failure ("no way to represent a project with its own milestones,
+so no way to see the list of projects or their status"). Expect the TODO design
+to teach it something, and check era 1's failure 3 against it first.
+
+## A gate that was never opened has not returned a negative
+
+D4 held the TODO UX behind an evidence gate: run a plain checkbox file in v1, and
+promote only against a recorded failure of it. Reasonable, and it quietly stopped
+working — the stand-in was never really used, so no failure was ever recorded,
+and the gate would have deferred the work forever while looking principled.
+
+This is the instruments discipline (`notes.md`, six entries) applied to a
+*process control* rather than to a measurement: **a negative result is only
+evidence if the positive control fired.** An unexercised gate returns nothing,
+not a "no", and the two are easy to confuse because they look identical from
+outside — no evidence has arrived either way.
+
+**When a gate has been closed for a while, check whether the thing behind it was
+ever actually run.**
+
+## Enumerate what the user does, not what the record contains
+
+`file-documents.md` predicted four future kinds and got the first one it met
+wrong. Todo was filed as record-shaped — "an edit is a field, and history is per
+item" — which is exactly what you conclude from listing an item's attributes:
+text, status, due date, tags, timestamps. Six fields, so: records.
+
+Asking instead what anyone *does* with a task list gives three motions, none of
+which asks about a single item's field history; they all ask what the **list**
+looked like. So it is text, history is per day, and it inherits the whole
+`SegmentedDocument` machinery rather than forking `Document`.
+
+**A kind looks record-shaped when you enumerate the fields an item has, and
+text-shaped when you ask what the user does with it.** Enumerating fields is the
+easier exercise and the misleading one. The same test has not yet been applied to
+calendar, which is still sitting in that row.
