@@ -98,6 +98,39 @@ export interface Theme {
    * justification its bad name, and nobody wants one without the other.
    */
   readonly justify: boolean
+
+  // ── code ──────────────────────────────────────────────────
+  /**
+   * The face for code: fenced blocks and inline spans.
+   *
+   * Its own, because a monospaced face is chosen against different criteria
+   * from a reading face — column alignment, a slashed zero, a legible `l1I` —
+   * and because it was a constant in a stylesheet where the theme should have
+   * owned it.
+   */
+  readonly codeFace: string
+  /**
+   * Code size as a RATIO of the body size, not a size of its own.
+   *
+   * A monospaced face at the same nominal size reads larger than a serif, so
+   * code is normally set a little smaller — and it should stay a little smaller
+   * when the body size changes, which an absolute number would not.
+   */
+  readonly codeSize: number
+  /** Lines of code sit closer together than lines of prose. */
+  readonly codeLeading: number
+  /**
+   * The code column, in characters of the CODE face.
+   *
+   * **Its own measure, wider than the prose one.** Eighty columns is what code
+   * is written to and what wrapping it at a reading measure destroys: a wrapped
+   * Python line looks like an indent that is not there. A block reaches this
+   * width even where the prose column is narrower, and only wraps past it —
+   * nothing is ever hidden.
+   */
+  readonly codeMeasure: number
+  /** How far a code block is inset from the text, in code characters. */
+  readonly codeIndent: number
   /*
    * `lineSpace` was here, and is gone on purpose.
    *
@@ -153,6 +186,11 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     leading: 1.72,
     paragraphSpace: 1.65,
     justify: false,
+    codeFace: "'JetBrains Mono', ui-monospace, monospace",
+    codeSize: 0.85,
+    codeLeading: 1.45,
+    codeMeasure: 80,
+    codeIndent: 2,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 46,
@@ -181,6 +219,11 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     leading: 1.58,
     paragraphSpace: 1.37,
     justify: false,
+    codeFace: "'JetBrains Mono', ui-monospace, monospace",
+    codeSize: 0.85,
+    codeLeading: 1.45,
+    codeMeasure: 80,
+    codeIndent: 2,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 42,
@@ -209,6 +252,11 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     leading: 1.66,
     paragraphSpace: 1.51,
     justify: false,
+    codeFace: "'JetBrains Mono', ui-monospace, monospace",
+    codeSize: 0.85,
+    codeLeading: 1.45,
+    codeMeasure: 80,
+    codeIndent: 2,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 52,
@@ -237,6 +285,11 @@ export const BUILT_IN_THEMES: readonly Theme[] = [
     leading: 1.76,
     paragraphSpace: 1.77,
     justify: false,
+    codeFace: "'JetBrains Mono', ui-monospace, monospace",
+    codeSize: 0.85,
+    codeLeading: 1.45,
+    codeMeasure: 80,
+    codeIndent: 2,
     hebrewFace: 'Times New Roman',
     hebrewScale: 130,
     tagSaturation: 46,
@@ -315,6 +368,11 @@ export function parseTheme(text: string, name: string): Theme | null {
     leading: num(raw.leading, base.leading, 1, 3),
     paragraphSpace: num(raw.paragraphSpace, base.paragraphSpace, 0, 4),
     justify: raw.justify === true,
+    codeFace: str(raw.codeFace, base.codeFace),
+    codeSize: num(raw.codeSize, base.codeSize, 0.4, 2),
+    codeLeading: num(raw.codeLeading, base.codeLeading, 1, 3),
+    codeMeasure: num(raw.codeMeasure, base.codeMeasure, 20, 200),
+    codeIndent: num(raw.codeIndent, base.codeIndent, 0, 12),
     hebrewFace: str(raw.hebrewFace, base.hebrewFace),
     hebrewScale: num(raw.hebrewScale, base.hebrewScale, 50, 250),
     palette: {

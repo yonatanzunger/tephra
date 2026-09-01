@@ -233,6 +233,31 @@ export function ThemePanel({
         </p>
       </div>
 
+      <h3 className="theme-heading">Code</h3>
+      <label className="field">
+        <span>Face</span>
+        <input
+          type="text"
+          value={draft.codeFace}
+          spellCheck={false}
+          onChange={e => control.update({ codeFace: e.target.value })}
+        />
+      </label>
+      {/* A RATIO, not a size: a monospaced face reads larger than a serif at the
+          same nominal size, and it should stay a little smaller when the body
+          size moves. */}
+      <Slider label="Size" unit="×" min={0.5} max={1.5} step={0.01}
+        value={draft.codeSize} onChange={codeSize => control.update({ codeSize })} />
+      <Slider label="Leading" unit="" min={1} max={2.4} step={0.02}
+        value={draft.codeLeading} onChange={codeLeading => control.update({ codeLeading })} />
+      <Slider label="Measure" unit="ch" min={40} max={140} step={1}
+        value={draft.codeMeasure} onChange={codeMeasure => control.update({ codeMeasure })} />
+      <Slider label="Inset" unit="ch" min={0} max={8} step={0.5}
+        value={draft.codeIndent} onChange={codeIndent => control.update({ codeIndent })} />
+      <p className="theme-sample theme-code-sample">
+        <code>{'def solve(grid):  # memoised\n    return cache["key"]'}</code>
+      </p>
+
       {/* The measure is not only a matter of taste: it decides how much room is
           left, and therefore whether the capture stream lands on empty paper or
           covers the margin where commentary lives (D42, R27). Saying so here

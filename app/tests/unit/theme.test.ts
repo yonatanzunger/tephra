@@ -264,3 +264,21 @@ test('justification is a switch, and every built-in starts ragged', () => {
   // and guessing at one would be worse than ignoring it.
   assert.equal((parseTheme(JSON.stringify({ version: 1, justify: 'yes' }), 'j') as Theme).justify, false)
 })
+
+test('code has typography of its own, and it starts where the stylesheet had it', () => {
+  // The mono face was a constant in `index.css`, which is why no amount of
+  // editing a theme could change it — the same shape as the panel colour.
+  for (const built of BUILT_IN_THEMES) {
+    assert.match(built.codeFace, /mono/i, built.name)
+    assert.ok(built.codeSize > 0 && built.codeSize < 1.5, built.name)
+    // Its own measure, WIDER than the prose one: code is written to eighty
+    // columns and wrapping it at a reading measure destroys its layout.
+    assert.ok(built.codeMeasure > built.measure, `${built.name}: ${built.codeMeasure} > ${built.measure}`)
+  }
+})
+
+test('a theme written before code had settings keeps working', () => {
+  const theme = parseTheme(JSON.stringify({ version: 1, measure: 60 }), 'older') as Theme
+  assert.equal(theme.codeFace, defaultTheme().codeFace)
+  assert.equal(theme.codeMeasure, defaultTheme().codeMeasure)
+})

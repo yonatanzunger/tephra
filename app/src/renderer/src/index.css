@@ -894,3 +894,9 @@ body {
 .field.toggle-field > span { display: flex; flex-direction: column; line-height: 1.25; }
 .field.toggle-field em { font-style: normal; font-size: 10.5px; color: rgb(var(--panel-text-muted)); }
 .field.toggle-field input[type='checkbox'] { accent-color: rgb(var(--accent)); }
+
+/* The code sample in the theme panel, set in the face being chosen. */
+.theme-code-sample code {
+  font-family: var(--font-code); font-size: 11px; line-height: 1.5;
+  white-space: pre; display: block; color: rgb(var(--panel-text));
+}

@@ -322,7 +322,7 @@ export function App(): React.JSX.Element {
                     const how = POLICIES[annotations]
                     const ok = await window.tephra.doc.print({
                       ...printRangePage(days, rangeTitle(days), how),
-                      css: printCss(theme.draft.justify),
+                      css: printCss(theme.draft.justify, theme.draft.codeFace),
                       paginate: needsPages(how),
                       // Relative links resolve from a day directory, and every
                       // day in the stream sits at the same depth — so the first
@@ -436,7 +436,7 @@ export function App(): React.JSX.Element {
         void window.tephra.doc
           .print({
             ...printPage(selection.lines, day),
-            css: printCss(theme.draft.justify),
+            css: printCss(theme.draft.justify, theme.draft.codeFace),
             segment: day,
           })
           .then(ok => {

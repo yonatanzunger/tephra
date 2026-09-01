@@ -17,6 +17,7 @@ import { EditorView, crosshairCursor, drawSelection, keymap, placeholder, rectan
 import { defaultKeymap } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
+import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
 import { listIndent } from './lists.ts'
@@ -31,6 +32,7 @@ import { commentExtents, recomment } from './comment-anchors.ts'
 import type { CommentAnchor } from '../../annotations.ts'
 import { richPaste } from './paste.ts'
 import { dayBoundaries, redays } from './days.ts'
+import { codeBlocks } from './code.ts'
 import { proseHighlight, tephraTheme, typographyCompartment } from './theme.ts'
 import { defaultTypography, type Typography } from '../../typography.ts'
 import { Compartment } from '@codemirror/state'
@@ -110,7 +112,12 @@ export function bindEditor(options: BindOptions): Binding {
         scrollTrack(),
         vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
-        markdown(),
+        // **`codeLanguages` is what makes a fence more than one token.** Without
+        // it a fenced block parses as a single `CodeText` node whatever its info
+        // string says, so ```python is styled exactly as ```. The registry is
+        // lazy — a grammar is fetched the first time a block claims it — which
+        // is why one dependency is cheaper here than ten hand-picked ones.
+        markdown({ codeLanguages: languages }),
         syntaxHighlighting(proseHighlight, { fallback: true }),
         highlightSelectionMatches(),
         EditorView.lineWrapping,
@@ -131,6 +138,7 @@ export function bindEditor(options: BindOptions): Binding {
               EditorState.transactionFilter.of(tr => (tr.docChanged ? [] : tr)),
             ]),
         widgetExtensions(),
+        codeBlocks(),
         ...(behaviour.annotations ? [tagExtents(docWindow)] : []),
         ...(behaviour.days ? [dayBoundaries(docWindow)] : []),
         ...(behaviour.annotations

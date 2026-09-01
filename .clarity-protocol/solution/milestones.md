@@ -408,6 +408,32 @@ after the list.
     at the measure. Structure follows markdown; wrapping waits for the rendered
     editing surface (M5), which is where "raw or rendered" stops being a
     question at all.
+  - **Code has typography of its own, and a parser.** Neither existed: the mono
+    face was a constant in `index.css` — unreachable by any theme, the same
+    shape as the panel colour — and a fenced block parsed as a single `CodeText`
+    node whatever its info string said, so ```python was styled exactly as ```.
+
+    A theme now authors `codeFace`, `codeSize` (a RATIO of the body size, since
+    a monospaced face reads larger at the same nominal size and should stay a
+    little smaller when the body moves), `codeLeading`, `codeMeasure` and
+    `codeIndent`. `codeLanguages` from `@codemirror/language-data` makes a fence
+    its language — one lazy dependency instead of ten hand-picked grammars.
+
+    **A code block reaches its own measure, past the prose column.** Code is
+    written to eighty columns and wrapping it at sixty destroys the one thing
+    its layout carries: a wrapped Python line looks like an indent that is not
+    there. It still wraps past that width, because a line you cannot see is a
+    line you will forget to read.
+
+    **Colour is restrained and comes from the theme's existing palette** —
+    comments quiet and italic, keywords and strings on the accent at two
+    strengths, everything else ink. It works on themes nobody has written yet
+    and adds nothing to the six decisions a theme already asks for. A fuller
+    syntax palette stays open.
+
+    And paper takes the code face too. Screen and paper had two different
+    monospaced stacks for the same code, which is the third time that exact
+    disagreement has turned up — after the date formats and justification.
   - **A built-in cannot be deleted, and the button says so.** Seeding writes any
     built-in whose file is missing, so deleting one would delete it until the
     next launch and then quietly bring it back — a control that appears to work
@@ -455,6 +481,28 @@ character spans, no `SegmentedDocument`, history per item rather than per
 segment. A genuinely interesting test, and a milestone rather than a bullet.
 
 Whatever tests the shape first should be a kind that is still TEXT.
+
+## The file lifecycle *(next)*
+
+The four File-menu items that are present and disabled — **New File**, **Save a
+Copy**, **Rename**, **Delete** — plus the same acts reached from the sidebar,
+where a person is already looking at the list of documents: rename in place,
+and a context menu that makes a file or deletes one.
+
+**The expensive part is shared, and it is why these are one piece rather than
+four.** A fileset links to a document by relative path, so renaming a file
+breaks every section that points at it and deleting one leaves entries dangling.
+This is D13's *update references* step — the one that is present and empty in
+`branch`, with a note saying sections are the finite set it must rewrite and
+that they arrive in M3. They have arrived.
+
+Two rules already decided that this has to honour:
+- **A new file is a real file from the first keystroke** (`notes/untitled.md`),
+  not an unsaved buffer. Tephra has no unsaved state, and adding one would make
+  the newest document the only losable thing in the app.
+- **A reference that cannot be resolved dangles VISIBLY** (D7). So delete may
+  turn out to need no reference rewriting at all — the panel already renders a
+  missing entry as "not found" — while rename certainly does.
 
 **Deferred within M3, deliberately.** Section reordering and deletion — which
 need `tephra:builtin/*` sentinels so the built-in sections can be positioned

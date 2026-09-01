@@ -238,8 +238,16 @@ export function readable(date: string, sameYear: boolean): string {
  * Paper already hyphenates unconditionally, which is why justification only has
  * to add the alignment here.
  */
-export function printCss(justify: boolean): string {
-  return justify ? `${PRINT_CSS}\n  main { text-align: justify; }\n` : PRINT_CSS
+export function printCss(justify: boolean, codeFace?: string): string {
+  const rules = [
+    justify ? '  main { text-align: justify; }' : '',
+    // **The code face is the reader's, on paper too.** Screen and paper had two
+    // different monospaced stacks — JetBrains Mono here, SF Mono there — for
+    // the same code, which is the same disagreement the date formats and
+    // justification each turned out to be.
+    codeFace === undefined || codeFace.trim() === '' ? '' : `  code, pre { font-family: ${codeFace}; }`,
+  ].filter(rule => rule !== '')
+  return rules.length === 0 ? PRINT_CSS : `${PRINT_CSS}\n${rules.join('\n')}\n`
 }
 
 export const PRINT_CSS = `

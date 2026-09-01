@@ -776,6 +776,46 @@ console.log('\n\u2014 emphasis \u2014')
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── 11. code blocks ─────────────────────────────────────────────────────────
+//
+// A fenced block is a PLACE with typography of its own \u2014 its own face, leading,
+// inset and measure \u2014 and its language is parsed rather than taken as one run of
+// monospace. Prose is set to a reading measure; code is written to eighty
+// columns, and wrapping it at sixty destroys the one thing its layout carries.
+console.log('\n\u2014 code blocks \u2014')
+{
+  const root = await week(['Prose sits at the reading measure, which is sixty-two characters.\n'])
+  const day = DAY
+  const [yy, mm] = day.split('-')
+  await writeFile(
+    join(root, 'stream', yy, mm, `${day}.md`),
+    `---\ntephra: 1\ndate: ${day}\nkind: stream\n---\n\n` +
+      'Prose sits at the reading measure, which is sixty-two characters.\n\n' +
+      '```python\ndef solve(grid, depth=0):\n    # memoised\n    return grid\n```\n',
+  )
+  const r = report(await launch('code', root))
+
+  check('the lines of a fence are marked as code', Number(r.codeLines) >= 5, String(r.codeLines))
+  check('including the fence rows themselves', r.fenceLines === 2, String(r.fenceLines))
+  check(
+    'code is set in the code face, prose in the reading face',
+    typeof r.codeFace === 'string' && typeof r.proseFace === 'string' &&
+      r.codeFace !== r.proseFace && /Mono|mono/.test(r.codeFace),
+    `${JSON.stringify(r.codeFace)} vs ${JSON.stringify(r.proseFace)}`,
+  )
+  check(
+    'THE MEASURE: a code block is wider than the prose column',
+    Number(r.codeWidth) > Number(r.proseWidth),
+    `${r.codeWidth}px vs ${r.proseWidth}px`,
+  )
+  check(
+    'the fence is parsed as PYTHON, not as one run of monospace',
+    r.keywordColoured === true && Number(r.distinctColours) >= 2,
+    `def coloured: ${r.keywordColoured}, ${r.distinctColours} colours`,
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

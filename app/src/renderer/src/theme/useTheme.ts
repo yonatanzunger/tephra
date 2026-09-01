@@ -146,6 +146,10 @@ export function useTheme(activeName: string, onSelect: (name: string) => void): 
       root.style.setProperty(name, value)
     }
     root.style.setProperty('--font-body', face)
+    // The code face is the theme's now, not a constant in the stylesheet — so
+    // the panel that edits it and the page that uses it are one value.
+    root.style.setProperty('--font-code', draft.codeFace)
+    root.style.setProperty('--code-size', `${draft.codeSize}em`)
     root.dataset.theme = draft.name
   }, [draft, face])
 
@@ -270,5 +274,10 @@ export function typographyOf(theme: Theme, face: string): Typography {
     leading: theme.leading,
     paragraphSpace: theme.paragraphSpace,
     justify: theme.justify,
+    codeFace: theme.codeFace,
+    codeSize: theme.codeSize,
+    codeLeading: theme.codeLeading,
+    codeMeasure: theme.codeMeasure,
+    codeIndent: theme.codeIndent,
   }
 }

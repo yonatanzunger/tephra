@@ -20,6 +20,12 @@ export interface Typography {
   paragraphSpace: number
   /** Justified, with hyphenation — or ragged right. */
   justify: boolean
+  /** Code has its own face, size, leading, measure and inset. */
+  codeFace: string
+  codeSize: number
+  codeLeading: number
+  codeMeasure: number
+  codeIndent: number
 }
 
 export const defaultTypography: Typography = {
@@ -31,4 +37,9 @@ export const defaultTypography: Typography = {
   leading: 1.55,
   paragraphSpace: 0.5,
   justify: false,
+  codeFace: "'JetBrains Mono', ui-monospace, monospace",
+  codeSize: 0.85,
+  codeLeading: 1.45,
+  codeMeasure: 80,
+  codeIndent: 2,
 }

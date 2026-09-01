@@ -31,7 +31,19 @@ export const proseHighlight = HighlightStyle.define([
   { tag: tags.emphasis, fontStyle: 'italic' },
   { tag: tags.link, color: 'rgb(var(--accent))', textDecoration: 'none' },
   { tag: tags.url, color: 'rgb(var(--text-muted))' },
-  { tag: tags.monospace, fontFamily: 'var(--font-mono)', fontSize: '0.85em' },
+  // Face and size only: a highlight reaches characters, and the rest of what
+  // code needs — leading, an inset, a measure — belongs to the line (`code.ts`).
+  { tag: tags.monospace, fontFamily: 'var(--font-code)', fontSize: 'var(--code-size)' },
+  // **Restrained, from the theme's own colours.** Comments recede, strings and
+  // keywords take the accent at two strengths, and everything else is ink —
+  // which works on every theme including ones nobody has written yet, and does
+  // not turn a page of prose into an IDE. A fuller palette is six more colours
+  // every theme would have to answer for.
+  { tag: tags.comment, color: 'rgb(var(--text-muted))', fontStyle: 'italic' },
+  { tag: [tags.keyword, tags.controlKeyword, tags.moduleKeyword], color: 'rgb(var(--accent))', fontWeight: '600' },
+  { tag: [tags.string, tags.special(tags.string)], color: 'rgb(var(--accent) / .85)' },
+  { tag: [tags.number, tags.bool, tags.null], color: 'rgb(var(--text) / .75)' },
+  { tag: [tags.definition(tags.variableName), tags.function(tags.variableName)], fontWeight: '600' },
   { tag: tags.quote, color: 'rgb(var(--text-muted))', fontStyle: 'italic' },
 ])
 
@@ -75,6 +87,32 @@ export function tephraTheme(t: Typography): Extension {
     // they were typed rather than at the measure, because each source line is
     // its own block. Structure agrees with markdown; wrapping waits for the
     // rendered surface (M5).
+    // ── code ─────────────────────────────────────────────────────────────
+    //
+    // **A block reaches its own measure, past the prose column.** Code is
+    // written to eighty columns and wrapping it at a reading measure destroys
+    // the one thing its layout carries. `ch` here is a character of the CODE
+    // face, because that is the font on the line — which is what makes the
+    // number mean what a person setting it expects.
+    //
+    // Wider than the column rather than scrolling inside it: a line you cannot
+    // see is a line you will forget to read. Past this width it still wraps.
+    '.cm-line.tx-code': {
+      fontFamily: 'var(--font-code)',
+      fontSize: `${t.codeSize}em`,
+      lineHeight: `${t.codeLeading}`,
+      paddingLeft: `${t.codeIndent}ch`,
+      width: `${t.codeMeasure}ch`,
+      maxWidth: 'none',
+      // Never justified, whatever prose is doing: stretching the spaces in a
+      // line of code changes what it says it is.
+      textAlign: 'left',
+      hyphens: 'manual',
+    },
+    // The fence rows are apparatus rather than code — they say where the block
+    // begins, which the block's own shape says too.
+    '.cm-line.tx-fence': { color: 'rgb(var(--text-muted))' },
+
     // **The blank line IS the gap between paragraphs.** One quantity, because a
     // reader sees one space; it was the sum of a padding and a height, so
     // neither number meant anything on its own. It keeps a real height rather

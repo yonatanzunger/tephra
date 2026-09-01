@@ -414,6 +414,37 @@ export async function runVerify(request: string): Promise<void> {
       say('familyInUse', getComputedStyle(document.documentElement).getPropertyValue('--font-body').slice(0, 40))
     }
 
+    if (scene === 'code') {
+      // A fenced block is a place with its own typography, and its language is
+      // parsed — a `python` fence is Python, not one run of monospace.
+      await settle(1200)
+      const codeLines = [...document.querySelectorAll('.cm-line.tx-code')]
+      say('codeLines', codeLines.length)
+      say('fenceLines', document.querySelectorAll('.cm-line.tx-fence').length)
+
+      const body = codeLines.find(l => (l.textContent ?? '').includes('def solve'))
+      const prose = [...document.querySelectorAll('.cm-line')].find(l =>
+        (l.textContent ?? '').includes('Prose sits at'),
+      )
+      const faceOf = (el: Element | undefined): string =>
+        el === undefined ? '' : getComputedStyle(el).fontFamily
+      say('codeFace', faceOf(body))
+      say('proseFace', faceOf(prose))
+      // Its own measure: the code column is wider than the prose one.
+      say('codeWidth', body === undefined ? 0 : Math.round(body.getBoundingClientRect().width))
+      say('proseWidth', prose === undefined ? 0 : Math.round(prose.getBoundingClientRect().width))
+
+      // Highlighted: `def` is a keyword and carries the accent, and the comment
+      // does not — which is only possible if the fence was parsed as Python.
+      const coloured = [...document.querySelectorAll('.cm-line.tx-code span')]
+        .filter(sp => (sp.textContent ?? '').trim() !== '')
+        .map(sp => `${(sp.textContent ?? '').trim().slice(0, 8)}=${getComputedStyle(sp).color}`)
+      say('keywordColoured', coloured.some(c => c.startsWith('def=')))
+      say('distinctColours', new Set(coloured.map(c => c.split('=')[1])).size)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(400)
+    }
+
     if (scene === 'emphasis') {
       const sample = [
         'A **bold** claim and an *italic* aside.',
