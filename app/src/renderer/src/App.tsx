@@ -393,10 +393,10 @@ export function App(): React.JSX.Element {
         return
       }
 
-      if (id === 'bold' || id === 'italic') {
+      if (id === 'bold' || id === 'italic' || id === 'strike') {
         // The one command that needs nothing but a caret: with no selection it
         // opens the markers and waits inside them.
-        editorRef.current?.toggleEmphasis(id === 'bold' ? '**' : '*')
+        editorRef.current?.toggleEmphasis(id === 'bold' ? '**' : id === 'strike' ? '~~' : '*')
         return
       }
 

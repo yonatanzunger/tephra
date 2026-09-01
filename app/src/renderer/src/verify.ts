@@ -1584,7 +1584,7 @@ export async function runVerify(request: string): Promise<void> {
 
       say('selected', select('A longer argument, worth its own file because it has outgrown\nthe day it was written on.'))
       await settle(300)
-      say('menuItemFound', await window.tephra.clickMenu('Branch to Its Own File…'))
+      say('menuItemFound', await window.tephra.clickMenu('Branch Selection to Its Own File…'))
       await settle(400)
       const input = document.querySelector('.prompt input') as HTMLInputElement | null
       say('promptOpened', input !== null)

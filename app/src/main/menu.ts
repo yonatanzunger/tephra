@@ -5,10 +5,10 @@
 // why `app.setName` runs before this. Left alone, Electron calls the app
 // "Electron" in About, Hide and Quit.
 //
-// Two things live here that used to be checkboxes in the titlebar. The screen
-// is for the document; a setting toggled once in a while and then forgotten is
-// exactly what a menu is for, and leaving it on screen means seeing it every
-// day to serve a decision made twice a year.
+// Settings live in menus rather than on screen. The screen is for the document,
+// and a setting toggled once in a while and then forgotten is exactly what a
+// menu is for — putting it in the chrome means seeing it every day to serve a
+// decision made twice a year.
 //
 // NOTE: setting any application menu REPLACES Electron's default one, which is
 // where Cmd-Q, Cmd-C and the window roles come from. They are spelled out below
@@ -21,6 +21,7 @@ import {
   isEnabled,
   NO_SELECTION,
   type CommandGroup,
+  type RangeCommandId,
   type SelectionState,
 } from '../shared/commands.ts'
 import { verifyMode } from './verify-mode.ts'
@@ -52,8 +53,14 @@ function send(channel: string, value: unknown): void {
  * The range commands as menu items, built from `RANGE_COMMANDS` so the menu bar
  * and the context menu cannot drift apart — they are two renderings of one list.
  */
+/** One command by name, for a menu that wants it in a particular place. */
+function commandItem(id: RangeCommandId): MenuItemConstructorOptions[] {
+  return rangeItems().filter(item => item.id === id)
+}
+
 function rangeItems(group?: CommandGroup): MenuItemConstructorOptions[] {
   return RANGE_COMMANDS.filter(command => group === undefined || command.group === group).map(command => ({
+    id: command.id,
     label: command.label,
     ...(command.accelerator === '' ? {} : { accelerator: command.accelerator }),
     enabled: isEnabled(command, state.selection),
@@ -153,33 +160,18 @@ export function installMenu(next?: MenuActions): void {
       // are the renderer's, because choosing is a dialog.
       label: 'File',
       submenu: [
-        // **Grouped by what the act DOES to your notebook**, which is the only
-        // grouping a reader can predict: go somewhere, bring something in, put
-        // something out, close. Ordered within each group by how often it is
-        // reached. The arrangement was an accumulation until there were enough
-        // commands for it to matter (M3).
-        //
-        // GO SOMEWHERE — the notebook, or a document in it.
+        // **Making and unmaking documents**, then bringing them in, then
+        // putting them out. Reading order is the order somebody works in.
         {
-          // The one document that is not a file, under the name everybody uses
-          // for it. `Cmd+0` because it is the zeroth thing, and because every
-          // other digit is free for whatever comes later.
-          label: 'Notebook',
-          accelerator: 'CmdOrCtrl+0',
-          click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
+          label: 'New File',
+          accelerator: 'CmdOrCtrl+N',
+          enabled: false,
+          click: () => send(CHANNEL.menuCommand, 'newFile'),
         },
         {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
           click: () => actions.open(false),
-        },
-        { type: 'separator' },
-        // ANOTHER VIEW — a window is a view on a document (MC6), so New Window
-        // and Open in New Window belong together and not beside Open.
-        {
-          label: 'New Window',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => actions.newWindow(),
         },
         {
           label: 'Open in New Window…',
@@ -187,11 +179,27 @@ export function installMenu(next?: MenuActions): void {
           click: () => actions.open(true),
         },
         { type: 'separator' },
-        // BRING SOMETHING IN — the two ways to reach one act.
+        // **`Save a Copy`, not `Save As`.** Nothing here is ever unsaved — the
+        // write tiers and the WAL see to that — so "save it somewhere else"
+        // does not name an act this app has, and `Save As` would imply the
+        // original was in some sense not saved until you did. Making a second
+        // copy under a new name is the act, and it is what other applications
+        // call it when there is nothing to save.
+        {
+          label: 'Save a Copy…',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          enabled: false,
+          click: () => send(CHANNEL.menuCommand, 'duplicateFile'),
+        },
+        { label: 'Rename…', enabled: false, click: () => send(CHANNEL.menuCommand, 'renameFile') },
+        { label: 'Delete…', enabled: false, click: () => send(CHANNEL.menuCommand, 'deleteFile') },
+        { type: 'separator' },
+        ...commandItem('branch'),
+        { type: 'separator' },
         {
           // Enabled only when there is something to import, which is when the
           // focused window is showing a file from outside the notebook.
-          label: 'Import',
+          label: 'Import Current File',
           enabled: state.importable,
           click: () => actions.import(false),
         },
@@ -201,14 +209,15 @@ export function installMenu(next?: MenuActions): void {
           click: () => actions.import(true),
         },
         { type: 'separator' },
-        // PUT SOMETHING OUT.
+        ...commandItem('print'),
         {
+          // **`Cmd+P` prints the document, where every other program puts it.**
+          // For the stream that cannot mean "all of it" — all of it is twenty
+          // years — so it asks which days first.
           label: 'Print…',
           accelerator: 'CmdOrCtrl+P',
           click: () => send(CHANNEL.menuCommand, 'printDocument'),
         },
-        { type: 'separator' },
-        { role: 'close', label: 'Close Window' },
       ],
     },
     {
@@ -219,11 +228,10 @@ export function installMenu(next?: MenuActions): void {
         // standard role would undo a CodeMirror transaction, which is a
         // different and much smaller thing than undoing a Document change.
         //
-        // They must still be present. An Edit menu on macOS without Undo is a
-        // broken application, and the earlier version left them out to avoid
-        // the accelerator competing with a keydown listener in the renderer.
-        // Making the menu the ONLY path removes the competition instead: the
-        // listener is gone, and these items are how ⌘Z arrives.
+        // They must also be present: an Edit menu on macOS without Undo is a
+        // broken application. And the menu is the ONLY path — there is no
+        // keydown listener in the renderer competing for the accelerator, so
+        // these items are how ⌘Z arrives at all.
         { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send(CHANNEL.menuCommand, 'undo') },
         { label: 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', click: () => send(CHANNEL.menuCommand, 'redo') },
         { type: 'separator' },
@@ -241,17 +249,20 @@ export function installMenu(next?: MenuActions): void {
         },
         { role: 'selectAll' },
         { type: 'separator' },
-        // **Emphasis is editing**, so it lives here rather than under `Range`
-        // or in a Format menu of its own: it is the same kind of act as cut and
-        // paste, and it is the only thing in the command set that works from a
-        // bare caret. Built from `RANGE_COMMANDS` like every other command, so
-        // the context menu shows it too without a second list to maintain.
+        // **Emphasis is editing**, so it lives here: the same kind of act as
+        // cut and paste, and the only commands in the set that work from a bare
+        // caret. Built from `RANGE_COMMANDS` like every other command, so the
+        // context menu shows them without a second list to maintain.
         ...rangeItems('format'),
       ],
     },
     {
-      label: 'Range',
-      submenu: rangeItems('range'),
+      // Everything that puts something INTO the text: a bookmark, a subject, a
+      // link, a note in the margin. What they have in common is the result, not
+      // the selection they start from — the acts that make or print a FILE are
+      // in the File menu even though they start from a selection too.
+      label: 'Insert',
+      submenu: rangeItems('insert'),
     },
     {
       label: 'View',
@@ -270,7 +281,43 @@ export function installMenu(next?: MenuActions): void {
         { role: 'togglefullscreen' },
       ],
     },
-    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }] },
+    {
+      // **The system owns most of this menu, and should.** macOS adds Cycle
+      // Through Windows, the Move & Resize submenu — Fill, Center, the tiling
+      // commands — and an entry per open window to whichever menu is registered
+      // as the Window menu. Hand-rolling those would be worse versions of what
+      // the platform already does, and they would stop matching every other
+      // application on the machine.
+      //
+      // What is ours is the two ways to get a window in the first place.
+      label: 'Window',
+      role: 'windowMenu',
+      submenu: [
+        { label: 'New Window', accelerator: 'CmdOrCtrl+Shift+N', click: () => actions.newWindow() },
+        {
+          // The one document that is not a file, under the name everybody uses
+          // for it. `Cmd+0` because it is the zeroth thing.
+          label: 'Notebook',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
+        },
+        { type: 'separator' },
+        // **Minimize without ⌘M.** The role carries the system accelerator, and
+        // that key is a daily hazard for someone who does not want it: a
+        // mistyped ⌘N or ⌘, drops the window to the Dock mid-sentence. The item
+        // stays, because a Window menu without it is a broken macOS
+        // application; only the shortcut goes.
+        {
+          label: 'Minimize',
+          click: () => BrowserWindow.getFocusedWindow()?.minimize(),
+        },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'close', label: 'Close Window' },
+        { type: 'separator' },
+        { role: 'front' },
+      ],
+    },
   ]
 
   const menu = Menu.buildFromTemplate(template)

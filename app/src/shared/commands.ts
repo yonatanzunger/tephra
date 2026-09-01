@@ -12,7 +12,7 @@
 
 export type RangeCommandId =
   | 'bookmark' | 'tag' | 'untag' | 'link' | 'comment' | 'branch' | 'print'
-  | 'bold' | 'italic'
+  | 'bold' | 'italic' | 'strike' | 'image'
 
 /**
  * Which menu a command appears under.
@@ -23,7 +23,7 @@ export type RangeCommandId =
  * lists to keep in step — this splits only the rendering, and the context menu
  * goes on showing everything, because a selection is a selection.
  */
-export type CommandGroup = 'format' | 'range'
+export type CommandGroup = 'format' | 'insert' | 'file'
 
 /** What a command needs before it can do anything. */
 export type CommandNeeds =
@@ -61,16 +61,23 @@ export const RANGE_COMMANDS: readonly RangeCommand[] = [
   // they have not written yet.
   { id: 'bold', label: 'Bold', accelerator: 'CmdOrCtrl+B', needs: 'point', group: 'format', built: true },
   { id: 'italic', label: 'Italic', accelerator: 'CmdOrCtrl+I', needs: 'point', group: 'format', built: true },
-  { id: 'bookmark', label: 'Bookmark…', accelerator: 'CmdOrCtrl+D', needs: 'point', group: 'range', built: true },
-  { id: 'tag', label: 'Tag…', accelerator: 'CmdOrCtrl+T', needs: 'range', group: 'range', built: true },
-  { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', group: 'range', built: true },
+  { id: 'strike', label: 'Strikeout', accelerator: 'CmdOrCtrl+/', needs: 'point', group: 'format', built: true },
+  { id: 'bookmark', label: 'Bookmark…', accelerator: 'CmdOrCtrl+D', needs: 'point', group: 'insert', built: true },
+  { id: 'tag', label: 'Tag…', accelerator: 'CmdOrCtrl+T', needs: 'range', group: 'insert', built: true },
+  { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', group: 'insert', built: true },
   // ⌘K is where every editor puts "make this a link", and a reader who has
   // used one before will try it. Commenting is the rarer act and takes the
   // longer reach.
-  { id: 'link', label: 'Link…', accelerator: 'CmdOrCtrl+K', needs: 'range', group: 'range', built: true },
-  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+Alt+M', needs: 'range', group: 'range', built: true },
-  { id: 'branch', label: 'Branch to Its Own File…', accelerator: '', needs: 'range', group: 'range', built: true },
-  { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', group: 'range', built: true },
+  { id: 'link', label: 'Link…', accelerator: 'CmdOrCtrl+K', needs: 'range', group: 'insert', built: true },
+  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+Alt+M', needs: 'range', group: 'insert', built: true },
+  // It MAKES a document, which is what the File menu is about, and it belongs
+  // beside the other commands that make and unmake files.
+  { id: 'branch', label: 'Branch Selection to Its Own File…', accelerator: '', needs: 'range', group: 'file', built: true },
+  { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', group: 'file', built: true },
+  // **Not built, and the menu says so rather than lying** — image paste is R7,
+  // scheduled with retrieval in M4. A disabled item is a promise; an item that
+  // does nothing is a bug report.
+  { id: 'image', label: 'Image…', accelerator: '', needs: 'point', group: 'insert', built: false },
 ]
 
 /** What the renderer tells main about the caret, so menus can enable correctly. */

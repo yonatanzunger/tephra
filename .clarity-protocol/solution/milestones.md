@@ -412,10 +412,31 @@ after the list.
     built-in whose file is missing, so deleting one would delete it until the
     next launch and then quietly bring it back — a control that appears to work
     and does not. Duplicate it and edit the copy; the copy IS deletable.
-  - **The menus grouped by what an act does to your notebook** — go somewhere,
-    another view, bring something in, put something out, close — which is the
-    only grouping a reader can predict. It was an accumulation until MC6 gave
-    the File menu enough commands for the arrangement to matter.
+  - **The menu bar is File / Edit / Insert / View / Window**, grouped by what an
+    act does rather than by what it acts on. `Insert` holds everything that puts
+    something INTO the text — a bookmark, a subject, a link, a note in the
+    margin; the acts that make or print a FILE are in File, even though they
+    start from a selection too. Emphasis is in Edit, because it is the same kind
+    of act as cut and paste.
+
+    **Most of the Window menu is the system's, and should be.** macOS adds Cycle
+    Through Windows, the Move & Resize submenu and an entry per open window to
+    whichever menu is registered as the Window menu; hand-rolling those would be
+    worse versions of what the platform does, and they would stop matching every
+    other application on the machine. What is ours is the two ways to get a
+    window in the first place. Minimize keeps its item and loses ⌘M — a Window
+    menu without Minimize is a broken macOS application, but that key is a daily
+    hazard for someone who does not want it.
+
+    **Four items are present and disabled**: New File, Save a Copy, Rename and
+    Delete. They need a file lifecycle Tephra does not have yet, and a disabled
+    item is a promise where an item that does nothing is a bug report — the same
+    rule `built: false` already applies to commands. `Image…` is disabled for a
+    different reason: it is R7, scheduled with retrieval in M4.
+
+    **`Save a Copy`, not `Save As`.** Nothing here is ever unsaved, so "save it
+    somewhere else" does not name an act this app has, and `Save As` would imply
+    the original was in some sense not saved until you did it.
 **The `todo` kind was here, and went back to the backlog.** It was added as a
 cheap test of the four-artifacts shape — a kind ought to be *adding files* after
 MC5½ — and reading the record back, that framing was wrong twice.
