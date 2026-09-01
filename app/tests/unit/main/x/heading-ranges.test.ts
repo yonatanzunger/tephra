@@ -14,7 +14,7 @@ const DAY = '2026-03-01' as DateKey
 
 /** One day, as the segment sees it after reading a file. */
 function day(body: string): Segment {
-  return Segment.load(DAY, 'stream/2026/03/2026-03-01.md' as never, `---\ndate: ${DAY}\n---\n${body}`)
+  return Segment.load(DAY, 'notebook.stream/2026/03/2026-03-01.md' as never, `---\ndate: ${DAY}\n---\n${body}`)
 }
 
 /** Each heading as `name: the text it covers`. */

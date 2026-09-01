@@ -48,8 +48,8 @@ async function week(bodies) {
     const at = new Date(Date.parse(`${DAY}T12:00:00Z`) - back * 86_400_000)
     const key = at.toISOString().slice(0, 10)
     const [y, m] = key.split('-')
-    await mkdir(join(root, 'stream', y, m), { recursive: true })
-    await writeFile(join(root, 'stream', y, m, `${key}.md`), `---\ntephra: 1\ndate: ${key}\n---\n\n${bodies[back]}`)
+    await mkdir(join(root, 'notebook.stream', y, m), { recursive: true })
+    await writeFile(join(root, 'notebook.stream', y, m, `${key}.md`), `---\ntephra: 1\ndate: ${key}\n---\n\n${bodies[back]}`)
   }
   return root
 }
@@ -789,7 +789,7 @@ console.log('\n\u2014 code blocks \u2014')
   const day = DAY
   const [yy, mm] = day.split('-')
   await writeFile(
-    join(root, 'stream', yy, mm, `${day}.md`),
+    join(root, 'notebook.stream', yy, mm, `${day}.md`),
     `---\ntephra: 1\ndate: ${day}\nkind: stream\n---\n\n` +
       'Prose sits at the reading measure, which is sixty-two characters.\n\n' +
       '```python\ndef solve(grid, depth=0):\n    # memoised\n    return grid\n```\n',
@@ -829,7 +829,7 @@ console.log('\n\u2014 bullet lists \u2014')
   const day = DAY
   const [yy, mm] = day.split('-')
   await writeFile(
-    join(root, 'stream', yy, mm, `${day}.md`),
+    join(root, 'notebook.stream', yy, mm, `${day}.md`),
     `---\ntephra: 1\ndate: ${day}\nkind: stream\n---\n\n` +
       'Things to fix:\n\n' +
       '- A short one\n' +

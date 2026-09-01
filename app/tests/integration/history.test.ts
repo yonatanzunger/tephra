@@ -30,7 +30,7 @@ const dayText = (date: string, body: string): string =>
 
 async function history(t: TestContext) {
   const dir = await mkdtemp(join(tmpdir(), 'tephra-hist-'))
-  await mkdir(join(dir, 'stream', '2026', '08'), { recursive: true })
+  await mkdir(join(dir, 'notebook.stream', '2026', '08'), { recursive: true })
   await writeFile(join(dir, '.gitignore'), '.tephra/\n')
   const repo = await GitRepository.open(dir)
   t.after(() => rm(dir, { recursive: true, force: true }))

@@ -21,7 +21,7 @@
 // `Window` lesson, arriving through the other half of the same door.
 
 import type { Notebook } from '../../w/notebook.ts'
-import { kindOf, type RelPath } from '../../w/layout.ts'
+import { documentRoot, kindOf, STREAM_DIR, type RelPath } from '../../w/layout.ts'
 import { StreamDocument } from './kinds/stream.ts'
 import { MarkdownDocument } from './kinds/markdown.ts'
 import { FilesetDocument } from './kinds/fileset.ts'
@@ -168,31 +168,48 @@ export class Corpus {
    * have done nothing, which is the exact bug this layer exists to end (D54).
    */
   async list(kind?: DocumentKind): Promise<readonly DocumentId[]> {
-    const out: DocumentId[] = []
-    if (kind === undefined || kind === 'stream') out.push(STREAM_ID)
+    // **The stream's directory is always there** (`REQUIRED_DIRS`), so it is
+    // seeded rather than discovered — an empty notebook still has a stream.
+    const roots = new Set<string>([STREAM_DIR])
+    const files: string[] = []
+
     const seen = new Set<string>()
-    for (const rel of [...(await this.#notebook.list()), ...this.#openPaths()]) {
+    for (const rel of [...(await this.#notebook.list()), ...this.#openIds()]) {
       if (seen.has(rel)) continue
       seen.add(rel)
-      const found = kindOf(rel as RelPath)
-      if (found === null || found === 'stream') continue // stream files are the stream's
-      if (kind !== undefined && found !== kind) continue
-      out.push(rel as string as DocumentId)
+      // **A file inside a directory document is that document's, not one of
+      // its own** (D59). One rule for every such kind, where this used to test
+      // for `stream` by name — which would have needed a second clause the day
+      // a todo list existed, and then a third.
+      const root = documentRoot(rel as RelPath)
+      if (root !== null) {
+        roots.add(root)
+        continue
+      }
+      if (kindOf(rel as RelPath) !== null) files.push(rel)
     }
+
+    const out: DocumentId[] = []
+    const wanted = (rel: string): boolean => {
+      const found = kindOf(rel as RelPath)
+      return found !== null && (kind === undefined || found === kind)
+    }
+    for (const root of roots) if (wanted(root)) out.push(root as string as DocumentId)
+    for (const rel of files) if (wanted(rel)) out.push(rel as string as DocumentId)
     return out
   }
 
   /**
-   * The paths of documents held in memory, whose files may not be written yet.
+   * The ids of documents held in memory, whose files may not be written yet.
    *
    * Outside documents are excluded: they are open, but they are not IN the
    * corpus, and a list of what the notebook holds must not name a file that
-   * happens to be on screen (MC6).
+   * happens to be on screen (MC6). Directory documents are NOT excluded any
+   * more — `list` sorts a root from a file itself, so an open todo list with no
+   * files written yet is still something the notebook holds.
    */
-  #openPaths(): readonly string[] {
-    return [...this.#opened.keys()].filter(
-      id => id !== STREAM_ID && !isOutside(id),
-    ) as unknown as string[]
+  #openIds(): readonly string[] {
+    return [...this.#opened.keys()].filter(id => !isOutside(id)) as unknown as string[]
   }
 
   /**
@@ -202,6 +219,10 @@ export class Corpus {
    * the thing, and its file is where the document is kept.
    */
   async exists(id: DocumentId): Promise<boolean> {
+    // The stream is named here for a reason that is true rather than
+    // structural: its directory is in `REQUIRED_DIRS`, so it exists in an empty
+    // notebook as much as in a full one. Other directory documents (D59) exist
+    // when something has been written in them, which is the `has` below.
     if (id === STREAM_ID || this.#opened.has(id)) return true
     if (isOutside(id)) return outsideExists(id as string)
     return this.#notebook.has(id as string as RelPath)
@@ -356,7 +377,11 @@ export class Corpus {
   #openDocument(id: DocumentId): Promise<StoredDocument> {
     // A factory keyed by kind. Adding one is a line here rather than a place
     // somebody has to find (D54).
-    const kind = id === STREAM_ID ? 'stream' : kindOf(id as string as RelPath)
+    //
+    // **No special case for the stream.** Its id is the path of its directory
+    // and the directory's name declares its kind, so it is answered by the same
+    // call as everything else (D59).
+    const kind = kindOf(id as string as RelPath)
     if (kind === null) {
       return Promise.reject(new Error(`${id} is not a document`))
     }

@@ -13,6 +13,7 @@
 
 import { spawn, execFileSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile, readdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -78,7 +79,7 @@ const dayFiles = async () => {
       else if (entry.name.endsWith('.md')) found.push(path)
     }
   }
-  await walk(join(root, 'stream'))
+  await walk(join(root, 'notebook.stream'))
   return found.sort()
 }
 
@@ -107,7 +108,7 @@ check(
       ? 'the file tier HAD written it — the race was lost'
       : 'day file exists, without the text',
 )
-const log = await readFile(join(root, '.tephra', 'wal', 'stream.jsonl'), 'utf8').catch(() => '')
+const log = await readFile(join(root, '.tephra', 'wal', 'notebook-stream.jsonl'), 'utf8').catch(() => '')
 check('the write-ahead log holds the edit', log.includes('SURVIVES-THE-CRASH'))
 
 const recovered = await launch('summary')
@@ -147,8 +148,8 @@ const [y, m] = today.split('-')
 let big = ''
 let i = 0
 while (big.length <= 1_050_000) big += `Paragraph ${i++}. ${'word '.repeat(40)}\n\n`
-await mkdir(join(root, 'stream', y, m), { recursive: true })
-await writeFile(join(root, 'stream', y, m, `${today}.md`), `---\ndate: ${today}\n---\n\n${big}`)
+await mkdir(join(root, 'notebook.stream', y, m), { recursive: true })
+await writeFile(join(root, 'notebook.stream', y, m, `${today}.md`), `---\ndate: ${today}\n---\n\n${big}`)
 
 // TYPE into it. A day is only ever written when it is dirty — we never rewrite
 // a file we did not change (format-spec) — so an oversized day that arrived
@@ -178,7 +179,65 @@ check(
   'the machine-local directory was never committed',
   !git('ls-files').includes('.tephra/'),
 )
-check('but the notebook was', git('ls-files').includes('stream/'))
+check('but the notebook was', git('ls-files').includes('notebook.stream/'))
+
+// ── 5. a notebook from before the layout rule still opens ───────────────────
+//
+// The stream's directory carries its kind in its name (D59), and notebooks that
+// predate that rule call it `stream/`. `scripts/migrate-layout.mjs` renames it.
+// The claim under test is that the rename is ALL it is: the same days, the same
+// prose, the same notes, no error — because a person's twenty years is behind
+// this and a migration that half-works is worse than none.
+console.log('\n\u2014 a notebook migrated from the old layout \u2014')
+{
+  const old = await mkdtemp(join(tmpdir(), 'tephra-m1-old-'))
+  await mkdir(join(old, 'stream', '2026', '08'), { recursive: true })
+  await mkdir(join(old, 'notes'), { recursive: true })
+  await mkdir(join(old, '.tephra', 'wal'), { recursive: true })
+  await mkdir(join(old, '.tephra', 'index', 'stream', '2026'), { recursive: true })
+  await writeFile(
+    join(old, 'stream', '2026', '08', '2026-08-30.md'),
+    '---\ntephra: 1\ndate: 2026-08-30\n---\n\nWritten before the rename.\n',
+  )
+  await writeFile(
+    join(old, 'stream', '2026', '08', '2026-08-31.md'),
+    '---\ntephra: 1\ndate: 2026-08-31\n---\n\nAnd the day after.\n',
+  )
+  await writeFile(join(old, 'notes', 'offer.md'), '---\ntephra: 1\nkind: markdown\n---\nA note.\n')
+  await writeFile(join(old, '.tephra', 'index', 'stream', '2026', '08.json'), '{}')
+
+  const migrate = (dir, ...flags) =>
+    execFileSync(process.execPath, ['scripts/migrate-layout.mjs', dir, ...flags], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+    })
+
+  // **It refuses while the log has anything in it.** Those records name the
+  // stream by its old id, and they are by definition the edits that never
+  // reached a file — the one thing a rename could actually lose.
+  await writeFile(join(old, '.tephra', 'wal', 'stream.jsonl'), '{"doc":"stream","date":"2026-08-31"}\n')
+  let refused = ''
+  try {
+    migrate(old)
+  } catch (err) {
+    refused = String(err.stderr ?? '')
+  }
+  check('it refuses to run over an unreplayed write-ahead log', /write-ahead log is not empty/.test(refused), refused.split('\n')[0])
+
+  await writeFile(join(old, '.tephra', 'wal', 'stream.jsonl'), '')
+  migrate(old)
+  check('the stream directory is renamed', existsSync(join(old, 'notebook.stream', '2026', '08', '2026-08-31.md')))
+  check('and nothing is left at the old name', !existsSync(join(old, 'stream')))
+  check('the path-keyed index is cleared, since every key in it moved', !existsSync(join(old, '.tephra', 'index')))
+  check('running it twice is a no-op rather than an error', /Already migrated/.test(migrate(old)))
+
+  const r = report(await launch('migrated', { env: { TEPHRA_ROOT: old } }))
+  check('THE POINT: the migrated notebook opens on its most recent day', r.title === '31 Aug', JSON.stringify(r.title))
+  check('both days are still there', Array.isArray(r.days) && r.days.length === 2, JSON.stringify(r.days))
+  check('with the prose that was written in them', /Written before the rename/.test(String(r.prose)), String(r.prose))
+  check('and the notes beside them are untouched', r.notes === true)
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
 
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)

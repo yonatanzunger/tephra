@@ -15,11 +15,11 @@ import { GitRepository } from '../../src/main/w/git-repository.ts'
 import type { RelPath } from '../../src/main/w/layout.ts'
 
 const rel = (s: string): RelPath => s as RelPath
-const DAY = rel('stream/2026/08/2026-08-22.md')
+const DAY = rel('notebook.stream/2026/08/2026-08-22.md')
 
 async function scratch(t: TestContext): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), 'tephra-repo-'))
-  await mkdir(join(dir, 'stream', '2026', '08'), { recursive: true })
+  await mkdir(join(dir, 'notebook.stream', '2026', '08'), { recursive: true })
   await writeFile(join(dir, '.gitignore'), '.tephra/\n')
   t.after(() => rm(dir, { recursive: true, force: true }))
   return dir
@@ -128,12 +128,12 @@ test('the startup scan catches what changed while the app was closed', async t =
 
   // Edited by something else entirely, with Tephra not running.
   await put(dir, DAY, 'Edited in another program.\n')
-  await put(dir, 'stream/2026/08/2026-08-23.md', 'A day created by hand.\n')
+  await put(dir, 'notebook.stream/2026/08/2026-08-23.md', 'A day created by hand.\n')
 
   const oid = await repo.save('Changes made outside Tephra')
   assert.ok(oid !== null, 'the scan found them')
   assert.match((await repo.contentAt(oid, DAY)) ?? '', /another program/)
-  assert.match((await repo.contentAt(oid, rel('stream/2026/08/2026-08-23.md'))) ?? '', /by hand/)
+  assert.match((await repo.contentAt(oid, rel('notebook.stream/2026/08/2026-08-23.md'))) ?? '', /by hand/)
 
   assert.equal(await repo.save('again'), null, 'and nothing is left outstanding')
 })

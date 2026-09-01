@@ -40,12 +40,12 @@ const electron = './node_modules/.bin/electron'
  */
 const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
 const [YEAR, MONTH] = DAY.split('-')
-const dayPath = root => join(root, 'stream', YEAR, MONTH, `${DAY}.md`)
+const dayPath = root => join(root, 'notebook.stream', YEAR, MONTH, `${DAY}.md`)
 
 /** A fresh notebook holding one day, so scenes cannot contaminate each other. */
 async function notebook(body) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-m2-'))
-  await mkdir(join(root, 'stream', YEAR, MONTH), { recursive: true })
+  await mkdir(join(root, 'notebook.stream', YEAR, MONTH), { recursive: true })
   await writeFile(dayPath(root), `---\ndate: ${DAY}\n---\n\n${body}`)
   return root
 }
@@ -61,8 +61,8 @@ async function week(bodies) {
     const at = new Date(Date.parse(`${DAY}T12:00:00Z`) - back * 86_400_000)
     const key = at.toISOString().slice(0, 10)
     const [y, m] = key.split('-')
-    await mkdir(join(root, 'stream', y, m), { recursive: true })
-    await writeFile(join(root, 'stream', y, m, `${key}.md`), `---\ndate: ${key}\n---\n\n${bodies[back]}`)
+    await mkdir(join(root, 'notebook.stream', y, m), { recursive: true })
+    await writeFile(join(root, 'notebook.stream', y, m, `${key}.md`), `---\ndate: ${key}\n---\n\n${bodies[back]}`)
   }
   return root
 }

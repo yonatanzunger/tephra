@@ -23,10 +23,31 @@ the end of MT3.
 
 ---
 
-## MT1 — Directory documents, and the stream's migration
+## MT1 — Directory documents, and the stream's migration *(done)*
 
 **D59, and nothing user-visible changes.** That is the marker of a good first
 phase: it moves the spine onto its final footing and the app behaves identically.
+
+**Done**, and verified by `npm run m1`, which migrates a notebook built in the
+old layout and then opens it. What the phase actually taught:
+
+- **`STREAM_ID` was in the code twice under two names**, once in `shared/` for
+  the renderer and once as `STREAM_DIR` in `w/layout.ts` for main, and nothing
+  said they had to agree. They did agree, by luck. There is a test now.
+- **Three places knew the stream by name where they meant "belongs to a
+  directory document"** — the corpus's listing, the sidebar's directory
+  sections, and restore's document sweep. Each would have needed a second
+  clause for todo and a third for whatever came after. All three now ask
+  `documentRoot(rel) !== null`.
+- **The one special case that survives is honest**: `Corpus.exists` still names
+  the stream, because its directory is in `REQUIRED_DIRS` and therefore exists
+  in an empty notebook. That is a fact about the notebook rather than a fact
+  about ids, and it is stated as one.
+- **The write-ahead log was the only real hazard.** A WAL record names its
+  document by id, so unreplayed records would survive the rename addressed to a
+  document that no longer existed — and those are by definition the edits that
+  never reached a file. The migration refuses to run over a non-empty log and
+  says how to empty one.
 
 - `kindOf` answers for directories by extension, the way it already answers for
   files — one function over both, replacing the hardcoded `stream/` prefix test.

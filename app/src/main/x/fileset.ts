@@ -16,6 +16,7 @@
 import type { Corpus } from './documents/corpus.ts'
 import { asFileset, type FilesetDocument } from './documents/kinds/fileset.ts'
 import {
+  documentRoot,
   SECTIONS_DIR, STREAM_DIR, relativePath, relativeTo, sectionFile, type RelPath,
 } from '../w/layout.ts'
 import {
@@ -168,9 +169,15 @@ export class Filesets {
       if (cut <= 0) continue // a document at the root belongs to no directory
 
       const dir = rel.slice(0, cut)
-      // The stream is the Timeline, and `sections/` holds the sections
-      // themselves — a section listing the sections is the list twice.
-      if (dir === STREAM_DIR || dir === SECTIONS_DIR) continue
+      // **A file inside a directory document belongs to that document** (D59),
+      // so it is not a document of its own and has no business in a listing —
+      // the stream's five thousand days least of all. Asked generically rather
+      // than by name, because the next such kind is a todo list and the answer
+      // is the same one.
+      if (documentRoot(rel) !== null) continue
+      // `sections/` holds the sections themselves; a section listing the
+      // sections is the list twice.
+      if (dir === SECTIONS_DIR) continue
       if (nameOf(rel) === '_index') continue // the listing is not in its own list
 
       const held = byDirectory.get(dir)

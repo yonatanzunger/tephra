@@ -30,8 +30,8 @@ export async function verifyGit(): Promise<boolean> {
     await git.init({ fs, dir, defaultBranch: 'main' })
     all = say('init', fs.existsSync(join(dir, '.git', 'HEAD'))) && all
 
-    const rel = 'stream/2026/08/2026-08-22.md'
-    await mkdir(join(dir, 'stream', '2026', '08'), { recursive: true })
+    const rel = 'notebook.stream/2026/08/2026-08-22.md'
+    await mkdir(join(dir, 'notebook.stream', '2026', '08'), { recursive: true })
     await writeFile(join(dir, rel), 'A paragraph written from the main process.\n')
     await git.add({ fs, dir, filepath: rel })
     const oid = await git.commit({ fs, dir, author, message: 'from Electron' })

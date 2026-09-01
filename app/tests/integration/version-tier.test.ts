@@ -114,7 +114,7 @@ test('the committed file contains what was typed', async t => {
   const oid = log?.[0]?.id ?? ('' as VersionId)
   const info = await svc.info()
   const [y, m] = info.today.split('-')
-  const rel = `stream/${y}/${m}/${info.today}.md`
+  const rel = `notebook.stream/${y}/${m}/${info.today}.md`
   const inCommit = await svc.repository?.contentAt(oid, rel as never)
   assert.match(inCommit ?? '', /Durable prose\./)
   assert.match(await readFile(join(root, rel), 'utf8'), /Durable prose\./)
@@ -147,8 +147,8 @@ async function watched(t: TestContext, options = {}) {
   })
   const info = await svc.info()
   const [y, m] = info.today.split('-')
-  await mkdir(join(root, 'stream', y as string, m as string), { recursive: true })
-  return { svc, root, today: info.today, rel: `stream/${y}/${m}/${info.today}.md` }
+  await mkdir(join(root, 'notebook.stream', y as string, m as string), { recursive: true })
+  return { svc, root, today: info.today, rel: `notebook.stream/${y}/${m}/${info.today}.md` }
 }
 
 test('a file edited outside Tephra is committed while the app is still running', async t => {

@@ -146,7 +146,7 @@ export class NotebookWatcher {
 
       // Stat before reading, and for a reason found by a test: creating a
       // directory fires an event for it, and reading a directory fails. Folding
-      // that failure into "content is null" reported every new `stream/2026/03`
+      // that failure into "content is null" reported every new `notebook.stream/2026/03`
       // as a DELETED FILE — the loudest possible wrong answer, on the ordinary
       // path of writing the first note of a month.
       const info = await stat(abs).catch(() => null)

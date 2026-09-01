@@ -26,7 +26,7 @@ async function store(t: TestContext) {
 const entries = (of: Record<string, Spans>): Entries<Spans> =>
   new Map(Object.entries(of).map(([name, payload]) => [name, { stamp: { size: 1, mtime: 2 }, payload }]))
 
-const DIR = 'stream/2026/08' as RelPath
+const DIR = 'notebook.stream/2026/08' as RelPath
 
 test('what goes in comes out, keyed by file name within the directory', async t => {
   const { store: s } = await store(t)
@@ -46,14 +46,14 @@ test('THE POINT: a corrupt cache is empty, not an exception', async t => {
   // A cache that throws turns a disposable file into an application error. The
   // honest response to nonsense is to have nothing and rebuild.
   const { root, store: s } = await store(t)
-  await mkdir(join(root, '.tephra', 'index', 'stream', '2026'), { recursive: true })
+  await mkdir(join(root, '.tephra', 'index', 'notebook.stream', '2026'), { recursive: true })
   await writeFile(join(root, indexFile(DIR)), '{ this is not json')
   assert.equal((await s.read(DIR)).size, 0)
 })
 
 test('an entry missing its stamp is discarded, and its neighbours are not', async t => {
   const { root, store: s } = await store(t)
-  await mkdir(join(root, '.tephra', 'index', 'stream', '2026'), { recursive: true })
+  await mkdir(join(root, '.tephra', 'index', 'notebook.stream', '2026'), { recursive: true })
   await writeFile(
     join(root, indexFile(DIR)),
     JSON.stringify({ good: { stamp: { size: 1, mtime: 2 }, payload: ['x'] }, bad: { payload: ['y'] } }),
@@ -74,7 +74,7 @@ test('the store can list what it holds, and throw all of it away', async t => {
   const { notebook, store: s } = await store(t)
   await s.write(DIR, entries({ 'a.md': ['x'] }))
   await s.write('notes' as RelPath, entries({ 'b.md': ['y'] }))
-  assert.deepEqual([...(await s.directories())].sort(), ['notes', 'stream/2026/08'])
+  assert.deepEqual([...(await s.directories())].sort(), ['notebook.stream/2026/08', 'notes'])
 
   await s.clear()
   assert.deepEqual(await s.directories(), [])
@@ -84,9 +84,9 @@ test('the store can list what it holds, and throw all of it away', async t => {
 test('and the corpus is untouched by any of it', async t => {
   // The cache lives in `.tephra/`, which is machine-local and never committed.
   const { root, notebook, store: s } = await store(t)
-  await mkdir(join(root, 'stream', '2026', '08'), { recursive: true })
-  await writeFile(join(root, 'stream/2026/08/2026-08-24.md'), 'the real thing\n')
+  await mkdir(join(root, 'notebook.stream', '2026', '08'), { recursive: true })
+  await writeFile(join(root, 'notebook.stream/2026/08/2026-08-24.md'), 'the real thing\n')
   await s.write(DIR, entries({ '2026-08-24.md': ['x'] }))
   await s.clear()
-  assert.deepEqual(await notebook.list('stream' as RelPath), ['stream/2026/08/2026-08-24.md'])
+  assert.deepEqual(await notebook.list('notebook.stream' as RelPath), ['notebook.stream/2026/08/2026-08-24.md'])
 })

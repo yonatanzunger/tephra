@@ -24,6 +24,7 @@ import type { DocumentText } from '../../shared/document-api.ts'
 import type { Notebook } from './notebook.ts'
 import type { RelPath } from './layout.ts'
 import { walFile } from './layout.ts'
+import { STREAM_ID } from '../../shared/document-api.ts'
 
 export interface WalRecord {
   /**
@@ -59,8 +60,8 @@ export class Wal {
   readonly #notebook: Notebook
   readonly #file: RelPath
 
-  /** One log per document (format-spec). v1 has only the stream. */
-  constructor(notebook: Notebook, docId = 'stream') {
+  /** One log per document (format-spec). The stream is only the default. */
+  constructor(notebook: Notebook, docId: string = STREAM_ID) {
     this.#notebook = notebook
     this.#file = walFile(docId)
   }

@@ -359,12 +359,21 @@ export interface DocumentChange {
 export type DocumentKind = 'stream' | 'markdown' | 'todo' | 'fileset'
 
 /**
- * The stream's id, which is not a path because the stream is not a file (D8).
+ * The stream's id: the `.stream` directory at the notebook's root (D59).
  *
- * Shared because both processes name it now: main opens it by default, and the
- * renderer meets it in a list of documents beside the ones that ARE files.
+ * **A path after all, which is the point of the change.** It was plain `stream`
+ * and was described here as "not a path because the stream is not a file" —
+ * true, and it made this the one id that every path-shaped question had to
+ * special-case. A directory carries its kind in its name exactly as a file
+ * does, so `kindOf(STREAM_ID)` now answers `'stream'` and the special cases in
+ * `Corpus` are gone rather than duplicated for the second such document.
+ *
+ * Shared because both processes name it: main opens it by default, and the
+ * renderer meets it in a list of documents beside the ones that are single
+ * files. It is spelled out here rather than imported from `w/layout.ts`, which
+ * is main's; `STREAM_DIR` there is the same string and they must agree.
  */
-export const STREAM_ID = 'stream' as DocumentId
+export const STREAM_ID = 'notebook.stream' as DocumentId
 
 /**
  * A document from OUTSIDE the notebook, named by its absolute path.

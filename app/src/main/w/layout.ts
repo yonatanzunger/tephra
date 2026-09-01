@@ -11,7 +11,62 @@ export { slug }
 
 import { dirname, join, posix, relative, resolve, sep } from 'node:path'
 
-export const STREAM_DIR = 'stream'
+/**
+ * The kinds that are a DIRECTORY of dated files rather than one file (D59).
+ *
+ * A stream and a todo list are both `SegmentedDocument`s: many files, one
+ * document, days for segments. A markdown note and a fileset are one file each.
+ * That split is the whole of why a directory can carry a kind at all, and this
+ * is the list of the ones that do.
+ */
+export const DIRECTORY_KINDS = ['stream', 'todo'] as const
+
+/**
+ * The kind a DIRECTORY name declares, or null if it declares none.
+ *
+ * `notebook.stream` → `stream`; `main.todo` → `todo`; `notes` → null. The same
+ * rule a filename follows, which is the point of D59: a name says what a thing
+ * is, whether the thing is a file or a directory, and nothing is inferred from
+ * context (D3).
+ */
+export function directoryKind(name: string): DocumentKind | null {
+  const cut = name.lastIndexOf('.')
+  if (cut <= 0) return null
+  const found = name.slice(cut + 1)
+  return (DIRECTORY_KINDS as readonly string[]).includes(found) ? (found as DocumentKind) : null
+}
+
+/**
+ * The multi-file document a path belongs to, or null if it stands alone.
+ *
+ * **This is what replaced the hardcoded `stream/` prefix test.** Every file
+ * under `notebook.stream/` is the stream's rather than a document of its own,
+ * and every file under `main.todo/` will be that list's — one rule, applied by
+ * walking up until a name declares a kind.
+ *
+ * A path that IS a root answers with itself, which is what makes a directory
+ * document's id resolvable by the same call that resolves its files.
+ */
+export function documentRoot(rel: RelPath): RelPath | null {
+  const parts = rel.split('/')
+  for (let n = parts.length; n > 0; n--) {
+    if (directoryKind(parts[n - 1] as string) !== null) return parts.slice(0, n).join('/')
+  }
+  return null
+}
+
+/** Is this path a multi-file document's root, rather than something inside one? */
+export const isDirectoryDocument = (rel: RelPath): boolean => documentRoot(rel) === rel
+
+/**
+ * The stream's directory, and therefore the stream's id (D59).
+ *
+ * **`notebook.stream`, because the stream IS the notebook** — one stream per
+ * notebook, the way one `.todo` at the root is *the* todo list. It was plain
+ * `stream` until 2026-09-01; see `solution/link-roadmap.md`'s sibling
+ * `todo-roadmap.md`, MT1, and the migration in `scripts/migrate-layout.mjs`.
+ */
+export const STREAM_DIR = 'notebook.stream'
 
 /**
  * Authored configuration, inside the notebook rather than in `.tephra/` (D41).
@@ -66,21 +121,31 @@ export type RelPath = string
  * suffix, so the common case reads as an ordinary dated file — which matters
  * because a human browsing the directory is a supported way to use this.
  */
-export function dayFile(date: DateKey, part = 1): RelPath {
+export function dayFile(date: DateKey, part = 1, root: RelPath = STREAM_DIR): RelPath {
   const [year, month] = date.split('-') as [string, string, string]
   const suffix = part > 1 ? `.${part}` : ''
-  return `${STREAM_DIR}/${year}/${month}/${date}${suffix}.md`
+  return `${root}/${year}/${month}/${date}${suffix}.md`
 }
 
-/** The directory holding a date's files. */
-export function dayDir(date: DateKey): RelPath {
+/** The directory holding a date's files, in whichever document is asking. */
+export function dayDir(date: DateKey, root: RelPath = STREAM_DIR): RelPath {
   const [year, month] = date.split('-') as [string, string, string]
-  return `${STREAM_DIR}/${year}/${month}`
+  return `${root}/${year}/${month}`
 }
 
 export interface DayFileRef {
   readonly date: DateKey
   readonly part: number
+  /**
+   * Which directory document it belongs to.
+   *
+   * **A caller that means "a day of the STREAM" must check this**, because the
+   * grammar is shared: a todo list's days are laid out identically, under a
+   * different root. Before D59 there was only one root and the question could
+   * not be asked, which is exactly the kind of thing that becomes a silent bug
+   * the day a second one exists.
+   */
+  readonly root: RelPath
 }
 
 /**
@@ -91,7 +156,10 @@ export interface DayFileRef {
  * the stream. Type is declared by name *and* place, never inferred loosely (D3).
  */
 export function parseDayFile(rel: RelPath): DayFileRef | null {
-  const m = /^stream\/(\d{4})\/(\d{2})\/(\d{4}-\d{2}-\d{2})(?:\.(\d+))?\.md$/.exec(rel)
+  const root = documentRoot(rel)
+  if (root === null || root === rel) return null
+  const within = rel.slice(root.length + 1)
+  const m = /^(\d{4})\/(\d{2})\/(\d{4}-\d{2}-\d{2})(?:\.(\d+))?\.md$/.exec(within)
   if (!m) return null
   const [, year, month, dateText, partText] = m as unknown as [string, string, string, string, string | undefined]
   const date = asDateKey(dateText)
@@ -102,7 +170,7 @@ export function parseDayFile(rel: RelPath): DayFileRef | null {
   const part = partText === undefined ? 1 : Number(partText)
   if (!Number.isInteger(part) || part < 1) return null
   if (part === 1 && partText !== undefined) return null // ".1.md" is not how part 1 is spelled
-  return { date, part }
+  return { date, part, root }
 }
 
 /** A branched document or pinned list. */
@@ -162,17 +230,19 @@ export function isMachinery(rel: RelPath): boolean {
 /**
  * What kind of document a path holds (D3, D54).
  *
- * **The filename declares the type**, mirrored in frontmatter but not decided
- * by it: a name is what you have before you have opened anything, which is what
- * enumeration needs. Anything under `stream/` belongs to the one stream
- * document rather than being a document of its own.
+ * **The name declares the type**, mirrored in frontmatter but not decided by
+ * it: a name is what you have before you have opened anything, which is what
+ * enumeration needs. That is true of directories too (D59) — anything under
+ * `notebook.stream/` belongs to the one stream document rather than being a
+ * document of its own, and the directory's own name is what says so.
  *
  * Null means **not a document at all** — an attachment, a theme, machinery —
  * which is a different answer from "a document of some kind I do not know", and
  * the reason this returns a nullable rather than a fallback kind.
  */
 export function kindOf(rel: RelPath): DocumentKind | null {
-  if (rel === STREAM_DIR || rel.startsWith(`${STREAM_DIR}/`)) return 'stream'
+  const root = documentRoot(rel)
+  if (root !== null) return directoryKind(root.slice(root.lastIndexOf('/') + 1))
   if (rel.endsWith('.fileset.md')) return 'fileset'
   if (rel.endsWith('.todo.md')) return 'todo'
   if (rel.endsWith('.md')) return 'markdown'

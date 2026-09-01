@@ -24,7 +24,7 @@ const TAG = (s: string, text: string): string =>
 async function corpus(t: TestContext, days: readonly [string, string][], notes: Record<string, string> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-idx-'))
   for (const [date, body] of days) {
-    await mkdir(join(root, 'stream', date.slice(0, 4), date.slice(5, 7)), { recursive: true })
+    await mkdir(join(root, 'notebook.stream', date.slice(0, 4), date.slice(5, 7)), { recursive: true })
     await writeFile(join(root, dayFile(d(date))), `---\ntephra: 1\ndate: ${date}\n---\n${body}`)
   }
   for (const [name, body] of Object.entries(notes)) {
@@ -98,7 +98,7 @@ test('a file that changed behind the cache is rescanned', async t => {
 test('THE POINT: deleting the whole index costs time and nothing else', async t => {
   const { root, index, notebook } = await corpus(t, [['2026-03-01', `${TAG('Kept', 'x')}\n`]])
   await index.rebuild()
-  assert.equal(await notebook.has(indexFile('stream/2026/03' as RelPath)), true)
+  assert.equal(await notebook.has(indexFile('notebook.stream/2026/03' as RelPath)), true)
 
   await rm(join(root, '.tephra', 'index'), { recursive: true, force: true })
   await index.clear()
@@ -112,10 +112,10 @@ test('a rebuild writes the cache, and verify finds a cache that has drifted', as
 
   // Tamper with the cache directly, the way a corrupt or truncated file would.
   await writeFile(
-    join(root, indexFile('stream/2026/03' as RelPath)),
+    join(root, indexFile('notebook.stream/2026/03' as RelPath)),
     JSON.stringify({ '2026-03-01.md': { stamp: { size: 1, mtime: 2 }, payload: [] } }),
   )
-  assert.deepEqual(await index.verify(), ['stream/2026/03/2026-03-01.md'])
+  assert.deepEqual(await index.verify(), ['notebook.stream/2026/03/2026-03-01.md'])
 })
 
 test('a day whose file is gone leaves nothing behind', async t => {

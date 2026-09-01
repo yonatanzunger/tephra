@@ -55,7 +55,7 @@ test('an ordinary day is still exactly one file, byte for byte', async t => {
   await append(doc, 'A normal day.\n')
   await doc.flush()
 
-  const files = (await readdir(join(root, 'stream', '2026', '03'))).sort()
+  const files = (await readdir(join(root, 'notebook.stream', '2026', '03'))).sort()
   assert.deepEqual(files, ['2026-03-14.md'])
   const text = await readFile(join(root, dayFile(DAY)), 'utf8')
   assert.match(text, /^---\n/, 'frontmatter intact')
@@ -67,7 +67,7 @@ test('FORCED: a day past 1 MB writes several parts, and they are numbered', asyn
   await append(doc, oversizedDay())
   await doc.flush()
 
-  const files = await readdir(join(root, 'stream', '2026', '03'))
+  const files = await readdir(join(root, 'notebook.stream', '2026', '03'))
   assert.ok(files.length > 1, `expected a split, got ${JSON.stringify(files)}`)
   // Membership, not sort position: '2026-03-14.2.md' sorts BEFORE
   // '2026-03-14.md', because '2' precedes 'm'. Ordering parts by filename is a
@@ -125,14 +125,14 @@ test('a day that shrinks back removes the parts it no longer needs', async t => 
   const { root, doc } = await notebook(t)
   await append(doc, oversizedDay())
   await doc.flush()
-  assert.ok((await readdir(join(root, 'stream', '2026', '03'))).length > 1)
+  assert.ok((await readdir(join(root, 'notebook.stream', '2026', '03'))).length > 1)
 
   const w = await doc.read({ begin: doc.positionAt(DAY, 0), end: doc.positionAt(DAY, 0) })
   await w.edit([{ from: wp(0), to: wp(w.text.length), insert: pt('Almost nothing left.\n') }], 'operation')
   await doc.flush()
 
   assert.deepEqual(
-    (await readdir(join(root, 'stream', '2026', '03'))).sort(),
+    (await readdir(join(root, 'notebook.stream', '2026', '03'))).sort(),
     ['2026-03-14.md'],
     'the tail is gone, not orphaned',
   )

@@ -16,7 +16,7 @@ test('writes and reads back exactly', async () => {
 
 test('creates missing parent directories', async () => {
   const dir = await scratch()
-  const f = join(dir, 'stream/2026/03/2026-03-14.md')
+  const f = join(dir, 'notebook.stream/2026/03/2026-03-14.md')
   await writeAtomic(f, 'x')
   assert.ok(await exists(f))
 })

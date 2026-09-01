@@ -1,7 +1,8 @@
 // The notebook directory as W presents it to X: relative paths in, text out,
 // atomic writes, and a change feed for edits made outside the app.
 //
-// X asks for `stream/2026/03/2026-03-14.md`; W knows where the root is and what
+// X asks for `notebook.stream/2026/03/2026-03-14.md`; W knows where the root is
+// and what
 // atomic means. Nothing above this layer opens a file, and nothing below it
 // knows what a day is.
 

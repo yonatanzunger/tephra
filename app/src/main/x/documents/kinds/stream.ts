@@ -14,7 +14,7 @@ import type {
 import { addDays, compareDateKeys, dateKeyAt } from '../../../../shared/dates.ts'
 import { StalePositionError, offsetOf } from '../../../../shared/positions.ts'
 import type { Notebook } from '../../../w/notebook.ts'
-import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../../../w/layout.ts'
+import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath, STREAM_DIR } from '../../../w/layout.ts'
 import { createHash } from 'node:crypto'
 import { frontmatterFor, parseFile, renderFrontmatter } from '../../frontmatter.ts'
 import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody, type ScannedSpan } from '../../markers.ts'
@@ -94,9 +94,10 @@ const GROUPING_WINDOW_MS = 1_500
 const MAX_PARTS = 64
 
 import { SegmentedDocument } from '../segmented.ts'
+import { STREAM_ID } from '../../../../shared/document-api.ts'
 
 export class StreamDocument extends SegmentedDocument implements StreamDocumentApi {
-  readonly id = 'stream' as DocumentId
+  readonly id = STREAM_ID
   readonly meta: DocumentMeta & { readonly kind: 'stream' } = { kind: 'stream' }
 
   /** Read a day off disk, parts and all — the stream's answer to `load`. */
@@ -111,7 +112,7 @@ export class StreamDocument extends SegmentedDocument implements StreamDocumentA
   /** Every date with a file on disk, ascending. A scan; never on the hot path. */
   async dates(): Promise<readonly DateKey[]> {
     const found: DateKey[] = []
-    for (const rel of await this.notebook.list('stream')) {
+    for (const rel of await this.notebook.list(STREAM_DIR)) {
       const ref = parseDayFile(rel)
       if (ref !== null && ref.part === 1) found.push(ref.date)
     }

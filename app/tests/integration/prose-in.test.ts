@@ -20,7 +20,7 @@ const d = (s: string): DateKey => s as DateKey
 async function notebook(t: TestContext, days: readonly [string, string][]) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-range-'))
   for (const [date, body] of days) {
-    await mkdir(join(root, 'stream', date.slice(0, 4), date.slice(5, 7)), { recursive: true })
+    await mkdir(join(root, 'notebook.stream', date.slice(0, 4), date.slice(5, 7)), { recursive: true })
     await writeFile(join(root, dayFile(d(date))), `---\ntephra: 1\ndate: ${date}\n---\n${body}`)
   }
   const nb = await Notebook.open({ root, lock: false, watch: false })

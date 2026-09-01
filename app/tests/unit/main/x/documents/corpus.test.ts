@@ -20,7 +20,7 @@ const DAY = d('2026-03-01')
 
 async function corpus(t: TestContext, options: { cache?: number } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-corpus-'))
-  await mkdir(join(root, 'stream', '2026', '03'), { recursive: true })
+  await mkdir(join(root, 'notebook.stream', '2026', '03'), { recursive: true })
   await writeFile(join(root, dayFile(DAY)), `---\ntephra: 1\ndate: 2026-03-01\n---\nA day.\n`)
   await mkdir(join(root, 'notes'), { recursive: true })
   await writeFile(join(root, 'notes', 'a-note.md'), '---\ntephra: 1\n---\nA note.\n')

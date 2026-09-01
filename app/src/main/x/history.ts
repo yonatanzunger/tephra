@@ -16,7 +16,8 @@
 // object ids, and **the mapping between them stops here** — nothing above this
 // layer learns that a day is a file (`architecture.md`).
 
-import { dayFile, isMachinery, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../w/layout.ts'
+import {
+  documentRoot, dayFile, isMachinery, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../w/layout.ts'
 import { compareDateKeys } from '../../shared/dates.ts'
 import type { StreamDocument } from './documents/kinds/stream.ts'
 import type { RestoreReport } from '../../shared/history-api.ts'
@@ -151,7 +152,10 @@ export class StreamHistory {
   async #restoreDocuments(version: VersionId, corpus: Corpus): Promise<RestoreReport> {
     const then = new Map<DocumentId, DocumentText>()
     for (const rel of await this.#repo.filesAt(version)) {
-      if (isMachinery(rel) || kindOf(rel) === null || kindOf(rel) === 'stream') continue
+      // A file inside a directory document is restored WITH that document,
+      // not as one of its own (D59) — the stream's days go through
+      // `#restoreDays` above, and a todo list's will go the same way.
+      if (isMachinery(rel) || kindOf(rel) === null || documentRoot(rel) !== null) continue
       const text = await this.#repo.contentAt(version, rel)
       if (text !== null) then.set(rel as string as DocumentId, parseFile(text).body as DocumentText)
     }

@@ -16,7 +16,7 @@ const DAY = '2026-03-14' as DateKey
 function check(text: string, date: DateKey = DAY): ReturnType<typeof findAnomalies> {
   const parsed = parseFile(text)
   return findAnomalies({
-    file: 'stream/2026/03/2026-03-14.md',
+    file: 'notebook.stream/2026/03/2026-03-14.md',
     date,
     parsed,
     markers: scanMarkers(parsed.body),

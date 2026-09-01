@@ -36,13 +36,13 @@ function collector(nb: Notebook): { seen: FileChange[] } {
 
 test('an external edit is reported', async t => {
   const nb = await openScratch(t)
-  await mkdir(join(nb.root, 'stream/2026/03'), { recursive: true })
+  await mkdir(join(nb.root, 'notebook.stream/2026/03'), { recursive: true })
   await settle(200)
   const { seen } = collector(nb)
-  await writeFile(join(nb.root, 'stream/2026/03/2026-03-14.md'), 'hand-edited\n')
+  await writeFile(join(nb.root, 'notebook.stream/2026/03/2026-03-14.md'), 'hand-edited\n')
   await settle()
   assert.ok(
-    seen.some(c => c.rel === 'stream/2026/03/2026-03-14.md' && c.kind === 'changed'),
+    seen.some(c => c.rel === 'notebook.stream/2026/03/2026-03-14.md' && c.kind === 'changed'),
     `expected a change, saw ${JSON.stringify(seen)}`,
   )
 })
@@ -53,7 +53,7 @@ test('our own atomic write is NOT reported as an external change', async t => {
   const nb = await openScratch(t)
   await settle(200)
   const { seen } = collector(nb)
-  await nb.write('stream/2026/03/2026-03-14.md', 'written by us\n')
+  await nb.write('notebook.stream/2026/03/2026-03-14.md', 'written by us\n')
   await settle()
   assert.deepEqual(seen, [], `own write leaked: ${JSON.stringify(seen)}`)
 })
@@ -61,12 +61,12 @@ test('our own atomic write is NOT reported as an external change', async t => {
 test('creating a directory is not reported as a deleted file', async t => {
   // The bug this caught: a new month's directory fires an event, reading a
   // directory fails, and folding that into "content is null" reported
-  // `stream/2026` as DELETED — on the ordinary path of writing a month's first
+  // `notebook.stream/2026` as DELETED — on the ordinary path of writing a month's first
   // note. Loudest possible wrong answer, on the most common path.
   const nb = await openScratch(t)
   await settle(200)
   const { seen } = collector(nb)
-  await mkdir(join(nb.root, 'stream/2027/01'), { recursive: true })
+  await mkdir(join(nb.root, 'notebook.stream/2027/01'), { recursive: true })
   await settle()
   assert.deepEqual(seen.filter(c => c.kind === 'deleted'), [], JSON.stringify(seen))
 })
@@ -75,7 +75,7 @@ test('the watcher survives an atomic replace and still reports later edits', asy
   // T5: an fd-based watcher dies *without erroring* at exactly this point, and
   // the app keeps running while quietly ceasing to notice the disk.
   const nb = await openScratch(t)
-  const rel = 'stream/2026/03/2026-03-14.md'
+  const rel = 'notebook.stream/2026/03/2026-03-14.md'
   await nb.write(rel, 'first\n') // atomic replace, ours
   await settle()
 

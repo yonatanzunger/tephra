@@ -15,6 +15,7 @@ import { DocumentService } from '../../src/main/document-service.ts'
 import { dayFile, walFile } from '../../src/main/w/layout.ts'
 import type { WindowPosition, DateKey } from '../../src/shared/document-api.ts'
 import { pt } from '../support/text.ts'
+import { STREAM_ID } from '../../src/shared/document-api.ts'
 
 const wp = (n: number): WindowPosition => n as WindowPosition
 const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
@@ -58,7 +59,7 @@ test('typing reaches the log before it reaches the file', async t => {
   const today = await type(svc, 'Unsaved when the lights went out.\n')
   await wait(120)
 
-  const log = await readFile(join(root, walFile('stream')), 'utf8')
+  const log = await readFile(join(root, walFile(STREAM_ID)), 'utf8')
   assert.match(log, /Unsaved when the lights went out/, 'the edit is in the log')
   assert.equal(
     await readFile(join(root, dayFile(today)), 'utf8').catch(() => null),
@@ -109,7 +110,7 @@ test('a flush empties the log', async t => {
   await wait(120)
   await svc.flush()
 
-  assert.equal((await readFile(join(root, walFile('stream')), 'utf8')).trim(), '')
+  assert.equal((await readFile(join(root, walFile(STREAM_ID)), 'utf8')).trim(), '')
 })
 
 test('a torn last line does not cost the records before it', async t => {
@@ -121,8 +122,8 @@ test('a torn last line does not cost the records before it', async t => {
   const today = await type(first.svc, 'Good record.\n')
   await wait(120)
 
-  const log = await readFile(join(root, walFile('stream')), 'utf8')
-  await writeFile(join(root, walFile('stream')), `${log}{"date":"2026-08-2`)
+  const log = await readFile(join(root, walFile(STREAM_ID)), 'utf8')
+  await writeFile(join(root, walFile(STREAM_ID)), `${log}{"date":"2026-08-2`)
 
   const second = await session(t, root)
   assert.equal(await second.svc.recover(), 1)
@@ -145,11 +146,11 @@ test('the log says which document each record belongs to (D54)', async t => {
   const date = await type(svc, 'journalled\n')
   await wait(80) // past the log's batching window
 
-  const log = await readFile(join(root, walFile('stream')), 'utf8')
+  const log = await readFile(join(root, walFile(STREAM_ID)), 'utf8')
   const [first] = log
     .trim()
     .split('\n')
     .map(line => JSON.parse(line) as { doc: string; date: string })
-  assert.equal(first?.doc, 'stream', 'the record names its document')
+  assert.equal(first?.doc, STREAM_ID, 'the record names its document')
   assert.equal(first?.date, date, 'and its segment within it')
 })

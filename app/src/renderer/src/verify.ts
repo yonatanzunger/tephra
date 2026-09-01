@@ -463,6 +463,28 @@ export async function runVerify(request: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'migrated') {
+      // A notebook that was `stream/` yesterday and `notebook.stream/` today
+      // opens, finds its days, and shows the prose that was in them (MT1, D59).
+      // The migration is a directory rename; this is the claim that the rename
+      // is all it is.
+      let waited = 0
+      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      say('title', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('prose', (document.querySelector('.cm-content')?.textContent ?? '').slice(0, 60))
+      say('days', [...document.querySelectorAll('.nav-row')]
+        .map(r => (r.querySelector('.nav-label')?.textContent ?? ''))
+        .filter(t => /^\d/.test(t)))
+      say('notes', [...document.querySelectorAll('.nav-row')]
+        .some(r => (r.textContent ?? '').includes('offer')))
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'rowmenu') {
       // Open a row's menu and leave it open, so the shot at the end of the run
       // has something to show. This project has found the invisible selection,
