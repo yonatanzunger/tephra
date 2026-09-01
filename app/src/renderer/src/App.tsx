@@ -393,6 +393,13 @@ export function App(): React.JSX.Element {
         return
       }
 
+      if (id === 'bold' || id === 'italic') {
+        // The one command that needs nothing but a caret: with no selection it
+        // opens the markers and waits inside them.
+        editorRef.current?.toggleEmphasis(id === 'bold' ? '**' : '*')
+        return
+      }
+
       if (id === 'link') {
         const selection = editorRef.current?.selection()
         if (selection === undefined || selection.empty) return

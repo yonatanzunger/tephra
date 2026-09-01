@@ -65,6 +65,16 @@ export interface Binding {
   selection(): Selection
   /** Put text around the selection, as ordinary typing would. */
   wrapSelection(before: string, after: string): void
+  /**
+   * Put emphasis on, or take it off again.
+   *
+   * A TOGGLE rather than an insert, because the second press of ⌘B is a person
+   * changing their mind, and answering it with `****` is the kind of thing that
+   * reads as broken. With nothing selected it opens the pair and leaves the
+   * caret between them, which is how you type a bold word you have not written
+   * yet.
+   */
+  toggleEmphasis(marker: string): void
   /** Put the caret at a buffer position and centre it. */
   revealAt(at: number): void
   /** Mark the active row's places down the scroll track (D51). */
@@ -126,7 +136,13 @@ export function bindEditor(options: BindOptions): Binding {
         ...(behaviour.annotations
           ? [commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors))]
           : []),
-        keymap.of([...defaultKeymap, ...searchKeymap]),
+        // **⌘I is ours.** CodeMirror's default keymap binds it to
+        // `selectParentSyntax`, which in a prose document selects a paragraph
+        // out from under you — and it is the key every text application uses
+        // for italic. Dropped by KEY rather than by identity, so a future
+        // CodeMirror that rebinds the same key to something else is also
+        // caught, and the menu accelerator is the only thing on it.
+        keymap.of([...defaultKeymap.filter(binding => binding.key !== 'Mod-i'), ...searchKeymap]),
         typographyCompartment.of(tephraTheme(typography)),
         editorToWindow(docWindow, options.onError),
         viewportReporter(options.onViewport),
@@ -212,6 +228,50 @@ export function bindEditor(options: BindOptions): Binding {
           // begin with finding them again.
           range: EditorSelection.range(r.from + before.length, r.to + before.length),
         })),
+        { userEvent: 'input' },
+      )
+      view.focus()
+    },
+    toggleEmphasis(marker: string): void {
+      const n = marker.length
+      view.dispatch(
+        view.state.changeByRange(range => {
+          const doc = view.state.doc
+          const before = doc.sliceString(Math.max(0, range.from - n), range.from)
+          const after = doc.sliceString(range.to, Math.min(doc.length, range.to + n))
+          const inside = doc.sliceString(range.from, range.to)
+
+          // Already emphasised, with the markers OUTSIDE what is selected —
+          // which is the state the first press leaves behind, and therefore the
+          // one the second press has to recognise.
+          if (before === marker && after === marker) {
+            return {
+              changes: [
+                { from: range.from - n, to: range.from },
+                { from: range.to, to: range.to + n },
+              ],
+              range: EditorSelection.range(range.from - n, range.to - n),
+            }
+          }
+          // Already emphasised, with the markers INSIDE it — someone selected
+          // the whole thing, asterisks and all.
+          if (inside.length >= 2 * n && inside.startsWith(marker) && inside.endsWith(marker)) {
+            return {
+              changes: [
+                { from: range.from, to: range.from + n },
+                { from: range.to - n, to: range.to },
+              ],
+              range: EditorSelection.range(range.from, range.to - 2 * n),
+            }
+          }
+          return {
+            changes: [
+              { from: range.from, insert: marker },
+              { from: range.to, insert: marker },
+            ],
+            range: EditorSelection.range(range.from + n, range.to + n),
+          }
+        }),
         { userEvent: 'input' },
       )
       view.focus()

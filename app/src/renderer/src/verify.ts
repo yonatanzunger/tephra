@@ -329,8 +329,6 @@ export async function runVerify(request: string): Promise<void> {
       // caret for the second insert and got the SAME offset as the first,
       // producing "SECOND. FIRST. " — two inverse deletes over overlapping
       // ranges, a shape real typing never makes because the caret advances.
-      const live = (): EditorViewLike =>
-        live()
       view.dispatch({
         changes: { from: view.state.doc.length, insert: 'FIRST. ' },
         userEvent: 'input.type',
@@ -429,8 +427,6 @@ export async function runVerify(request: string): Promise<void> {
       view.dispatch({ changes: { from: view.state.doc.length, insert: sample }, userEvent: 'input.type' })
       await settle(600)
 
-      const live = (): EditorViewLike =>
-        live()
       const rendered = (): string =>
         [...document.querySelectorAll('.cm-line')].map(l => l.textContent ?? '').join('\n')
 
@@ -1283,6 +1279,42 @@ export async function runVerify(request: string): Promise<void> {
 
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
+    }
+
+    if (scene === 'emphasis') {
+      // ⌘B and ⌘I through the REAL menu items, which is where the accelerators
+      // live and therefore what a keystroke actually reaches.
+      const doc = (): string => live().state.doc.toString()
+      live().dispatch({ selection: { anchor: live().state.doc.length } })
+
+      // From a bare caret: the markers open and the caret waits between them.
+      say('bold1', await window.tephra.clickMenu('Bold'))
+      await settle(500)
+      say('afterBold', doc().slice(-8))
+      say('caretInside', live().state.selection.main.head === live().state.doc.length - 2)
+
+      // Typing lands between them, which is the whole point of the gesture.
+      live().dispatch({
+        changes: { from: live().state.selection.main.head, insert: 'loud' },
+        userEvent: 'input.type',
+      })
+      await settle(500)
+      say('typedInside', doc().slice(-12))
+
+      // Select the word and press it again: the markers come off, not on.
+      const at = doc().length
+      live().dispatch({ selection: { anchor: at - 6, head: at - 2 } })
+      await settle(200)
+      await window.tephra.clickMenu('Bold')
+      await settle(600)
+      say('afterUnbold', doc().slice(-8))
+
+      // And italic is the same gesture with one marker.
+      await window.tephra.clickMenu('Italic')
+      await settle(600)
+      say('afterItalic', doc().slice(-8))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(400)
     }
 
     if (scene === 'cmdclick') {

@@ -740,6 +740,42 @@ console.log('\n\u2014 \u2318-click \u2014')
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── 10. emphasis ────────────────────────────────────────────────────────────
+//
+// \u2318B and \u2318I, from the Edit menu where the accelerators live. Emphasis is the
+// only command in the set that works from a bare caret, and a toggle rather
+// than an insert \u2014 the second press is someone changing their mind.
+console.log('\n\u2014 emphasis \u2014')
+{
+  const root = await week(['Today, so far.\n', 'Yesterday.\n'])
+  const r = report(await launch('emphasis', root))
+
+  check('Bold is in the menu, on \u2318B', r.bold1 === true)
+  check(
+    'from a bare caret it opens the markers',
+    typeof r.afterBold === 'string' && r.afterBold.endsWith('****'),
+    JSON.stringify(r.afterBold),
+  )
+  check('and leaves the caret BETWEEN them', r.caretInside === true)
+  check(
+    'so what you type next is what gets emphasised',
+    typeof r.typedInside === 'string' && r.typedInside.endsWith('**loud**'),
+    JSON.stringify(r.typedInside),
+  )
+  check(
+    'pressing it again on the same words takes it off, rather than doubling it',
+    typeof r.afterUnbold === 'string' && r.afterUnbold.endsWith('loud') &&
+      !r.afterUnbold.includes('*'),
+    JSON.stringify(r.afterUnbold),
+  )
+  check(
+    'and italic is the same gesture with one marker',
+    typeof r.afterItalic === 'string' && r.afterItalic.endsWith('*loud*'),
+    JSON.stringify(r.afterItalic),
+  )
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

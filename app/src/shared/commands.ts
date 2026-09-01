@@ -10,7 +10,20 @@
 // Type-only plus data: no Electron, no DOM. Main builds native menus from it;
 // the renderer decides what is currently applicable.
 
-export type RangeCommandId = 'bookmark' | 'tag' | 'untag' | 'link' | 'comment' | 'branch' | 'print'
+export type RangeCommandId =
+  | 'bookmark' | 'tag' | 'untag' | 'link' | 'comment' | 'branch' | 'print'
+  | 'bold' | 'italic'
+
+/**
+ * Which menu a command appears under.
+ *
+ * **One list, still.** The menu bar wants emphasis under `Format`, where every
+ * text application puts it and where a reader will look; the rest are things
+ * done to a passage and belong under `Range`. Splitting the LIST would be two
+ * lists to keep in step — this splits only the rendering, and the context menu
+ * goes on showing everything, because a selection is a selection.
+ */
+export type CommandGroup = 'format' | 'range'
 
 /** What a command needs before it can do anything. */
 export type CommandNeeds =
@@ -25,6 +38,7 @@ export interface RangeCommand {
   /** Electron accelerator syntax; also what the menu displays. */
   readonly accelerator: string
   readonly needs: CommandNeeds
+  readonly group: CommandGroup
   /** Absent until the milestone that builds it — the menu says so rather than lying. */
   readonly built: boolean
 }
@@ -41,16 +55,22 @@ export interface RangeCommand {
  * say something about it, move it out, put it on paper.
  */
 export const RANGE_COMMANDS: readonly RangeCommand[] = [
-  { id: 'bookmark', label: 'Bookmark…', accelerator: 'CmdOrCtrl+D', needs: 'point', built: true },
-  { id: 'tag', label: 'Tag…', accelerator: 'CmdOrCtrl+T', needs: 'range', built: true },
-  { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', built: true },
+  // **Emphasis works from a caret as well as a selection**, which is what makes
+  // it `point` rather than `range`: with nothing selected it opens the markers
+  // and leaves the caret between them, which is how a person types a bold word
+  // they have not written yet.
+  { id: 'bold', label: 'Bold', accelerator: 'CmdOrCtrl+B', needs: 'point', group: 'format', built: true },
+  { id: 'italic', label: 'Italic', accelerator: 'CmdOrCtrl+I', needs: 'point', group: 'format', built: true },
+  { id: 'bookmark', label: 'Bookmark…', accelerator: 'CmdOrCtrl+D', needs: 'point', group: 'range', built: true },
+  { id: 'tag', label: 'Tag…', accelerator: 'CmdOrCtrl+T', needs: 'range', group: 'range', built: true },
+  { id: 'untag', label: 'Remove Tag…', accelerator: '', needs: 'range', group: 'range', built: true },
   // ⌘K is where every editor puts "make this a link", and a reader who has
   // used one before will try it. Commenting is the rarer act and takes the
   // longer reach.
-  { id: 'link', label: 'Link…', accelerator: 'CmdOrCtrl+K', needs: 'range', built: true },
-  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+Alt+M', needs: 'range', built: true },
-  { id: 'branch', label: 'Branch to Its Own File…', accelerator: '', needs: 'range', built: true },
-  { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', built: true },
+  { id: 'link', label: 'Link…', accelerator: 'CmdOrCtrl+K', needs: 'range', group: 'range', built: true },
+  { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+Alt+M', needs: 'range', group: 'range', built: true },
+  { id: 'branch', label: 'Branch to Its Own File…', accelerator: '', needs: 'range', group: 'range', built: true },
+  { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', group: 'range', built: true },
 ]
 
 /** What the renderer tells main about the caret, so menus can enable correctly. */

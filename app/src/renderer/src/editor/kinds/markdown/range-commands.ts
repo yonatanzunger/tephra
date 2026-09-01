@@ -160,6 +160,15 @@ export interface EditorHandle extends SurfaceHandle {
    */
   wrapSelection(before: string, after: string): void
   /**
+   * Put emphasis on, or take it off again.
+   *
+   * A toggle, because the second press of ⌘B is someone changing their mind and
+   * `****` reads as broken. From a bare caret it opens the pair and waits
+   * inside — which is how a person types a bold word they have not written yet,
+   * and why emphasis is the one command that needs no selection.
+   */
+  toggleEmphasis(marker: string): void
+  /**
    * Put the caret at a place in the buffer and show it.
    *
    * **Centred, not merely scrolled to.** A jump that lands on the last visible

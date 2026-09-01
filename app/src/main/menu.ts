@@ -20,6 +20,7 @@ import {
   RANGE_COMMANDS,
   isEnabled,
   NO_SELECTION,
+  type CommandGroup,
   type SelectionState,
 } from '../shared/commands.ts'
 import { verifyMode } from './verify-mode.ts'
@@ -51,8 +52,8 @@ function send(channel: string, value: unknown): void {
  * The range commands as menu items, built from `RANGE_COMMANDS` so the menu bar
  * and the context menu cannot drift apart — they are two renderings of one list.
  */
-function rangeItems(): MenuItemConstructorOptions[] {
-  return RANGE_COMMANDS.map(command => ({
+function rangeItems(group?: CommandGroup): MenuItemConstructorOptions[] {
+  return RANGE_COMMANDS.filter(command => group === undefined || command.group === group).map(command => ({
     label: command.label,
     ...(command.accelerator === '' ? {} : { accelerator: command.accelerator }),
     enabled: isEnabled(command, state.selection),
@@ -239,11 +240,18 @@ export function installMenu(next?: MenuActions): void {
           click: () => send(CHANNEL.menuCommand, 'import'),
         },
         { role: 'selectAll' },
+        { type: 'separator' },
+        // **Emphasis is editing**, so it lives here rather than under `Range`
+        // or in a Format menu of its own: it is the same kind of act as cut and
+        // paste, and it is the only thing in the command set that works from a
+        // bare caret. Built from `RANGE_COMMANDS` like every other command, so
+        // the context menu shows it too without a second list to maintain.
+        ...rangeItems('format'),
       ],
     },
     {
       label: 'Range',
-      submenu: rangeItems(),
+      submenu: rangeItems('range'),
     },
     {
       label: 'View',

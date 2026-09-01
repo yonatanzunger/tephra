@@ -280,6 +280,18 @@ after the list.
   Derived from what is on disk rather than written, and curated by the same
   `_index.fileset.md` rule as everywhere else: the order orders, it does not
   gate.
+- ✅ **Emphasis on ⌘B and ⌘I**, in the Edit menu — emphasis is editing, the same
+  kind of act as cut and paste. Built from `RANGE_COMMANDS` like every other
+  command, so the context menu shows it without a second list to maintain, and
+  it is the first command in the set that needs only a CARET: with nothing
+  selected it opens the markers and waits between them, which is how a person
+  types a bold word they have not written yet. A TOGGLE, because the second
+  press is somebody changing their mind and `****` reads as broken.
+
+  **⌘I had to be taken back from CodeMirror**, whose default keymap binds it to
+  `selectParentSyntax` — in a prose document, that selects a paragraph out from
+  under you. Dropped by KEY rather than by identity, so a future CodeMirror that
+  rebinds the same key to something else is caught too.
 - ✅ **`Now`**, the one row that is not a set of places: the end of the stream,
   where the next sentence goes. Not a fileset entry, because it is not a date —
   pinning today's date would be wrong tomorrow.
