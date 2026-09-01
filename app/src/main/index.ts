@@ -129,6 +129,17 @@ function createWindow(): BrowserWindow {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
+      // **Only in verification mode, and only because the window is hidden.**
+      // Chromium throttles timers in a page nobody is looking at — to once a
+      // second after ten seconds, and once a minute after five — which is
+      // right for an app and wrong for a harness: a scene is a chain of
+      // `setTimeout`s in a window that is deliberately never shown, so the
+      // throttle applies for its whole run and the longest scene is the first
+      // to reach its timeout under load.
+      //
+      // Left ON in ordinary use, where a backgrounded notebook has nothing to
+      // do and the battery is worth more than its timers.
+      backgroundThrottling: !verifyMode(),
     },
   })
 
@@ -151,10 +162,22 @@ function createWindow(): BrowserWindow {
     if (!verifyMode()) win.show()
     else if (verifyEnv('TEPHRA_SHOW') !== undefined) win.showInactive()
     const shot = verifyEnv('TEPHRA_SHOT')
+    // **Not while a scene is running**, and this raced for a long time before
+    // anybody noticed. There are two ways a screenshot gets taken: this timer,
+    // and the `VERIFY done` handler below. With a scene set, the timer wins
+    // whenever the scene takes longer than `TEPHRA_SHOT_DELAY` — which is
+    // 2.5 seconds by default — and `captureAndQuit` then quits the app in the
+    // MIDDLE of the scene. The scene stops mid-sentence with no error, which
+    // reads exactly like a hang and was chased as one.
+    //
+    // So the timer is for screenshotting a window with no scene driving it.
+    // When there is a scene, `done` is the moment to photograph and the only
+    // one that means anything.
+    //
     // One file per window: with a set of them, a single path means the last
     // one to finish overwrites the others, and a window that came up blank is
     // exactly the one you would never see (MC6).
-    if (shot !== undefined && shot !== '') {
+    if (shot !== undefined && shot !== '' && verifyEnv('TEPHRA_VERIFY') === undefined) {
       void captureAndQuit(win, windowsMade <= 1 ? shot : shot.replace(/\.png$/, `-${windowsMade}.png`))
     }
   })

@@ -43,6 +43,15 @@ old layout and then opens it. What the phase actually taught:
   the stream, because its directory is in `REQUIRED_DIRS` and therefore exists
   in an empty notebook. That is a fact about the notebook rather than a fact
   about ids, and it is stated as one.
+- **Two harness faults, found by chasing a failure that was not there.** A
+  scene set with `TEPHRA_SHOT` was quit by `captureAndQuit`'s timer in the
+  middle of its run — the scene stopped mid-sentence with no error, which reads
+  exactly like a hang and was chased as one. The timer now stands down when a
+  scene is running, because `VERIFY done` is the only moment worth
+  photographing then. And the verify window, being deliberately never shown,
+  had Chromium's hidden-page timer throttling applied to it for its whole run;
+  that is off in verification mode now, and left on in ordinary use where a
+  backgrounded notebook has nothing to do.
 - **The write-ahead log was the only real hazard.** A WAL record names its
   document by id, so unreplayed records would survive the rename addressed to a
   document that no longer existed — and those are by definition the edits that
