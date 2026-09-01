@@ -2020,16 +2020,31 @@ way.
 
 ## D55: TODO is a text kind; days are segments and the working set is carried forward
 
-**Date:** 2026-09-01
+**Date:** 2026-09-01, revised 2026-09-01
 **Status:** decided
 **Detail:** `solution/todo.md`, `goal/todo.md`
 
 **Decision.** `TodoDocument extends SegmentedDocument`, segments keyed by
-`DateKey`, one list per directory: `todo/<list>/YYYY/MM/YYYY-MM-DD.todo.md`,
-with `todo/main/` distinguished by name rather than by any special case in the
-layout. **Each day's file holds that day's working set in full**, written by the
-morning walk carrying items forward. All TODO lists share one format; there is
-no lightweight second form.
+`DateKey`, one list per directory: `<name>.todo/YYYY/MM/YYYY-MM-DD.md` (D59),
+with the `.todo` directory at the notebook root distinguished by position rather
+than by any special case in the layout. **Each day's file holds that day's
+working set in full**, carried forward automatically. All TODO lists share one
+format; there is no lightweight second form.
+
+**Revised the same day, on two points.**
+
+**The carry is automatic; the walk reviews it.** As first written, the morning
+walk carried items forward and thereby wrote the day's file. But `goal/todo.md`
+also holds the walk to be offered and never compelled, and those cannot both be
+true — a skipped walk leaves the day with no file, so an item added on Thursday
+goes either into a file dated Monday, making ctime a lie, or into a Thursday
+file holding one item, making the invariant a lie. So the first touch of a day
+materialises that day's set from the last day that has one, and the walk becomes
+a review pass over a file that already exists. **The carry protects the data;
+the walk protects the attention.** Era 2 could not tell them apart because
+copying the list by hand *was* reading it.
+
+**ctime and mtime are stored, not derived** (see below, and D56).
 
 **This reverses `file-documents.md`'s prediction and the M3 deferral built on
 it.** Todo was predicted to be "record-shaped: an edit is a field, and history
@@ -2041,14 +2056,20 @@ serves asks when one item's status last flipped — they ask what the *list*
 looked like. History is per day.
 
 **Copy-forward is era 2's morning ritual minus the retyping, and it pays for
-itself five times.** The walk's designated working set needs no representation
-because it *is* the day's file — persistence, standing across skipped days, and
-idempotence on a second walk all fall out. Scrubbing to a past day is opening a
-file. ctime and mtime stop being metadata someone must maintain and become facts
-about the corpus, so R15's "recorded from day one, never backfilled" is
-structurally guaranteed. Nothing evicts resolved items because nothing carries
-them. And every verb is a `replace()` on a body, so undo, the WAL, divergence
-and versioning arrive free.
+itself four times.** The designated working set needs no representation because
+it *is* the day's file — persistence, standing across skipped days, and
+idempotence on a second carry all fall out. Scrubbing to a past day is opening a
+file. Nothing evicts resolved items because nothing carries them. And every verb
+is a `replace()` on a body, so undo, the WAL, divergence and versioning arrive
+free.
+
+**It was originally credited with a fifth, and that one is withdrawn.** Copy-
+forward does make ctime and mtime facts about the corpus — first day a line
+appears, last day it changed — but at one-day resolution, and recovering either
+means finding the earliest or latest file holding an id, which is a corpus scan
+without an index. The timestamps are stored in the item instead (D56). The other
+four stand, so the choice is unaffected; the argument for it is one item
+shorter.
 
 **The cost is duplication and it is negligible**: a ~30-line working set copied
 daily is ~220k lines over twenty years, ~15 MB, against the stream's own
@@ -2060,15 +2081,38 @@ prediction, and the claim that the first non-text kind forks `Document`);
 
 ## D56: TODO items carry ids, which D20 already permits
 
-**Date:** 2026-09-01
+**Date:** 2026-09-01, revised 2026-09-01
 **Status:** decided
 **Detail:** `solution/todo.md` §3
 
 **Decision.** Every TODO item carries a machine-minted id, corpus-unique,
 written inline as a trailing marker and carried forward with the item. Identity
 is what makes copy-forward work at all — text-matching breaks the moment an item
-is reworded — and it is also what ctime/mtime derive from, what the link
-directory points back at, and what backlog resurfacing would track.
+is reworded — and it is also what the link directory points back at and what
+backlog resurfacing would track.
+
+**The marker carries the timestamps with the id**, because T3 stores them rather
+than deriving them from which files the item appears in:
+
+```
+- [ ] Call the surveyor #house DUE 2026-09-14 <!--tephra:item 7f3a1b2c 1756684800 1756771200-->
+```
+
+**Eight base-36 characters, minted against the index.** `unusedCommentId` mints
+four against one body, which is right there and wrong here: corpus uniqueness
+over a few thousand items collides at four characters with probability near one.
+Eight suffices alone, and checking the mint against the index — which holds
+every id anyway, since that is how `tephra:todo/<id>` resolves — makes it
+certain.
+
+**mtime is stamped by operations, never by typing.** Status, tag, due date and a
+committed row edit each rewrite the line as one `replace()`, so the stamp is
+free. Keeping it exact through free-text typing would mean main injecting a
+marker rewrite into the line the cursor is in, on every keystroke, against a
+renderer holding the buffer optimistically — the situation `DesyncError` exists
+for. The surface makes this moot rather than a compromise: **a row is edited by
+a gesture that commits once**, so a text change *is* an operation. Raw-text
+edits to the file escape the stamp and are picked up by the next carry.
 
 **This was drafted as a departure from the "no ids" rule and is not one.** The
 rule is D20's, and D20 forbids storing spans *beside* the text. An id in the
@@ -2089,6 +2133,14 @@ it is now.
 item's day-by-day history. `goal/todo.md` explicitly did not ask for per-item
 history and `file-documents.md` predicted it would have to be built; it is a
 by-product of the storage. Worth a view eventually, worth building nothing for.
+
+**One rule about hand-editing has to be stated rather than left emergent.** A
+line with no id marker is adopted on the next read and given one, which is how a
+hand-written item joins the list at all — so a line whose marker is lost to a
+retype or a paste silently becomes a *new* item, with today's ctime and no
+history. It is the one place in this app where hand-editing loses something
+invisibly. Accepted: refusing to adopt unmarked lines would break the flow the
+leniency exists for, and hand-editing is rare enough to earn no more than this.
 
 **The hazard is sequencing, not principle.** Ids are cheap from day one and
 expensive to retrofit onto a year of carried-forward lines — R15's class.
@@ -2116,9 +2168,21 @@ pattern. Building it TODO-only is the same work aimed at less.
 **Its sibling is search, not the TODO list**: search finds text you remember
 writing, this finds documents you remember opening. Hence R10a's placement.
 
-**It is separable and should probably ship first.** It needs no item ids, no
-walk, and no surface beyond a list — the one piece of this design that pays for
-itself on its own.
+**It is separable, and it is scheduled after MT3** *(settled 2026-09-01; this
+first read "should probably ship first")*. Separable is right: it needs no item
+ids, no walk, and nothing from the TODO storage. But "ship first" was argued
+from two premises that turned out to be about M4 rather than about MT — that it
+is the read-only fork of D9's filtered view, and that it de-risks search. Both
+hold; neither says anything about the TODO list. **The two share exactly one
+piece of code** — the link scanner, which MT3 delivers because its rows need it
+(D61) — so nothing structural drives the order, and it goes on urgency.
+`solution/link-roadmap.md`.
+
+**And "no surface beyond a list" was understated.** Nothing scans links today;
+`TypedSpan` has no link variant and `shared/fileset.ts` parses links only in
+list-item position. It is a scanner, an index payload, and a pane that makes a
+window's location *a document or a query* — the last of which is M4's spine and
+the reason this is worth building early.
 
 ## D58: The TODO promotion gate is met by the historical record, not by a stand-in failure
 
@@ -2146,3 +2210,105 @@ that was never exercised has not returned a negative result** — it has returne
 nothing, and treating silence as evidence would have deferred the work
 indefinitely for no reason. This is the instruments discipline in `notes.md`
 applied to a process control rather than to a measurement.
+
+## D59: A multi-file document is a directory named by its kind
+
+**Date:** 2026-09-01
+**Status:** decided
+**Detail:** `solution/todo.md` §6
+
+**Decision.** A document made of many files is a **directory whose name carries
+its kind as an extension**, exactly as a single-file document's name does:
+`notebook.stream/`, `main.todo/`. Day files inside lose their own extension,
+because the directory carries it — `notebook.stream/2026/08/2026-08-31.md`. A
+`DocumentId` for such a document is its directory path.
+
+**This turns an existing special case into a rule rather than adding one.**
+`kindOf` already answers `'stream'` for anything under `stream/`, so the
+containing directory already decides a file's kind; what it lacked was a way to
+say so for a second directory. With the suffix, `kindOf` is one function over
+files and directories both, and `STREAM_ID` stops being a magic string meaning
+"the one document whose id is not a file path" — it becomes "the `.stream`
+directory at the root". The distinguished TODO list then falls out of T1 instead
+of being named: the `.todo` directory at the notebook root is *the* list, and
+two at the root is an anomaly, which this app already has a place to report.
+
+**The stream migrates, and the pre-migration restore seam is accepted.**
+`STREAM_DIR` has ten uses, all behind the constant, so the code is a small
+change. The consequence is not: the notebook is git-versioned and
+`StreamHistory` reads past versions *by path*, so versions committed before the
+rename are unreachable through Tephra's own restore. Teaching the two history
+call sites both names would close the seam and is deliberately not being done —
+there is nothing critical behind it, and a permanent compatibility branch is a
+worse thing to carry than a dated paragraph. **Versions before the migration are
+readable through git and not through restore.**
+
+## D60: The link directory indexes the corpus as it stands, and groups by a canonical form it never stores alone
+
+**Date:** 2026-09-01
+**Status:** decided
+**Detail:** `solution/link-roadmap.md`, R10a
+
+**Decision.** The link index is a cache of a scan of the corpus **as it stands**
+— D52's rule, unweakened. A link whose text no longer appears in any file leaves
+the directory. Rows are grouped by a **canonical form**, produced by
+`canonicalizeLink()`; what the index *stores* is the raw target as written, and
+the canonical form is a derived grouping key.
+
+**The retention narrows, and it turns out to narrow almost nothing.** R10a asks
+that links from completed and abandoned work be kept — "which is most of the
+value: the document you want is usually attached to something you already
+finished." An index that accumulated would deliver that, and would make itself a
+source of truth: deleting `.tephra/index` would then lose every link whose line
+is gone, which is precisely what D52 forbids. **The corpus's own shape delivers
+the requirement instead.** A TODO item is never destroyed, only restatused (T2),
+and past day files keep every line that ever stood in them, so a link attached
+to work finished last March is still in the corpus and still in the directory.
+What falls out is only a link whose text was genuinely deleted — and git still
+has that.
+
+**The canonical form is a grouping key, not the datum, and this is the
+load-bearing half.** Canonicalization is expected to change repeatedly — which
+query parameters are noise, whether a fragment distinguishes a page, how two
+spellings of one document relate. Every change invalidates every existing key.
+If the index stores the raw target, that is a rebuild, which D52 makes free. If
+it stores only the canonical form, it is a reindex of the corpus to recover
+information that was thrown away. Same discipline as D47's keeping the original
+bytes on import rather than the conversion: **the derived thing is never allowed
+to be the only thing.**
+
+**`canonicalizeLink` is isolated and independently testable on purpose.** It is
+its own module with its own tests, pure `(target) => CanonicalLink` to begin
+with, doing no more than stripping known tracking parameters and fragments and
+resolving corpus-relative paths to one corpus path. It is expected to grow, and
+to take the existing index as an input when it does; keeping it behind one seam
+is what makes that a two-call-site change rather than a redesign.
+
+## D61: One link scanner, complete and unopinionated; what counts as a link is a separate predicate
+
+**Date:** 2026-09-01
+**Status:** decided
+**Detail:** `solution/link-roadmap.md`
+
+**Decision.** `shared/links.ts` finds every markdown link in a body — both legal
+spellings of a destination — and classifies each through `referenceOf`. It has
+**no opinion about which links matter.** A separate `indexable(reference)`
+predicate decides what enters the directory: URLs, and files inside or outside
+the corpus. Not `tephra:` navigation references, which the sidebar already
+serves and which would bury the documents under them. Not images: an embedded
+picture is not a document you were reading.
+
+**The split is what makes the module reusable rather than a bundle.** The TODO
+list's rows need to find links in an item's text (MT3) and the editor needs to
+decorate them; neither should inherit the directory's policy about what is
+interesting. And the policy is one function, so changing it is changing that
+function and rebuilding a cache — which D52 makes free.
+
+**There are two link parsers today and they already disagree.** `ITEM` in
+`shared/fileset.ts` handles both spellings, including `(<http://a b>)`; `LINK` in
+`renderer/src/editor/kinds/markdown/widgets.ts` is `\(([^)\s]+)\)` and cannot
+match an angle-bracket destination. `App.tsx`'s Insert Link writes exactly that
+form, via `destination()`, whenever the URL contains a space — **so inserting a
+link with a space in it produces something the app's own renderer will not
+render as a link.** One scanner with three consumers retires the disagreement
+along with the bug, and the bug is what the scanner's first test should be.

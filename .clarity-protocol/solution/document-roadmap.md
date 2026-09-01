@@ -533,3 +533,21 @@ the audit is kept rather than done once.
   (D54's open question).
 - **Per-document edit queues.** One serial queue satisfies the ordering rule
   conservatively; the refinement waits for a measurement.
+- **Bounding the methods that walk every segment.** Five of them do —
+  `spans()`, `comments()`, `resolveAnchor`, `removeAnchor` and `#rewriteThread`
+  are each `for (const date of await this.keys()) { await this.segment(date) }`
+  — so each loads the document's whole history into memory and keeps it there.
+  `comments()` is on the renderer's path, since the comment rail asks for them.
+
+  **Noticed while designing the TODO kind (D55), and it is the stream's problem
+  more than the new kind's**: a todo list and the stream accumulate day files at
+  about the same rate, and the stream's are far larger. This is D8's measured
+  scale arriving through a door nobody was watching, and `solution/todo.md`
+  §2's "inherits everything else" is where the cost hides.
+
+  The shape of the fix is known — a recent-window default on the five, with
+  corpus-wide questions going to the index, which is what `spans()`'s own
+  comment already says they should do — but it is a change to the spine and
+  wants its own decision rather than being smuggled in under a kind. **Deferred
+  until it is measured**, not because it is doubtful but because the right
+  window is a number nobody has evidence for yet.

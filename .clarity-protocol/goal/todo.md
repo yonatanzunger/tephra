@@ -28,6 +28,8 @@ Everything the user does with a TODO list falls into three motions, and they are
 
 **These two are coupled, and the coupling is load-bearing.** The cap works by degrading visibility. The success criterion below forbids ever forgetting an item that is on the list. Those directly conflict — unless the daily walk is what guarantees the whole list still gets seen. **The walk is what makes the cap safe.** Neither is optional if the other ships.
 
+**But the walk must not also be what keeps the list intact.** It is offered and never compelled (T11), and a list whose *survival* depended on an optional habit would be a list that came apart the first week away from the desk. So the two jobs separate cleanly: **carrying the list forward is automatic and protects the data; walking it is offered and protects the attention.** Skipping the walk costs the day's grooming and nothing else — the list is still whole, still today's, and still there tomorrow.
+
 ## What an item is
 
 Text, which may contain links. A status. An optional due date. A creation time and a last-modified time. Zero or more tags.
@@ -54,11 +56,13 @@ Order is creation order, oldest first, because that is what the paper log did an
 
 ### The morning walk
 
-**The one ritual, and the thing that makes the rest safe.** Opening Tephra on a new day offers the walk — offers, not compels; it is a prominent affordance, not a modal, and skipping it costs nothing but the day's grooming.
+**The one ritual, and the thing that makes the cap safe.** The day's list is already there when you arrive: the first touch of a new day carries yesterday's live items forward without being asked. What the walk adds is not the list — it is that you have *looked* at all of it.
 
-The walk presents every live item in order, one at a time or in a tight column, and asks nothing harder than *still?* Everything defaults to carried forward, so a walk where nothing has changed costs one gesture. What changes, changes here: status, backlog, cancel, a nudge to the due date.
+Opening Tephra on a new day offers the walk — offers, not compels; it is a prominent affordance, not a modal, and skipping it costs nothing but the day's grooming.
 
-**Two things happen at the end.** The list you just walked *is* today's working view — which is era 2's copy-forward, minus the copying, and it is why nothing on the list can go unseen no matter what the overflow rule does. And if you are over the line, it says so: *you are carrying 41; the page holds 28.* That is the only moment the cap speaks, because it is the only moment you have the context to act on it.
+The walk presents every live item in order, one at a time or in a tight column, and asks nothing harder than *still?* Everything defaults to unchanged, so a walk where nothing has moved costs one gesture. What changes, changes here: status, backlog, cancel, a nudge to the due date.
+
+**At the end, if you are over the line, it says so:** *you are carrying 41; the page holds 28.* That is the only moment the cap speaks, because it is the only moment you have the context to act on it — you have just finished looking at all forty-one.
 
 **Backlogged items are not in the walk**, or the walk would grow without bound. They come back when their tag does: touch an item tagged `house`, and tomorrow's walk offers the backlogged `house` items once. *(Provisional — see Q3a.)*
 
@@ -90,7 +94,7 @@ Links from cancelled and completed items stay. That is most of the point: the do
 
 ### What is invented here rather than derived
 
-Three things above go past the evidence and should be treated as proposals: **the walk's output being the working view** (it is what makes the cap safe, but era 2 never quite worked this way — it copied a list rather than designating one); **the due-soon band rather than a separate urgency mode**; and **backlog resurfacing on tag activity**, which is Q3a's most promising candidate and nothing more.
+Three things above go past the evidence and should be treated as proposals: **splitting the carry from the walk** (era 2 did both at once, by hand, every morning — copying the list *was* reading it; making the copy happen whether or not you look is a change to the ritual rather than a restatement of it); **the due-soon band rather than a separate urgency mode**; and **backlog resurfacing on tag activity**, which is Q3a's most promising candidate and nothing more.
 
 ## The flows, and what they force
 
@@ -99,11 +103,11 @@ Three things above go past the evidence and should be treated as proposals: **th
 **1. Capture from elsewhere.** Mid-sentence in the stream, from a quick-add box, or from the phone's share sheet. It should feel like the thought left your head and went somewhere safe, with no context switch and nothing to dismiss.
 **Forces:** create-an-item from a single string, callable from outside the TODO surface, with no other required argument — and the tag/date parse shared between renderer and main, as `shared/fileset.ts` and `shared/prose.ts` already are, so the assisted and typed paths cannot disagree.
 
-**2. Working the list.** Read, check off, retag, edit a line, add. Many times a day. It should feel like a page you know your way around: order never shifts under you, checking off is one keystroke and leaves a visible mark.
-**Forces:** cheap single-item status mutation; stable item identity for the length of a session; ordering by ctime rather than by anything derived.
+**2. Working the list.** Read, check off, retag, edit a line, add. Many times a day. It should feel like a page you know your way around: order never shifts under you, checking off is one keystroke and leaves a visible mark. **Editing a row is one gesture that commits once** — text, tags and due date change together and are saved together — rather than the row being a live text field that writes on every keystroke.
+**Forces:** cheap single-item status mutation; stable item identity for the length of a session; ordering by ctime rather than by anything derived. The commit-once row edit is load-bearing for more than it looks: it is what makes every write to an item a single edit, which is in turn what lets mtime be stamped exactly without the app writing into text somebody is in the middle of typing.
 
-**3. The morning walk.** Offered on the first open of a day. Fast, rhythmic, defaults to carry, ends with a count.
-**Forces:** the most, and this is the flow to design against. "The day's working set" is a real persisted thing, distinct from "all live items," and it survives closing the app. There is a verb for designating it. Skipping days must be handled — the last walk's set stands until the next walk, however long that is — and walking twice in a day must be idempotent.
+**3. The morning walk.** Offered on the first open of a day. Fast, rhythmic, defaults to unchanged, ends with a count.
+**Forces:** less than it did when it also had to produce the list. "The day's working set" is a real persisted thing, distinct from "all live items," and it survives closing the app — but it is materialised by the day's first touch, not by the walk. Skipping days must be handled: opening on Thursday having last opened on Monday produces Thursday's set from Monday's, once. Walking twice in a day is idempotent for free, because the walk writes only what you change.
 
 **4. Pivot by tag.** Pick from a short list; see live items and recently resolved ones under it.
 **Forces:** the index answers *which tags have live items* and *items by tag* without loading the whole corpus. T6 exists for this and for completion in flow 1.
@@ -120,8 +124,8 @@ Three things above go past the evidence and should be treated as proposals: **th
 **8. Putting something down.** Backlogging an item should feel like relief, not like abandonment — which requires believing it will come back.
 **Forces:** whatever Q3a settles on. If it is resurfacing on tag activity, the index must also track *tag recency*, and the walk must have a slot for offering items it did not otherwise carry.
 
-**9. Editing the file by hand.** Rare, and it must simply work.
-**Forces:** lenient parse, precise serialize, untouched lines round-tripped byte-for-byte — the discipline `notes.md` already carries, applied to a format that now has three kinds of inline marker in it.
+**9. Editing the file by hand.** Rare — rare enough that it earns no design effort beyond not being broken — and it must simply work.
+**Forces:** lenient parse, precise serialize, untouched lines round-tripped byte-for-byte — the discipline `notes.md` already carries, applied to a format that now has three kinds of inline marker in it. **One rule has to be stated rather than left emergent:** a line with no id marker is adopted on the next read and given one, which is how a hand-written item joins the list at all — and therefore a line whose marker is lost to a retype or a paste silently becomes a *new* item, with today's ctime and no history behind it. That is the one place in this app where hand-editing can lose something invisibly. It is accepted, because the alternative is refusing to adopt unmarked lines, which breaks the flow this requirement exists for.
 
 ## Requirements
 
@@ -129,7 +133,7 @@ Three things above go past the evidence and should be treated as proposals: **th
 
 **T2. Logically one ever-growing ordered list.** Items are never destroyed, only restatused. How this is stored is an implementation detail and deliberately unfixed — daily files that copy forward, one long file, or something else. The user-perceived model is the requirement; the wire format is not.
 
-**T3. Every item carries text, status, ctime, mtime, optional due date, and zero or more tags.** ctime and mtime are recorded from the first day and are never backfilled — backfilled timestamps make every item look equally fresh, which destroys every staleness mechanism at once.
+**T3. Every item carries text, status, ctime, mtime, optional due date, and zero or more tags.** ctime and mtime are true timestamps, **stored in the item** rather than inferred from which day files it appears in, and are recorded from the first day and never backfilled — backfilled timestamps make every item look equally fresh, which destroys every staleness mechanism at once. ctime is written once and never changes, so it costs nothing to maintain. **mtime is stamped by the operations that write the line** — a status change, a tag, a due date, a committed row edit — and by nothing else, so keeping it exact never means writing into text somebody is typing in.
 
 **T4. Status is an open set** including at least *not started*, *in progress*, *blocked* (with prose), *done*, *nevermind*, and *backlog*. The era-1 glyph vocabulary is the starting point, not a constraint.
 
@@ -137,7 +141,7 @@ Three things above go past the evidence and should be treated as proposals: **th
 
 **T6. The index distinguishes tags that have live items from tags that do not.** The live set is dramatically smaller and is what the interface offers by default; the full set stays reachable.
 
-**T7. The default view is the day's working set in creation order** — the era-1 spread. It holds the items carried by the morning's walk plus anything added since, including ones finished today, which stay visible and greyed until the next walk clears them.
+**T7. The default view is the day's working set in creation order** — the era-1 spread. **The set is carried forward automatically at the day's first touch**, not by any ritual that can be skipped. It holds those carried items plus anything added since, including ones finished today, which stay visible and greyed until the next day's carry leaves them behind.
 
 **T8. Pivot by tag,** showing live items and recently resolved ones together.
 
@@ -145,7 +149,7 @@ Three things above go past the evidence and should be treated as proposals: **th
 
 **T10. A link directory.** Every link that has appeared in the list, reverse-chronological by last appearance, searchable, each with the context it appeared in and a link back to its item. This serves interaction 2 and is therefore core.
 
-**T11. A daily walk** that presents the whole live list, runs regardless of length, and exists to load the list into the head. It is offered, never compelled. **Its output is the day's working set** (T7), which is what guarantees every live item is seen at least daily no matter what T12 does to the view.
+**T11. A daily walk** that presents the whole live list, runs regardless of length, and exists to load the list into the head. It is offered, never compelled. **It reviews the day's working set rather than producing it** — the carry is automatic (T7), so a skipped walk costs the day's grooming and never the list's integrity. What the walk guarantees is that every live item is *seen* at least daily, whatever T12 does to the view. That guarantee is the reason T12 cannot ship without it.
 
 **T12. A soft cap on the working view.** Items past it remain reachable and are never hidden. The cap is announced at the end of the walk and nowhere else — that is the only moment with enough context to act on it.
 

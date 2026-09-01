@@ -572,6 +572,44 @@ focusable**, which is what would finally put a key on a fileset's undo: ⌘Z goe
 to the focused document, and while the editor is the only focusable surface, the
 stream is the honest answer (MC4).
 
+## MT — the TODO list *(next)*
+
+**Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
+`solution/todo.md`. Decisions: D55–D59.**
+
+Six phases, and the ordering is forced by identity being a one-way door, by
+interaction 1 dominating everything else the list is asked, and by the soft cap
+being unable to ship before the walk that makes it safe. Usable at the end of
+MT3.
+
+**It arrives earlier than planned.** M3 deferred todo on the strength of
+`file-documents.md`'s prediction that it would be record-shaped and therefore an
+expensive first test of the four-artifact shape. D55 reverses that: an item is a
+line, history is per day, and the kind inherits `SegmentedDocument` whole. What
+it does test first is the *surface* — it is the first thing in Tephra shown as
+something other than running text.
+
+**R10a, the link directory, is not part of it** (D57) and can land anywhere.
+
+## ML — the link directory *(after MT3)*
+
+**Roadmap: `solution/link-roadmap.md`. Requirement: R10a. Decisions: D57, D60,
+D61.**
+
+*"Where is that document I was looking at on Tuesday?"* — search's sibling, and
+the half no era has ever served. Three phases: one shared link scanner, the
+index, and the pane.
+
+**It is the first instance of D9's filtered-view mechanism**, built against the
+tractable query — finite, unranked, in memory — where M4's search is none of
+those things. And it takes the read-only fork of D9's open question, so the
+mechanism gets built without settling whether a filtered view is editable.
+
+**Orthogonal to MT**, which is why it interleaves rather than queuing: the two
+share exactly one piece of code (ML1, which ships inside MT3 because MT3's rows
+need it). Scheduled after MT3 on urgency alone — the list is what is needed
+first, and this lands while MT4–MT6 are still ahead.
+
 ## M4 — retrieval
 
 Marked ◆ in `features.md` as arguable, and settled as **the last things built in
