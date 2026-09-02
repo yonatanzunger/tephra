@@ -2368,10 +2368,19 @@ and until now nothing knew where a day ended.
 - **The terminating newline is not in anybody's undo stack.** A day terminator
   you can undo into a mid-line day is a control with no meaning.
 
+**`writingDay` is monotonic, and it does double duty.** It never goes backwards
+and its seed is the newest day in the corpus with content — which is what stops
+a zone change from re-dating going forward (D63), and *also* what makes two
+devices converge: whichever crosses the boundary first writes day N+1, and the
+other moves forward to meet it on its next seed and cannot move back. Without
+it the pair would flap, each pulling the other's day back to its own. The price
+is that a device with a fast clock pulls the rest forward by at most a day,
+which is the right way round — a boundary in an odd place, rather than
+corruption.
+
 **Accepted, not solved.** A day that never ends — forty hours of continuous
 writing gives one file dated Monday holding Wednesday — is judged not worth a
-rule. Two devices each deciding a boundary is left to sync, since the decision
-is recorded in the files themselves and the worst case is text in adjacent days.
+rule.
 
 ## D63: The day's zone is chosen and kept with the notebook, not fixed and not detected
 

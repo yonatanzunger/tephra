@@ -180,12 +180,32 @@ invariant this establishes, and both are the kind of defence that hides a
 failure rather than preventing it — which is why the separator went missing for
 a day before anybody noticed it was gone.
 
+## Two devices converge, and monotonicity is why
+
+Sync is v2, but the answer falls out of a property already needed for another
+reason, so it is worth recording now rather than rediscovering.
+
+**`writingDay` never goes backwards**, and its seed is the newest day in the
+corpus that has content. Put those together and two devices deciding a boundary
+independently converge rather than oscillate: whichever crosses first writes day
+N+1, and the other — seeing N+1 in the corpus the next time it seeds — moves
+forward to meet it and cannot move back. Text the second device wrote before it
+learned about N+1 stays in day N, which is a true statement about when it was
+written, and from that point both are on the same day.
+
+Without monotonicity the same pair would flap: each device pulling the other's
+day back to its own, and passages landing in whichever day happened to be
+current on whichever machine. **The property that stops a westward flight from
+re-dating going forward is the same property that makes two machines agree.**
+
+The cost, stated: a device whose clock is fast pulls everyone forward with it,
+by at most a day. That is the price of a monotonic clock and it is the right one
+— a day too early is a boundary in an odd place, while going back is corruption.
+
 ## Accepted, not solved
 
 - **A day that never ends.** Write continuously for forty hours and the boundary
   never fires: one file, dated Monday, holding Wednesday's writing. The 1 MB
   part-split bounds the file and not the date. Judged not worth a rule.
-- **Two devices** (v2, sync) could each decide a boundary independently. The
-  decision is recorded — the files exist and the text is in them — so the worst
-  case is text in adjacent days rather than a disagreement that cannot be read.
-  Revisit with sync, not before.
+- **A fast clock on one device** pulls the others forward by up to a day, which
+  is monotonicity's price and cheaper than what it buys.

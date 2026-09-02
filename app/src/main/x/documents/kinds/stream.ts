@@ -378,6 +378,33 @@ export class StreamDocument extends SegmentedDocument implements StreamDocumentA
     }
   }
 
+  /**
+   * Close off a day that has ended: make sure it ends with a newline (D62).
+   *
+   * **The invariant nothing owned.** A day file that ends mid-line makes the
+   * separator below it unplaceable, and `days.ts` answered by skipping the
+   * widget — so the break between two days vanished, silently, whenever
+   * somebody stopped typing mid-sentence at the wrong moment. `branch` carried
+   * a clamp for the same missing rule. Defended twice, enforced nowhere.
+   *
+   * Enforced here, at the one moment a day is known to have ended. Idempotent,
+   * so a boundary crossed twice costs a read; and `boundary` origin, so it is
+   * journalled and durable but not something anybody can undo the notebook back
+   * into a mid-line day with.
+   *
+   * An empty day is left alone: there is nothing to terminate, and a newline
+   * would make a file out of a day nobody wrote in.
+   */
+  async endDay(date: DateKey): Promise<boolean> {
+    const body = await this.bodyOf(date)
+    if (body === '' || body.endsWith('\n')) return false
+    await this.replace(
+      [{ span: { begin: this.at(date, body.length), end: this.at(date, body.length) }, payload: '\n' as DocumentText }],
+      'boundary',
+    )
+    return true
+  }
+
   /** The date a new note goes to, in the reference zone (D38). */
   static today(): DateKey {
     return dateKeyAt()

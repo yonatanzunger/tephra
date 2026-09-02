@@ -23,16 +23,17 @@ import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import {
-  kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath, resolveInsideNotebook, SECTIONS_DIR, slug,
+  dayFile, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath, resolveInsideNotebook, SECTIONS_DIR, slug,
   type RelPath,
 } from './w/layout.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
+import { DayClock } from './x/day-clock.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
 import type { TodoItem, TodoStatus } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
-import { dateKeyAt } from '../shared/dates.ts'
+import { compareDateKeys, dateKeyAt } from '../shared/dates.ts'
 import { StreamDocument } from './x/documents/kinds/stream.ts'
 import { CorpusIndex } from './x/documents/corpus-index.ts'
 import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
@@ -107,6 +108,8 @@ export interface ServiceOptions {
    * arrives from the caller, because reading it means reading the environment
    * through the verify gate, and that gate imports Electron.
    */
+  /** How long writing has to have stopped before the day may end (D62). */
+  readonly idleMs?: number
   readonly quiesceMs?: number
   readonly maxIntervalMs?: number
   readonly versionQuiesceMs?: number
@@ -160,7 +163,11 @@ export class DocumentService {
   readonly #wantsHistory: boolean
 
   /** The day the app believes it is in, and the poll that keeps it honest. */
-  #today: DateKey
+  #clock: DayClock
+  /** The day through which every earlier one is known to be closed off. */
+  #closedThrough: DateKey | null = null
+  readonly #seeded: Promise<void>
+  readonly #idleMs: number | undefined
   #dayTimer: ReturnType<typeof setInterval> | null = null
   readonly #now: () => Date
 
@@ -209,7 +216,17 @@ export class DocumentService {
     this.#versionMaxMs = options.versionMaxMs ?? VERSION_MAX_MS
     this.#wantsHistory = options.history !== false
     this.#now = options.now ?? (() => new Date())
-    this.#today = dateKeyAt(this.#now())
+    this.#idleMs = options.idleMs
+    // Seeded properly once the stream can be asked what the newest day is; a
+    // clock with no seed is on today, which is right for a notebook with
+    // nothing in it and is corrected by `#seedTheClock` for one that has.
+    this.#clock = new DayClock(null, { now: this.#now, ...(this.#idleMs === undefined ? {} : { idleMs: this.#idleMs }) })
+    // **Seeding is I/O and a constructor is not**, so the clock starts on today
+    // and is corrected the moment the corpus can be read. Every door into this
+    // object awaits `#seeded` first, so nothing can observe the wrong answer —
+    // which is not hypothetical: the first draft raced, and a caller asking the
+    // date immediately got the unseeded one.
+    this.#seeded = this.#seedTheClock()
     this.#watchTheClock(options.dayCheckMs ?? DAY_CHECK_MS)
 
     // What went into the commit message, gathered as it happens. Reconstructing
@@ -336,6 +353,7 @@ export class DocumentService {
    * "not applicable", said in the one vocabulary the wire has for it.
    */
   async info(id: DocumentId = STREAM_ID): Promise<DocumentInfo> {
+    await this.#seeded
     return this.#corpus.use(
       id,
       async doc => ({
@@ -353,6 +371,7 @@ export class DocumentService {
   }
 
   async openWindow(request: ReadRequest): Promise<WindowSnapshot> {
+    await this.#seeded
     const docId = request.doc ?? STREAM_ID
     const window = await this.#corpus.use(
       docId,
@@ -410,6 +429,9 @@ export class DocumentService {
       const window = this.#windows.get(request.id)?.window
       if (window === undefined) throw new Error(`no such window ${request.id}`)
       await window.edit(request.edits, request.origin)
+      // The idle rule's only input, and it is free here: every keystroke
+      // already passes through this method (D62).
+      if (request.origin === 'user') this.#clock.wrote()
       this.#scheduleFlush()
       return {
         generation: window.generation,
@@ -494,7 +516,20 @@ export class DocumentService {
    * 00:00 cannot disagree about which day it is now.
    */
   get today(): DateKey {
-    return this.#today
+    return this.#clock.writingDay
+  }
+
+  /**
+   * What the calendar says, as against what the notebook is writing into (D62).
+   *
+   * The interface counts from this — a due date's *in three days*, the
+   * sidebar's marker — while the filing date is `today` above. They differ
+   * exactly while somebody is still writing past midnight, and a band that
+   * still says *tomorrow* at 00:30 is telling the truth about the evening they
+   * are still in.
+   */
+  get clockDay(): DateKey {
+    return this.#clock.clockDay
   }
 
   /**
@@ -510,13 +545,60 @@ export class DocumentService {
    * renderer's — it is the only side that knows whether someone is in the
    * middle of a sentence (D35: the editor reports facts, Z owns policy).
    */
+  /**
+   * What day the notebook was on when it was last closed.
+   *
+   * **Read from the corpus, because the ordinary case is an app that was not
+   * running** (D62). The newest day with a file, and when that file was last
+   * written, is enough to reconstruct the answer — after a close, a crash, a
+   * sleeping laptop or a week away, none of which a live timer survives.
+   */
+  async #seedTheClock(): Promise<void> {
+    const stream = await this.#stream
+    const days = await stream.dates()
+    const newest = days[days.length - 1]
+    if (newest === undefined) return
+    const stamp = await this.#notebook.stamp(dayFile(newest))
+    this.#clock = new DayClock(
+      { day: newest, writtenAt: stamp?.mtime ?? 0 },
+      { now: this.#now, ...(this.#idleMs === undefined ? {} : { idleMs: this.#idleMs }) },
+    )
+  }
+
+  /**
+   * Cross a boundary if there is one to cross, and say so.
+   *
+   * **Main does the infrastructural half before it announces**, which is what
+   * keeps three windows from racing to do it and what means no window ever
+   * sees a half-crossed boundary (D62). The announcement is still all the
+   * renderer gets: where the caret should go is the renderer's, because it is
+   * the only side that knows whether somebody is mid-sentence (D35).
+   */
+  async crossTheDay(): Promise<void> {
+    await this.#seeded
+    const advanced = this.#clock.tick()
+    const writing = this.#clock.writingDay
+
+    // **Not "did it just advance" — "is every day before this one closed".**
+    // The tick is an edge and the invariant is a level, which is the whole
+    // shape of D62; asking the edge missed the commonest case of all, an app
+    // opened the next morning where the seed had already moved the writing day
+    // and no tick was ever going to fire.
+    if (this.#closedThrough === null || compareDateKeys(writing, this.#closedThrough) > 0) {
+      const stream = await this.#stream
+      const before = (await stream.dates()).filter(day => compareDateKeys(day, writing) < 0)
+      const last = before[before.length - 1]
+      if (last !== undefined && (await this.#serial(() => stream.endDay(last)))) this.#touched()
+      // A memo, not the truth: the files are the truth, and this only saves the
+      // scan on the ninety-nine polls out of a hundred with nothing to do.
+      this.#closedThrough = writing
+    }
+
+    if (advanced) for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
+  }
+
   #watchTheClock(everyMs: number): void {
-    this.#dayTimer = setInterval(() => {
-      const now = dateKeyAt(this.#now())
-      if (now === this.#today) return
-      this.#today = now
-      for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, now)
-    }, everyMs)
+    this.#dayTimer = setInterval(() => void this.crossTheDay(), everyMs)
     // The clock must never be the reason a process stays alive.
     this.#dayTimer.unref?.()
   }

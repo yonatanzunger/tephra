@@ -620,7 +620,9 @@ documents hold `openDay` and cross a boundary when `openDay < writingDay`. A
 level rather than an edge, seeded from the corpus rather than kept in memory, so
 it is right after a close, a crash or a week away.
 
-- `DayClock`: the two dates, the idle rule, the seed read from the corpus
+- `DayClock`: the two dates, the idle rule, the seed read from the corpus, and
+  `writingDay` monotonic — which is what makes two devices converge as well as
+  what stops a zone change re-dating going forward (D62)
 - Terminating a day — the newline, outside anybody's undo stack
 - The stream: a new day file when there is something to write; the empty today
   that stays in memory until there is
@@ -637,7 +639,6 @@ from waiting on a wide refactor.
 
 - The zone as chosen configuration in `config/`, and the affordance that offers
   a change when the system's zone disagrees — offered, never applied
-- `writingDay` made monotonic, so flying west cannot re-date going forward
 - `shared/dates.ts` taking a zone rather than a module constant, with main
   publishing it beside the two dates so neither side computes its own
 

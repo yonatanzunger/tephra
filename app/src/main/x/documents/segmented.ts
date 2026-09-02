@@ -541,7 +541,11 @@ export abstract class SegmentedDocument implements StoredDocument {
       at: Date.now(),
     }
 
-    if (record && origin !== 'external') {
+    // **Journalled and undoable are two questions.** They agreed until the day
+    // boundary needed a write that is durable, is visible in the record as what
+    // it was, and is not something anybody can undo into a day ending mid-line
+    // (D62).
+    if (record && origin !== 'external' && origin !== 'boundary') {
       this.#push({ change, inverse }, origin)
       this.redoStack.length = 0
     }

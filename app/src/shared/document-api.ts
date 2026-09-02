@@ -341,7 +341,19 @@ export interface Edit {
  *  - 'operation' tag, branch, paste; its own undo step
  *  - 'external'  sync pull or reload; not in history, but history maps through it
  */
-export type EditOrigin = 'user' | 'operation' | 'external'
+/**
+ * Where an edit came from, which decides what is remembered about it.
+ *
+ * - `user` — typing. Groups with adjacent user edits into one undo step.
+ * - `operation` — a verb the person invoked: a tag, a pin, a status. One step.
+ * - `external` — it arrived from disk. Neither journalled nor undoable, because
+ *   it is not ours and the file already says it.
+ * - `boundary` — the app closing off a day (D62). **Journalled but not
+ *   undoable**: it is durable and it is visible in the record as what it was,
+ *   and undoing it would put a day back to ending mid-line, which is a control
+ *   with no meaning.
+ */
+export type EditOrigin = 'user' | 'operation' | 'external' | 'boundary'
 
 /** The journal record. Serialisable; this is what durability appends. */
 export interface DocumentChange {
