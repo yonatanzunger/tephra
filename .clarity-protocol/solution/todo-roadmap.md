@@ -279,6 +279,11 @@ the whole list, in order, and that is already useful.
 
 ## MT4 — Capture from elsewhere
 
+**Depends on MD1** (`solution/day-boundary.md`): capture writes into the stream
+from outside it, and without the boundary in place it would be a fourth caller
+learning the day rules by hand.
+
+
 **T13, and the guard against the success criterion's first failure mode.**
 
 - From the stream mid-sentence: the selection or the line becomes an item and

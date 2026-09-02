@@ -572,9 +572,44 @@ focusable**, which is what would finally put a key on a fileset's undo: ⌘Z goe
 to the focused document, and while the editor is the only focusable surface, the
 stream is the honest answer (MC4).
 
-## MD — the day boundary *(next)*
+## The order, and why it is that order
 
-**Design: `solution/day-boundary.md`. Decision: D62, amending D38.**
+Three milestones are open at once — the task list, the link directory and the
+day boundary — and only three dependencies between them are real. The rest is a
+judgement about what is worth having soonest.
+
+**MD1 → MT4 → MD2 → MT5 → ML2+ML3 → MT6.**
+
+The dependencies, which are not negotiable:
+
+- **MD1 before MT4 and MT5.** MT4's capture writes into the stream from
+  elsewhere, and would otherwise be a fourth caller learning the day rules by
+  hand — which is how the boundary came to be defended twice and enforced
+  nowhere. MT5's walk is *offered when the carry happens*, so it has no trigger
+  of its own by design.
+- **Inside MT5: walk, then tag index, then cap.** The cap cannot ship before the
+  walk (T11, T12) — that coupling is the goal document's, not a preference.
+
+The judgements, which are:
+
+- **MD1 first** because it is the only user-visible defect on the board, it
+  unblocks the two milestones after it, and it gets more expensive with every
+  caller that learns the day rules by hand first.
+- **MT4 next** because the list is in daily use and capture is what guards the
+  success criterion's first failure — a task that never reaches the list, so the
+  head goes on carrying it.
+- **MT5 has a clock on it.** A list that accumulates every day with no walk and
+  no cap is era 2, which is the thing the design exists to improve on; every
+  week without it is a week the central mechanism goes untested by use.
+- **ML2+ML3 fifth, and this is the weakest link in the chain.** The link
+  directory serves an interaction unserved in all three eras and ML3 is also
+  M4's spine — but the task list has evidence behind it from daily use and the
+  directory does not yet. If it should come sooner, the clean slot is after MT4,
+  where MD2 and ML2 are interchangeable "away from the list" work.
+
+## MD1 — the day boundary *(next)*
+
+**Design: `solution/day-boundary.md`. Decisions: D62, D63, amending D38.**
 
 **Its own milestone because it is one rule with three customers**, and because
 it is currently defended in two places and enforced in none — which is how the
@@ -585,23 +620,32 @@ documents hold `openDay` and cross a boundary when `openDay < writingDay`. A
 level rather than an edge, seeded from the corpus rather than kept in memory, so
 it is right after a close, a crash or a week away.
 
-- `DayClock`: the notebook's zone, the two dates, the idle rule, the seed read
-  from the corpus
-- The zone as chosen configuration in `config/` (D63), the affordance that
-  offers a change when the system disagrees, and `writingDay` made monotonic so
-  flying west cannot re-date going forward
-- `shared/dates.ts` taking a zone rather than a module constant, with main
-  publishing it beside the two dates so neither side computes its own
+- `DayClock`: the two dates, the idle rule, the seed read from the corpus
 - Terminating a day — the newline, outside anybody's undo stack
 - The stream: a new day file when there is something to write; the empty today
   that stays in memory until there is
 - The task list: carry against `writingDay`, and record that a walk is offered
 - Delete the `days.ts` skip and the `branch` clamp, which this makes unnecessary
 
-**Before MT4**, because MT4's capture writes into the stream from elsewhere and
-would otherwise be a third caller learning the boundary rules by hand.
+**The zone stays UTC−8 here**, exactly as it is now: MD1 does not touch
+`shared/dates.ts`'s signature. That is what keeps the bug fix and the unblocking
+from waiting on a wide refactor.
 
-## MT — the TODO list *(next)*
+## MD2 — the notebook's own zone
+
+**Decision: D63.**
+
+- The zone as chosen configuration in `config/`, and the affordance that offers
+  a change when the system's zone disagrees — offered, never applied
+- `writingDay` made monotonic, so flying west cannot re-date going forward
+- `shared/dates.ts` taking a zone rather than a module constant, with main
+  publishing it beside the two dates so neither side computes its own
+
+**Nothing depends on this**, which is why it is split out: it is the travelling
+feature rather than the correctness fix, and it is wide-but-shallow work that
+would otherwise hold up MT4.
+
+## MT — the TODO list *(MT1–MT3 done)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**
@@ -620,7 +664,7 @@ something other than running text.
 
 **R10a, the link directory, is not part of it** (D57) and can land anywhere.
 
-## ML — the link directory *(after MT3)*
+## ML — the link directory *(ML1 done, in MT3)*
 
 **Roadmap: `solution/link-roadmap.md`. Requirement: R10a. Decisions: D57, D60,
 D61.**
