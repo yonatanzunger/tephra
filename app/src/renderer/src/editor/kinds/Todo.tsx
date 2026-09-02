@@ -129,6 +129,30 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
   }, [list, refresh, fail])
 
   /**
+   * **And again when the day rolls over under an open window.**
+   *
+   * The carry runs on the first touch of a day, and opening the list is a
+   * touch — but a window left open overnight is never opened again. It would
+   * have gone on showing yesterday's working set, with yesterday's date on the
+   * file it was writing to, until somebody navigated away and back. Main
+   * already announces the rollover for exactly this reason (the stream has the
+   * same problem); this is the list listening.
+   */
+  useEffect(
+    () =>
+      window.tephra.doc.onDayRolled(() => {
+        void window.tephra.todo
+          .today(list)
+          .then(async date => {
+            setToday(date)
+            await refresh(date)
+          })
+          .catch(fail)
+      }),
+    [list, refresh, fail],
+  )
+
+  /**
    * Re-read when the document changes underneath.
    *
    * Every verb here writes through main rather than through this window, so the
@@ -508,6 +532,14 @@ function Field({
   const [pick, setPick] = useState(0)
   const [hidden, setHidden] = useState(false)
   const done = useRef(false)
+  /** Where the caret goes once the field is holding the new value. */
+  const caretTo = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (caretTo.current === null) return
+    field.current?.setSelectionRange(caretTo.current, caretTo.current)
+    caretTo.current = null
+  }, [value])
 
   useEffect(() => {
     field.current?.focus()
@@ -521,22 +553,49 @@ function Field({
     onDone(text)
   }
 
-  // **The word under the caret, when it starts with `#`.** That is the whole of
-  // the completion trigger: no mode to enter and none to leave, so a `#` typed
-  // by accident costs a keystroke to undo rather than an escape from somewhere.
+  /**
+   * **The word under the caret, when it starts with `#`.**
+   *
+   * That is the whole of the completion trigger: no mode to enter and none to
+   * leave, so a `#` typed by accident costs a keystroke to undo rather than an
+   * escape from somewhere.
+   *
+   * **Asked for a caret rather than reading one**, because where the caret is
+   * differs between the two callers. Rendering the list wants where it was at
+   * the last render; inserting a tag wants where it is NOW — and taking the
+   * render's answer for the insert is what turned a second Tab into
+   * `#tephraephra`: the caret had moved after the tag was written, no re-render
+   * followed, and the stale position still pointed inside the fragment.
+   */
+  const wordAt = (where: number): RegExpExecArray | null =>
+    /(?:^|\s)#([A-Za-z0-9][\w-]*)?$/.exec(value.slice(0, where))
+
   const caret = field.current?.selectionStart ?? value.length
-  const partial = /(?:^|\s)#([A-Za-z0-9][\w-]*)?$/.exec(value.slice(0, caret))
+  const partial = wordAt(caret)
   const matching =
     partial === null || hidden
       ? []
       : tags.filter(tag => tag.toLowerCase().startsWith((partial[1] ?? '').toLowerCase())).slice(0, 6)
   const at = Math.min(pick, Math.max(0, matching.length - 1))
 
+  /**
+   * Put the tag in, and **put the caret after it**.
+   *
+   * A controlled input keeps its selection where it was when the value is set
+   * from code, so without this the caret stayed inside the fragment that had
+   * just been completed — and a second Tab, reading the word under a caret that
+   * had not moved, completed the same fragment again: `#t` → `#tephra` →
+   * `#tephraephra`. The caret is applied after render, because that is when the
+   * new value is actually in the field.
+   */
   const complete = (tag: string): void => {
-    if (partial === null) return
-    const at = caret - (partial[0].length - (partial[0].startsWith('#') ? 0 : 1))
-    const from = caret - (partial[0].length - (partial[0].startsWith('#') ? 0 : 1))
-    setValue(`${value.slice(0, from)}${written(tag)}${value.slice(caret)}`)
+    const now = field.current?.selectionStart ?? value.length
+    const word = wordAt(now)
+    if (word === null) return
+    const from = now - (word[0].length - (word[0].startsWith('#') ? 0 : 1))
+    const text = written(tag)
+    setValue(`${value.slice(0, from)}${text}${value.slice(now)}`)
+    caretTo.current = from + text.length
     setPick(0)
     field.current?.focus()
   }

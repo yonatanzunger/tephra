@@ -624,9 +624,24 @@ export async function runVerify(request: string): Promise<void> {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(again, 'read the survey #te')
       again?.dispatchEvent(new Event('input', { bubbles: true }))
       await settle(300)
+      // Which way the list runs, measured by where its options SIT: up and down
+      // are what move through it, so it has to go down the page.
+      {
+        const opts = [...document.querySelectorAll('.todo-complete button')].map(b =>
+          b.getBoundingClientRect(),
+        )
+        say('listRuns', opts.length < 2 ? 'one' : (opts[1] as DOMRect).top > (opts[0] as DOMRect).top ? 'down' : 'across')
+      }
       key('Tab')
       await settle(300)
       say('afterTab', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+      // **And again.** A controlled input keeps its selection where it was when
+      // the value is set from code, and the render-time caret does not move
+      // with it — so a second Tab completed the same fragment again:
+      // `#t` → `#tephra` → `#tephraephra`.
+      key('Tab')
+      await settle(300)
+      say('afterTabTwice', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
 
       ;(document.querySelectorAll('.todo-tools button')[1] as HTMLElement | null)?.dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true }),
@@ -743,6 +758,27 @@ export async function runVerify(request: string): Promise<void> {
         say('rail', { left: Math.round(rail?.left ?? -1), colRight: Math.round(col?.right ?? -1) })
         const one = document.querySelector('.todo-soon-item')
         say('railSize', one === null ? '' : getComputedStyle(one).fontSize)
+      }
+      // Complete a tag from the keyboard, twice, and see which way the list runs.
+      {
+        const f = document.querySelector('.todo-field') as HTMLInputElement | null
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        set?.call(f, 'write the thing #t')
+        f?.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(300)
+        const tab = (): void => {
+          f?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+        }
+        const opts = [...document.querySelectorAll('.todo-complete button')].map(b =>
+          b.getBoundingClientRect(),
+        )
+        say('listRuns', opts.length < 2 ? '' : (opts[1] as DOMRect).top > (opts[0] as DOMRect).top ? 'down' : 'across')
+        tab()
+        await settle(300)
+        say('afterTab', f?.value ?? '')
+        tab()
+        await settle(300)
+        say('afterTabTwice', f?.value ?? '')
       }
       say('marks', document.querySelectorAll('.todo-mark').length)
       // Where the INK sits between the rules, which is what "centred" means to

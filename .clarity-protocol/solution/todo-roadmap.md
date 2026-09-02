@@ -221,6 +221,21 @@ tags on today's live items, and those are already on screen.
 - **`<button>` does not inherit a font**, which is why the mark stayed one size
   while the theme's size slider moved: every `em` in its box was measuring the
   browser's 13px default rather than the text beside it.
+- **The carry runs on a rollover, not only on an open.** The carry is the first
+  touch of a day, and opening the list is a touch — but a window left open
+  overnight is never opened again, so it went on showing yesterday's set and
+  writing to yesterday's file. Main already announces the rollover for the
+  stream's sake; the list listens now.
+- **Completion reads the LIVE caret, not the render's.** A controlled input
+  keeps its selection where it was when the value is set from code, so after
+  Tab wrote a tag the render-time caret still pointed inside the fragment — and
+  a second Tab completed it again: `#t` → `#tephra` → `#tephraephra`. The first
+  fix, moving the caret after render, was not enough on its own: nothing
+  re-rendered before the next keystroke, so the stale position was still what
+  the handler read.
+- **The options run down the page**, because up and down are what move through
+  them. A row navigated with the arrow keys asks the hand and the eye to
+  disagree about which way the list goes.
 - **A row's padding is asymmetric, and in `em`.** Symmetric padding leaves the
   words looking high: a line box carries its leading above and below the ink,
   and an eye judges where a line sits by its x-height band rather than by the

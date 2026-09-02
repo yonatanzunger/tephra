@@ -1193,6 +1193,16 @@ console.log('\n\u2014 the task list \u2014')
     `picked ${JSON.stringify(r.picked)} \u00b7 hid ${r.escapeHidesTheList} \u00b7 kept ${r.escapeKeptTheLine} \u00b7 tab ${JSON.stringify(r.afterTab)}`,
   )
   check(
+    'completing twice completes once — the caret moves with the tag it wrote',
+    r.afterTabTwice === r.afterTab,
+    `${JSON.stringify(r.afterTab)} then ${JSON.stringify(r.afterTabTwice)}`,
+  )
+  check(
+    'and the options run down the page, the way the arrows move through them',
+    r.listRuns === 'down' || r.listRuns === 'one',
+    String(r.listRuns),
+  )
+  check(
     'an item can be deleted outright, for a line that was never a task',
     r.menuHasDelete === true &&
       Array.isArray(r.afterDelete) && !r.afterDelete.includes('ring the bank'),

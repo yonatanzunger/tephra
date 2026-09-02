@@ -541,6 +541,13 @@ body {
   border: 1px solid rgb(var(--border)); border-radius: 6px;
   box-shadow: 0 10px 26px rgb(0 0 0 / .16);
 }
+/* **Down the page, because up and down are what move through it.** A row of
+   options navigated with the arrow keys asks the hand and the eye to disagree
+   about which way the list runs. The dates stay in a row: nothing steps
+   through them. */
+.todo-complete { flex-direction: column; flex-wrap: nowrap; min-width: 8rem; }
+.todo-complete button { text-align: left; }
+
 .todo-complete button, .todo-dates button {
   font-family: var(--font-ui); font-size: 12px; cursor: pointer;
   color: rgb(var(--text)); background: none; border: 0; border-radius: 4px;
