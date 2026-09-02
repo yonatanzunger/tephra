@@ -485,6 +485,67 @@ export async function runVerify(request: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'todo') {
+      // The list, driven the way a person drives it: open it from the menu,
+      // check one off, edit a row, add one.
+      say('opened', await window.tephra.clickMenu('Task List'))
+      let waited = 0
+      while (waited < 8000 && document.querySelector('.todo') === null) {
+        await settle(200)
+        waited += 200
+      }
+      await settle(600)
+      say('title', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      const rows = (): readonly HTMLElement[] =>
+        [...document.querySelectorAll('.todo-row')] as HTMLElement[]
+      const texts = (): readonly string[] =>
+        rows().map(r => r.querySelector('.todo-text')?.textContent ?? '')
+
+      say('carried', texts())
+      say('band', [...document.querySelectorAll('.todo-soon-item')].map(
+        b => b.querySelector('.todo-when')?.textContent ?? '',
+      ))
+      say('tags', [...document.querySelectorAll('.todo-tag')].map(t => t.textContent ?? ''))
+      say('dues', [...document.querySelectorAll('.todo-due')].map(d => d.textContent ?? ''))
+      say('links', [...document.querySelectorAll('.todo-text .tx-link')].map(a2 => a2.textContent ?? ''))
+
+      // Check one off. It stays where it was, greyed — the paper page's X.
+      const first = rows()[0]
+      ;(first?.querySelector('.todo-glyph') as HTMLElement | null)?.click()
+      await settle(1200)
+      say('afterCheck', texts())
+      say('finished', rows().map(r => r.className.includes('finished')))
+
+      const type = async (selector: string, value: string): Promise<void> => {
+        const input = document.querySelector(selector) as HTMLInputElement | null
+        if (input === null) return
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, value)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1400)
+      }
+
+      // The row edit commits once — text, tags and date together (D56).
+      ;(rows()[1]?.querySelector('.todo-text') as HTMLElement | null)?.click()
+      await settle(400)
+      say('editingRaw', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+      await type('.todo-field', 'read the survey properly #house DUE 2026-09-30')
+      say('afterEdit', texts())
+      say('afterEditTags', [...document.querySelectorAll('.todo-tag')].map(t => t.textContent ?? ''))
+
+      ;(document.querySelector('.todo-add') as HTMLElement | null)?.click()
+      await settle(300)
+      await type('.todo-field', 'ring the bank #money')
+      say('afterAdd', texts())
+
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'rowmenu') {
       // Open a row's menu and leave it open, so the shot at the end of the run
       // has something to show. This project has found the invisible selection,

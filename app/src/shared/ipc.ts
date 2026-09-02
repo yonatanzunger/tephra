@@ -13,6 +13,7 @@ import type {
 import type { Annotation, Marker, Prose } from './prose.ts'
 import type { StoredCursor, WindowState } from './ui-state.ts'
 import type { NavTarget } from './pane-api.ts'
+import type { TodoStatus } from './kinds/todo.ts'
 import type { WindowPosition, ProseOffset, ProseText } from './document-api.ts'
 
 /** Windows are addressed by handle; the objects themselves never cross. */
@@ -100,6 +101,15 @@ export const CHANNEL = {
   // The file lifecycle. Naming is the renderer's — a name needs a text field,
   // and this app does its asking in-app rather than in a native box (Prompt).
   newDocument: 'tephra:doc:new',
+  /**
+   * The task list, over one channel.
+   *
+   * **One channel, several verbs**, and the naming happens in the preload where
+   * the renderer meets it: a bridge with `setStatus` and `add` on it reads the
+   * way the document does, while the wire stays one handler. Six channels would
+   * be six pieces of boilerplate saying the same thing.
+   */
+  todo: 'tephra:todo',
   renameDocument: 'tephra:doc:rename',
   duplicateDocument: 'tephra:doc:duplicate',
   deleteDocument: 'tephra:doc:delete',
@@ -337,3 +347,24 @@ export interface Clipboard {
   readonly text: string
   readonly html: string
 }
+
+/**
+ * One task-list verb, as it crosses the wire (MT3).
+ *
+ * A union rather than a channel each: the preload gives the renderer named
+ * methods over it, so the API a caller sees has the document's own nouns while
+ * the wire has one handler to keep in step.
+ */
+export type TodoCommand =
+  | { readonly kind: 'list' }
+  | { readonly kind: 'today'; readonly list: DocumentId }
+  | { readonly kind: 'items'; readonly list: DocumentId; readonly date: DateKey }
+  | { readonly kind: 'add'; readonly list: DocumentId; readonly text: string }
+  | {
+      readonly kind: 'status'
+      readonly list: DocumentId
+      readonly item: string
+      readonly status: TodoStatus
+      readonly note?: string
+    }
+  | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }

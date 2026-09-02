@@ -2,7 +2,7 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { destination } from '../../src/renderer/src/editor/kinds/markdown/links.ts'
+import { destination, scanLinks } from '../../src/shared/links.ts'
 import { parser, GFM } from '@lezer/markdown'
 
 const md = parser.configure(GFM)
@@ -44,6 +44,24 @@ test('THE POINT: a destination survives the round trip through the parser', () =
       url,
       `destination did not survive: ${markdown}`,
     )
+  }
+})
+
+test('AND THE SCANNER AGREES WITH LEZER, which is the pair that used to differ', () => {
+  // The bug this pair exists to prevent: `destination` wrote a form the app's
+  // own reader could not read. Checking the writer against the real markdown
+  // grammar proves it is legal; checking it against `scanLinks` proves the app
+  // can read what it wrote. Neither alone would have caught it (ML1, D61).
+  for (const url of [
+    'https://example.com/kca-1978',
+    'https://en.wikipedia.org/wiki/Hold-up_problem_(economics)',
+    '../notes/a file with spaces.md',
+  ]) {
+    const markdown = `[the source](${destination(url)})`
+    const found = scanLinks(markdown)
+    assert.equal(found.length, 1, `scanLinks found no link in ${markdown}`)
+    assert.equal(found[0]?.target, url, `the scanner disagreed with the writer: ${markdown}`)
+    assert.notEqual(parsed(markdown), null, `lezer disagreed with the writer: ${markdown}`)
   }
 })
 

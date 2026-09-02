@@ -12,13 +12,15 @@
 
 import type { ComponentType } from 'react'
 import { MarkdownSurface } from './Markdown.tsx'
+import { TodoSurface } from './Todo.tsx'
 import type { SurfaceProps } from '../surface.ts'
 import type { DocumentKind } from '../../../../shared/document-api.ts'
 
 const SURFACES: Partial<Record<DocumentKind, ComponentType<SurfaceProps>>> = {
-  // stream, markdown, todo and fileset are all running text today. The first
-  // entry here will be the first kind that is shown as something else — a todo
-  // list with checkboxes to click, or a fileset as a list to drag.
+  // **The first entry, and the first thing in Tephra shown as something other
+  // than running text** (MT3). A fileset will be the second, as a list to drag;
+  // stream and markdown stay with the default, because they are prose.
+  todo: TodoSurface,
 }
 
 export function surfaceFor(kind: DocumentKind): ComponentType<SurfaceProps> {

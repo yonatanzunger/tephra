@@ -370,6 +370,104 @@ body {
 }
 .row-menu hr { height: 0; margin: .25rem .4rem; border: 0; border-top: 1px solid rgb(var(--border)); }
 
+/* ── the task list ────────────────────────────────────
+   The era-1 spread: one item per line, a glyph in a narrow left column, the
+   due date allowed to be the loud thing. It takes the reading measure and the
+   body face, because it is a page you read — what it does not take is the
+   prose leading, since a list is scanned rather than read through. */
+.todo {
+  max-width: var(--measure); margin: 0 auto; padding: 2.5rem 0 6rem;
+  font-family: var(--font-body); font-size: 15px; color: rgb(var(--text));
+}
+.todo-list { list-style: none; margin: 0; padding: 0; }
+
+.todo-row {
+  display: flex; align-items: baseline; gap: .5rem;
+  padding: .3rem 0; border-bottom: 1px solid rgb(var(--border) / .45);
+}
+/* **Finished items stay, greyed, until tomorrow's carry leaves them behind** —
+   exactly as an X'd row stayed on the paper page. Checking something off should
+   leave a mark you can see, and the eye learns to skip the marks in a week. */
+.todo-row.finished { color: rgb(var(--text-muted)); }
+.todo-row.finished .todo-text { text-decoration: line-through; text-decoration-thickness: 1px; }
+.todo-row.status-dropped .todo-text { text-decoration: line-through; opacity: .7; }
+
+/* The glyph column: narrow, fixed, and the same width whatever is in it, so
+   every item's text starts at one left edge. */
+.todo-glyph {
+  flex: 0 0 1.4rem; width: 1.4rem; height: 1.4rem;
+  display: flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+  color: rgb(var(--text)); background: none;
+  border: 1px solid rgb(var(--border)); border-radius: 3px;
+}
+.todo-glyph:hover { border-color: rgb(var(--accent)); background: rgb(var(--accent) / .08); }
+.todo-glyph:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
+.todo-row.finished .todo-glyph { color: rgb(var(--text-muted)); }
+
+.todo-text {
+  flex: 1; min-width: 0; text-align: left;
+  font: inherit; line-height: 1.45;
+  color: inherit; background: none; border: 0; padding: 0; cursor: text;
+}
+.todo-note { margin-left: .5rem; font-size: .85em; font-style: italic; color: rgb(var(--text-muted)); }
+
+.todo-tags { display: flex; flex-wrap: wrap; gap: .25rem; flex: 0 0 auto; }
+.todo-tag {
+  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: .04em;
+  color: rgb(var(--text-muted)); background: rgb(var(--text) / .06);
+  border-radius: 999px; padding: .08rem .45rem;
+}
+
+/* **The one thing allowed to be loud** (T9). Era 2 stored due dates and still
+   missed them; what was missing was not storage. */
+.todo-due {
+  flex: 0 0 auto; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  color: rgb(var(--accent));
+}
+.todo-due.overdue { color: rgb(var(--status-error)); }
+
+/* The band: always there, usually short, gone entirely when empty. */
+.todo-soon {
+  display: flex; flex-direction: column; gap: .1rem;
+  margin-bottom: 1.6rem; padding-bottom: .9rem;
+  border-bottom: 1px solid rgb(var(--border));
+}
+.todo-soon-item {
+  display: flex; align-items: baseline; gap: .6rem; width: 100%;
+  font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+  color: rgb(var(--text)); background: none; border: 0; border-radius: 4px;
+  padding: .2rem .35rem;
+}
+.todo-soon-item:hover { background: rgb(var(--accent) / .10); }
+.todo-soon-item:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: -1px; }
+.todo-when {
+  flex: 0 0 6.5rem; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  color: rgb(var(--accent)); font-variant-numeric: tabular-nums;
+}
+.todo-soon-item.overdue .todo-when { color: rgb(var(--status-error)); }
+.todo-soon-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Typed in the row, in the row's own type, so nothing shifts when a name goes
+   from being read to being typed. */
+.todo-field {
+  flex: 1; min-width: 0; box-sizing: border-box;
+  font: inherit; font-family: var(--font-body);
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 0; border-bottom: 1px solid rgb(var(--accent)); border-radius: 0;
+  padding: 0;
+}
+.todo-field:focus { outline: 0; }
+
+.todo-add {
+  margin-top: .6rem; padding: .2rem .4rem;
+  font-family: var(--font-ui); font-size: 12.5px; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none; border: 0; border-radius: 4px;
+}
+.todo-add:hover { color: rgb(var(--accent)); background: rgb(var(--accent) / .08); }
+.todo-empty { margin: 1.4rem 0 0; font-size: 13px; font-style: italic; color: rgb(var(--text-muted)); }
+
 /* ── prompt ───────────────────────────────────────────────────────────────
    One short string, asked for and answered. Small on purpose: a range
    operation should feel like a keystroke and a word, not a form. */

@@ -52,7 +52,7 @@ const POLICIES: Record<AnnotationChoice, Presentation> = {
   margin: PAPER_MARGIN,
 }
 import { markdownFromHtml } from './import/html.ts'
-import { destination } from './editor/kinds/markdown/links.ts'
+import { destination } from '../../shared/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { useTheme, typographyOf } from './theme/useTheme'
@@ -113,8 +113,20 @@ function covering(w: DocumentWindow | null, at: DocumentPosition): Where {
 }
 
 /** A document's filename, which is its name of last resort. */
+/**
+ * What a document is called when it has no title of its own: its filename.
+ *
+ * **A directory document is named the same way** (D59): `tasks.todo` is
+ * "tasks", by the same rule that makes `notes/offer.md` "offer". Only the
+ * extension is new — capitalising would have been a nicer title for the task
+ * list and a changed one for every note in the notebook, which is not a trade
+ * this had any business making.
+ */
 const nameOf = (id: string): string =>
-  (id.split('/').pop() ?? id).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')
+  (id.split('/').pop() ?? id)
+    .replace(/\.fileset\.md$/, '')
+    .replace(/\.md$/, '')
+    .replace(/\.(stream|todo)$/, '')
 
 export function App(): React.JSX.Element {
   /** The STREAM, which is what the app opens with and what the title bar dates. */
@@ -315,6 +327,15 @@ export function App(): React.JSX.Element {
         askDelete(showing.id, showing.title ?? nameOf(showing.id))
       } else if (command === 'goToNotebook') {
         void pane?.goToToday().catch(fail)
+      } else if (command === 'goToTasks') {
+        // `which` makes the list if there is not one yet: a notebook that has
+        // never had a task list should not carry an empty directory for one,
+        // and asking to see it is a perfectly good moment to decide you have
+        // one (T1).
+        void window.tephra.todo
+          .which()
+          .then(id => pane?.goTo({ kind: 'document', id }))
+          .catch(fail)
       } else if (command === 'printDocument') {
         // The extent is asked for HERE rather than held in state: it grows as
         // the day goes on, and a dialog offering "everything" that stops at

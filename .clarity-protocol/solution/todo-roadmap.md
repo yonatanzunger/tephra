@@ -133,7 +133,34 @@ of doing it here. A todo file opens in the markdown surface meanwhile, because
 
 **Does not do:** any surface, any capture, any index.
 
-## MT3 — The list
+## MT3 — The list *(done)*
+
+**Done**, and verified by `npm run m3`. It also delivered **ML1**, the shared
+link scanner (`solution/link-roadmap.md`). What the phase settled:
+
+- **The surface reads ITEMS, not text.** `SurfaceProps` hands over a
+  `DocumentWindow`, and the todo surface uses it for one thing: `onChanged` as
+  the signal to re-read. The items themselves come from main already parsed,
+  and every verb goes back the same way. Reading a window's prose and
+  reconstructing rows from it would have been a second parser in the renderer,
+  which is the failure the shared grammar exists to prevent.
+- **Tags and the due date are lifted out of the PROSE and left in the LINE.**
+  The row reads like a sentence with chips beside it; the file still says
+  `#house` and `DUE 2026-09-14` where a person typed them (T16). `tagSpans` and
+  `dueSpan` are what make that one operation rather than a second parse.
+- **One channel, named verbs.** The wire is a `TodoCommand` union and the
+  preload is where it stops being one, so a caller writes
+  `todo.setStatus(list, id, 'done')` — the document's own vocabulary — and never
+  composes a command object.
+- **The distinguished list is `tasks.todo`**, not `main.todo`. A directory
+  document is titled by its name (D59), so naming it for what it holds means
+  the title falls out instead of being special-cased.
+- **A bug the tests could not see and a screenshot could.** `parseDayFile`
+  answers for every directory document now, so the corpus index was handing a
+  task list's day to `StreamDocument.scan` — and the sidebar's Timeline showed
+  today twice, once per document with a file for it. The root check was
+  identified during MT1 and not written; looking at the picture is what found
+  it. `dateOf` asks now.
 
 **The first entry in `SURFACES`, and the first thing in Tephra shown as
 something other than running text.** The unknowns of this whole milestone are

@@ -315,6 +315,14 @@ export function installMenu(next?: MenuActions): void {
           accelerator: 'CmdOrCtrl+0',
           click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
         },
+        {
+          // **The other place you are always going.** It sits beside the
+          // notebook rather than under File because it is a destination and
+          // not a document you opened — ⌘1 after the zeroth thing (T7, MT3).
+          label: 'Task List',
+          accelerator: 'CmdOrCtrl+1',
+          click: () => send(CHANNEL.menuCommand, 'goToTasks'),
+        },
         { type: 'separator' },
         // **Minimize without ⌘M.** The role carries the system accelerator, and
         // that key is a daily hazard for someone who does not want it: a

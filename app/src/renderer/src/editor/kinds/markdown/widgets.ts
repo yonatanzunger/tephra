@@ -23,6 +23,7 @@ import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, typ
 import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import katex from 'katex'
 import { HANDLE } from '../../../../../shared/document-api.ts'
+import { scanLinks } from '../../../../../shared/links.ts'
 
 export const rebuildWidgets = StateEffect.define<null>()
 
@@ -70,7 +71,6 @@ const CODE_SPAN = /`+[^`\n]*`+/g
 // behind is v1's ONLY path back to the branched material (D13), and it has to
 // keep working in any other editor as well as in this one. `!` in front makes
 // it an image, which is handled above.
-const LINK = /(?<!!)\[([^\]\n]+)\]\(([^)\s]+)\)/g
 
 // A marker's HANDLE — one character of prose standing for a bookmark or the
 // start of a tagged range (D44). There is no marker SYNTAX to look for here:
@@ -401,16 +401,21 @@ function buildInline(view: EditorView): DecorationSet {
       // Links: show the words, keep the target in the tooltip and one click
       // away. A link rendered as `[Titration curves](../../../notes/…)` is a
       // path back that costs a line of prose to read past every time.
-      LINK.lastIndex = 0
-      while ((m = LINK.exec(text)) !== null) {
-        if (insideCode(spans, m.index)) continue
-        const from2 = line.from + m.index
-        const to2 = from2 + m[0].length
+      //
+      // **Through the shared scanner** (ML1, D61), which is how a link whose
+      // URL contains a space became visible here: this had its own regex, it
+      // did not accept the angle-bracket spelling, and `destination()` writes
+      // that spelling — so Insert Link produced something this could not draw.
+      for (const link of scanLinks(text)) {
+        if (link.image) continue // an image is embedded elsewhere, not drawn as words
+        if (insideCode(spans, link.from)) continue
+        const from2 = line.from + link.from
+        const to2 = line.from + link.to
         if (widgetOptions.reveal && overlapsCursor(state, from2, to2)) continue
         decos.push({
           from: from2,
           to: to2,
-          deco: Decoration.replace({ widget: new LinkWidget(m[1] as string, m[2] as string) }),
+          deco: Decoration.replace({ widget: new LinkWidget(link.label, link.target) }),
         })
       }
 

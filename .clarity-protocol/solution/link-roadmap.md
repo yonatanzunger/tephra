@@ -43,7 +43,15 @@ it is a cache, which is the point of D52 — but free to avoid.
 
 ---
 
-## ML1 — one link scanner
+## ML1 — one link scanner *(done, in MT3)*
+
+**Done.** `shared/links.ts` holds the scanner and `destination` both — the
+writer moved there from the renderer, because the two are one grammar's halves
+and keeping them apart is how they came to disagree in the first place. The bug
+is fixed and pinned twice: once against `scanLinks` and once against the real
+lezer parser, since neither check alone would have caught it.
+
+### What it was
 
 **Ships inside MT3, because MT3 needs it**, and is counted here so the dependency
 is written down rather than discovered. A todo row is a React table cell, not

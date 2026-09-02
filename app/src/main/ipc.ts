@@ -1,7 +1,7 @@
 // Wiring the document service to Electron IPC. Nothing here does work.
 
 import { app, clipboard, ipcMain, shell, type BrowserWindow } from 'electron'
-import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId } from '../shared/ipc.ts'
+import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
@@ -83,6 +83,23 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string) =>
     service.newDocument(label, section),
   )
+
+  ipcMain.handle(CHANNEL.todo, async (_e, command: TodoCommand) => {
+    switch (command.kind) {
+      case 'list':
+        return service.todoList()
+      case 'today':
+        return service.todoToday(command.list)
+      case 'items':
+        return service.todoItems(command.list, command.date)
+      case 'add':
+        return service.todoAdd(command.list, command.text)
+      case 'status':
+        return service.todoSetStatus(command.list, command.item, command.status, command.note)
+      case 'edit':
+        return service.todoEdit(command.list, command.item, command.text)
+    }
+  })
   ipcMain.handle(CHANNEL.renameDocument, (_e, id: DocumentId, label: string) =>
     service.renameDocument(id, label),
   )

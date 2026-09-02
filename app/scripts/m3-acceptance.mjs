@@ -12,7 +12,7 @@
 //   1. Cmd+P asks which days, and produces a PDF of the ones written in
 
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, writeFile, stat } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, readFile, writeFile, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1010,6 +1010,102 @@ console.log('\n\u2014 the sidebar\'s own gestures \u2014')
     e.rowTop === e.fieldTop && e.rowHeight === e.fieldHeight && e.rowHeight > 0,
     `top ${e.rowTop}/${e.fieldTop} \u00b7 height ${e.rowHeight}/${e.fieldHeight}`,
   )
+}
+
+// ── 15. the task list ───────────────────────────────────────────────────────
+//
+// The first thing in Tephra shown as something other than running text, and the
+// interaction that dominates every other thing a list is asked: read it, check
+// something off, add to it. What is being tested beyond the drawing is that the
+// list a person sees IS the carried working set — the day is materialised by
+// opening it, not by a ritual that can be skipped (D55).
+console.log('\n\u2014 the task list \u2014')
+{
+  const root = await week(['Today.\n'])
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await mkdir(join(root, 'tasks.todo', '2026', '08'), { recursive: true })
+  await writeFile(join(root, 'notes', 'covenants.md'), '---\ntephra: 1\nkind: markdown\n---\nThe covenants.\n')
+  // Yesterday's list, with one of each thing that has to survive the carry or
+  // deliberately not survive it.
+  await writeFile(
+    join(root, 'tasks.todo', '2026', '08', '2026-08-31.md'),
+    '---\ntephra: 1\ndate: 2026-08-31\nkind: todo\n---\n' +
+      '- [ ] call the surveyor #house DUE 2026-09-03 <!--tephra:item aaaaaaaa 1756600000 1756600000-->\n' +
+      '- [/] read the survey <!--tephra:item bbbbbbbb 1756600000 1756600000-->\n' +
+      '- [?] get the deeds #house \u2014 waiting on the solicitor <!--tephra:item cccccccc 1756600000 1756600000-->\n' +
+      '- [x] ring the estate agent <!--tephra:item dddddddd 1756600000 1756600000-->\n' +
+      '- [ ] file the return DUE 2026-08-28 <!--tephra:item ffffffff 1756600000 1756600000-->\n' +
+      '- [ ] read [the covenants](../notes/covenants.md) again <!--tephra:item eeeeeeee 1756600000 1756600000-->\n',
+  )
+
+  const r = report(await launch('todo', root))
+  const carried = Array.isArray(r.carried) ? r.carried : []
+  const files = await readdir(join(root, 'tasks.todo', '2026', '09')).catch(() => [])
+  const today = files.length === 1
+    ? await readFile(join(root, 'tasks.todo', '2026', '09', files[0]), 'utf8')
+    : ''
+  const yesterday = await readFile(join(root, 'tasks.todo', '2026', '08', '2026-08-31.md'), 'utf8')
+
+  check('the list opens from the menu, under its own name', r.title === 'tasks', JSON.stringify(r.title))
+  check(
+    'THE CARRY: today is what was still yours yesterday',
+    carried.length === 5 && !carried.some(t => t.includes('estate agent')),
+    JSON.stringify(carried),
+  )
+  check(
+    'and yesterday is untouched, because it is the record of yesterday',
+    /ring the estate agent/.test(yesterday) && yesterday.split('\n').filter(l => l.startsWith('- ')).length === 6,
+  )
+  check(
+    'a blocked item keeps the reason somebody wrote',
+    carried.some(t => t.includes('waiting on the solicitor')),
+    JSON.stringify(carried),
+  )
+  check('tags are lifted out of the prose and shown as their own thing', Array.isArray(r.tags) && r.tags.length === 2, JSON.stringify(r.tags))
+  check('links in an item are live', Array.isArray(r.links) && r.links[0] === 'the covenants', JSON.stringify(r.links))
+  check(
+    'the due-soon band surfaces what is close, most urgent first (T9)',
+    Array.isArray(r.band) && r.band[0] === '4 days ago' && r.band[1] === 'in 2 days',
+    JSON.stringify(r.band),
+  )
+
+  check(
+    'THE MARK STAYS: checking off leaves the row where it was, finished',
+    Array.isArray(r.afterCheck) && r.afterCheck[0] === carried[0] &&
+      Array.isArray(r.finished) && r.finished[0] === true && r.finished[1] === false,
+    `${JSON.stringify(r.afterCheck?.[0])} \u00b7 ${JSON.stringify(r.finished)}`,
+  )
+  check('and it is done in the file, on today', /- \[x\] call the surveyor/.test(today), JSON.stringify(today))
+
+  check(
+    'a row is edited as the line it is, markers included (T16)',
+    r.editingRaw === 'read the survey',
+    JSON.stringify(r.editingRaw),
+  )
+  check(
+    'and the edit commits once, tags and date together (D56)',
+    Array.isArray(r.afterEdit) && r.afterEdit[1] === 'read the survey properly' &&
+      Array.isArray(r.afterEditTags) && r.afterEditTags.length === 3,
+    `${JSON.stringify(r.afterEdit?.[1])} \u00b7 ${JSON.stringify(r.afterEditTags)}`,
+  )
+  check(
+    'adding lands at the end, in creation order, and never re-sorts',
+    Array.isArray(r.afterAdd) && r.afterAdd[r.afterAdd.length - 1] === 'ring the bank',
+    JSON.stringify(r.afterAdd),
+  )
+  check(
+    'the file is the file it appears to be: a markdown task list',
+    /^- \[.\] .* <!--tephra:item [0-9a-z]{8} \d+ \d+-->$/m.test(today),
+    JSON.stringify(today.split('\n').find(l => l.startsWith('- '))),
+  )
+  check(
+    "and the task list's days are not mistaken for the notebook's",
+    // `parseDayFile` answers for every directory document (D59), so without a
+    // root check the sidebar showed today twice — once per document with a
+    // file for it. Caught by looking at a screenshot.
+    r.appError === 'none' && !/todo/.test(String(r.title)),
+  )
+  check('nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
 const failed = checks.filter(c => !c.ok)

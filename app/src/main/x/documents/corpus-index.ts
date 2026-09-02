@@ -18,7 +18,7 @@
 
 import type { Notebook } from '../../w/notebook.ts'
 import { IndexStore, type Entries, type Cached } from '../../w/index-store.ts'
-import { dayFile, parseDayFile, type RelPath } from '../../w/layout.ts'
+import { dayFile, parseDayFile, STREAM_DIR, type RelPath } from '../../w/layout.ts'
 import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
 import { parseFile } from '../frontmatter.ts'
 import type { StreamDocument } from './kinds/stream.ts'
@@ -355,7 +355,20 @@ export class CorpusIndex {
 
 const dirOf = (file: RelPath): RelPath => (file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '') as RelPath
 const nameOf = (file: RelPath): string => file.slice(file.lastIndexOf('/') + 1)
-const dateOf = (file: RelPath): DateKey | null => parseDayFile(file)?.date ?? null
+/**
+ * The day of the STREAM this file is, if it is one.
+ *
+ * **The root check is the whole of it, and its absence was visible.** Every
+ * directory document lays its days out identically (D59), so `parseDayFile`
+ * answers for a task list's file exactly as it answers for the stream's — and
+ * without asking which, the index handed a todo day to `StreamDocument.scan`
+ * and the sidebar's Timeline showed today twice, once for each document that
+ * had a file for it.
+ */
+const dateOf = (file: RelPath): DateKey | null => {
+  const ref = parseDayFile(file)
+  return ref === null || ref.root !== STREAM_DIR ? null : ref.date
+}
 const same = (a: { size: number; mtime: number }, b: { size: number; mtime: number }): boolean =>
   a.size === b.size && a.mtime === b.mtime
 

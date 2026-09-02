@@ -21,6 +21,7 @@ import type { NavTarget } from '../shared/pane-api.ts'
 import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
+import type { TodoItem, TodoStatus } from '../shared/kinds/todo.ts'
 
 type Handler<T> = (message: T) => void
 
@@ -142,6 +143,29 @@ const tephra = {
     close: (): Promise<void> => ipcRenderer.invoke(CHANNEL.windowClose),
   },
 
+  /**
+   * The task list (MT3).
+   *
+   * **Named verbs over one channel.** The wire is a union and this is where it
+   * stops being one: a caller writes `todo.setStatus(list, id, 'done')`, which
+   * is the document's own vocabulary, and never composes a command object.
+   */
+  todo: {
+    /** The notebook's list — the `.todo` directory at the root, made if new. */
+    which: (): Promise<DocumentId> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'list' }),
+    /** Today, materialised from the last day that had a file if need be (D55). */
+    today: (list: DocumentId): Promise<DateKey> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'today', list }),
+    items: (list: DocumentId, date: DateKey): Promise<readonly TodoItem[]> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'items', list, date }),
+    add: (list: DocumentId, text: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'add', list, text }),
+    setStatus: (list: DocumentId, item: string, status: TodoStatus, note?: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'status', list, item, status, note }),
+    /** The committed row edit: text, tags and date together, one edit (D56). */
+    edit: (list: DocumentId, item: string, text: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'edit', list, item, text }),
+  },
   doc: {
     open: (id?: DocumentId): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open, id),
     read: (request: ReadRequest): Promise<WindowSnapshot> => ipcRenderer.invoke(CHANNEL.read, request),

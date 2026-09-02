@@ -27,6 +27,8 @@ import {
   type RelPath,
 } from './w/layout.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
+import { TodoDocument } from './x/documents/kinds/todo.ts'
+import type { TodoItem, TodoStatus } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
@@ -949,6 +951,72 @@ export class DocumentService {
       const candidate = (dir === '' ? `${name}${suffix}` : `${dir}/${name}${suffix}`) as string as DocumentId
       if (candidate === id || !(await this.#corpus.exists(candidate))) return candidate
     }
+  }
+
+  // ── the task list (MT3) ──────────────────────────────────────
+
+  /**
+   * The notebook's TODO list, made if there is not one yet.
+   *
+   * **The `.todo` directory at the root is *the* list** (T1, D59) — the same
+   * way one stream is the notebook. It falls out of the layout rather than
+   * being named anywhere, and a second one at the root is an anomaly rather
+   * than a choice this has to arbitrate.
+   *
+   * Made on demand, because a notebook that has never had a task list should
+   * not carry an empty directory for one, and the first time you open the list
+   * is a perfectly good moment to decide you have one.
+   */
+  async todoList(): Promise<DocumentId> {
+    for (const id of await this.#corpus.list('todo')) {
+      if (!(id as string).includes('/')) return id
+    }
+    const made = 'tasks.todo' as DocumentId
+    // No `create`: a directory document has no single file to be created, and
+    // the day the carry materialises IS what brings it into being.
+    await this.#corpus.use(made, doc => (doc as TodoDocument).carry())
+    this.#touched()
+    return made
+  }
+
+  /**
+   * Today's working set, materialised if this is the day's first touch (D55).
+   *
+   * **The carry is here rather than in the walk**, which is the correction D55
+   * records: the walk is offered and never compelled, so a list whose survival
+   * depended on it would come apart the first week away from the desk. Opening
+   * the list is enough, and opening it twice does nothing the second time.
+   */
+  async todoToday(id: DocumentId): Promise<DateKey> {
+    const today = TodoDocument.today()
+    await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today))
+    this.#touched()
+    return today
+  }
+
+  async todoItems(id: DocumentId, date: DateKey): Promise<readonly TodoItem[]> {
+    return this.#corpus.use(id, doc => (doc as TodoDocument).itemsOn(date), { mode: 'read' })
+  }
+
+  /** Serialised with every other write, for the reason D37 gives. */
+  async todoAdd(id: DocumentId, text: string): Promise<string> {
+    const made = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as TodoDocument).add(text)),
+    )
+    this.#touched()
+    return made
+  }
+
+  async todoSetStatus(id: DocumentId, item: string, status: TodoStatus, note?: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as TodoDocument).setStatus(item, status, note)),
+    )
+    this.#touched()
+  }
+
+  async todoEdit(id: DocumentId, item: string, text: string): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).edit(item, text)))
+    this.#touched()
   }
 
   /**
