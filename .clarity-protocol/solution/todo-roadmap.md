@@ -353,6 +353,16 @@ without anything being told to.
   the list window tends to stay open all day, so a reset costs one click on the
   rare morning. If that proves wrong it goes where the theme's selection already
   is, rather than into a second place soft state lives.
+- **A completed tag is a finished tag, and the list has to close.** Matching is
+  by prefix and a completed word is a prefix of itself, so the list went on
+  offering `term` over a line that already said `#term`. An open list takes
+  Return as *accept the suggestion*, so the consequence was that **Return could
+  not commit an item ending in a tag at all** — the one gesture the assistant
+  exists to make faster was the one it blocked. Reported as "enter should work
+  like tab", and the truth was that Return already did what Tab did; what was
+  missing was anything ever putting the list away. Taking a completion now
+  dismisses it, which is the rule Escape already followed, and typing again is
+  how you ask for it back.
 - **A focused control keeps its own keys.** "Type anywhere to add an item"
   (MT3) swallowed the space that activates a button, so the first control ever
   put on this surface both looked broken and started an item with a space in

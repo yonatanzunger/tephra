@@ -718,6 +718,14 @@ function Field({
     setValue(`${value.slice(0, from)}${text}${value.slice(now)}`)
     caretTo.current = from + text.length
     setPick(0)
+    // **A tag that has been taken is finished, so the list goes away.**
+    // Matching is by prefix and the completed word is a prefix of itself, so
+    // the list went on offering `term` over a line that already said `#term` —
+    // and since an open list takes Return as "accept the suggestion", Return
+    // could never reach the item. An item ending in a tag could not be
+    // committed from the keyboard at all. Typing again asks for the list again,
+    // which is the same rule Escape has always followed.
+    setHidden(true)
     field.current?.focus()
   }
 

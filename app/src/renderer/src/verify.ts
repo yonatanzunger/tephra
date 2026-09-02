@@ -519,6 +519,7 @@ export async function runVerify(request: string): Promise<void> {
       ;(document.querySelector('.prompt-actions .destructive') as HTMLElement | null)?.click()
       await settle(1600)
       say('titleAfterDelete', document.querySelector('.titlebar .title')?.textContent ?? '')
+
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
@@ -673,6 +674,14 @@ export async function runVerify(request: string): Promise<void> {
       await settle(300)
       say('afterTabTwice', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
 
+      // **A completed tag is a finished tag, so the list goes away.** It went on
+      // matching what had just been written into it — `#term` is still a prefix
+      // of `term` — so it stayed open over a tag that was already whole. Only
+      // observed here: pressing Return to prove the consequence would commit
+      // the row the rest of this scene is still measuring, and it is proved at
+      // the end instead.
+      say('listAfterTaking', document.querySelector('.todo-complete') === null)
+
       ;(document.querySelectorAll('.todo-tools button')[1] as HTMLElement | null)?.dispatchEvent(
         new MouseEvent('mousedown', { bubbles: true }),
       )
@@ -760,6 +769,31 @@ export async function runVerify(request: string): Promise<void> {
       say('emptyEditable', document.querySelector('.todo-field') !== null)
       await type('.todo-field', 'the thing I could not name')
       say('afterNaming', texts().some(t => t.includes('could not name')))
+
+      // **Return twice, which is what typing a line ending in a tag actually
+      // is**: once to take the suggestion, once to say that is the item. It
+      // used to be impossible — the list stayed open over a tag it had just
+      // completed, so the second Return was eaten as "accept" like the first.
+      ;(document.querySelector('.todo-add') as HTMLElement | null)?.click()
+      await settle(300)
+      {
+        const fresh = document.querySelector('.todo-field') as HTMLInputElement | null
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+          fresh,
+          'paint the shed #te',
+        )
+        fresh?.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      await settle(400)
+      say('enterOffered', [...document.querySelectorAll('.todo-complete button')].map(b => b.textContent ?? ''))
+      key('Enter')
+      await settle(400)
+      say('firstEnterTook', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+      say('andClosedTheList', document.querySelector('.todo-complete') === null)
+      key('Enter')
+      await settle(700)
+      say('secondEnterCommitted', document.querySelector('.todo-field') === null)
+      say('enterEnterRows', texts())
 
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')

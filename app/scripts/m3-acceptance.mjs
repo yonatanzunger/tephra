@@ -1203,6 +1203,31 @@ console.log('\n\u2014 the task list \u2014')
     String(r.listRuns),
   )
   check(
+    // Matching is by prefix and a completed word is a prefix of itself, so the
+    // list went on offering `term` over a line that already said `#term`.
+    'taking a completion CLOSES the list, because the tag is finished',
+    r.listAfterTaking === true,
+    `still open: ${r.listAfterTaking === false}`,
+  )
+  check(
+    // **Reported from use.** An open list takes Return as "accept the
+    // suggestion", so with the list never closing, Return could not commit an
+    // item that ended in a tag — at all, from the keyboard.
+    'THE BUG: Return reaches the ITEM once the tag has been taken',
+    r.secondEnterCommitted === true,
+    String(r.secondEnterCommitted),
+  )
+  check(
+    // Which is the gesture somebody actually makes: one Return for the tag,
+    // one for the item.
+    'and Return twice is the whole of typing a line that ends in a tag',
+    r.firstEnterTook === 'paint the shed #term' &&
+      r.andClosedTheList === true &&
+      r.secondEnterCommitted === true &&
+      Array.isArray(r.enterEnterRows) && r.enterEnterRows.includes('paint the shed'),
+    `${JSON.stringify(r.firstEnterTook)} \u2192 committed ${r.secondEnterCommitted}`,
+  )
+  check(
     'an item can be deleted outright, for a line that was never a task',
     r.menuHasDelete === true &&
       Array.isArray(r.afterDelete) && !r.afterDelete.includes('ring the bank'),
