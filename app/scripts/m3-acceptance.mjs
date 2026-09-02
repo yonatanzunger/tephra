@@ -1277,6 +1277,82 @@ console.log('\n\u2014 the task list \u2014')
   )
 }
 
+// ── arranging the list by tag (T8's cheap half) ────────────────
+//
+// **A regrouping of what is on screen, not a query.** Every live item is in the
+// day already open, so the pivot needs no index and reaches no other file — and
+// what has to be true of it is therefore that it is the SAME list: nothing lost,
+// nothing invented, and every verb still working from inside a group.
+console.log('\n— arranging the list —')
+{
+  const root = await week(['Today.\n'])
+  const [y, m] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', y, m), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', y, m, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      `- [ ] call the surveyor #house DUE ${dayFrom(2)} <!--tephra:item aaaa1111 1756600000 1756600000-->\n` +
+      // The item that decides the design: two tags, so it is in two places.
+      '- [/] draft the copy #tephra #writing <!--tephra:item aaaa2222 1756600000 1756600000-->\n' +
+      '- [ ] renew the permit #admin <!--tephra:item aaaa3333 1756600000 1756600000-->\n' +
+      '- [x] fix the gate #house <!--tephra:item aaaa4444 1756600000 1756600000-->\n' +
+      '- [ ] think about it <!--tephra:item aaaa5555 1756600000 1756600000-->\n' +
+      '- [?] reroof the shed #house \u2014 waiting on the quote <!--tephra:item aaaa6666 1756600000 1756600000-->\n' +
+      '- [ ] read the survey #tephra <!--tephra:item aaaa7777 1756600000 1756600000-->\n',
+  )
+
+  const v = report(await launch('todoview', root))
+  const byTime = Array.isArray(v.byTime) ? v.byTime : []
+  const byTag = Array.isArray(v.byTag) ? v.byTag : []
+
+  check(
+    // Alphabetical because the list's governing promise is that it is a place
+    // you know your way around; by size or by recency the headings would move
+    // under the reader as items came and went.
+    'the groups are the tags, alphabetically, with the untagged ones LAST',
+    JSON.stringify(v.headings) === JSON.stringify(['admin', 'house', 'tephra', 'writing', 'Untagged']),
+    JSON.stringify(v.headings),
+  )
+  check('and each says how many it holds', JSON.stringify(v.counts) === JSON.stringify([1, 3, 2, 1, 1]),
+    JSON.stringify(v.counts))
+  check(
+    // "What is outstanding on the house" has to include an item that is also
+    // urgent; filing it under whichever tag was typed first answers a question
+    // nobody asked. So the rows outnumber the items, on purpose.
+    'THE CHOICE: an item with two tags is in both places',
+    v.appearsTwice === 2 && byTag.length === byTime.length + 1,
+    `${v.appearsTwice} copies \u00b7 ${byTag.length} rows for ${byTime.length} items`,
+  )
+  check(
+    // A heading already said it. The OTHER tag is exactly what the reader wants
+    // — it says where else this thing lives.
+    'a row does not repeat its group\'s tag, and still shows the others',
+    JSON.stringify(v.chipsUnderTephra) === JSON.stringify(['writing']),
+    JSON.stringify(v.chipsUnderTephra),
+  )
+  check(
+    'nothing is lost on the way in: every item reaches a group',
+    byTime.every(text => byTag.includes(text)),
+    `${byTime.filter(t => !byTag.includes(t)).join(', ') || 'all present'}`,
+  )
+  check(
+    // The verbs are the row's, wherever the row is drawn — and because every
+    // change round-trips through main and the list re-reads, the item's other
+    // copy follows without being told.
+    'a status set from inside one group moves the item in BOTH',
+    JSON.stringify(v.statusesAfter) === JSON.stringify(['done', 'done']),
+    JSON.stringify(v.statusesAfter),
+  )
+  check(
+    // The pivot is a view. Turning it off restores the order exactly, because
+    // nothing about the file changed when it went on.
+    'and going back is the list exactly as it was, in creation order',
+    JSON.stringify(v.backToTime) === JSON.stringify(byTime) && byTime.length === 7,
+    JSON.stringify(v.backToTime),
+  )
+  check('nothing errored on the way', v.appError === 'none', String(v.appError))
+}
+
 // ── the notebook is filing days somewhere you are not (D63) ────────────
 //
 // **Reported from use, and the report had three parts.** Changing the system

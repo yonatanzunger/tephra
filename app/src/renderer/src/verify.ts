@@ -912,6 +912,62 @@ export async function runVerify(request: string): Promise<void> {
       await settle(1200)
     }
 
+    if (scene === 'todoview') {
+      // The pivot is a view over what is already on screen (T8's cheap half),
+      // so what is worth checking is that it is the SAME list rearranged: no
+      // item lost, every tag a heading, and the verbs still reaching main.
+      // Navigated to rather than opened from the menu, for the reason the
+      // `todo` scene is: ⌘1 opens a window of its own and a scene runs in the
+      // first one.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const rows = () => [...document.querySelectorAll('.todo-row')]
+      const texts = () => rows().map(r => (r.querySelector('.todo-text')?.textContent ?? '').trim())
+      say('byTime', texts())
+
+      const pick = (label: string) =>
+        [...document.querySelectorAll('.todo-views button')].find(
+          b => (b.textContent ?? '').trim() === label,
+        ) as HTMLElement | undefined
+      pick('by tag')?.click()
+      await settle(600)
+      say('headings', [...document.querySelectorAll('.todo-group-name')].map(h =>
+        (h.childNodes[0]?.textContent ?? '').trim(),
+      ))
+      say('counts', [...document.querySelectorAll('.todo-group-count')].map(c => Number(c.textContent)))
+      say('byTag', texts())
+      // The heading said the tag; the row must not say it again — but the
+      // OTHER tags on a two-tag item are exactly what the reader wants.
+      const writing = [...document.querySelectorAll('.todo-group')].find(g =>
+        (g.querySelector('.todo-group-name')?.textContent ?? '').startsWith('tephra'),
+      )
+      say('chipsUnderTephra', [...(writing?.querySelectorAll('.todo-tag') ?? [])].map(t => t.textContent))
+
+      // A verb from inside a group still works, and the row it changes is the
+      // same item everywhere it appears. **Which item that is, is found rather
+      // than named** — a scene that knows its fixture's words tests the fixture.
+      const repeated = texts().find((t, i) => t !== '' && texts().indexOf(t) !== i) ?? ''
+      const copiesOf = (text: string) =>
+        rows().filter(r => (r.querySelector('.todo-text')?.textContent ?? '').trim() === text)
+      say('appearsTwice', copiesOf(repeated).length)
+      ;(copiesOf(repeated)[0]?.querySelector('.todo-glyph') as HTMLElement | null)?.click()
+      await settle(900)
+      say('statusesAfter', copiesOf(repeated).map(r => r.className.replace(/.*status-(\w+).*/, '$1')))
+
+      pick('by time')?.click()
+      await settle(500)
+      say('backToTime', texts())
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      // For the picture: this project has found the invisible selection, the
+      // cut-off sheet and the sans-serif Hebrew by looking at pixels.
+      if (arg === 'stay') pick('by tag')?.click()
+      await settle(800)
+    }
+
     if (scene === 'zonebar') {
       // **The control has to DO something.** The offer used to be a pill in the
       // title bar, and the title bar is a drag region — which swallows mouse

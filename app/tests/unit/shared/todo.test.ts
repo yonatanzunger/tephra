@@ -7,7 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  isLive, itemLine, parseItem, resolveDue, scanItems, unusedItemId,
+  groupByTag, isLive, itemLine, parseItem, resolveDue, scanItems, unusedItemId,
   type TodoItem, type TodoStatus,
 } from '../../../src/shared/kinds/todo.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
@@ -205,4 +205,73 @@ test('an item with no text is still a line', () => {
 test('a due date is a DateKey the rest of the app already understands', () => {
   const due: DateKey | null = parseItem('- [ ] x DUE 2026-09-14')?.due ?? null
   assert.equal(due, '2026-09-14')
+})
+
+// ── the tag pivot (T8's cheap half) ────────────────────
+//
+// A grouping and not a query: every live item is in the day already open, so
+// the view is a function of what is on screen. Tested here, with no DOM, for
+// the reason the rest of the grammar is — the interesting cases are all about
+// items and none of them are about drawing.
+
+/** A line, through the real parser, so a test cannot invent an item shape. */
+const item = (line: string): TodoItem => parseItem(line) as TodoItem
+
+test('groups run alphabetically, and items keep the order they came in', () => {
+  const groups = groupByTag([
+    item('- [ ] fix the gate #house'),
+    item('- [ ] call the surveyor #admin'),
+    item('- [ ] paint the shed #house'),
+  ])
+  assert.deepEqual(groups.map(g => g.tag), ['admin', 'house'])
+  assert.deepEqual(groups[1]?.items.map(i => i.text), [
+    'fix the gate #house',
+    'paint the shed #house',
+  ])
+})
+
+test('THE CHOICE: an item appears under every tag it carries', () => {
+  // "What is outstanding on the house" has to include an item that is also
+  // urgent. Filing it under whichever tag was typed first would answer a
+  // question nobody asked.
+  const groups = groupByTag([item('- [ ] fix the gate #house #urgent')])
+  assert.deepEqual(groups.map(g => g.tag), ['house', 'urgent'])
+  assert.equal(groups[0]?.items.length, 1)
+  assert.equal(groups[1]?.items[0], groups[0]?.items[0], 'and it is the same item, not a copy')
+})
+
+test('but a tag written twice on one line is one appearance', () => {
+  const groups = groupByTag([item('- [ ] #house fix the gate #house')])
+  assert.equal(groups.length, 1)
+  assert.equal(groups[0]?.items.length, 1)
+})
+
+test('untagged items are a group of their own, and it is LAST', () => {
+  // Never omitted. A view that silently dropped them would lose tasks, which
+  // is the one thing this list cannot do.
+  const groups = groupByTag([item('- [ ] think about it'), item('- [ ] fix the gate #house')])
+  assert.deepEqual(groups.map(g => g.tag), ['house', null])
+  assert.deepEqual(groups[1]?.items.map(i => i.text), ['think about it'])
+})
+
+test('and there is no empty group when everything is tagged', () => {
+  const groups = groupByTag([item('- [ ] fix the gate #house')])
+  assert.deepEqual(groups.map(g => g.tag), ['house'])
+})
+
+test('an empty list pivots to nothing at all', () => {
+  assert.deepEqual(groupByTag([]), [])
+})
+
+test('every item reaches the view, whatever its status', () => {
+  // The pivot is a REGROUPING, not a filter: an item finished today stays
+  // visible and greyed until tomorrow's carry (T7), in this view as in the
+  // other one. A pivot that quietly dropped it would be a second rule about
+  // what the list contains.
+  const items = [
+    item('- [x] fix the gate #house'),
+    item('- [-] paint the shed #house'),
+    item('- [>] reroof #house'),
+  ]
+  assert.equal(groupByTag(items)[0]?.items.length, items.length)
 })

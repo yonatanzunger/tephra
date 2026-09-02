@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { scanLinks } from '../../../../shared/links.ts'
-import { isLive, resolveDue, type TodoItem, type TodoStatus } from '../../../../shared/kinds/todo.ts'
+import { groupByTag, isLive, resolveDue, type TodoItem, type TodoStatus } from '../../../../shared/kinds/todo.ts'
 import { daysBetween } from '../../../../shared/dates.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 
@@ -107,6 +107,17 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
   const [menu, setMenu] = useState<RowMenuRequest | null>(null)
   /** The item whose reason is being typed, after `Blocked…` is chosen. */
   const [blocking, setBlocking] = useState<string | null>(null)
+  /**
+   * Which way the list is laid out (T8's cheap half).
+   *
+   * **Not persisted, on purpose.** The theme's selection lives in `UiState`
+   * because it is soft state worth keeping; this is soft state that is not yet
+   * known to be worth a mechanism, and the list window tends to stay open all
+   * day, so what a reset actually costs is one click on the rare morning. If
+   * that turns out to be wrong it goes where the theme's selection already is,
+   * rather than into a second place soft state lives.
+   */
+  const [by, setBy] = useState<'time' | 'tag'>('time')
 
   const fail = useCallback(
     (err: unknown) => onError?.(err instanceof Error ? err : new Error(String(err))),
@@ -224,6 +235,11 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (e.key.length !== 1) return
       if (document.querySelector('.todo-field') !== null) return
+      // **A focused button keeps its own keys.** Space activates a control, and
+      // swallowing it here would both start an item beginning with a space and
+      // leave the control looking broken — the cost of a rule that says "any
+      // key, anywhere" once there is something on the page to click.
+      if (document.activeElement?.closest('button') != null) return
       e.preventDefault()
       setAdding(e.key)
     }
@@ -266,53 +282,91 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
     '--measure': `${settings.typography.measure}ch`,
   } as React.CSSProperties
 
+  /**
+   * One row, wherever it is being drawn.
+   *
+   * **The same row in both views**, because the pivot changes where an item is
+   * shown and nothing about what it is — an item under a tag heading is the
+   * same item with the same verbs, and two copies of this JSX would be two
+   * places for those verbs to drift apart.
+   */
+  const row = (item: TodoItem, under: string | null = null): React.JSX.Element => (
+    <Row
+      key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}
+      under={under}
+      item={item}
+      today={today}
+      tags={live}
+      editing={editing === item.id}
+      blocking={blocking === item.id}
+      onEdit={() => setEditing(item.id)}
+      onDone={text => {
+        setEditing(null)
+        if (item.id !== null && text !== null) act(window.tephra.todo.edit(list, item.id, text))
+      }}
+      onStatus={status => {
+        if (item.id !== null) act(window.tephra.todo.setStatus(list, item.id, status))
+      }}
+      onBlocked={note => {
+        setBlocking(null)
+        if (item.id !== null && note !== null) {
+          act(window.tephra.todo.setStatus(list, item.id, 'blocked', note))
+        }
+      }}
+      onMenu={e => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (item.id === null) return
+        const id = item.id
+        setMenu({
+          at: { x: e.clientX, y: e.clientY },
+          about: prose(item),
+          items: statusItems(status => {
+            // Blocked asks WHY, because a block without the thing it is
+            // waiting on is the one status that says nothing (T4).
+            if (status === 'blocked') setBlocking(id)
+            else act(window.tephra.todo.setStatus(list, id, status))
+          }, () => act(window.tephra.todo.remove(list, id))),
+        })
+      }}
+    />
+  )
+
   return (
     <div className="todo" role="region" aria-label="Task list" style={type}>
       {/* **The list keeps the notebook's own two columns** — a measure, and a
           gutter beside it — so a task list and a page of prose are the same
           page laid out the same way (D42, R27). */}
       <div className="todo-column">
+        {/* **How the list is laid out, said where the list is** — a surface's
+            own affordance rather than chrome in the title bar, which the
+            notebook shares and which knows nothing about tags. Both options are
+            always shown and one is always pressed, so the control never
+            changes size and the list beneath it never moves (D42). */}
+        <div className="todo-views" role="group" aria-label="Arrange the list">
+          <button type="button" aria-pressed={by === 'time'} onClick={() => setBy('time')}>
+            by time
+          </button>
+          <button type="button" aria-pressed={by === 'tag'} onClick={() => setBy('tag')}>
+            by tag
+          </button>
+        </div>
+
         <ol className="todo-list">
-          {items.map(item => (
-            <Row
-              key={item.id ?? `unadopted:${item.text}`}
-              item={item}
-              today={today}
-              tags={live}
-              editing={editing === item.id}
-              blocking={blocking === item.id}
-              onEdit={() => setEditing(item.id)}
-              onDone={text => {
-                setEditing(null)
-                if (item.id !== null && text !== null) act(window.tephra.todo.edit(list, item.id, text))
-              }}
-              onStatus={status => {
-                if (item.id !== null) act(window.tephra.todo.setStatus(list, item.id, status))
-              }}
-              onBlocked={note => {
-                setBlocking(null)
-                if (item.id !== null && note !== null) {
-                  act(window.tephra.todo.setStatus(list, item.id, 'blocked', note))
-                }
-              }}
-              onMenu={e => {
-                e.preventDefault()
-                e.stopPropagation()
-                if (item.id === null) return
-                const id = item.id
-                setMenu({
-                  at: { x: e.clientX, y: e.clientY },
-                  about: prose(item),
-                  items: statusItems(status => {
-                    // Blocked asks WHY, because a block without the thing it is
-                    // waiting on is the one status that says nothing (T4).
-                    if (status === 'blocked') setBlocking(id)
-                    else act(window.tephra.todo.setStatus(list, id, status))
-                  }, () => act(window.tephra.todo.remove(list, id))),
-                })
-              }}
-            />
-          ))}
+          {by === 'time'
+            ? items.map(item => row(item))
+            : groupByTag(items).map(group => (
+                <li key={group.tag ?? ':none'} className="todo-group">
+                  {/* **The heading is a heading, not a row.** A group is a
+                      place on the page and its name has to read as one, or the
+                      eye takes it for another item with an odd-looking mark. */}
+                  <h2 className="todo-group-name">
+                    {group.tag === null ? 'Untagged' : group.tag}
+                    <span className="todo-group-count">{group.items.length}</span>
+                  </h2>
+                  <ol className="todo-list">{group.items.map(item => row(item, group.tag))}</ol>
+                </li>
+              ))}
 
           {/* **Adding is a row, and it is the SAME row.** It wears the list's
               own geometry — the mark, the padding, the field at the width an
@@ -437,6 +491,7 @@ function Row({
   onStatus,
   onBlocked,
   onMenu,
+  under = null,
 }: {
   item: TodoItem
   today: DateKey | null
@@ -448,8 +503,17 @@ function Row({
   onStatus: (status: TodoStatus) => void
   onBlocked: (note: string | null) => void
   onMenu: (e: React.MouseEvent) => void
+  /**
+   * The tag of the group this row is sitting under, if it is in one.
+   *
+   * **A heading already said it.** Repeating `#house` on every row inside the
+   * house group is noise, but the OTHER tags on that item are exactly what the
+   * reader wants — they say where else this thing also lives.
+   */
+  under?: string | null
 }): React.JSX.Element {
   const done = item.status === 'done' || item.status === 'dropped'
+  const chips = item.tags.filter(tag => tag !== under)
   return (
     <li
       id={`todo-${item.id ?? ''}`}
@@ -501,9 +565,9 @@ function Row({
         </span>
       )}
 
-      {item.tags.length > 0 && (
+      {chips.length > 0 && (
         <span className="todo-tags">
-          {item.tags.map(tag => (
+          {chips.map(tag => (
             <span key={tag} className="todo-tag">
               {tag}
             </span>

@@ -313,6 +313,55 @@ learning the day rules by hand.
 - `#` and date entry as a typist's assistant that produces character-for-
   character what the typed path produces (T16).
 
+## MT4a — Arranging the list by tag *(done)*
+
+**Not planned, and asked for from use** — "I'm already feeling the gap" — which
+is the signal this roadmap is supposed to move for. It takes **half of T8 out of
+MT6** and leaves the other half there, and the seam between them turned out to
+be sharp enough to be worth naming.
+
+**The pivot over today's set is a VIEW, not a query.** Every live item is in the
+day already open (T7), so grouping by tag is a function of what is on screen: no
+index, no second file read, and **no change above the renderer at all** — the
+grouping is in `shared/kinds/todo.ts` because it is a fact about a list of items
+rather than about drawing one, which is also what makes it testable with no DOM.
+What stays in MT6 is the half that *is* a query: recently-resolved items from
+earlier days, which reaches into files today's segment does not contain and
+wants the index MT5 builds.
+
+**An item appears under every tag it carries, not under its first.** The
+question a tag view answers is "what is outstanding on the house", and an item
+tagged `#house #urgent` is outstanding on the house whichever tag was typed
+first. So the rows outnumber the items — that is not a defect being tolerated,
+it is what "this item is in two places" looks like when it is drawn. It costs
+nothing to keep consistent: every verb already round-trips through main and the
+list re-reads, so checking an item off in one group moves it in the other
+without anything being told to.
+
+- **Alphabetical, and creation order within a group.** The list's governing
+  promise is that it is a place you know your way around, so a pivot has to be
+  as predictable as the order it replaces. Sorted by size or by recency, the
+  headings would move under the reader as items came and went.
+- **The untagged group is last and is never omitted.** A view that silently
+  dropped untagged items would lose tasks, which is the one thing this list
+  cannot do.
+- **A row does not repeat the tag its heading already said**, and does show the
+  others — which is exactly the information a duplicated row is carrying.
+- **The choice is not persisted**, and that is a decision rather than an
+  omission. The theme's selection lives in `UiState` because it is soft state
+  known to be worth keeping; this is not known to be worth a mechanism yet, and
+  the list window tends to stay open all day, so a reset costs one click on the
+  rare morning. If that proves wrong it goes where the theme's selection already
+  is, rather than into a second place soft state lives.
+- **A focused control keeps its own keys.** "Type anywhere to add an item"
+  (MT3) swallowed the space that activates a button, so the first control ever
+  put on this surface both looked broken and started an item with a space in
+  it. The rule now stops at anything clickable.
+
+**Does not do:** the resolved tail, filtering to one tag, or adding into a group
+with its tag prefilled. The first is MT6's; the other two are cheap and nobody
+has asked.
+
 ## MT5 — The walk, the tag index, and then the cap
 
 **Depends on MD** (`solution/day-boundary.md`): the walk is offered when the
@@ -334,10 +383,12 @@ list wants the index.
 
 ## MT6 — The pivots and the drawer
 
-- Tag pivot (T8) — live items and recently resolved ones together. Cheaper than
-  `scope.md` feared: every live item is in today's file, so the live half is a
-  filter over **one segment** and writes back as an ordinary edit. Only the
-  resolved tail reaches into other days, and it can be read-only.
+- Tag pivot (T8) — **the resolved tail only; the live half shipped in MT4a.**
+  `scope.md` feared this and it was cheaper than feared for the reason recorded
+  there: every live item is in today's file, so the live half is a regrouping of
+  one segment and needed nothing built. What is left is the part that reaches
+  into other days for recently resolved items, which is read-only and wants
+  MT5's index.
 - Scrub to a past day (T7's flow 7) — read-only, and nearly free: it is opening
   a file.
 - The backlog drawer (T14) — reachable and counted. **Resurfacing is deferred**

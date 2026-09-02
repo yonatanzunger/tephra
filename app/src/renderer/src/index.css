@@ -432,6 +432,44 @@ body {
 .todo-column { min-width: 0; }
 .todo-list { list-style: none; margin: 0; padding: 0; }
 
+/* ── how the list is arranged (T8) ──────────────────────
+   Small, quiet and always present: it is a control for a decision somebody
+   makes occasionally, so it should not compete with the list it arranges. Both
+   options are always drawn, so nothing under it moves when the choice changes.
+   Set in the UI face rather than the notebook's, because it is chrome about the
+   page and not part of it. */
+.todo-views { display: flex; gap: .1rem; padding: .2rem 0 .5rem; }
+.todo-views button {
+  font-family: var(--font-ui); font-size: 11.5px; letter-spacing: .02em;
+  cursor: pointer; color: rgb(var(--text-muted));
+  background: none; border: 1px solid transparent; border-radius: 4px;
+  padding: .12rem .5rem;
+}
+.todo-views button:hover { color: rgb(var(--text)); }
+.todo-views button[aria-pressed='true'] {
+  color: rgb(var(--text-heading));
+  background: rgb(var(--text) / .06);
+  border-color: rgb(var(--border));
+}
+
+/* A group is a PLACE on the page, so its name is set as a heading rather than
+   as another row — an eye scanning a left edge for status marks must never
+   take a heading for an item with an odd-looking one. */
+.todo-group { list-style: none; margin: 0 0 .6em; }
+.todo-group-name {
+  display: flex; align-items: baseline; gap: .4rem;
+  margin: .9em 0 0; padding-bottom: .15em;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: rgb(var(--text-heading));
+  border-bottom: 1px solid rgb(var(--border));
+}
+/* The count is here rather than in the heading's words because it changes and
+   the name does not; a number that moves inside a label makes the label move. */
+.todo-group-count {
+  font-weight: 400; letter-spacing: 0; color: rgb(var(--text-muted));
+}
+
 /* `flex-start`, not `baseline`: a box has no baseline worth aligning to, and
    asking for one put it above the text. It is nudged down by half the
    difference between the line box and its own height, which is what "on the

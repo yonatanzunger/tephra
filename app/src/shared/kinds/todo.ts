@@ -335,3 +335,55 @@ export function unusedItemId(taken: ReadonlySet<string>, random: () => number = 
 
 /** Seconds since the epoch: what the marker carries, and what T3 asks for. */
 export const nowSeconds = (): number => Math.floor(Date.now() / 1000)
+
+/**
+ * One heading's worth of the list, when the list is grouped by tag (T8).
+ *
+ * `tag` is null for the group of items that carry none, which is last and is
+ * never omitted — a view that silently dropped untagged items would be a view
+ * that loses tasks, and losing a task is the one thing this list cannot do.
+ */
+export interface TodoGroup {
+  readonly tag: string | null
+  readonly items: readonly TodoItem[]
+}
+
+/**
+ * The list, pivoted by tag.
+ *
+ * **An item appears under EVERY tag it carries, not under its first.** The
+ * question a tag view answers is "what is outstanding on the house", and an
+ * item tagged `#house #urgent` is outstanding on the house whichever tag was
+ * typed first; hiding it under `#urgent` would answer a question nobody asked.
+ * The cost is that the rows outnumber the items, which is not an error being
+ * tolerated — it is what "this item is in two places" looks like when drawn.
+ *
+ * **Alphabetical, and creation order within a group.** The list's governing
+ * promise is that it is a place you know your way around, so the pivot has to
+ * be as predictable as the order it replaces: by size or by recency the
+ * headings would move under the reader as items came and went.
+ *
+ * A grouping and not a query — every live item is in the day already open, so
+ * this is a function of what is on screen and needs no index behind it. The
+ * half of T8 that reaches into other days for recently resolved items is a
+ * different thing and is still MT6's.
+ */
+export function groupByTag(items: readonly TodoItem[]): readonly TodoGroup[] {
+  const byTag = new Map<string, TodoItem[]>()
+  const untagged: TodoItem[] = []
+  for (const item of items) {
+    // Per item, because a line that says `#house` twice is one item in the
+    // house group — the duplication that is meaningful is across tags.
+    const tags = [...new Set(item.tags)]
+    if (tags.length === 0) untagged.push(item)
+    for (const tag of tags) {
+      const into = byTag.get(tag)
+      if (into === undefined) byTag.set(tag, [item])
+      else into.push(item)
+    }
+  }
+  const named = [...byTag.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([tag, group]): TodoGroup => ({ tag, items: group }))
+  return untagged.length === 0 ? named : [...named, { tag: null, items: untagged }]
+}
