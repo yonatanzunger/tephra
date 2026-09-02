@@ -418,7 +418,7 @@ export async function runVerify(request: string): Promise<void> {
       // New, rename, copy, delete — through the real menu items, which is where
       // the accelerators live and what a keystroke actually reaches.
       let waited = 0
-      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+      while (waited < 25_000 && document.querySelectorAll('.nav-row').length < 1) {
         await settle(200)
         waited += 200
       }
@@ -469,7 +469,7 @@ export async function runVerify(request: string): Promise<void> {
       // The migration is a directory rename; this is the claim that the rename
       // is all it is.
       let waited = 0
-      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+      while (waited < 25_000 && document.querySelectorAll('.nav-row').length < 1) {
         await settle(200)
         waited += 200
       }
@@ -486,9 +486,12 @@ export async function runVerify(request: string): Promise<void> {
     }
 
     if (scene === 'todo') {
-      // The list, driven the way a person drives it: open it from the menu,
-      // check one off, edit a row, add one.
-      say('opened', await window.tephra.clickMenu('Task List'))
+      // The list, driven the way a person drives it — but navigated to rather
+      // than opened from the menu. **⌘1 opens a window of its own** (a person
+      // works with the list beside their writing, not instead of it), and a
+      // scene runs in window 1: the menu item is checked separately, below.
+      say('opened', await window.tephra.todo.which())
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
       let waited = 0
       while (waited < 8000 && document.querySelector('.todo') === null) {
         await settle(200)
@@ -503,6 +506,18 @@ export async function runVerify(request: string): Promise<void> {
         rows().map(r => r.querySelector('.todo-text')?.textContent ?? '')
 
       say('carried', texts())
+      // Drawn, not typed: a character in a box takes the text's face and its
+      // own idea of where the middle is, and six of them line up six ways.
+      say('marksDrawn', document.querySelectorAll('.todo-glyph svg.todo-mark').length)
+      // The list is set in the notebook's own type (D41), not a second set of
+      // numbers that the theme panel's sliders do not reach.
+      const surface = document.querySelector('.todo') as HTMLElement | null
+      const prose2 = document.querySelector('.cm-content') as HTMLElement | null
+      say('type', {
+        list: getComputedStyle(surface as Element).fontSize,
+        listFace: getComputedStyle(surface as Element).fontFamily,
+        prose: prose2 === null ? null : getComputedStyle(prose2).fontSize,
+      })
       say('band', [...document.querySelectorAll('.todo-soon-item')].map(
         b => b.querySelector('.todo-when')?.textContent ?? '',
       ))
@@ -510,12 +525,27 @@ export async function runVerify(request: string): Promise<void> {
       say('dues', [...document.querySelectorAll('.todo-due')].map(d => d.textContent ?? ''))
       say('links', [...document.querySelectorAll('.todo-text .tx-link')].map(a2 => a2.textContent ?? ''))
 
-      // Check one off. It stays where it was, greyed — the paper page's X.
-      const first = rows()[0]
-      ;(first?.querySelector('.todo-glyph') as HTMLElement | null)?.click()
-      await settle(1200)
+      // **A click advances one step.** Not started, then in progress, then done
+      // — and the row stays where it was, greyed, which is the paper page's X.
+      const glyph = (): HTMLElement | null => rows()[0]?.querySelector('.todo-glyph') ?? null
+      glyph()?.click()
+      await settle(1000)
+      say('afterOneClick', rows()[0]?.className.replace(/.*status-(\w+).*/, '$1') ?? '')
+      glyph()?.click()
+      await settle(1000)
+      say('afterTwoClicks', rows()[0]?.className.replace(/.*status-(\w+).*/, '$1') ?? '')
       say('afterCheck', texts())
       say('finished', rows().map(r => r.className.includes('finished')))
+
+      // The other three statuses are on the right-click menu.
+      rows()[2]?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+      await settle(400)
+      say('statusMenu', [...document.querySelectorAll('.row-menu button')].map(b => b.textContent ?? ''))
+      ;([...document.querySelectorAll('.row-menu button')].find(
+        b => (b.textContent ?? '').startsWith('Backlogged'),
+      ) as HTMLElement | null)?.click()
+      await settle(1200)
+      say('afterBacklog', rows()[2]?.className.replace(/.*status-(\w+).*/, '$1') ?? '')
 
       const type = async (selector: string, value: string): Promise<void> => {
         const input = document.querySelector(selector) as HTMLInputElement | null
@@ -532,6 +562,51 @@ export async function runVerify(request: string): Promise<void> {
       ;(rows()[1]?.querySelector('.todo-text') as HTMLElement | null)?.click()
       await settle(400)
       say('editingRaw', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+
+      // **The typist's assistant** (T16): a `#` offers the tags that have live
+      // items, and the date buttons write what typing would have written.
+      const field = document.querySelector('.todo-field') as HTMLInputElement | null
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setValue?.call(field, 'read the survey #')
+      field?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(400)
+      say('completions', [...document.querySelectorAll('.todo-complete button')].map(b => b.textContent ?? ''))
+
+      // **From the keyboard**: down moves the highlight, Tab takes it. Reaching
+      // for the mouse to accept a suggestion costs more than typing the tag
+      // would have, which makes the assistant slower than the thing it assists.
+      const key = (k: string): void => {
+        document.querySelector('.todo-field')?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }),
+        )
+      }
+      key('ArrowDown')
+      await settle(200)
+      say('picked', document.querySelector('.todo-complete button.picked')?.textContent ?? '')
+      key('Escape')
+      await settle(200)
+      say('escapeHidesTheList', document.querySelector('.todo-complete') === null)
+      say('escapeKeptTheLine', document.querySelector('.todo-field') !== null)
+
+      // Ask for it again and take it with Tab.
+      const again = document.querySelector('.todo-field') as HTMLInputElement | null
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(again, 'read the survey #te')
+      again?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(300)
+      key('Tab')
+      await settle(300)
+      say('afterTab', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+
+      ;(document.querySelectorAll('.todo-tools button')[1] as HTMLElement | null)?.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true }),
+      )
+      await settle(400)
+      ;([...document.querySelectorAll('.todo-dates button')].find(
+        b => (b.textContent ?? '') === 'tomorrow',
+      ) as HTMLElement | null)?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await settle(400)
+      say('afterDateButton', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+
       await type('.todo-field', 'read the survey properly #house DUE 2026-09-30')
       say('afterEdit', texts())
       say('afterEditTags', [...document.querySelectorAll('.todo-tag')].map(t => t.textContent ?? ''))
@@ -541,9 +616,168 @@ export async function runVerify(request: string): Promise<void> {
       await type('.todo-field', 'ring the bank #money')
       say('afterAdd', texts())
 
+      // **Straight-up delete**, for a line that was never a task. Not
+      // *nevermind*, which is a decision and stays on the list saying so.
+      const last = rows()[rows().length - 1]
+      last?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+      await settle(400)
+      say('menuHasDelete', [...document.querySelectorAll('.row-menu button')].some(
+        b => (b.textContent ?? '') === 'Delete',
+      ))
+      ;([...document.querySelectorAll('.row-menu button')].find(
+        b => (b.textContent ?? '') === 'Delete',
+      ) as HTMLElement | null)?.click()
+      await settle(1400)
+      say('afterDelete', texts())
+
+      // Where the ink sits between the rules. A line box carries its leading
+      // above and below, and an eye judges a line by its x-height band — so
+      // "centred" means the ink set a shade BELOW the middle.
+      {
+        const row = document.querySelector('.todo-row') as HTMLElement | null
+        const span = document.querySelector('.todo-text') as HTMLElement | null
+        const range = document.createRange()
+        if (span !== null) range.selectNodeContents(span)
+        const ink = range.getBoundingClientRect()
+        const box = row?.getBoundingClientRect()
+        const mark = document.querySelector('.todo-mark')?.getBoundingClientRect()
+        say('rhythm', {
+          above: Math.round(ink.top - (box?.top ?? 0)),
+          below: Math.round((box?.bottom ?? 0) - ink.bottom),
+          // The mark rides up out of the geometric centre to meet the words.
+          markAbove: Math.round((mark?.top ?? 0) - (box?.top ?? 0)),
+        })
+      }
+
+      // Typing anywhere on the list starts an item: no button to find first.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', bubbles: true }))
+      await settle(500)
+      say('typedToAdd', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? null)
+      {
+        const rowBox = document.querySelectorAll('.todo-row:not(.todo-adding)')[0]?.getBoundingClientRect()
+        const addBox = document.querySelector('.todo-adding')?.getBoundingClientRect()
+        const rail = document.querySelector('.todo-soon')?.getBoundingClientRect()
+        const col = document.querySelector('.todo-column')?.getBoundingClientRect()
+        say('addRow', {
+          rowH: Math.round(rowBox?.height ?? -1),
+          addH: Math.round(addBox?.height ?? -1),
+          rowMark: Math.round(document.querySelector('.todo-row:not(.todo-adding) .todo-glyph')?.getBoundingClientRect().left ?? -1),
+          addMark: Math.round(document.querySelector('.todo-adding .todo-glyph')?.getBoundingClientRect().left ?? -1),
+        })
+        say('railRight', (rail?.left ?? 0) >= (col?.right ?? 0))
+      }
+      document.querySelector('.todo-field')?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      )
+      await settle(400)
+
+      // **An item with no words is still an item**, and the whole row is what
+      // you click to give it some: the text used to be a button that collapsed
+      // to nothing, leaving no way back into the line.
+      const empty = await window.tephra.todo.add(await window.tephra.todo.which(), ' ')
+      void empty
+      await settle(1200)
+      const blank = rows().find(r => (r.textContent ?? '').includes('Nothing written yet'))
+      say('emptyShown', blank !== undefined)
+      blank?.click()
+      await settle(400)
+      say('emptyEditable', document.querySelector('.todo-field') !== null)
+      await type('.todo-field', 'the thing I could not name')
+      say('afterNaming', texts().some(t => t.includes('could not name')))
+
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
+    }
+
+    if (scene === 'todo-look') {
+      // Open the list and start adding, so a screenshot shows the geometry.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      await settle(1200)
+      // Just type: no button to find, no field to open first.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }))
+      await settle(500)
+      say('typedToAdd', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? null)
+      {
+        const rowBox = document.querySelectorAll('.todo-row')[0]?.getBoundingClientRect()
+        const addBox = document.querySelector('.todo-adding')?.getBoundingClientRect()
+        const rail = document.querySelector('.todo-soon')?.getBoundingClientRect()
+        const col = document.querySelector('.todo-column')?.getBoundingClientRect()
+        say('rowVsAdd', {
+          rowH: Math.round(rowBox?.height ?? -1),
+          addH: Math.round(addBox?.height ?? -1),
+          rowMark: Math.round(document.querySelectorAll('.todo-glyph')[0]?.getBoundingClientRect().left ?? -1),
+          addMark: Math.round(document.querySelector('.todo-adding .todo-glyph')?.getBoundingClientRect().left ?? -1),
+        })
+        say('rail', { left: Math.round(rail?.left ?? -1), colRight: Math.round(col?.right ?? -1) })
+        const one = document.querySelector('.todo-soon-item')
+        say('railSize', one === null ? '' : getComputedStyle(one).fontSize)
+      }
+      say('marks', document.querySelectorAll('.todo-mark').length)
+      // Where the INK sits between the rules, which is what "centred" means to
+      // an eye: a line box has leading above and below, and a serif's
+      // ascenders outrun its descenders, so a centred box looks high.
+      {
+        const row = document.querySelector('.todo-row') as HTMLElement | null
+        const span = document.querySelector('.todo-text') as HTMLElement | null
+        const range = document.createRange()
+        if (span !== null) range.selectNodeContents(span)
+        const ink = range.getBoundingClientRect()
+        const box = row?.getBoundingClientRect()
+        const mark = document.querySelector('.todo-mark')?.getBoundingClientRect()
+        say('rhythm', {
+          above: Math.round((ink.top - (box?.top ?? 0)) * 10) / 10,
+          below: Math.round(((box?.bottom ?? 0) - ink.bottom) * 10) / 10,
+          markAbove: Math.round(((mark?.top ?? 0) - (box?.top ?? 0)) * 10) / 10,
+          markBelow: Math.round(((box?.bottom ?? 0) - (mark?.bottom ?? 0)) * 10) / 10,
+        })
+      }
+      const g = document.querySelector('.todo-glyph')?.getBoundingClientRect()
+      const t = document.querySelector('.todo-text')?.getBoundingClientRect()
+      say('markSize', Math.round(g?.height ?? -1))
+      say('markVsText', { markTop: Math.round(g?.top ?? -1), textTop: Math.round(t?.top ?? -1) })
+      say('fontSize', getComputedStyle(document.querySelector('.todo') as Element).fontSize)
+      say('editorFont', getComputedStyle(document.querySelector('.todo') as Element).fontFamily.slice(0, 24))
+      // Type a `#` and see what completion offers, then open the date popup.
+      const input = document.querySelector('.todo-field') as HTMLInputElement | null
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'plan the term #')
+      input?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(400)
+      say('completions', [...document.querySelectorAll('.todo-complete button')].map(b => b.textContent ?? ''))
+      ;(document.querySelectorAll('.todo-tools button')[1] as HTMLElement | null)?.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true }),
+      )
+      await settle(400)
+      say('dateChoices', [...document.querySelectorAll('.todo-dates button')].map(b => b.textContent ?? ''))
+      const box = document.querySelector('.todo-field')?.getBoundingClientRect()
+      const rowBox = document.querySelector('.todo-row')?.getBoundingClientRect()
+      say('fieldWidth', Math.round(box?.width ?? -1))
+      say('fieldLeft', Math.round(box?.left ?? -1))
+      say('rowLeft', Math.round(rowBox?.left ?? -1))
+      say('paneLeft', Math.round(document.querySelector('.todo')?.getBoundingClientRect().left ?? -1))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+    }
+
+    if (scene === 'todo-window') {
+      // ⌘1 opens the list in a window of its own and leaves this one where it
+      // was — which is the whole of why it is main's action and not a
+      // navigation (MC6). **And ⌘0 is the same act**: both mean "there should
+      // be a window with this in it, in front".
+      const before = document.querySelector('.titlebar .title')?.textContent ?? ''
+      say('clicked', await window.tephra.clickMenu('Task List'))
+      await settle(2500)
+      say('thisWindowStayed', (document.querySelector('.titlebar .title')?.textContent ?? '') === before)
+      say('stillShowingProse', document.querySelector('.cm-content') !== null)
+      // Asked for twice, it is the same window both times rather than a drift
+      // of identical ones.
+      say('again', await window.tephra.clickMenu('Task List'))
+      await settle(2000)
+      say('notebookAgain', await window.tephra.clickMenu('Notebook'))
+      await settle(2000)
+      say('stillProse', document.querySelector('.cm-content') !== null)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(1200)
     }
 
     if (scene === 'rowmenu') {
@@ -551,7 +785,7 @@ export async function runVerify(request: string): Promise<void> {
       // has something to show. This project has found the invisible selection,
       // the cut-off sheet and the sans-serif Hebrew by looking at pixels.
       let waited = 0
-      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+      while (waited < 25_000 && document.querySelectorAll('.nav-row').length < 1) {
         await settle(200)
         waited += 200
       }
@@ -593,7 +827,7 @@ export async function runVerify(request: string): Promise<void> {
       // bar — plus the two that only exist here: relabelling a row, and making
       // a file in the section you are looking at.
       let waited = 0
-      while (waited < 8000 && document.querySelectorAll('.nav-row').length < 1) {
+      while (waited < 25_000 && document.querySelectorAll('.nav-row').length < 1) {
         await settle(200)
         waited += 200
       }

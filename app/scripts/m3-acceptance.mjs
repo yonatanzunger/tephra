@@ -54,7 +54,12 @@ async function week(bodies) {
   return root
 }
 
-function launch(scene, root, { timeoutMs = 90_000, shotDelay = 30_000 } = {}) {
+// **Three minutes, not ninety seconds.** The scenes have grown — the sidebar's
+// drives a dozen gestures through real IPC — and the timeout had not, so the
+// longest one was the first to fall over whenever the machine had anything else
+// to do. A timeout that fires on a slow machine reports a failure that is not
+// there, which is worse than a slow suite.
+function launch(scene, root, { timeoutMs = 180_000, shotDelay = 30_000 } = {}) {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
@@ -1035,7 +1040,7 @@ console.log('\n\u2014 the task list \u2014')
       '- [?] get the deeds #house \u2014 waiting on the solicitor <!--tephra:item cccccccc 1756600000 1756600000-->\n' +
       '- [x] ring the estate agent <!--tephra:item dddddddd 1756600000 1756600000-->\n' +
       '- [ ] file the return DUE 2026-08-28 <!--tephra:item ffffffff 1756600000 1756600000-->\n' +
-      '- [ ] read [the covenants](../notes/covenants.md) again <!--tephra:item eeeeeeee 1756600000 1756600000-->\n',
+      '- [ ] read [the covenants](../notes/covenants.md) again #term <!--tephra:item eeeeeeee 1756600000 1756600000-->\n',
   )
 
   const r = report(await launch('todo', root))
@@ -1046,7 +1051,7 @@ console.log('\n\u2014 the task list \u2014')
     : ''
   const yesterday = await readFile(join(root, 'tasks.todo', '2026', '08', '2026-08-31.md'), 'utf8')
 
-  check('the list opens from the menu, under its own name', r.title === 'tasks', JSON.stringify(r.title))
+  check('the list opens under its own name', r.title === 'tasks', JSON.stringify(r.title))
   check(
     'THE CARRY: today is what was still yours yesterday',
     carried.length === 5 && !carried.some(t => t.includes('estate agent')),
@@ -1061,7 +1066,7 @@ console.log('\n\u2014 the task list \u2014')
     carried.some(t => t.includes('waiting on the solicitor')),
     JSON.stringify(carried),
   )
-  check('tags are lifted out of the prose and shown as their own thing', Array.isArray(r.tags) && r.tags.length === 2, JSON.stringify(r.tags))
+  check('tags are lifted out of the prose and shown as their own thing', Array.isArray(r.tags) && r.tags.length === 3, JSON.stringify(r.tags))
   check('links in an item are live', Array.isArray(r.links) && r.links[0] === 'the covenants', JSON.stringify(r.links))
   check(
     'the due-soon band surfaces what is close, most urgent first (T9)',
@@ -1070,10 +1075,39 @@ console.log('\n\u2014 the task list \u2014')
   )
 
   check(
-    'THE MARK STAYS: checking off leaves the row where it was, finished',
+    'a click ADVANCES the status rather than jumping to done',
+    r.afterOneClick === 'doing' && r.afterTwoClicks === 'done',
+    `${r.afterOneClick} \u2192 ${r.afterTwoClicks}`,
+  )
+  check(
+    'THE MARK STAYS: the finished row is where it was, greyed',
     Array.isArray(r.afterCheck) && r.afterCheck[0] === carried[0] &&
       Array.isArray(r.finished) && r.finished[0] === true && r.finished[1] === false,
     `${JSON.stringify(r.afterCheck?.[0])} \u00b7 ${JSON.stringify(r.finished)}`,
+  )
+  check(
+    'and the three that are not part of the daily rhythm are a right-click away',
+    Array.isArray(r.statusMenu) && r.statusMenu.length === 7 &&
+      r.statusMenu.includes('Blocked\u2026') && r.afterBacklog === 'backlog',
+    `${JSON.stringify(r.statusMenu)} \u00b7 ${r.afterBacklog}`,
+  )
+  check(
+    // THE POINT of T6: the live set is dramatically smaller than every tag ever
+    // used, and it is what makes completion useful rather than a list of
+    // everything. By this point in the scene `#house` is on one item that is
+    // done and one that is backlogged, so it is not offered — while `#term`,
+    // on an item still live, is.
+    'completion offers the tags that have LIVE items, and only those (T6)',
+    Array.isArray(r.completions) && r.completions.includes('term') && !r.completions.includes('house'),
+    JSON.stringify(r.completions),
+  )
+  check(
+    'THE ASSISTANT IS NOT A SECOND INPUT PATH: the date button writes what typing would',
+    // `resolveDue` is the same function the file is written through, so
+    // pressing `tomorrow` and typing `DUE TOMORROW` leave the same characters
+    // behind — one notation, reached two ways (T16).
+    typeof r.afterDateButton === 'string' && /DUE 2026-09-02$/.test(r.afterDateButton),
+    JSON.stringify(r.afterDateButton),
   )
   check('and it is done in the file, on today', /- \[x\] call the surveyor/.test(today), JSON.stringify(today))
 
@@ -1085,7 +1119,7 @@ console.log('\n\u2014 the task list \u2014')
   check(
     'and the edit commits once, tags and date together (D56)',
     Array.isArray(r.afterEdit) && r.afterEdit[1] === 'read the survey properly' &&
-      Array.isArray(r.afterEditTags) && r.afterEditTags.length === 3,
+      Array.isArray(r.afterEditTags) && r.afterEditTags.length === 4,
     `${JSON.stringify(r.afterEdit?.[1])} \u00b7 ${JSON.stringify(r.afterEditTags)}`,
   )
   check(
@@ -1105,7 +1139,106 @@ console.log('\n\u2014 the task list \u2014')
     // file for it. Caught by looking at a screenshot.
     r.appError === 'none' && !/todo/.test(String(r.title)),
   )
+  check(
+    'typing anywhere on the list starts an item',
+    // A list is a thing you add to; the keyboard should not have to be told
+    // that first, or the thought gets carried in the head instead (T13).
+    r.typedToAdd === 'q',
+    JSON.stringify(r.typedToAdd),
+  )
+  check(
+    'and the add row IS a row — same height, same mark, same left edge',
+    typeof r.addRow === 'object' && r.addRow !== null &&
+      r.addRow.rowH === r.addRow.addH && r.addRow.rowMark === r.addRow.addMark,
+    JSON.stringify(r.addRow),
+  )
+  check(
+    'the due-soon rail is beside the list rather than above it (D42)',
+    // A band that comes and goes as dates do moves every row under it. In the
+    // gutter it grows into space that belongs to nobody.
+    r.railRight === true,
+  )
+  check(
+    'completion is a keyboard\'s: arrows move, Tab takes, Escape dismisses',
+    typeof r.picked === 'string' && r.picked !== '' &&
+      Array.isArray(r.completions) && r.completions.includes(r.picked) &&
+      r.escapeHidesTheList === true && r.escapeKeptTheLine === true &&
+      String(r.afterTab).endsWith(`#${r.picked}`),
+    `picked ${JSON.stringify(r.picked)} \u00b7 hid ${r.escapeHidesTheList} \u00b7 kept ${r.escapeKeptTheLine} \u00b7 tab ${JSON.stringify(r.afterTab)}`,
+  )
+  check(
+    'an item can be deleted outright, for a line that was never a task',
+    r.menuHasDelete === true &&
+      Array.isArray(r.afterDelete) && !r.afterDelete.includes('ring the bank'),
+    JSON.stringify(r.afterDelete),
+  )
+  check(
+    // T2 says items are never destroyed, only restatused, and this does not
+    // break it: what is cut is the line from the day the item is LIVE in, and
+    // every earlier day keeps its copy, because those days are the record of
+    // what those days looked like.
+    'and deleting cuts today\'s line, never the record of an earlier day',
+    !/ring the bank/.test(today) && /ring the estate agent/.test(yesterday),
+  )
+  check(
+    'the words sit a shade below the middle of the row, which is where they read as centred',
+    typeof r.rhythm === 'object' && r.rhythm !== null &&
+      r.rhythm.above > r.rhythm.below && r.rhythm.above - r.rhythm.below <= 5,
+    JSON.stringify(r.rhythm),
+  )
+  check(
+    // A line box is symmetric about the em box and a line of type is not: its
+    // ink sits in the x-height band, well above the middle, because descenders
+    // reach further down than the letters they hang from. So a mark centred on
+    // the line box reads as low, and this one is on the cap line instead.
+    'and the status mark is on the words rather than on the line box',
+    typeof r.rhythm === 'object' && r.rhythm !== null &&
+      r.rhythm.markAbove < r.rhythm.above && r.rhythm.above - r.rhythm.markAbove <= 5,
+    JSON.stringify(r.rhythm),
+  )
+  check(
+    'an item with no words is still an item, and says so',
+    r.emptyShown === true,
+  )
+  check(
+    'and the WHOLE ROW is what you click to give it some',
+    // The text was a button, so an empty one collapsed to nothing and there was
+    // no way back into the line short of editing the file.
+    r.emptyEditable === true && r.afterNaming === true,
+    `editable ${r.emptyEditable} \u00b7 named ${r.afterNaming}`,
+  )
+  check(
+    'the status is DRAWN rather than typed into a box',
+    r.marksDrawn === carried.length,
+    `${r.marksDrawn} of ${carried.length}`,
+  )
+  check(
+    'and the list is set in the notebook\'s own type, not a second set of numbers',
+    typeof r.type === 'object' && r.type !== null && r.type.list === '20px' &&
+      /Tephra|Lora|serif/i.test(String(r.type.listFace)),
+    JSON.stringify(r.type),
+  )
   check('nothing errored on the way', r.appError === 'none', String(r.appError))
+
+  // **\u23181 opens a window of its own**, and leaves the one you were writing
+  // in alone. A person works with the list beside their prose rather than
+  // instead of it, which is why this is main's action and not a navigation.
+  // Its OWN notebook: the scene above leaves a saved session with a task-list
+  // window in it, and restoring that would make the todo window the FIRST one —
+  // which is the window a scene runs in.
+  const alone = await week(['Today.\n'])
+  const w = report(await launch('todo-window', alone))
+  check('\u23181 opens the list without taking the window you were in', w.thisWindowStayed === true && w.stillShowingProse === true,
+    `${JSON.stringify(w.clicked)} \u00b7 stayed ${w.thisWindowStayed} \u00b7 prose ${w.stillShowingProse}`)
+  check(
+    // Both accelerators mean the same thing — "there should be a window with
+    // this in it, in front" — and neither leaves a drift of identical windows
+    // behind. \u23180 used to navigate the current one instead, which was an
+    // accident of which was built first.
+    'and \u23180 is the same act, not a navigation',
+    w.again === true && w.notebookAgain === true && w.stillProse === true,
+    `again ${w.again} \u00b7 notebook ${w.notebookAgain} \u00b7 prose ${w.stillProse}`,
+  )
 }
 
 const failed = checks.filter(c => !c.ok)

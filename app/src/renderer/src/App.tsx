@@ -325,17 +325,7 @@ export function App(): React.JSX.Element {
         const showing = pane?.document
         if (showing === undefined) return
         askDelete(showing.id, showing.title ?? nameOf(showing.id))
-      } else if (command === 'goToNotebook') {
-        void pane?.goToToday().catch(fail)
-      } else if (command === 'goToTasks') {
-        // `which` makes the list if there is not one yet: a notebook that has
-        // never had a task list should not carry an empty directory for one,
-        // and asking to see it is a perfectly good moment to decide you have
-        // one (T1).
-        void window.tephra.todo
-          .which()
-          .then(id => pane?.goTo({ kind: 'document', id }))
-          .catch(fail)
+
       } else if (command === 'printDocument') {
         // The extent is asked for HERE rather than held in state: it grows as
         // the day goes on, and a dialog offering "everything" that stops at

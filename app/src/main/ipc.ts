@@ -98,6 +98,8 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.todoSetStatus(command.list, command.item, command.status, command.note)
       case 'edit':
         return service.todoEdit(command.list, command.item, command.text)
+      case 'remove':
+        return service.todoRemove(command.list, command.item)
     }
   })
   ipcMain.handle(CHANNEL.renameDocument, (_e, id: DocumentId, label: string) =>

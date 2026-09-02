@@ -162,6 +162,84 @@ link scanner (`solution/link-roadmap.md`). What the phase settled:
   identified during MT1 and not written; looking at the picture is what found
   it. `dateOf` asks now.
 
+### What using it changed, on the first day
+
+Four things came back from actually working the list, and three were design
+errors rather than bugs:
+
+- **Flush left, not centred.** Prose is centred in a reading measure because
+  that is how a column of text is read; a list is scanned down a left edge, and
+  centring puts the thing the eye returns to in a different place on every
+  window width. It still takes a measure, as a maximum on the left.
+- **⌘1 opens a window of its own.** A person works with the list BESIDE what
+  they are writing, not instead of it — so navigating the current window takes
+  away the thing they were looking at. `Windows.reveal` focuses the window that
+  already has it and opens one when none does; only main can answer that, since
+  only main holds the set (MC6).
+- **A click ADVANCES the status; it does not jump to done.** A checkbox over
+  six states could reach two, so the gesture committed you to the wrong one of
+  those two about as often as the right one. Click now steps *not started → in
+  progress → done*, and the other three are on a right-click menu, where an act
+  outside the daily rhythm belongs. Blocked asks why, because a block without
+  the thing it is waiting on is the one status that says nothing.
+- **The add field was a ~20-character box**, because it sat outside the flex
+  row and `flex: 1` had nothing to act on. Typing a task into a slot narrower
+  than the task is the thing this list exists to stop being.
+
+**And the typist's assistant came forward from MT4**, because the notation is
+not discoverable and a list you cannot tag without knowing the syntax is a list
+you do not tag. Typing `#` completes against the tags that have live items;
+`#` and `due` buttons reach the same thing by pointing. **Both write through
+`resolveDue`, the same function the file is written through**, so what the
+assistant produces is character-for-character what typing would have produced —
+which is T16 made literal rather than merely intended.
+
+**A pleasant find:** the live tag set (T6) needs no index. It is exactly the
+tags on today's live items, and those are already on screen.
+
+### And a second day of it
+
+- **⌘0 and ⌘1 are the same act.** One navigated the current window and the
+  other opened a new one, which was an accident of the order they were built
+  in. Both now mean *there should be a window with this in it, in front* —
+  matched by which DOCUMENT a window is on, not by which place inside it, so a
+  window that has scrolled is still the window with the notebook in it.
+- **The whole row is the target.** An item with no words had nothing to click:
+  the text was a button, so an empty one collapsed to nothing and there was no
+  way back into the line short of editing the file. It now says *Nothing
+  written yet* and the row edits.
+- **The list is set in the notebook's own type.** It had a hard-coded 15px,
+  which made it quietly a different app from the notebook beside it — and made
+  the theme panel's sliders lie about what they controlled. `typography.ts`
+  already said this ("a kind that draws something other than running text still
+  renders inside the same page", D41); the surface just was not listening. It
+  takes the theme's LIST metrics, which exist for exactly this.
+- **The status is drawn, not typed.** A character in a box takes the text's
+  face and its own idea of where the middle is, so six of them lined up six
+  ways. They are strokes on a 16-unit grid now — same weight at every size,
+  sitting where they are put. The vocabulary is still era 1's; it is only drawn.
+- **`<button>` does not inherit a font**, which is why the mark stayed one size
+  while the theme's size slider moved: every `em` in its box was measuring the
+  browser's 13px default rather than the text beside it.
+- **A row's padding is asymmetric, and in `em`.** Symmetric padding leaves the
+  words looking high: a line box carries its leading above and below the ink,
+  and an eye judges where a line sits by its x-height band rather than by the
+  box around its descenders. The ink is set a shade below the middle, which is
+  where it reads as centred.
+- **And the mark is centred on the WORDS, not on the line box**, which is a
+  different place and the reason it needs a constant rather than arithmetic
+  alone. A line box is symmetric about the em box; a line of type is not, since
+  descenders reach further down than the letters they hang from. Centring the
+  mark geometrically therefore puts it low, and it rides up to meet the cap
+  line instead. Both this and the row's rhythm are measured in `m3`, because a
+  number nobody can see drifting is exactly the kind that drifts.
+- **An item can be deleted outright**, which T2 does not cover and does not
+  forbid. What is cut is the line from the day the item is live in; every
+  earlier day keeps its copy, because those days are the record of what those
+  days looked like. *Nevermind* remains the status for a task you decided
+  against — this is for a line that was never a task, and it leaves no mark
+  because there is nothing to have a view about.
+
 **The first entry in `SURFACES`, and the first thing in Tephra shown as
 something other than running text.** The unknowns of this whole milestone are
 here rather than in the storage, so it gets a phase to itself.

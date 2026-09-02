@@ -22,8 +22,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
+import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { scanLinks } from '../../../../shared/links.ts'
-import { isLive, type TodoItem, type TodoStatus } from '../../../../shared/kinds/todo.ts'
+import { isLive, resolveDue, type TodoItem, type TodoStatus } from '../../../../shared/kinds/todo.ts'
 import { daysBetween } from '../../../../shared/dates.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 
@@ -36,14 +37,46 @@ import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
  */
 const SOON_DAYS = 7
 
-/** What the glyph column shows. The file's own vocabulary, drawn. */
-const GLYPH: Readonly<Record<TodoStatus, string>> = {
-  todo: '',
-  doing: '/',
-  blocked: '?',
-  done: '×',
-  dropped: '–',
-  backlog: '→',
+/**
+ * The status, drawn rather than typed.
+ *
+ * **A character in a box is a character in a box**: it takes the text's face,
+ * its own metrics, and its own idea of where the middle is, so six of them in a
+ * column line up six different ways. These are strokes on a 16-unit grid, so
+ * they are the same weight as each other at every size and sit where they are
+ * put. The vocabulary is still era 1's — a slash for in progress, `>` for
+ * migrated forward — it is just drawn now.
+ */
+function StatusMark({ status }: { status: TodoStatus }): React.JSX.Element {
+  return (
+    <svg className="todo-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="3" className="todo-mark-box" />
+      {status === 'doing' && <path d="M4.5 11.5 11.5 4.5" className="todo-mark-ink" />}
+      {status === 'blocked' && <path d="M4.5 8h7" className="todo-mark-ink" />}
+      {status === 'done' && <path d="m4.5 8.3 2.6 2.7 4.6-5.4" className="todo-mark-ink" />}
+      {status === 'dropped' && <path d="M5 5l6 6M11 5l-6 6" className="todo-mark-ink" />}
+      {status === 'backlog' && <path d="M4.5 8h6m-2.4-2.6L11 8l-2.9 2.6" className="todo-mark-ink" />}
+    </svg>
+  )
+}
+
+/**
+ * What a click on the box does: the three states a working item passes through.
+ *
+ * **A click advances; it never jumps.** Clicking straight to *done* was wrong
+ * for the reason a checkbox over six states is always wrong — the box could
+ * reach two of them, so the gesture committed you to the wrong one of those
+ * two as often as not. The other three are a right-click away, where an act
+ * that is not part of the daily rhythm belongs.
+ *
+ * A status outside the cycle enters it at the start: an item you unblock or
+ * bring back from the backlog is one that is on the list again, and saying so
+ * is more honest than guessing that you have already begun it.
+ */
+const CYCLE: readonly TodoStatus[] = ['todo', 'doing', 'done']
+const advance = (status: TodoStatus): TodoStatus => {
+  const at = CYCLE.indexOf(status)
+  return at < 0 ? 'todo' : (CYCLE[(at + 1) % CYCLE.length] as TodoStatus)
 }
 
 const TITLE: Readonly<Record<TodoStatus, string>> = {
@@ -55,12 +88,16 @@ const TITLE: Readonly<Record<TodoStatus, string>> = {
   backlog: 'Backlogged',
 }
 
-export function TodoSurface({ window: docWindow, onError }: SurfaceProps): React.JSX.Element {
+export function TodoSurface({ window: docWindow, settings, onError }: SurfaceProps): React.JSX.Element {
   const list = docWindow.document.id as DocumentId
   const [today, setToday] = useState<DateKey | null>(null)
   const [items, setItems] = useState<readonly TodoItem[]>([])
   const [editing, setEditing] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
+  /** Not adding, or the text to start the new item with. */
+  const [adding, setAdding] = useState<string | null>(null)
+  const [menu, setMenu] = useState<RowMenuRequest | null>(null)
+  /** The item whose reason is being typed, after `Blocked…` is chosen. */
+  const [blocking, setBlocking] = useState<string | null>(null)
 
   const fail = useCallback(
     (err: unknown) => onError?.(err instanceof Error ? err : new Error(String(err))),
@@ -112,15 +149,152 @@ export function TodoSurface({ window: docWindow, onError }: SurfaceProps): React
     [today, refresh, fail],
   )
 
+  /**
+   * **Typing anywhere on the list starts an item.**
+   *
+   * The page is a list and the thing you do with a list is add to it, so the
+   * keyboard should not need to be told that first — a task noticed is a task
+   * that has to reach the list before the thought is carried in the head
+   * instead (T13). Anything with a modifier on it belongs to the menus, and
+   * anything typed while a field is open belongs to the field.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key.length !== 1) return
+      if (document.querySelector('.todo-field') !== null) return
+      e.preventDefault()
+      setAdding(e.key)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const soon = today === null ? [] : dueSoon(items, today)
 
+  /**
+   * The tags that currently have live items (T6).
+   *
+   * **Derived from what is on screen, not from an index.** The live set is
+   * exactly the set of tags on today's live items, and today's items are
+   * already here — so completion works before the corpus index knows anything
+   * about tags, and will keep working when it does.
+   */
+  const live = [
+    ...new Set(items.filter(item => isLive(item.status)).flatMap(item => item.tags)),
+  ].sort()
+
+  /**
+   * **The notebook's own type, not a second set of numbers.**
+   *
+   * `typography.ts` says it already: these measurements sit above any one
+   * surface, so "a kind that draws something other than running text still
+   * renders inside the same page" (D41). Hard-coding 15px here made the list
+   * quietly a different app from the notebook beside it — and made the theme
+   * panel's sliders lie about what they controlled.
+   *
+   * A list gets the theme's LIST metrics, which exist for exactly this: its own
+   * leading within an item, and its own space between them.
+   */
+  const type = {
+    fontFamily: settings.typography.font,
+    fontSize: `${settings.typography.size}px`,
+    lineHeight: settings.typography.listLeading,
+    '--todo-space': `${settings.typography.listSpace}em`,
+    '--todo-leading': String(settings.typography.listLeading),
+    '--measure': `${settings.typography.measure}ch`,
+  } as React.CSSProperties
+
   return (
-    <div className="todo" role="region" aria-label="Task list">
+    <div className="todo" role="region" aria-label="Task list" style={type}>
+      {/* **The list keeps the notebook's own two columns** — a measure, and a
+          gutter beside it — so a task list and a page of prose are the same
+          page laid out the same way (D42, R27). */}
+      <div className="todo-column">
+        <ol className="todo-list">
+          {items.map(item => (
+            <Row
+              key={item.id ?? `unadopted:${item.text}`}
+              item={item}
+              today={today}
+              tags={live}
+              editing={editing === item.id}
+              blocking={blocking === item.id}
+              onEdit={() => setEditing(item.id)}
+              onDone={text => {
+                setEditing(null)
+                if (item.id !== null && text !== null) act(window.tephra.todo.edit(list, item.id, text))
+              }}
+              onStatus={status => {
+                if (item.id !== null) act(window.tephra.todo.setStatus(list, item.id, status))
+              }}
+              onBlocked={note => {
+                setBlocking(null)
+                if (item.id !== null && note !== null) {
+                  act(window.tephra.todo.setStatus(list, item.id, 'blocked', note))
+                }
+              }}
+              onMenu={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (item.id === null) return
+                const id = item.id
+                setMenu({
+                  at: { x: e.clientX, y: e.clientY },
+                  about: prose(item),
+                  items: statusItems(status => {
+                    // Blocked asks WHY, because a block without the thing it is
+                    // waiting on is the one status that says nothing (T4).
+                    if (status === 'blocked') setBlocking(id)
+                    else act(window.tephra.todo.setStatus(list, id, status))
+                  }, () => act(window.tephra.todo.remove(list, id))),
+                })
+              }}
+            />
+          ))}
+
+          {/* **Adding is a row, and it is the SAME row.** It wears the list's
+              own geometry — the mark, the padding, the field at the width an
+              item is — so the line you are typing lands exactly where it will
+              sit, and nothing shifts when it does. */}
+          {adding !== null ? (
+            <li className="todo-row todo-adding">
+              <span className="todo-glyph" aria-hidden="true">
+                <StatusMark status="todo" />
+              </span>
+              <Field
+                initial={adding}
+                placeholder="what needs doing"
+                tags={live}
+                today={today}
+                onDone={text => {
+                  setAdding(null)
+                  if (text !== null && text.trim() !== '') act(window.tephra.todo.add(list, text))
+                }}
+              />
+            </li>
+          ) : (
+            <li className="todo-addrow">
+              <button type="button" className="todo-add" onClick={() => setAdding('')}>
+                + Add
+              </button>
+            </li>
+          )}
+        </ol>
+
+        {items.length === 0 && adding === null && (
+          // Absence that explains itself, as every empty state in this app does.
+          <p className="todo-empty">Nothing on the list. That is allowed.</p>
+        )}
+      </div>
+
+      {/* **In the rail, where the notebook already puts what sits beside the
+          text.** It was a band above the list, and a band that comes and goes
+          as dates do moves every row under it — the reflow this project has
+          ruled out everywhere else (D42). In the gutter it grows into space
+          that belongs to nobody, and can be set in a size somebody can read. */}
       {soon.length > 0 && (
-        // **A band, not a mode** (T9): always there, usually short, and gone
-        // entirely when it is empty. Era 2 stored due dates and still missed
-        // them; ordering by them is the requirement, storing them is not.
-        <div className="todo-soon" aria-label="Due soon">
+        <aside className="todo-soon" aria-label="Due soon">
           {soon.map(item => (
             <button
               key={`soon:${item.id ?? item.text}`}
@@ -132,99 +306,118 @@ export function TodoSurface({ window: docWindow, onError }: SurfaceProps): React
               <span className="todo-soon-text">{prose(item)}</span>
             </button>
           ))}
-        </div>
+        </aside>
       )}
 
-      <ol className="todo-list">
-        {items.map(item => (
-          <Row
-            key={item.id ?? `unadopted:${item.text}`}
-            item={item}
-            today={today}
-            editing={editing === item.id}
-            onEdit={() => setEditing(item.id)}
-            onDone={text => {
-              setEditing(null)
-              if (item.id !== null && text !== null) act(window.tephra.todo.edit(list, item.id, text))
-            }}
-            onStatus={status => {
-              if (item.id !== null) act(window.tephra.todo.setStatus(list, item.id, status))
-            }}
-          />
-        ))}
-      </ol>
-
-      {/* **Adding is a row, not a dialog.** The list is where the thought
-          lands, and a form in front of it is a form between you and the list.
-          Capture from elsewhere — mid-sentence in the stream, a quick-add from
-          anywhere — is MT4; this is the one that belongs to the page. */}
-      {adding ? (
-        <Field
-          initial=""
-          placeholder="what needs doing"
-          onDone={text => {
-            setAdding(false)
-            if (text !== null && text.trim() !== '') act(window.tephra.todo.add(list, text))
-          }}
-        />
-      ) : (
-        <button type="button" className="todo-add" onClick={() => setAdding(true)}>
-          + Add
-        </button>
-      )}
-
-      {items.length === 0 && !adding && (
-        // Absence that explains itself, as every empty state in this app does.
-        <p className="todo-empty">Nothing on the list. That is allowed.</p>
-      )}
+      {menu !== null && <RowMenu request={menu} onClose={() => setMenu(null)} />}
     </div>
   )
+}
+
+/**
+ * What the right-click menu on a row offers.
+ *
+ * **The three statuses that are not part of the daily rhythm, and Delete.** A
+ * click on the box advances through the working states; everything here is
+ * something you mean deliberately, which is what a menu is for.
+ */
+function statusItems(
+  onStatus: (status: TodoStatus) => void,
+  onRemove: () => void,
+): readonly MenuEntry[] {
+  const statuses: readonly TodoStatus[] = ['todo', 'doing', 'blocked', 'done', 'backlog', 'dropped']
+  return [
+    ...statuses.map(status => ({
+      label: status === 'blocked' ? `${TITLE[status]}\u2026` : TITLE[status],
+      destructive: status === 'dropped',
+      onChoose: () => onStatus(status),
+    })),
+    'rule' as const,
+    {
+      // **Not *nevermind*.** That is the status for a task you decided against,
+      // and it stays on the list saying so. This is for a line that was never a
+      // task — a mis-hit `Add`, a row of garbage — and it leaves no mark
+      // because there is nothing to have a view about.
+      label: 'Delete',
+      destructive: true,
+      onChoose: onRemove,
+    },
+  ]
 }
 
 function Row({
   item,
   today,
+  tags,
   editing,
+  blocking,
   onEdit,
   onDone,
   onStatus,
+  onBlocked,
+  onMenu,
 }: {
   item: TodoItem
   today: DateKey | null
+  tags: readonly string[]
   editing: boolean
+  blocking: boolean
   onEdit: () => void
   onDone: (text: string | null) => void
   onStatus: (status: TodoStatus) => void
+  onBlocked: (note: string | null) => void
+  onMenu: (e: React.MouseEvent) => void
 }): React.JSX.Element {
   const done = item.status === 'done' || item.status === 'dropped'
   return (
     <li
       id={`todo-${item.id ?? ''}`}
       className={`todo-row status-${item.status}${done ? ' finished' : ''}`}
+      onContextMenu={onMenu}
+      // **The whole row**, because an item whose text is empty had nothing to
+      // click: the text button collapsed to nothing and the only way back into
+      // it was to delete the file. A row is one thing and clicking it edits it.
+      onClick={() => {
+        if (!editing && !blocking) onEdit()
+      }}
     >
-      {/* **One keystroke to check off**, and the mark stays where it was until
-          tomorrow's carry leaves it behind — exactly as an X'd row stayed on
-          the paper page. The eye learns to skip them in about a week. */}
+      {/* **A click advances one step**; the other three statuses are on the
+          right-click menu. The mark stays where it was until tomorrow's carry
+          leaves it behind — exactly as an X'd row stayed on the paper page,
+          and the eye learns to skip them in about a week. */}
       <button
         type="button"
         className="todo-glyph"
         aria-label={`${TITLE[item.status]}: ${prose(item)}`}
-        title={TITLE[item.status]}
-        onClick={() => onStatus(item.status === 'done' ? 'todo' : 'done')}
+        title={`${TITLE[item.status]} \u2014 click for ${TITLE[advance(item.status)].toLowerCase()}`}
+        onClick={e => {
+          e.stopPropagation() // the row edits; the box changes the status
+          onStatus(advance(item.status))
+        }}
+        onContextMenu={onMenu}
       >
-        {GLYPH[item.status]}
+        <StatusMark status={item.status} />
       </button>
 
       {editing ? (
         // **The raw line is what gets edited**, tags and date included: the
         // markers are what the line says, and hiding them from the editor would
         // make them uneditable without a second control for each (T16).
-        <Field initial={item.text} onDone={onDone} />
+        <Field initial={item.text} tags={tags} today={today} onDone={onDone} />
+      ) : blocking ? (
+        <Field initial={item.note ?? ''} placeholder="waiting on what?" tags={tags} today={today} onDone={onBlocked} />
       ) : (
-        <button type="button" className="todo-text" onClick={onEdit}>
-          <Prose text={prose(item)} />
+        <span className="todo-text">
+          {prose(item) === '' ? (
+            // Something to see and something to aim at. An item with no words
+            // yet is a real item — it has an id, a ctime and a place in the
+            // order — and saying so is better than a blank the eye slides off.
+            <span className="todo-unwritten">Nothing written yet</span>
+          ) : (
+            <Prose text={prose(item)} />
+          )}
           {item.note !== null && <span className="todo-note">{item.note}</span>}
-        </button>
+        </span>
       )}
 
       {item.tags.length > 0 && (
@@ -284,45 +477,199 @@ function Prose({ text }: { text: string }): React.JSX.Element {
   return <>{parts}</>
 }
 
-/** One line, being typed. Return keeps it, Escape drops it, blur keeps it. */
+/**
+ * One line, being typed — with the two things nobody should have to remember.
+ *
+ * **The UI is a typist's assistant, not a second input path** (T16). Everything
+ * these controls produce is character-for-character what typing would have
+ * produced, because they go through the same `resolveDue` the file does: there
+ * is one notation, and the buttons are a way of reaching it rather than a
+ * parallel way of meaning it. That is what keeps the file legible and hand-
+ * editing a supported act.
+ */
 function Field({
   initial,
   placeholder,
+  tags,
+  today,
   onDone,
 }: {
   initial: string
   placeholder?: string
+  /** Tags that currently have live items — the short set worth completing (T6). */
+  tags: readonly string[]
+  today: DateKey | null
   onDone: (text: string | null) => void
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null)
+  const [value, setValue] = useState(initial)
+  const [dating, setDating] = useState(false)
+  /** Which completion is under the keyboard, and whether Escape has hidden them. */
+  const [pick, setPick] = useState(0)
+  const [hidden, setHidden] = useState(false)
+  const done = useRef(false)
+
   useEffect(() => {
     field.current?.focus()
     field.current?.select()
   }, [])
+
+  /** Commit once, however it was reached: Return, blur, or a button. */
+  const finish = (text: string | null): void => {
+    if (done.current) return
+    done.current = true
+    onDone(text)
+  }
+
+  // **The word under the caret, when it starts with `#`.** That is the whole of
+  // the completion trigger: no mode to enter and none to leave, so a `#` typed
+  // by accident costs a keystroke to undo rather than an escape from somewhere.
+  const caret = field.current?.selectionStart ?? value.length
+  const partial = /(?:^|\s)#([A-Za-z0-9][\w-]*)?$/.exec(value.slice(0, caret))
+  const matching =
+    partial === null || hidden
+      ? []
+      : tags.filter(tag => tag.toLowerCase().startsWith((partial[1] ?? '').toLowerCase())).slice(0, 6)
+  const at = Math.min(pick, Math.max(0, matching.length - 1))
+
+  const complete = (tag: string): void => {
+    if (partial === null) return
+    const at = caret - (partial[0].length - (partial[0].startsWith('#') ? 0 : 1))
+    const from = caret - (partial[0].length - (partial[0].startsWith('#') ? 0 : 1))
+    setValue(`${value.slice(0, from)}${written(tag)}${value.slice(caret)}`)
+    setPick(0)
+    field.current?.focus()
+  }
+
+  /** A date, written the way it is written in the file. */
+  const setDue = (spelling: string): void => {
+    // Through `resolveDue`, so what a button inserts is exactly what typing
+    // `DUE FRIDAY` would have left behind once the file was written (T16).
+    const without = value.replace(/\s*\bDUE\s+\S+/g, '').trim()
+    const resolved = today === null ? `DUE ${spelling}` : resolveDue(`DUE ${spelling}`, today)
+    setValue(`${without} ${resolved}`.trim())
+    setDating(false)
+    field.current?.focus()
+  }
+
   return (
-    <input
-      className="todo-field"
-      ref={field}
-      defaultValue={initial}
-      placeholder={placeholder ?? ''}
-      aria-label={initial === '' ? 'New item' : `Edit ${initial}`}
-      spellCheck={false}
-      onBlur={e => onDone(e.currentTarget.value)}
-      onKeyDown={e => {
-        // Stopped here in every case: this is inside a window with menu
-        // accelerators, and an item with an "i" in it must not toggle italics.
-        e.stopPropagation()
-        if (e.key === 'Enter') {
-          e.preventDefault()
-          onDone(e.currentTarget.value)
-        } else if (e.key === 'Escape') {
-          e.preventDefault()
-          onDone(null)
-        }
-      }}
-    />
+    <span className="todo-editing">
+      <input
+        className="todo-field"
+        ref={field}
+        value={value}
+        placeholder={placeholder ?? ''}
+        aria-label={initial === '' ? 'New item' : `Edit ${initial}`}
+        spellCheck={false}
+        onChange={e => {
+          setValue(e.currentTarget.value)
+          // A fresh `#` is a fresh list: Escape hides the one you did not want,
+          // and typing on is how you ask for it again.
+          setHidden(false)
+          setPick(0)
+        }}
+        onBlur={e => {
+          // A click on one of this row's own controls is not leaving the row.
+          if (e.relatedTarget instanceof HTMLElement && e.relatedTarget.closest('.todo-editing') !== null) return
+          finish(e.currentTarget.value)
+        }}
+        onKeyDown={e => {
+          // Stopped here in every case: this is inside a window with menu
+          // accelerators, and an item with an "i" in it must not toggle italics.
+          e.stopPropagation()
+          // **The completion list is a keyboard's, first.** Reaching for the
+          // mouse to accept a suggestion costs more than typing the tag would
+          // have, which makes the assistant slower than the thing it assists.
+          if (matching.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault()
+            setPick((at + (e.key === 'ArrowDown' ? 1 : matching.length - 1)) % matching.length)
+            return
+          }
+          if (matching.length > 0 && (e.key === 'Tab' || e.key === 'Enter')) {
+            // Tab and Return both take the highlighted one. Tab because that is
+            // what completion means everywhere else; Return because the hand is
+            // already there and committing the item mid-tag is never what was
+            // meant.
+            e.preventDefault()
+            complete(matching[at] as string)
+            return
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            finish(e.currentTarget.value)
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            // Escape dismisses whatever is open before it abandons the line:
+            // one key, most-local-thing-first, so it never loses more than you
+            // were pointing at.
+            if (dating) setDating(false)
+            else if (matching.length > 0) setHidden(true)
+            else finish(null)
+          }
+        }}
+      />
+
+      <span className="todo-tools">
+        <button
+          type="button"
+          title="Tag this"
+          onMouseDown={e => {
+            e.preventDefault()
+            setValue(`${value.replace(/\s+$/, '')} #`.trimStart())
+            field.current?.focus()
+          }}
+        >
+          #
+        </button>
+        <button type="button" title="Give it a date" onMouseDown={e => { e.preventDefault(); setDating(was => !was) }}>
+          due
+        </button>
+      </span>
+
+      {matching.length > 0 && !dating && (
+        <span className="todo-complete" role="listbox" aria-label="Tags">
+          {matching.map((tag, n) => (
+            <button
+              key={tag}
+              type="button"
+              className={n === at ? 'picked' : ''}
+              aria-selected={n === at}
+              onMouseDown={e => { e.preventDefault(); complete(tag) }}
+            >
+              {tag}
+            </button>
+          ))}
+        </span>
+      )}
+
+      {dating && (
+        <span className="todo-dates" role="listbox" aria-label="Due">
+          {['TODAY', 'TOMORROW', 'FRIDAY', 'MONDAY'].map(spelling => (
+            <button key={spelling} type="button" onMouseDown={e => { e.preventDefault(); setDue(spelling) }}>
+              {spelling.toLowerCase()}
+            </button>
+          ))}
+          <input
+            type="date"
+            aria-label="A date"
+            onMouseDown={e => e.stopPropagation()}
+            onChange={e => e.currentTarget.value !== '' && setDue(e.currentTarget.value)}
+          />
+          <button type="button" className="clear" onMouseDown={e => {
+            e.preventDefault()
+            setValue(value.replace(/\s*\bDUE\s+\S+/g, '').trim())
+            setDating(false)
+          }}>
+            none
+          </button>
+        </span>
+      )}
+    </span>
   )
 }
+
+/** How a tag is written down: the same two spellings the grammar reads. */
+const written = (name: string): string => (/\s/.test(name) ? `#'${name}'` : `#${name}`)
 
 /**
  * What the row shows: the text without the markers it draws separately.

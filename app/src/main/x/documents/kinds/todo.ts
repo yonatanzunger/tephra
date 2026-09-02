@@ -283,6 +283,35 @@ export class TodoDocument extends SegmentedDocument {
     return this.#rewrite(id, (item, date) => ({ ...item, text: resolveDue(text.trim(), date) }))
   }
 
+  /**
+   * Take an item off the list — the one case T2 does not cover.
+   *
+   * **T2 says items are never destroyed, only restatused, and this does not
+   * break it.** What is cut is the line from the day the item is live in;
+   * every earlier day keeps its copy, because those days are the record of
+   * what those days looked like and editing them would be editing history.
+   * An item deleted the day it was made is gone entirely, which is right: the
+   * case this exists for is a mis-hit `Add` and a line of garbage, and asking
+   * somebody to carry that forever in the name of a principle about work would
+   * be applying the principle to something that is not work.
+   *
+   * *Nevermind* is the status for a task you decided against; this is for one
+   * that was never a task.
+   */
+  async remove(id: string): Promise<boolean> {
+    for (const key of [...(await this.keys())].reverse()) {
+      const date = key as DateKey
+      const found = (await this.#scan(date)).find(s => s.item.id === id)
+      if (found === undefined) continue
+      await this.replace(
+        [{ span: { begin: this.at(date, found.from), end: this.at(date, found.end) }, payload: '' as DocumentText }],
+        'operation',
+      )
+      return true
+    }
+    return false
+  }
+
   /** The day a new item goes to, in the reference zone (D38). */
   static today(): DateKey {
     return dateKeyAt()

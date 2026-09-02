@@ -368,3 +368,4 @@ export type TodoCommand =
       readonly note?: string
     }
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
+  | { readonly kind: 'remove'; readonly list: DocumentId; readonly item: string }

@@ -18,7 +18,7 @@ import type { BrowserWindow, WebContents } from 'electron'
 import type { DocumentService } from './document-service.ts'
 import { attachWindow } from './ipc.ts'
 import { setMenuTargets } from './menu.ts'
-import type { DocumentId } from '../shared/document-api.ts'
+import { STREAM_ID, type DocumentId } from '../shared/document-api.ts'
 import type { WindowInfo, WindowReport } from '../shared/ipc.ts'
 import type { NavTarget } from '../shared/pane-api.ts'
 import { defaultUiState, defaultWindowState, type UiState, type WindowState } from '../shared/ui-state.ts'
@@ -62,6 +62,31 @@ export class Windows {
     this.#theme = saved.theme
     const windows = saved.windows.length > 0 ? saved.windows : [defaultWindowState]
     for (const state of windows) this.#open(state)
+  }
+
+  /**
+   * Show `target` in a window of its own — the one that already has it if there
+   * is one, a new one if there is not.
+   *
+   * **For the places you keep going back to**, of which the task list is the
+   * first: a person works with the list open BESIDE what they are writing, not
+   * instead of it, so navigating the current window would be taking away the
+   * thing they were looking at. And opening a second window every time would
+   * leave a drift of identical ones.
+   *
+   * Only main can answer this: it holds the set of windows and what each is
+   * showing (MC6), which is exactly the knowledge a renderer does not have.
+   */
+  reveal(target: NavTarget): BrowserWindow {
+    const wanted = documentOf(target)
+    for (const entry of this.#entries.values()) {
+      if (entry.window.isDestroyed()) continue
+      if (wanted === null || documentOf(entry.state.location) !== wanted) continue
+      if (entry.window.isMinimized()) entry.window.restore()
+      entry.window.focus()
+      return entry.window
+    }
+    return this.open(target)
   }
 
   /** A new window, showing `target` — or today, which is what New Window means. */
@@ -199,5 +224,29 @@ export class Windows {
       const state = this.snapshot()
       if (state.windows.length > 0) void this.#service.saveUiState(state)
     }, 400)
+  }
+}
+
+/**
+ * Which document a target names — the question `reveal` is really asking.
+ *
+ * **A window is on a DOCUMENT, not on a place inside one.** Somebody asking for
+ * the notebook wants the window that has the notebook in it, whatever day it
+ * happens to be showing; comparing the targets themselves would open a second
+ * window every time the first one had scrolled. A date, a bookmark and "today"
+ * are all the stream.
+ */
+function documentOf(target: NavTarget): DocumentId | null {
+  switch (target.kind) {
+    case 'today':
+    case 'date':
+    case 'anchor':
+      return STREAM_ID
+    case 'document':
+      return target.id
+    case 'span':
+      return target.doc
+    default:
+      return null // a URL and an OS file are not windows of ours
   }
 }

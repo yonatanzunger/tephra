@@ -103,6 +103,17 @@ export function setMenuSelection(selection: SelectionState): void {
  */
 export interface MenuActions {
   newWindow: () => void
+  /** The same act as `tasks`, for the one document that is not a file. */
+  notebook: () => void
+  /**
+   * Show the task list, in a window of its own.
+   *
+   * **Main's, because only main knows the window set.** A person works with the
+   * list open beside what they are writing rather than instead of it, so this
+   * focuses the window that already has it and opens one when none does — a
+   * question a renderer cannot answer about windows it is not (MC6).
+   */
+  tasks: () => void
   /**
    * Ask for a file, the way every other application asks for one.
    *
@@ -127,6 +138,8 @@ export interface MenuActions {
  */
 let actions: MenuActions = {
   newWindow: () => undefined,
+  notebook: () => undefined,
+  tasks: () => undefined,
   open: () => undefined,
   import: () => undefined,
   newFile: () => undefined,
@@ -313,15 +326,16 @@ export function installMenu(next?: MenuActions): void {
           // for it. `Cmd+0` because it is the zeroth thing.
           label: 'Notebook',
           accelerator: 'CmdOrCtrl+0',
-          click: () => send(CHANNEL.menuCommand, 'goToNotebook'),
+          click: () => actions.notebook(),
         },
         {
-          // **The other place you are always going.** It sits beside the
-          // notebook rather than under File because it is a destination and
-          // not a document you opened — ⌘1 after the zeroth thing (T7, MT3).
+          // **The other place you are always going**, and it opens in a window
+          // of its own: the list is something you keep beside your writing, so
+          // navigating the current window would take away what you were
+          // looking at. ⌘1 after the zeroth thing (T7, MT3).
           label: 'Task List',
           accelerator: 'CmdOrCtrl+1',
-          click: () => send(CHANNEL.menuCommand, 'goToTasks'),
+          click: () => actions.tasks(),
         },
         { type: 'separator' },
         // **Minimize without ⌘M.** The role carries the system accelerator, and

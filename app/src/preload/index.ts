@@ -165,6 +165,9 @@ const tephra = {
     /** The committed row edit: text, tags and date together, one edit (D56). */
     edit: (list: DocumentId, item: string, text: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'edit', list, item, text }),
+    /** Off the list, for a line that was never a task. Earlier days keep theirs. */
+    remove: (list: DocumentId, item: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'remove', list, item }),
   },
   doc: {
     open: (id?: DocumentId): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open, id),

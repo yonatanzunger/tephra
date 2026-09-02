@@ -285,6 +285,18 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
  * name is the only part deferred, which is right: it is the part you do not
  * know before writing the thing.
  */
+/**
+ * The task list, in its own window.
+ *
+ * `todoList()` makes it if there is not one yet: a notebook that has never had
+ * a task list should not carry an empty directory for one, and asking to see it
+ * is a good moment to decide you have one (T1).
+ */
+async function showTasks(): Promise<void> {
+  if (service === null) return
+  windows?.reveal({ kind: 'document', id: await service.todoList() })
+}
+
 async function newDocument(): Promise<void> {
   if (service === null) return
   windows?.open({ kind: 'document', id: await service.newDocument() })
@@ -401,6 +413,8 @@ app.whenReady().then(async () => {
     open: inNewWindow => void openDocument(inNewWindow),
     import: pick => void importDocument(pick),
     newFile: () => void newDocument(),
+    notebook: () => windows?.reveal({ kind: 'today' }),
+    tasks: () => void showTasks(),
   })
   ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
   // The renderer owns the caret; main owns the menus. Each tells the other the

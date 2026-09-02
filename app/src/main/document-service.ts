@@ -1014,6 +1014,11 @@ export class DocumentService {
     this.#touched()
   }
 
+  async todoRemove(id: DocumentId, item: string): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).remove(item)))
+    this.#touched()
+  }
+
   async todoEdit(id: DocumentId, item: string, text: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).edit(item, text)))
     this.#touched()

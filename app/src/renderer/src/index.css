@@ -375,15 +375,41 @@ body {
    due date allowed to be the loud thing. It takes the reading measure and the
    body face, because it is a page you read — what it does not take is the
    prose leading, since a list is scanned rather than read through. */
+/* **Flush left, not centred.** Prose is centred in a reading measure because
+   that is how a column of text is read; a list is SCANNED, down a left edge,
+   and centring it puts the thing your eye returns to in a different place on
+   every window width. Era 1's spread was flush against the spine.
+
+   It still takes a measure — a task written across 1400px is unreadable — but
+   as a maximum on the left rather than a column in the middle. */
 .todo {
-  max-width: var(--measure); margin: 0 auto; padding: 2.5rem 0 6rem;
-  font-family: var(--font-body); font-size: 15px; color: rgb(var(--text));
+  /* Face, size, leading and measure all come from the theme, on the element —
+     the list is the same page as the notebook, set the same way (D41).
+
+     **Two columns, the notebook's own**: the measure, and the gutter beside it
+     where annotations live. `--gutter` already carries its own gap (D42). */
+  display: grid;
+  grid-template-columns: minmax(0, var(--measure)) var(--gutter);
+  margin: 0; padding: 2rem 0 6rem 2.25rem;
+  color: rgb(var(--text));
 }
+.todo-column { min-width: 0; }
 .todo-list { list-style: none; margin: 0; padding: 0; }
 
+/* `flex-start`, not `baseline`: a box has no baseline worth aligning to, and
+   asking for one put it above the text. It is nudged down by half the
+   difference between the line box and its own height, which is what "on the
+   first line" means when an item wraps to three. */
+/* **Asymmetric, and in `em` so it moves with the type.** Symmetric padding
+   leaves the words looking high: a line box carries its leading above and
+   below the ink, and an eye judges where a line sits by its x-height band
+   rather than by the box around its descenders. So the ink is set a shade
+   BELOW the middle, which is where it reads as centred. */
 .todo-row {
-  display: flex; align-items: baseline; gap: .5rem;
-  padding: .3rem 0; border-bottom: 1px solid rgb(var(--border) / .45);
+  display: flex; align-items: flex-start; gap: .5rem;
+  padding: .3em 0 calc(.14em + var(--todo-space, 0em));
+  border-bottom: 1px solid rgb(var(--border) / .45);
+  cursor: text;
 }
 /* **Finished items stay, greyed, until tomorrow's carry leaves them behind** —
    exactly as an X'd row stayed on the paper page. Checking something off should
@@ -392,24 +418,38 @@ body {
 .todo-row.finished .todo-text { text-decoration: line-through; text-decoration-thickness: 1px; }
 .todo-row.status-dropped .todo-text { text-decoration: line-through; opacity: .7; }
 
-/* The glyph column: narrow, fixed, and the same width whatever is in it, so
-   every item's text starts at one left edge. */
+/* **Sized in `em`, so it grows with the type** rather than staying 1.4rem while
+   the theme's size slider moves under it. The box IS the control; there is no
+   border on the button, because two nested boxes is what made it look large. */
 .todo-glyph {
-  flex: 0 0 1.4rem; width: 1.4rem; height: 1.4rem;
-  display: flex; align-items: center; justify-content: center;
-  font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
-  color: rgb(var(--text)); background: none;
-  border: 1px solid rgb(var(--border)); border-radius: 3px;
+  /* **`font: inherit` first**, because a `<button>` does not inherit one — so
+     every `em` below was measuring the browser's 13px default instead of the
+     text beside it, and the mark stayed one size while the theme's size slider
+     moved. */
+  font: inherit;
+  flex: 0 0 auto; display: block; padding: 0; cursor: pointer;
+  background: none; border: 0; border-radius: 3px;
+  /* **Centred on the WORDS, not on the line box**, which is a different place
+     and the reason this needs a constant rather than just arithmetic. A line
+     box is symmetric about the em box; a line of type is not — its ink sits in
+     the x-height band, well above the middle, because descenders reach further
+     down than the letters they hang from. So the mark rides up out of the
+     geometric centre to meet it. */
+  margin-top: calc((1em * var(--todo-leading, 1.5) - .9em) / 2 - .2em);
 }
-.todo-glyph:hover { border-color: rgb(var(--accent)); background: rgb(var(--accent) / .08); }
 .todo-glyph:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
-.todo-row.finished .todo-glyph { color: rgb(var(--text-muted)); }
-
-.todo-text {
-  flex: 1; min-width: 0; text-align: left;
-  font: inherit; line-height: 1.45;
-  color: inherit; background: none; border: 0; padding: 0; cursor: text;
+.todo-mark { display: block; width: .9em; height: .9em; }
+.todo-mark-box { fill: none; stroke: rgb(var(--border)); stroke-width: 1.4; }
+.todo-mark-ink {
+  fill: none; stroke: rgb(var(--text)); stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round;
 }
+.todo-glyph:hover .todo-mark-box { stroke: rgb(var(--accent)); }
+.todo-row.finished .todo-mark-box { stroke: rgb(var(--border) / .6); }
+.todo-row.finished .todo-mark-ink { stroke: rgb(var(--text-muted)); }
+
+.todo-text { flex: 1; min-width: 0; text-align: left; color: inherit; }
+.todo-unwritten { color: rgb(var(--text-muted)); font-style: italic; }
 .todo-note { margin-left: .5rem; font-size: .85em; font-style: italic; color: rgb(var(--text-muted)); }
 
 .todo-tags { display: flex; flex-wrap: wrap; gap: .25rem; flex: 0 0 auto; }
@@ -428,37 +468,92 @@ body {
 }
 .todo-due.overdue { color: rgb(var(--status-error)); }
 
-/* The band: always there, usually short, gone entirely when empty. */
+/* **In the gutter, sticky**, so it stays with you as the list scrolls and
+   takes no row's space when it appears. Set at .8em of the body rather than a
+   fixed 11px: it is something you read, not a badge. */
 .todo-soon {
-  display: flex; flex-direction: column; gap: .1rem;
-  margin-bottom: 1.6rem; padding-bottom: .9rem;
-  border-bottom: 1px solid rgb(var(--border));
+  grid-column: 2; align-self: start; position: sticky; top: 2rem;
+  display: flex; flex-direction: column; gap: .35rem;
+  margin-left: 1.25rem; padding-left: 1rem;
+  border-left: 1px solid rgb(var(--border));
 }
 .todo-soon-item {
-  display: flex; align-items: baseline; gap: .6rem; width: 100%;
-  font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: .05rem; width: 100%;
+  font: inherit; font-size: .8em; line-height: 1.35; text-align: left; cursor: pointer;
   color: rgb(var(--text)); background: none; border: 0; border-radius: 4px;
-  padding: .2rem .35rem;
+  padding: .1rem .3rem;
 }
 .todo-soon-item:hover { background: rgb(var(--accent) / .10); }
 .todo-soon-item:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: -1px; }
 .todo-when {
-  flex: 0 0 6.5rem; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  font-family: var(--font-ui); font-size: .72em; font-weight: 600;
+  letter-spacing: .03em; text-transform: uppercase;
   color: rgb(var(--accent)); font-variant-numeric: tabular-nums;
 }
 .todo-soon-item.overdue .todo-when { color: rgb(var(--status-error)); }
-.todo-soon-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-soon-text { min-width: 0; overflow-wrap: break-word; }
 
 /* Typed in the row, in the row's own type, so nothing shifts when a name goes
    from being read to being typed. */
 .todo-field {
-  flex: 1; min-width: 0; box-sizing: border-box;
+  /* **The full width of the row it is in**, which it was not: the add field sat
+     outside the flex row, so `flex: 1` did nothing and an input fell back to
+     its ~20-character default. Typing a task into a slot narrower than the task
+     is the thing this list exists to stop being. */
+  flex: 1 1 auto; width: 100%; min-width: 0; box-sizing: border-box;
   font: inherit; font-family: var(--font-body);
   color: rgb(var(--text)); background: rgb(var(--surface));
-  border: 0; border-bottom: 1px solid rgb(var(--accent)); border-radius: 0;
-  padding: 0;
+  /* **No rule of its own**: the row already has one, and a second underneath
+     it both doubled the line and made the add row a pixel taller than every
+     other. The row's rule takes the accent instead, which says the same thing
+     in the place the eye is already reading. */
+  border: 0; border-radius: 0; padding: 0;
 }
 .todo-field:focus { outline: 0; }
+.todo-row:has(.todo-field) { border-bottom-color: rgb(var(--accent)); }
+
+/* **The add row IS a row**, `.todo-row` and all — the mark, the padding, the
+   rules. It had its own smaller geometry, so the line you were typing sat
+   somewhere the item would not, and everything jumped when you committed it.
+   The mark is drawn and dimmed rather than hidden: hiding it collapsed the
+   column and pulled the field left. */
+.todo-adding { cursor: text; }
+.todo-adding .todo-glyph { cursor: default; }
+.todo-adding .todo-mark-box { stroke: rgb(var(--border) / .5); }
+.todo-addrow { padding-top: .3em; }
+
+/* The editing row: the field, its two tools, and whatever they opened. The
+   popups are absolutely placed against this, so they hang under the field
+   rather than pushing the list around while you type (D42). */
+.todo-editing { position: relative; flex: 1; display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.todo-tools { display: flex; gap: .2rem; flex: 0 0 auto; }
+.todo-tools button {
+  font-family: var(--font-ui); font-size: 11px; cursor: pointer;
+  color: rgb(var(--text-muted)); background: rgb(var(--text) / .05);
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .05rem .4rem;
+}
+.todo-tools button:hover { color: rgb(var(--accent)); border-color: rgb(var(--accent) / .6); }
+
+.todo-complete, .todo-dates {
+  position: absolute; top: 1.6rem; left: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: .2rem; padding: .3rem;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 6px;
+  box-shadow: 0 10px 26px rgb(0 0 0 / .16);
+}
+.todo-complete button, .todo-dates button {
+  font-family: var(--font-ui); font-size: 12px; cursor: pointer;
+  color: rgb(var(--text)); background: none; border: 0; border-radius: 4px;
+  padding: .15rem .5rem;
+}
+/* Which one Return and Tab would take. */
+.todo-complete button.picked { background: rgb(var(--accent) / .18); color: rgb(var(--text-heading)); }
+.todo-complete button:hover, .todo-dates button:hover { background: rgb(var(--accent) / .14); }
+.todo-dates .clear { color: rgb(var(--text-muted)); }
+.todo-dates input[type="date"] {
+  font-family: var(--font-ui); font-size: 12px; color: rgb(var(--text));
+  background: none; border: 1px solid rgb(var(--border)); border-radius: 4px; padding: 0 .2rem;
+}
 
 .todo-add {
   margin-top: .6rem; padding: .2rem .4rem;
