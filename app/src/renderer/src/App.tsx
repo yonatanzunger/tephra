@@ -160,6 +160,22 @@ export function App(): React.JSX.Element {
   const [extent, setExtent] = useState<{ first: DateKey; last: DateKey } | null>(null)
   const [frameEl, setFrameEl] = useState<HTMLDivElement | null>(null)
 
+  /**
+   * A task this window asked for exists now, so the words become a link to it.
+   *
+   * **Written on the way back, not on the way out.** The item cannot be made
+   * until the row is committed, and the selection is still here waiting — so
+   * this is the only moment both halves exist at once (T13).
+   */
+  useEffect(
+    () =>
+      window.tephra.todo.onCaptured(item => {
+        editorRef.current?.wrapSelection('[', `](tephra:todo/${item})`)
+        setNavGeneration(n => n + 1)
+      }),
+    [],
+  )
+
   const metrics = useFrameMetrics(frameEl, typography)
 
   // Temporary, for the frame self-check. Goes away with verify.ts.
@@ -451,30 +467,15 @@ export function App(): React.JSX.Element {
             ? ''
             : w.text.slice(from as number, to as number).trim()
 
+        // **One flow, whichever way it started.** Creating the item outright
+        // from a selection was a second flow wearing the same key: no chance to
+        // add a tag or a date, no chance to change your mind, and an item put
+        // somewhere you could not see. Both paths now open the row in the list
+        // — prefilled from the selection, or empty — and both come back here
+        // when they are done, committed or abandoned.
         void window.tephra.todo
-          .which()
-          .then(async list => {
-            if (words !== '') {
-              const item = await window.tephra.todo.add(list, words)
-              editorRef.current?.wrapSelection('[', `](tephra:todo/${item})`)
-              setNavGeneration(n => n + 1)
-              return
-            }
-            setPrompt({
-              title: 'What needs doing',
-              // The line, offered rather than assumed — selected, so Return
-              // takes it and typing replaces it. One keystroke either way.
-              initial: selection.lines.trim(),
-              placeholder: 'and it goes on the list',
-              submitLabel: 'Add',
-              onSubmit: text => {
-                void window.tephra.todo
-                  .add(list, text)
-                  .then(() => setNavGeneration(n => n + 1))
-                  .catch(fail)
-              },
-            })
-          })
+          .capture(words, words !== '')
+          .then(id => window.tephra.win.reveal({ kind: 'document', id }))
           .catch(fail)
         return
       }

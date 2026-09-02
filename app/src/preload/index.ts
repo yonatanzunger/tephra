@@ -132,6 +132,14 @@ const tephra = {
     /** Fire and forget: losing a cursor position is cheap and self-correcting. */
     report: (report: WindowReport): void => ipcRenderer.send(CHANNEL.windowReport, report),
     create: (target?: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowCreate, target),
+    /** Bring it to the front, in the window that already has it or a new one. */
+    reveal: (target: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowReveal, target),
+    /** This window was brought forward — by ⌘1, or by somebody capturing a task. */
+    onRevealed(handler: () => void): () => void {
+      const listener = (): void => handler()
+      ipcRenderer.on(CHANNEL.revealed, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.revealed, listener)
+    },
     /** Bring in what this window is showing — the read-only badge's gesture. */
     import: (): Promise<void> => ipcRenderer.invoke(CHANNEL.windowImport),
     /** Main picked a document for this window to show (File ▸ Open…). */
@@ -168,6 +176,26 @@ const tephra = {
     /** Off the list, for a line that was never a task. Earlier days keep theirs. */
     remove: (list: DocumentId, item: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'remove', list, item }),
+    /** Show the list with a row open for a task, prefilled with `text` (T13). */
+    capture: (text: string, wrap: boolean): Promise<DocumentId> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'capture', text, wrap }),
+    /** The list takes it, if one is waiting. Taking it means nobody else will. */
+    claim: (): Promise<{ text: string } | null> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'claim' }),
+    /** It became this item, or `null` because it was abandoned. */
+    settle: (item: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'settle', item }),
+    /**
+     * A task this window asked for now exists, so its words can point at it.
+     *
+     * The item cannot be made until the row is committed, and by then the caret
+     * is in another window — so the link is written when the answer comes back
+     * rather than when the question was asked.
+     */
+    onCaptured(handler: Handler<string>): () => void {
+      const listener = (_e: unknown, item: string): void => handler(item)
+      ipcRenderer.on(CHANNEL.captured, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.captured, listener)
+    },
   },
   doc: {
     open: (id?: DocumentId): Promise<DocumentInfo> => ipcRenderer.invoke(CHANNEL.open, id),

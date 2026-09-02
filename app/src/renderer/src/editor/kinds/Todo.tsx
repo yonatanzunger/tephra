@@ -95,6 +95,15 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
   const [editing, setEditing] = useState<string | null>(null)
   /** Not adding, or the text to start the new item with. */
   const [adding, setAdding] = useState<string | null>(null)
+  /**
+   * This row is somebody's captured thought, not an item typed here.
+   *
+   * **Which makes abandoning it a real answer**, and one that has to be
+   * reported: the window that asked is waiting to be given its sentence back
+   * and — if it offered words — to be told whether there is anything to link
+   * them to (T13).
+   */
+  const [capturing, setCapturing] = useState(false)
   const [menu, setMenu] = useState<RowMenuRequest | null>(null)
   /** The item whose reason is being typed, after `Blocked…` is chosen. */
   const [blocking, setBlocking] = useState<string | null>(null)
@@ -110,6 +119,34 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
     },
     [list],
   )
+
+  /**
+   * Somebody asked for a task on the way here, so open a row for it (T13).
+   *
+   * **Asked for rather than sent**, because a message pushed at a window that
+   * was created a moment ago arrives before there is anything listening. This
+   * reads a one-shot flag on arrival and again whenever the window comes
+   * forward, which covers both the list that had to be opened and the one that
+   * was already sitting there.
+   */
+  useEffect(() => {
+    const check = (): void => {
+      void window.tephra.todo
+        .claim()
+        .then(asked => {
+          if (asked === null) return
+          setAdding(asked.text)
+          setCapturing(true)
+        })
+        .catch(fail)
+    }
+    // On arrival, and again whenever this window is brought forward. Focus is
+    // not enough: a window that is not shown never gets one, and the claim is
+    // one-shot anyway, so asking twice costs a round trip and nothing else.
+    check()
+    const stop = window.tephra.win.onRevealed(check)
+    return () => stop()
+  }, [fail])
 
   // **Opening the list is what materialises the day** (D55). The carry is not
   // the walk's, so arriving here is enough — and arriving twice does nothing.
@@ -293,7 +330,27 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
                 today={today}
                 onDone={text => {
                   setAdding(null)
-                  if (text !== null && text.trim() !== '') act(window.tephra.todo.add(list, text))
+                  const wanted = text === null ? '' : text.trim()
+                  if (!capturing) {
+                    if (wanted !== '') act(window.tephra.todo.add(list, wanted))
+                    return
+                  }
+                  setCapturing(false)
+                  // **Escape eliminates it, and that costs nothing** because it
+                  // was never made: a captured item exists only once the row is
+                  // committed. Either way the window that asked gets its
+                  // sentence back.
+                  if (wanted === '') {
+                    void window.tephra.todo.settle(null).catch(fail)
+                    return
+                  }
+                  void window.tephra.todo
+                    .add(list, wanted)
+                    .then(async item => {
+                      if (today !== null) await refresh(today)
+                      await window.tephra.todo.settle(item)
+                    })
+                    .catch(fail)
                 }}
               />
             </li>

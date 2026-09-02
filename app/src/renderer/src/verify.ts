@@ -62,8 +62,8 @@ export async function runVerify(request: string): Promise<void> {
     }).__tephra
     const view = handle.view
     const pane = handle.pane
-    if (view === undefined || view === null || pane === undefined || pane === null) {
-      say('ERROR', `view=${view != null} pane=${pane != null}`)
+    if (pane === undefined || pane === null) {
+      say('ERROR', `pane=${pane != null}`)
       if (me.id <= 1) console.log('VERIFY done')
       return
     }
@@ -72,6 +72,27 @@ export async function runVerify(request: string): Promise<void> {
     // what it is showing and lets the scene in window 1 do the asking. It never
     // says `done` — ending the run is the first window's to decide.
     if (me.id > 1) {
+      if (scene === 'capture') {
+        // The list, opened because somebody asked for a task, with the row for
+        // it already waiting — prefilled from the selection the first time,
+        // empty the second, and abandoned with Escape.
+        const row = (): HTMLInputElement | null =>
+          document.querySelector('.todo-adding .todo-field') as HTMLInputElement | null
+        const key = (k: string): void => {
+          row()?.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }))
+        }
+        await until(() => row() !== null, 8000)
+        say('surface', document.querySelector('.todo') !== null)
+        say('rowOpen', row() !== null)
+        say('prefilled', row()?.value ?? '')
+        // `arg` says which half is being driven: committed, or abandoned.
+        key(arg === 'escape' ? 'Escape' : 'Enter')
+        await settle(2500)
+        say('rowGone', row() === null)
+        say('leftBehind', document.querySelectorAll('.todo-row:not(.todo-adding)').length)
+        await settle(2500)
+        return
+      }
       say('name', document.querySelector('.titlebar .title')?.textContent ?? '')
       say('text', live().state.doc.toString())
       // And again later, so that a change window 1 makes to the SAME document
@@ -79,6 +100,15 @@ export async function runVerify(request: string): Promise<void> {
       await settle(6000)
       say('nameLater', document.querySelector('.titlebar .title')?.textContent ?? '')
       say('textLater', live().state.doc.toString())
+      return
+    }
+
+    // **The driver needs an editor; a participant does not.** A todo window has
+    // no CodeMirror view and never will, and requiring one made every such
+    // window report a failure and stop before it could say anything.
+    if (view === undefined || view === null) {
+      say('ERROR', 'this window has no editor to drive')
+      console.log('VERIFY done')
       return
     }
 
@@ -834,33 +864,27 @@ export async function runVerify(request: string): Promise<void> {
       const at = text.indexOf('call the surveyor')
       view.dispatch({ selection: { anchor: at, head: at + 'call the surveyor about the boundary'.length } })
       await settle(400)
-      say('selected', view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to))
+      say('selected', text.slice(view.state.selection.main.from, view.state.selection.main.to))
 
+      // **Both paths open the row**, so nothing is created here: the list
+      // window commits it, and the link comes back afterwards.
+      const before = view.state.doc.toString()
       say('clicked', await window.tephra.clickMenu('Task\u2026'))
-      await settle(1600)
-      // The words stay where they were, and now point at the task.
-      say('prose', view.state.doc.toString().replace(/\n+/g, ' ').slice(0, 160))
+      // Waited FOR: the other window has to boot, claim, settle, and send the
+      // answer back before there is anything here to look at.
+      await until(() => view.state.doc.toString() !== before, 12_000)
+      await settle(1500)
+      say('proseUntouched', view.state.doc.toString() === before)
       const list = await window.tephra.todo.which()
       const today = await window.tephra.todo.today(list)
       say('items', (await window.tephra.todo.items(list, today)).map(i => i.text))
+      say('prose', view.state.doc.toString().replace(/\n+/g, ' ').slice(0, 170))
 
-      // From a bare caret it offers the line instead, and writes nothing back.
-      const line = view.state.doc.line(view.state.doc.lineAt(at).number)
-      view.dispatch({ selection: { anchor: line.from, head: line.from } })
-      await settle(300)
-      const before = view.state.doc.toString()
-      say('clickedAgain', await window.tephra.clickMenu('Task\u2026'))
-      await settle(700)
-      const field = document.querySelector('.prompt input') as HTMLInputElement | null
-      say('offeredTheLine', (field?.value ?? '').slice(0, 60))
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-      setter?.call(field, 'ring the solicitor')
-      field?.dispatchEvent(new Event('input', { bubbles: true }))
-      await settle(120)
-      field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-      await settle(1600)
-      say('proseUntouched', view.state.doc.toString() === before)
-      say('itemsAfter', (await window.tephra.todo.items(list, today)).map(i => i.text))
+      // **From a bare caret it takes you to the list with a row already open**,
+      // and writes nothing into the prose. A second window opens, so what this
+      // one can check is that its own text was left alone and that the request
+      // was made — the row itself is the other window's, and is checked there.
+      say('linked', view.state.doc.toString().includes('tephra:todo/'))
 
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
@@ -930,7 +954,7 @@ export async function runVerify(request: string): Promise<void> {
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
     }
 
-    if (scene === 'sidebar') {
+    if (scene === 'sidebar-acts') {
       // The same three acts, asked for from the list rather than from the menu
       // bar — plus the two that only exist here: relabelling a row, and making
       // a file in the section you are looking at.

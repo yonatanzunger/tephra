@@ -1,6 +1,6 @@
 // Wiring the document service to Electron IPC. Nothing here does work.
 
-import { app, clipboard, ipcMain, shell, type BrowserWindow } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, shell, type WebContents } from 'electron'
 import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
@@ -84,7 +84,23 @@ export function registerDocumentIpc(service: DocumentService): void {
     service.newDocument(label, section),
   )
 
-  ipcMain.handle(CHANNEL.todo, async (_e, command: TodoCommand) => {
+  /**
+   * A task somebody asked for, between the asking and the answer.
+   *
+   * **It spans two windows, which is why it lives here.** The words come from
+   * a selection in one window; the item is made in another; and the link back
+   * can only be written once the item exists, by which time the caret is
+   * somewhere else entirely. Main is the only thing that can see both ends.
+   */
+  interface Capture {
+    readonly text: string
+    readonly wrap: boolean
+    readonly origin: WebContents
+  }
+  let waiting: Capture | null = null
+  let claimed: Capture | null = null
+
+  ipcMain.handle(CHANNEL.todo, async (e, command: TodoCommand) => {
     switch (command.kind) {
       case 'list':
         return service.todoList()
@@ -100,6 +116,40 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.todoEdit(command.list, command.item, command.text)
       case 'remove':
         return service.todoRemove(command.list, command.item)
+      case 'capture': {
+        // **Left for the list to pull.** Pushing at a window that may have been
+        // created a millisecond ago races its renderer: `did-finish-load` is
+        // not "React has mounted and subscribed". Something the list reads when
+        // it arrives cannot be too early — the same level-rather-than-edge
+        // shape the day boundary settled on (D62). Revealing is the caller's
+        // next call, because windows are not this handler's to know about.
+        waiting = { text: command.text, wrap: command.wrap, origin: e.sender }
+        return service.todoList()
+      }
+      case 'claim': {
+        // **Only when there is something to take.** The list asks on arrival
+        // AND on being revealed, and the second ask used to overwrite the live
+        // claim with nothing — so by the time the row was committed there was
+        // no one left to answer, and the link never came back. Asking twice is
+        // meant to be free; it was destroying the thing it asked about.
+        if (waiting === null) return null
+        claimed = waiting
+        waiting = null
+        return { text: claimed.text }
+      }
+      case 'settle': {
+        const capture = claimed
+        claimed = null
+        if (capture === null || capture.origin.isDestroyed()) return
+        // **Back where the thought started, committed or abandoned.** The point
+        // of the gesture is that a task reaches the list without costing you
+        // the sentence you were in, so it ends by giving the sentence back.
+        if (command.item !== null && capture.wrap) {
+          capture.origin.send(CHANNEL.captured, command.item)
+        }
+        BrowserWindow.fromWebContents(capture.origin)?.focus()
+        return
+      }
     }
   })
   ipcMain.handle(CHANNEL.renameDocument, (_e, id: DocumentId, label: string) =>
@@ -228,6 +278,16 @@ export function registerWindowIpc(windows: Windows, onImport: (id: DocumentId | 
   ipcMain.on(CHANNEL.windowReport, (e, report: WindowReport) => windows.report(e.sender, report))
   ipcMain.handle(CHANNEL.windowCreate, (_e, target?: NavTarget) => {
     windows.open(target)
+  })
+  /**
+   * Show something in a window of its own — the one that already has it, or a
+   * new one. What ⌘0 and ⌘1 do, reachable by a renderer that has a reason.
+   */
+  ipcMain.handle(CHANNEL.windowReveal, (_e, target: NavTarget) => {
+    const shown = windows.reveal(target)
+    // Told, not left to notice: a window already open has no mount to react to,
+    // and a hidden one — every window in verification mode — never sees focus.
+    if (!shown.isDestroyed()) shown.webContents.send(CHANNEL.revealed)
   })
   ipcMain.handle(CHANNEL.windowClose, e => windows.close(e.sender))
   // The badge and the File menu reach the same act; main owns it either way.

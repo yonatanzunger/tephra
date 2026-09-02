@@ -95,6 +95,17 @@ export const CHANNEL = {
   /** What this window is showing now — main keeps the set (MC6). */
   windowReport: 'tephra:win:report',
   windowCreate: 'tephra:win:create',
+  windowReveal: 'tephra:win:reveal',
+  /**
+   * This window was just brought forward.
+   *
+   * **Because focus is not a signal a hidden window gets**, and a window that
+   * was already open has no mount to react to either. Revealing is the one
+   * event both cases share, so it is the one that is announced.
+   */
+  revealed: 'tephra:win:revealed',
+  /** A capture became an item: the window that asked may now link to it. */
+  captured: 'tephra:todo:captured',
   /** Every document that could be opened, for the Open… chooser (MC6). */
   navDocuments: 'tephra:nav:documents',
   deleteTheme: 'tephra:theme:delete',
@@ -385,3 +396,16 @@ export type TodoCommand =
     }
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
   | { readonly kind: 'remove'; readonly list: DocumentId; readonly item: string }
+  /**
+   * Show the list with a row open for a task (T13).
+   *
+   * `text` prefills it — the words a selection offered. `wrap` says the asking
+   * window wants a link back once there is something to link to, which it
+   * cannot write itself: the item does not exist until the row is committed,
+   * and by then the caret is in another window.
+   */
+  | { readonly kind: 'capture'; readonly text: string; readonly wrap: boolean }
+  /** The list takes the waiting capture, if there is one. */
+  | { readonly kind: 'claim' }
+  /** It became this item, or `null` because it was abandoned. */
+  | { readonly kind: 'settle'; readonly item: string | null }

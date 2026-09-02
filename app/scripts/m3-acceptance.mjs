@@ -965,7 +965,7 @@ console.log('\n\u2014 the sidebar\'s own gestures \u2014')
     join(root, 'sections', 'house.fileset.md'),
     '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer](../notes/offer.md) \u2014 worth keeping\n',
   )
-  const r = report(await launch('sidebar', root))
+  const r = report(await launch('sidebar-acts', root))
   const section = await readFile(join(root, 'sections', 'house.fileset.md'), 'utf8').catch(() => '')
   const items = (list) => (Array.isArray(list) ? list.join(' \u00b7 ') : String(list))
 
@@ -1292,36 +1292,44 @@ if (process.env.TEPHRA_TIMING !== undefined) {
 // nothing: no window to open, no place to go, no sentence abandoned.
 console.log('\n\u2014 capture from the stream \u2014')
 {
-  const root = await week([
-    'Spoke to the agent today. I should call the surveyor about the boundary before Friday.\n',
-  ])
-  const r = report(await launch('capture', root))
-  const prose = String(r.prose)
+  const prose = 'Spoke to the agent today. I should call the surveyor about the boundary before Friday.\n'
 
-  check('a selection can be taken from mid-sentence', r.selected === 'call the surveyor about the boundary')
+  // **Committed**: the row opens in the list prefilled from the selection, and
+  // once it is committed the words point at the task they became.
+  const kept = report(await launch('capture', await week([prose])))
+  check('a selection can be taken from mid-sentence', kept.selected === 'call the surveyor about the boundary')
   check(
-    'THE POINT: it becomes an item, and the sentence keeps its words',
-    Array.isArray(r.items) && r.items[0] === 'call the surveyor about the boundary' &&
-      /Spoke to the agent today\./.test(prose) && /before Friday\./.test(prose),
-    JSON.stringify(r.items),
+    'THE POINT: it opens the LIST with a row, prefilled — not an item made behind your back',
+    kept['w2.rowOpen'] === true && kept['w2.prefilled'] === 'call the surveyor about the boundary',
+    `${kept['w2.rowOpen']} \u00b7 ${JSON.stringify(kept['w2.prefilled'])}`,
+  )
+  check(
+    'committing it makes the item and leaves the sentence its words',
+    Array.isArray(kept.items) && kept.items[0] === 'call the surveyor about the boundary' &&
+      /Spoke to the agent today\./.test(String(kept.prose)) && /before Friday\./.test(String(kept.prose)),
+    JSON.stringify(kept.items),
   )
   check(
     'and the words now point at the task they became',
-    /\[call the surveyor about the boundary\]\(tephra:todo\/[0-9a-z]{8}\)/.test(prose),
-    prose,
+    /\[call the surveyor about the boundary\]\(tephra:todo\/[0-9a-z]{8}\)/.test(String(kept.prose)),
+    String(kept.prose),
+  )
+  check('nothing errored on the way', kept.appError === 'none', String(kept.appError))
+
+  // **Abandoned**: Escape eliminates it, which costs nothing because it was
+  // never made — the item exists only once the row is committed.
+  const gone = report(await launch('capture|escape', await week([prose])))
+  check(
+    'escaping the row leaves no task behind',
+    gone['w2.rowGone'] === true && gone['w2.leftBehind'] === 0 &&
+      Array.isArray(gone.items) && gone.items.length === 0,
+    `row ${gone['w2.rowGone']} \u00b7 rows ${gone['w2.leftBehind']} \u00b7 ${JSON.stringify(gone.items)}`,
   )
   check(
-    'from a bare caret the line is OFFERED rather than assumed',
-    typeof r.offeredTheLine === 'string' && r.offeredTheLine.startsWith('Spoke to the agent today.'),
-    JSON.stringify(r.offeredTheLine),
+    'and the sentence you were writing is exactly as you left it',
+    gone.proseUntouched === true && gone.linked === false,
+    String(gone.prose),
   )
-  check(
-    'and nothing is written back, because the words retyped are not the ones on the page',
-    r.proseUntouched === true &&
-      Array.isArray(r.itemsAfter) && r.itemsAfter.includes('ring the solicitor'),
-    JSON.stringify(r.itemsAfter),
-  )
-  check('nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
 const failed = checks.filter(c => !c.ok)
