@@ -20,6 +20,16 @@ import { join } from 'node:path'
 const root = await mkdtemp(join(tmpdir(), 'tephra-m1-'))
 const electron = './node_modules/.bin/electron'
 
+/**
+ * How long each scene took, so a suite that has got slow can say where.
+ *
+ * **A harness that cannot report its own cost gets slower by accident.** These
+ * runs are minutes of real Electron and the time is nearly all deliberate
+ * waiting; without a number per scene, the only signal is that the whole thing
+ * feels slow, which is not enough to act on.
+ */
+const spent = []
+
 function launch(scene, { abrupt = false, timeoutMs = 45_000, env: extra = {} } = {}) {
   return new Promise((resolve, reject) => {
     const env = {
@@ -31,6 +41,7 @@ function launch(scene, { abrupt = false, timeoutMs = 45_000, env: extra = {} } =
       ...extra,
     }
     delete env.ELECTRON_RUN_AS_NODE
+    const began = Date.now()
     const child = spawn(electron, ['.'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
     const timer = setTimeout(() => {
@@ -41,6 +52,7 @@ function launch(scene, { abrupt = false, timeoutMs = 45_000, env: extra = {} } =
     child.stderr.on('data', d => (out += d))
     child.on('exit', () => {
       clearTimeout(timer)
+      spent.push({ scene, ms: Date.now() - began })
       resolve(out)
     })
   })
@@ -237,6 +249,14 @@ console.log('\n\u2014 a notebook migrated from the old layout \u2014')
   check('with the prose that was written in them', /Written before the rename/.test(String(r.prose)), String(r.prose))
   check('and the notes beside them are untouched', r.notes === true)
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
+if (process.env.TEPHRA_TIMING !== undefined) {
+  const total = spent.reduce((n, one) => n + one.ms, 0)
+  console.log(`\n\u2014 where the time went: ${(total / 1000).toFixed(1)}s across ${spent.length} launches \u2014`)
+  for (const one of [...spent].sort((a, b) => b.ms - a.ms)) {
+    console.log(`  ${String((one.ms / 1000).toFixed(1)).padStart(6)}s  ${one.scene}`)
+  }
 }
 
 const failed = checks.filter(c => !c.ok)

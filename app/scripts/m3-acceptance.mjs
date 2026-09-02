@@ -23,6 +23,18 @@ const electron = './node_modules/.bin/electron'
 const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
 
 /**
+ * A day relative to today, in the reference zone.
+ *
+ * **Every date a fixture writes has to be relative.** A due date spelled out as
+ * `2026-09-14` is a different number of days away tomorrow than it is today, so
+ * a suite that hard-codes one passes on the day it was written and fails every
+ * day after — which is a suite that cries wolf, and the only reason a green run
+ * is worth anything is that it does not.
+ */
+const dayFrom = days =>
+  new Date(Date.parse(`${DAY}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+
+/**
  * A day's label as the sidebar writes it — "26 Aug" — counted back from today.
  *
  * **Derived, never typed.** m2 was fixed once for hard-coded dates and this
@@ -59,6 +71,16 @@ async function week(bodies) {
 // longest one was the first to fall over whenever the machine had anything else
 // to do. A timeout that fires on a slow machine reports a failure that is not
 // there, which is worse than a slow suite.
+/**
+ * How long each scene took, so a suite that has got slow can say where.
+ *
+ * **A harness that cannot report its own cost gets slower by accident.** These
+ * runs are minutes of real Electron and the time is nearly all deliberate
+ * waiting; without a number per scene, the only signal is that the whole thing
+ * feels slow, which is not enough to act on.
+ */
+const spent = []
+
 function launch(scene, root, { timeoutMs = 180_000, shotDelay = 30_000 } = {}) {
   return new Promise((resolve, reject) => {
     const env = {
@@ -69,6 +91,7 @@ function launch(scene, root, { timeoutMs = 180_000, shotDelay = 30_000 } = {}) {
       TEPHRA_SHOT_DELAY: String(shotDelay),
     }
     delete env.ELECTRON_RUN_AS_NODE
+    const began = Date.now()
     const child = spawn(electron, ['.'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
     const timer = setTimeout(() => {
@@ -79,6 +102,7 @@ function launch(scene, root, { timeoutMs = 180_000, shotDelay = 30_000 } = {}) {
     child.stderr.on('data', d => (out += d))
     child.on('exit', () => {
       clearTimeout(timer)
+      spent.push({ scene, ms: Date.now() - began })
       resolve(out)
     })
   })
@@ -1028,28 +1052,27 @@ console.log('\n\u2014 the task list \u2014')
 {
   const root = await week(['Today.\n'])
   await mkdir(join(root, 'notes'), { recursive: true })
-  await mkdir(join(root, 'tasks.todo', '2026', '08'), { recursive: true })
+  const [ty, tm] = dayFrom(-1).split('-')
+  await mkdir(join(root, 'tasks.todo', ty, tm), { recursive: true })
   await writeFile(join(root, 'notes', 'covenants.md'), '---\ntephra: 1\nkind: markdown\n---\nThe covenants.\n')
   // Yesterday's list, with one of each thing that has to survive the carry or
   // deliberately not survive it.
   await writeFile(
-    join(root, 'tasks.todo', '2026', '08', '2026-08-31.md'),
-    '---\ntephra: 1\ndate: 2026-08-31\nkind: todo\n---\n' +
-      '- [ ] call the surveyor #house DUE 2026-09-03 <!--tephra:item aaaaaaaa 1756600000 1756600000-->\n' +
+    join(root, 'tasks.todo', ty, tm, `${dayFrom(-1)}.md`),
+    `---\ntephra: 1\ndate: ${dayFrom(-1)}\nkind: todo\n---\n` +
+      `- [ ] call the surveyor #house DUE ${dayFrom(2)} <!--tephra:item aaaaaaaa 1756600000 1756600000-->\n` +
       '- [/] read the survey <!--tephra:item bbbbbbbb 1756600000 1756600000-->\n' +
       '- [?] get the deeds #house \u2014 waiting on the solicitor <!--tephra:item cccccccc 1756600000 1756600000-->\n' +
       '- [x] ring the estate agent <!--tephra:item dddddddd 1756600000 1756600000-->\n' +
-      '- [ ] file the return DUE 2026-08-28 <!--tephra:item ffffffff 1756600000 1756600000-->\n' +
+      `- [ ] file the return DUE ${dayFrom(-4)} <!--tephra:item ffffffff 1756600000 1756600000-->\n` +
       '- [ ] read [the covenants](../notes/covenants.md) again #term <!--tephra:item eeeeeeee 1756600000 1756600000-->\n',
   )
 
   const r = report(await launch('todo', root))
   const carried = Array.isArray(r.carried) ? r.carried : []
-  const files = await readdir(join(root, 'tasks.todo', '2026', '09')).catch(() => [])
-  const today = files.length === 1
-    ? await readFile(join(root, 'tasks.todo', '2026', '09', files[0]), 'utf8')
-    : ''
-  const yesterday = await readFile(join(root, 'tasks.todo', '2026', '08', '2026-08-31.md'), 'utf8')
+  const [ny, nm] = DAY.split('-')
+  const today = await readFile(join(root, 'tasks.todo', ny, nm, `${DAY}.md`), 'utf8').catch(() => '')
+  const yesterday = await readFile(join(root, 'tasks.todo', ty, tm, `${dayFrom(-1)}.md`), 'utf8')
 
   check('the list opens under its own name', r.title === 'tasks', JSON.stringify(r.title))
   check(
@@ -1070,7 +1093,10 @@ console.log('\n\u2014 the task list \u2014')
   check('links in an item are live', Array.isArray(r.links) && r.links[0] === 'the covenants', JSON.stringify(r.links))
   check(
     'the due-soon band surfaces what is close, most urgent first (T9)',
-    Array.isArray(r.band) && r.band[0] === '4 days ago' && r.band[1] === 'in 2 days',
+    // Relative, not literal: what is being tested is the ORDER — overdue
+    // first — and a literal reads differently every morning.
+    Array.isArray(r.band) && r.band.length === 2 &&
+      / ago$/.test(String(r.band[0])) && !/ ago$/.test(String(r.band[1])),
     JSON.stringify(r.band),
   )
 
@@ -1106,7 +1132,7 @@ console.log('\n\u2014 the task list \u2014')
     // `resolveDue` is the same function the file is written through, so
     // pressing `tomorrow` and typing `DUE TOMORROW` leave the same characters
     // behind — one notation, reached two ways (T16).
-    typeof r.afterDateButton === 'string' && /DUE 2026-09-02$/.test(r.afterDateButton),
+    typeof r.afterDateButton === 'string' && r.afterDateButton.endsWith(`DUE ${dayFrom(1)}`),
     JSON.stringify(r.afterDateButton),
   )
   check('and it is done in the file, on today', /- \[x\] call the surveyor/.test(today), JSON.stringify(today))
@@ -1239,6 +1265,14 @@ console.log('\n\u2014 the task list \u2014')
     w.again === true && w.notebookAgain === true && w.stillProse === true,
     `again ${w.again} \u00b7 notebook ${w.notebookAgain} \u00b7 prose ${w.stillProse}`,
   )
+}
+
+if (process.env.TEPHRA_TIMING !== undefined) {
+  const total = spent.reduce((n, one) => n + one.ms, 0)
+  console.log(`\n\u2014 where the time went: ${(total / 1000).toFixed(1)}s across ${spent.length} launches \u2014`)
+  for (const one of [...spent].sort((a, b) => b.ms - a.ms)) {
+    console.log(`  ${String((one.ms / 1000).toFixed(1)).padStart(6)}s  ${one.scene}`)
+  }
 }
 
 const failed = checks.filter(c => !c.ok)

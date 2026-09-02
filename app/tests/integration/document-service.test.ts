@@ -23,7 +23,16 @@ const wp = (n: number): WindowPosition => n as WindowPosition
 async function fixture(t: TestContext, options: ServiceOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-svc-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  t.after(() => nb.close())
+  t.after(async () => {
+    // **Stop the service, then close the notebook.** The write tiers are
+    // timers; one nobody cancels holds the process open for its whole
+    // interval after the tests have passed — which for a fixture that sets
+    // a long one is a minute of wall clock for half a second of work. The
+    // app does this on quit (D32); a test that starts a service is a
+    // process that has to do it too.
+    await service.stop()
+    await nb.close()
+  })
   const service = new DocumentService(nb, options)
   const today = StreamDocument.today()
   const snapshot = await service.openWindow({ first: today, last: today })

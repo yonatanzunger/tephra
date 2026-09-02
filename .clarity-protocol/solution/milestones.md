@@ -730,6 +730,37 @@ download.
 use. The `CFBundleName` patch in `run.sh` is now only needed by the dev path,
 since a real bundle carries its own name.
 
+## Running the suites, and keeping them fast
+
+`npm test` is 576 tests in **12 seconds**; `m0`–`m3` are **3.5 minutes** of real
+Electron across 35 launches. They were nine minutes and six respectively, and
+what fixed each is worth writing down because both will happen again.
+
+**`npm test`: a fixture that started a service and never stopped it.** One file
+took 61 seconds of wall clock for half a second of CPU — it set a 60-second file
+tier deliberately (so the tier could not rescue what the WAL was being tested
+for), typed, and closed the notebook without stopping the service. The tier's
+timer then held the process open for its whole interval after the tests had
+passed. **A test that starts a service is a process that has to stop it**, which
+is what the app does on quit (D32).
+
+**The acceptance suites: waiting a fixed time instead of waiting for a fact.**
+Every scene opened with a flat 1.8-second settle — a guess about the slowest
+machine, paid on every machine, and still wrong on a slower one. `until()` polls
+for the window being ready instead. That is a minute across the four suites, and
+it is also why scenes used to fail under load: a fixed wait that is too short
+does not slow down, it lies.
+
+**Both suites report where their time goes.** `TEPHRA_TIMING=1 npm run m3`
+prints seconds per scene, slowest first. A harness that cannot say what it spent
+gets slower by accident, which is exactly what happened here.
+
+**And every date a fixture writes is relative** (`dayFrom` in the harnesses). A
+due date spelled `2026-09-14` is a different number of days away tomorrow than
+today, so a literal passes on the day it was written and fails every day after.
+Two checks did exactly that and were caught by the calendar rolling over
+mid-session.
+
 ## How to know what to test
 
 Test M0's list above. Anything in M1 and beyond is absent, and absence is not a

@@ -19,12 +19,43 @@ export async function runVerify(request: string): Promise<void> {
     console.log(`VERIFY ${mine(key)}: ${JSON.stringify(value)}`)
   const settle = (ms = 200): Promise<void> => new Promise(r => setTimeout(r, ms))
 
+  /**
+   * Wait for something to be true, rather than for long enough that it is.
+   *
+   * **A fixed wait is a guess about the slowest machine.** It costs that guess
+   * on every machine, and it is still wrong on a slower one — which is how a
+   * suite comes to take minutes and to fail under load at the same time. This
+   * returns as soon as the thing has happened and gives up at the point where
+   * waiting longer would be waiting for something that is not coming.
+   */
+  const until = async (ready: () => boolean, capMs = 8000): Promise<boolean> => {
+    for (let waited = 0; waited < capMs; waited += 50) {
+      if (ready()) return true
+      await settle(50)
+    }
+    return ready()
+  }
+
   /** The live view, asked for each time: navigation rebinds the surface. */
   const live = (): EditorViewLike =>
     (globalThis as unknown as { __tephra: { view: EditorViewLike } }).__tephra.view
 
   try {
-    await settle(1800) // open, bind, restore, and let background growth finish
+    // Open, bind, restore, and let background growth finish — waited FOR rather
+    // than waited OUT. This was a flat 1.8 seconds on every scene in every
+    // suite, which is a minute of the acceptance run spent watching a window
+    // that was ready in a fifth of it.
+    //
+    // A todo window has no editor view (it is not CodeMirror), so its surface
+    // being on screen counts as ready too — otherwise the one window that is
+    // not prose would wait out the whole cap before reporting what it is.
+    const booted = (): boolean => {
+      const h = (globalThis as unknown as { __tephra?: { view?: unknown; pane?: unknown } }).__tephra
+      if (h?.pane === undefined || h.pane === null) return false
+      return (h.view !== undefined && h.view !== null) || document.querySelector('.todo') !== null
+    }
+    await until(booted, 6000)
+    await settle(250) // and a beat for the first paint to settle
 
     const handle = (globalThis as unknown as {
       __tephra: { view?: EditorViewLike; pane?: PaneLike }
@@ -607,7 +638,7 @@ export async function runVerify(request: string): Promise<void> {
       await settle(400)
       say('afterDateButton', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
 
-      await type('.todo-field', 'read the survey properly #house DUE 2026-09-30')
+      await type('.todo-field', 'read the survey properly #house DUE FRIDAY')
       say('afterEdit', texts())
       say('afterEditTags', [...document.querySelectorAll('.todo-tag')].map(t => t.textContent ?? ''))
 
