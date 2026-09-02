@@ -12,7 +12,7 @@
 
 export type RangeCommandId =
   | 'bookmark' | 'tag' | 'untag' | 'link' | 'comment' | 'branch' | 'print'
-  | 'bold' | 'italic' | 'strike' | 'image'
+  | 'bold' | 'italic' | 'strike' | 'image' | 'task'
 
 /**
  * Which menu a command appears under.
@@ -70,6 +70,13 @@ export const RANGE_COMMANDS: readonly RangeCommand[] = [
   // longer reach.
   { id: 'link', label: 'Link…', accelerator: 'CmdOrCtrl+K', needs: 'range', group: 'insert', built: true },
   { id: 'comment', label: 'Comment…', accelerator: 'CmdOrCtrl+Alt+M', needs: 'range', group: 'insert', built: true },
+  // **`point`, because it does two things and both are capture** (T13). With a
+  // selection it takes those words; with a bare caret it offers the line, which
+  // is the same gesture asking rather than assuming. The point of both is that
+  // the thought reaches the list without leaving the sentence it arrived in —
+  // a task carried in the head instead is the failure the whole list exists
+  // against.
+  { id: 'task', label: 'Task…', accelerator: 'CmdOrCtrl+Shift+T', needs: 'point', group: 'insert', built: true },
   // It MAKES a document, which is what the File menu is about, and it belongs
   // beside the other commands that make and unmake files.
   { id: 'branch', label: 'Branch Selection to Its Own File…', accelerator: '', needs: 'range', group: 'file', built: true },

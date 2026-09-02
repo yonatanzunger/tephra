@@ -33,6 +33,15 @@ export type Reference =
   | { readonly kind: 'file'; readonly path: NotebookPath }
   /** A curated section, which is a fileset by name (D53). */
   | { readonly kind: 'section'; readonly name: string }
+  /**
+   * One TODO item, by its id (D56).
+   *
+   * **Resolves to its NEWEST instance**, which is what the item is now — the
+   * inverse of `mark`, which resolves to the first in date order, because a
+   * bookmark means where something was first said and an item means where it
+   * stands.
+   */
+  | { readonly kind: 'todo'; readonly id: string }
   /** Somewhere else entirely: the browser's problem, not the corpus's. */
   | { readonly kind: 'url'; readonly href: string }
 

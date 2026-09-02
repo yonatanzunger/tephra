@@ -75,6 +75,8 @@ function describe(target: Reference): string {
       return target.date
     case 'heading':
       return `“${target.text}”`
+    case 'todo':
+      return 'that task'
   }
 }
 
@@ -423,6 +425,57 @@ export function App(): React.JSX.Element {
         // The one command that needs nothing but a caret: with no selection it
         // opens the markers and waits inside them.
         editorRef.current?.toggleEmphasis(id === 'bold' ? '**' : id === 'strike' ? '~~' : '*')
+        return
+      }
+
+      if (id === 'task') {
+        /**
+         * **Capture, without leaving the sentence it arrived in** (T13).
+         *
+         * Two behaviours from one gesture, and the difference is whether the
+         * prose IS the task. With a selection those words become the item and
+         * the words stay where they are, wrapped in a link to it — a journal
+         * that loses a sentence to make a task out of it has been gutted to
+         * fill a list. From a bare caret the line is offered in a prompt
+         * instead, because a line of prose is rarely phrased as a task, and
+         * nothing is written back: linking words that are not the task would
+         * point at something that does not say what it points to.
+         */
+        const selection = editorRef.current?.selection()
+        const w = pane?.window
+        if (selection === undefined || w === null || w === undefined) return
+        const from = w.toWindow(selection.span.begin)
+        const to = w.toWindow(selection.span.end)
+        const words =
+          selection.empty || from === null || to === null
+            ? ''
+            : w.text.slice(from as number, to as number).trim()
+
+        void window.tephra.todo
+          .which()
+          .then(async list => {
+            if (words !== '') {
+              const item = await window.tephra.todo.add(list, words)
+              editorRef.current?.wrapSelection('[', `](tephra:todo/${item})`)
+              setNavGeneration(n => n + 1)
+              return
+            }
+            setPrompt({
+              title: 'What needs doing',
+              // The line, offered rather than assumed — selected, so Return
+              // takes it and typing replaces it. One keystroke either way.
+              initial: selection.lines.trim(),
+              placeholder: 'and it goes on the list',
+              submitLabel: 'Add',
+              onSubmit: text => {
+                void window.tephra.todo
+                  .add(list, text)
+                  .then(() => setNavGeneration(n => n + 1))
+                  .catch(fail)
+              },
+            })
+          })
+          .catch(fail)
         return
       }
 

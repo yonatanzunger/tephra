@@ -114,6 +114,13 @@ export function registerDocumentIpc(service: DocumentService): void {
       await shell.openExternal(reference.href)
       return 'opened'
     }
+    if (reference.kind === 'todo') {
+      // **A task is a document in the corpus, so it opens like one** (D56).
+      // Which day it is showing is the list's business, and it shows today —
+      // the item's newest instance is what the item IS now. Landing on the
+      // exact line is worth having and is not this milestone's.
+      return { document: await service.todoList() }
+    }
     if (reference.kind !== 'file') return 'unsupported'
 
     // **A document in the corpus is this app's to open**, and the renderer is

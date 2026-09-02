@@ -826,6 +826,47 @@ export async function runVerify(request: string): Promise<void> {
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
     }
 
+    if (scene === 'capture') {
+      // A thought arrives mid-sentence and has to reach the list without
+      // leaving the sentence it arrived in (T13).
+      const view = live()
+      const text = view.state.doc.toString()
+      const at = text.indexOf('call the surveyor')
+      view.dispatch({ selection: { anchor: at, head: at + 'call the surveyor about the boundary'.length } })
+      await settle(400)
+      say('selected', view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to))
+
+      say('clicked', await window.tephra.clickMenu('Task\u2026'))
+      await settle(1600)
+      // The words stay where they were, and now point at the task.
+      say('prose', view.state.doc.toString().replace(/\n+/g, ' ').slice(0, 160))
+      const list = await window.tephra.todo.which()
+      const today = await window.tephra.todo.today(list)
+      say('items', (await window.tephra.todo.items(list, today)).map(i => i.text))
+
+      // From a bare caret it offers the line instead, and writes nothing back.
+      const line = view.state.doc.line(view.state.doc.lineAt(at).number)
+      view.dispatch({ selection: { anchor: line.from, head: line.from } })
+      await settle(300)
+      const before = view.state.doc.toString()
+      say('clickedAgain', await window.tephra.clickMenu('Task\u2026'))
+      await settle(700)
+      const field = document.querySelector('.prompt input') as HTMLInputElement | null
+      say('offeredTheLine', (field?.value ?? '').slice(0, 60))
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(field, 'ring the solicitor')
+      field?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(120)
+      field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(1600)
+      say('proseUntouched', view.state.doc.toString() === before)
+      say('itemsAfter', (await window.tephra.todo.items(list, today)).map(i => i.text))
+
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(500)
+    }
+
     if (scene === 'todo-window') {
       // ⌘1 opens the list in a window of its own and leaves this one where it
       // was — which is the whole of why it is main's action and not a

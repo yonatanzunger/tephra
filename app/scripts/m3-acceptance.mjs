@@ -1285,6 +1285,45 @@ if (process.env.TEPHRA_TIMING !== undefined) {
   }
 }
 
+// ── 16. capture from where the thought arrives ──────────────────────────────
+//
+// The success criterion's first failure is a task that never reaches the list,
+// so the head goes on carrying it (T13). What guards it is that capture costs
+// nothing: no window to open, no place to go, no sentence abandoned.
+console.log('\n\u2014 capture from the stream \u2014')
+{
+  const root = await week([
+    'Spoke to the agent today. I should call the surveyor about the boundary before Friday.\n',
+  ])
+  const r = report(await launch('capture', root))
+  const prose = String(r.prose)
+
+  check('a selection can be taken from mid-sentence', r.selected === 'call the surveyor about the boundary')
+  check(
+    'THE POINT: it becomes an item, and the sentence keeps its words',
+    Array.isArray(r.items) && r.items[0] === 'call the surveyor about the boundary' &&
+      /Spoke to the agent today\./.test(prose) && /before Friday\./.test(prose),
+    JSON.stringify(r.items),
+  )
+  check(
+    'and the words now point at the task they became',
+    /\[call the surveyor about the boundary\]\(tephra:todo\/[0-9a-z]{8}\)/.test(prose),
+    prose,
+  )
+  check(
+    'from a bare caret the line is OFFERED rather than assumed',
+    typeof r.offeredTheLine === 'string' && r.offeredTheLine.startsWith('Spoke to the agent today.'),
+    JSON.stringify(r.offeredTheLine),
+  )
+  check(
+    'and nothing is written back, because the words retyped are not the ones on the page',
+    r.proseUntouched === true &&
+      Array.isArray(r.itemsAfter) && r.itemsAfter.includes('ring the solicitor'),
+    JSON.stringify(r.itemsAfter),
+  )
+  check('nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 const failed = checks.filter(c => !c.ok)
 console.log(`\n${checks.length - failed.length} passed, ${failed.length} failed`)
 process.exit(failed.length === 0 ? 0 : 1)

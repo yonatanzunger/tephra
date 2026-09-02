@@ -121,6 +121,8 @@ export function targetOf(target: Reference): string {
       return `tephra:day/${target.date}`
     case 'section':
       return `tephra:section/${encodeURIComponent(target.name)}`
+    case 'todo':
+      return `tephra:todo/${target.id}`
     case 'heading':
       return `tephra:heading/${encodeURIComponent(target.text)}`
     case 'file':
@@ -157,6 +159,8 @@ export function referenceOf(target: string): Reference | null {
         return { kind: 'date', date: rest as DateKey }
       case 'section':
         return { kind: 'section', name: rest }
+      case 'todo':
+        return { kind: 'todo', id: rest }
       default:
         return null // an unknown host is not a guess worth making
     }

@@ -277,9 +277,30 @@ the whole list, in order, and that is already useful.
 
 **Usable from here.** MT1–MT3 is interaction 1 complete.
 
-## MT4 — Capture from elsewhere
+## MT4 — Capture from elsewhere *(done)*
 
-**Depends on MD1** (`solution/day-boundary.md`): capture writes into the stream
+**Done**, and verified by `npm run m3`. One gesture — `Task…`, ⌘⇧T — with two
+behaviours, and the difference is **whether the prose IS the task**:
+
+- **With a selection**, those words become the item and *stay where they are*,
+  wrapped in a link to it. A journal that loses a sentence to make a task out of
+  it has been gutted to fill a list, so `branch`'s move-it-out shape is the
+  wrong model here even though the link-left-behind is the right one.
+- **From a bare caret**, the line is offered in a prompt — prefilled and
+  selected, so Return takes it and typing replaces it. **Nothing is written
+  back**: if the words were retyped they are not the words on the page, and
+  linking them would point at something that does not say what it points to.
+  That is also the keyboard-first quick-add, which turned out to be the same
+  gesture rather than a second one.
+
+`tephra:todo/<id>` joins the reference vocabulary (D56) and follows to the list.
+Landing on the exact line is worth having and is not this milestone's.
+
+**The typist's assistant that was the third bullet here shipped early**, in the
+round of feedback after MT3 — a notation nobody can discover is a notation
+nobody uses.
+
+**Depended on MD1** (`solution/day-boundary.md`): capture writes into the stream
 from outside it, and without the boundary in place it would be a fourth caller
 learning the day rules by hand.
 
