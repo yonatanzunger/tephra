@@ -364,6 +364,7 @@ export class DocumentService {
         title: isStream(doc) ? null : await doc.titleOf(ONLY_SEGMENT),
         generation: doc.generation,
         today: this.today,
+        clockDay: this.clockDay,
         extent: isStream(doc) ? await doc.extent() : null,
       }),
       { mode: 'read' },
@@ -1056,7 +1057,7 @@ export class DocumentService {
     const made = 'tasks.todo' as DocumentId
     // No `create`: a directory document has no single file to be created, and
     // the day the carry materialises IS what brings it into being.
-    await this.#corpus.use(made, doc => (doc as TodoDocument).carry())
+    await this.#corpus.use(made, doc => (doc as TodoDocument).carry(this.today))
     this.#touched()
     return made
   }
@@ -1070,7 +1071,11 @@ export class DocumentService {
    * the list is enough, and opening it twice does nothing the second time.
    */
   async todoToday(id: DocumentId): Promise<DateKey> {
-    const today = TodoDocument.today()
+    // **The writing day, not the calendar's** (D62). A list fetched at 00:30
+    // while somebody is still going shows the evening they are still in, and
+    // carries when they have stopped — the same boundary the notebook uses,
+    // asked at the moment the list is looked at.
+    const today = this.today
     await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today))
     this.#touched()
     return today
@@ -1083,7 +1088,7 @@ export class DocumentService {
   /** Serialised with every other write, for the reason D37 gives. */
   async todoAdd(id: DocumentId, text: string): Promise<string> {
     const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as TodoDocument).add(text)),
+      this.#corpus.use(id, doc => (doc as TodoDocument).add(text, this.today)),
     )
     this.#touched()
     return made

@@ -148,7 +148,23 @@ export interface DocumentInfo {
    */
   readonly title: string | null
   readonly generation: SessionGeneration
+  /**
+   * The day this document is writing into — the filing date (D62's writingDay).
+   *
+   * **Not what the calendar says**, which is `clockDay` below. They differ
+   * exactly while somebody is still writing past midnight, and this is the one
+   * that decides which file the next sentence lands in.
+   */
   readonly today: DateKey
+  /**
+   * What the calendar says now (D62's clockDay).
+   *
+   * What the interface counts from: a due date's *in three days*, the sidebar's
+   * marker. **Published rather than computed in the renderer**, so the two
+   * sides cannot disagree about the date — which is the same rule the zone
+   * follows, and for the same reason.
+   */
+  readonly clockDay: DateKey
   readonly extent: { readonly first: DateKey; readonly last: DateKey } | null
 }
 

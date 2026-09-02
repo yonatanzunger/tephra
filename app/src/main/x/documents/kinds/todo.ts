@@ -116,7 +116,7 @@ export class TodoDocument extends SegmentedDocument {
    *
    * Returns the number of items carried, or -1 when the day already existed.
    */
-  async carry(date: DateKey = TodoDocument.today()): Promise<number> {
+  async carry(date: DateKey): Promise<number> {
     const already = await this.#exists(date)
     if (already) {
       await this.adopt(date)
@@ -196,7 +196,7 @@ export class TodoDocument extends SegmentedDocument {
    * moment of noticing: status is *not started*, ctime is now, and the tags and
    * the due date are whatever the string already said (T13, T16).
    */
-  async add(text: string, date: DateKey = TodoDocument.today()): Promise<string> {
+  async add(text: string, date: DateKey): Promise<string> {
     await this.carry(date)
     const now = nowSeconds()
     const found = await this.#scan(date)
@@ -312,10 +312,10 @@ export class TodoDocument extends SegmentedDocument {
     return false
   }
 
-  /** The day a new item goes to, in the reference zone (D38). */
-  static today(): DateKey {
-    return dateKeyAt()
-  }
+  // **No `today()` here, and that is the point of D62.** A document holds the
+  // day it has open and is *told* which day to work in; one that asked a clock
+  // would be a fourth answer to a question that now has one, and would go on
+  // believing the calendar while the notebook was still in last night.
 
   // ── internals ──────────────────────────────────────────────
 

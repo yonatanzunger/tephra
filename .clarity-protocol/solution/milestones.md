@@ -624,10 +624,12 @@ it is right after a close, a crash or a week away.
   `writingDay` monotonic — which is what makes two devices converge as well as
   what stops a zone change re-dating going forward (D62)
 - Terminating a day — the newline, outside anybody's undo stack
-- The stream: a new day file when there is something to write; the empty today
-  that stays in memory until there is
+- The stream: a new day file when there is something to write. The empty today
+  needs nothing — `Segment.disposable` already removes a day nobody wrote in
 - The task list: carry against `writingDay`, and record that a walk is offered
-- Delete the `days.ts` skip and the `branch` clamp, which this makes unnecessary
+- **Not** deleting the `days.ts` skip or the `branch` clamp: the first is how a
+  deliberate cross-midnight join renders, and the second guards a different
+  cause. The plan was wrong about both; see `day-boundary.md`
 
 **The zone stays UTC−8 here**, exactly as it is now: MD1 does not touch
 `shared/dates.ts`'s signature. That is what keeps the bug fix and the unblocking

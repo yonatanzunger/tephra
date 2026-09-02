@@ -151,11 +151,11 @@ rather than discovered:
   because time passed and you launched. That is what terminating a day *means*,
   and it must not be mistaken for divergence.
 - **The break needs a day below it to be a seam**, so today is materialised as
-  an empty segment. `days.ts` already assumes this — *"an empty today is where
-  you are about to write, and the seam above it is what says so"* — but an empty
-  segment with no file currently counts as dirty and gets written, which would
-  put a file on disk for every day the app is opened and nothing is written.
-  **An empty day stays in memory until something lands in it.**
+  an empty segment. That already works and needs nothing: `Segment.disposable`
+  and `writeDirty` between them remove an empty day rather than writing one,
+  and do so "even when the segment is CLEAN, so files written before this rule
+  existed are collected as the days holding them are loaded". The worry that a
+  file would appear for every day the app is opened was unfounded.
 
 **The stream** starts a new day file when `openDay < writingDay` and there is
 something to write. Not before: a day file is created by writing in it.
@@ -173,12 +173,32 @@ recoverable. **It is not in anybody's undo stack**: a day terminator you can und
 into a mid-line day is a control with no meaning, and the boundary is not an
 edit somebody made.
 
-## What this lets us delete
+## What this does NOT let us delete
 
-The `days.ts` skip and the `branch` clamp. Both are compensation for the
-invariant this establishes, and both are the kind of defence that hides a
-failure rather than preventing it — which is why the separator went missing for
-a day before anybody noticed it was gone.
+The plan said this would retire the `days.ts` skip and the `branch` clamp. It
+retires neither, and reading them properly is what says why.
+
+**The `days.ts` skip has a real job, and it is not compensation.** A
+cross-midnight *deletion* joins two days on purpose — `branch`'s own comment
+says so: *"joining two days is what a reader asking to delete across the
+boundary means"* — and a joined pair has no seam between them, which is exactly
+what the skip draws. Deleting it would make a deliberate join render as two days
+with a rule between them, which is the opposite of what was asked for.
+
+**The `branch` clamp guards a different cause.** This closes a day when it ends;
+`branch` can take the newline back out afterwards, because it removes text. The
+two are unrelated defences against the same *symptom*, and only one of them was
+compensating for a missing owner.
+
+**And a corpus that predates this keeps its mid-line days** until each is closed
+— the boundary only closes the day it is crossing, not the history behind it. So
+the skip is still doing work on any notebook written before today. A one-time
+sweep could fix those, and is deliberately not part of this: it would mean
+writing to every day file in the corpus to fix a rule that only bites the day
+before the newest one.
+
+What this *does* remove is the reason the symptom appeared in ordinary use: a
+day that ends because time passed now ends with a newline.
 
 ## Two devices converge, and monotonicity is why
 

@@ -2350,11 +2350,17 @@ with content, and when it was last written. That makes it correct after a close,
 a crash, a sleeping laptop or a week away, which no timer is.
 
 **What forced it.** The day separator disappears — silently — when a day ends
-mid-line, because `days.ts` skips a block widget it cannot place. That is the
-second place compensating for the same missing invariant; `branch` carries a
-clamp for it too. **Defended twice, enforced nowhere**, which is the shape of a
-rule with no owner. The rule is that a day which has ended ends with a newline,
-and until now nothing knew where a day ended.
+mid-line, because `days.ts` skips a block widget it cannot place. The rule is
+that a day which has ended ends with a newline, and until now nothing knew where
+a day ended.
+
+*(Revised on building it: this first read "defended twice, enforced nowhere",
+naming the `days.ts` skip and the `branch` clamp as compensation to be deleted.
+Both stay. The skip is how a deliberate cross-midnight join renders — joining
+two days is a thing a person can mean, and a joined pair has no seam — and the
+clamp guards a different cause, since `branch` removes text after a day has been
+closed. What this decision supplies is the owner, not the removal of two
+defences that turned out to have jobs.)*
 
 **Three consequences, decided rather than discovered.**
 
