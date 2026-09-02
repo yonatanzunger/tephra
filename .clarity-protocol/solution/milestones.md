@@ -572,6 +572,35 @@ focusable**, which is what would finally put a key on a fileset's undo: ⌘Z goe
 to the focused document, and while the editor is the only focusable surface, the
 stream is the honest answer (MC4).
 
+## MD — the day boundary *(next)*
+
+**Design: `solution/day-boundary.md`. Decision: D62, amending D38.**
+
+**Its own milestone because it is one rule with three customers**, and because
+it is currently defended in two places and enforced in none — which is how the
+day separator came to vanish, silently, whenever a day ended mid-line.
+
+`DayClock` in main owns `clockDay` and `writingDay` and publishes both;
+documents hold `openDay` and cross a boundary when `openDay < writingDay`. A
+level rather than an edge, seeded from the corpus rather than kept in memory, so
+it is right after a close, a crash or a week away.
+
+- `DayClock`: the notebook's zone, the two dates, the idle rule, the seed read
+  from the corpus
+- The zone as chosen configuration in `config/` (D63), the affordance that
+  offers a change when the system disagrees, and `writingDay` made monotonic so
+  flying west cannot re-date going forward
+- `shared/dates.ts` taking a zone rather than a module constant, with main
+  publishing it beside the two dates so neither side computes its own
+- Terminating a day — the newline, outside anybody's undo stack
+- The stream: a new day file when there is something to write; the empty today
+  that stays in memory until there is
+- The task list: carry against `writingDay`, and record that a walk is offered
+- Delete the `days.ts` skip and the `branch` clamp, which this makes unnecessary
+
+**Before MT4**, because MT4's capture writes into the stream from elsewhere and
+would otherwise be a third caller learning the boundary rules by hand.
+
 ## MT — the TODO list *(next)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,

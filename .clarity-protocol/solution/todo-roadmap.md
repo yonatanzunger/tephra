@@ -289,6 +289,12 @@ the whole list, in order, and that is already useful.
 
 ## MT5 — The walk, the tag index, and then the cap
 
+**Depends on MD** (`solution/day-boundary.md`): the walk is offered when the
+carry happens, which is when `openDay < writingDay`. It needs no trigger of its
+own, and building one before the boundary existed would have been a third
+subsystem learning the day rules by hand.
+
+
 **In that order, because the cap depends on the walk** and the walk's completion
 list wants the index.
 

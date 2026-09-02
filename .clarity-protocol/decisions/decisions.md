@@ -813,17 +813,17 @@ Main also wins on the properties actually wanted: it is a singleton by construct
 
 ## D38: Dates are assigned in a fixed reference zone, UTC−8
 
-**Date:** 2026-08-14
+**Date:** 2026-08-14, amended 2026-09-02
 **Status:** decided
-**Detail:** `solution/format-spec.md`
+**Detail:** `solution/format-spec.md`, `solution/day-boundary.md`
 
-**Decision.** The `date` a passage is filed under is computed in a **fixed UTC−8**, never in the device's local zone. Times are *displayed* locally; only the filing date is fixed. The practice is borrowed from Google, where a single reference zone removed exactly this class of problem.
+**Decision.** *(Amended twice. **D62**: the filing date is the **writing day**, which advances to the calendar date only once writing has stopped — so a passage typed at 00:30 files under the evening it was written in. **D63**: the zone is no longer fixed at UTC−8 but chosen by the person and kept with the notebook; the diagnosis below is right about local time and wrong about the remedy, because what fails is a zone that changes *itself*, not one that is local. UTC−8 remains what an unset notebook means.)* The `date` a passage is filed under is computed in a **fixed UTC−8**, never in the device's local zone. Times are *displayed* locally; only the filing date is fixed. The practice is borrowed from Google, where a single reference zone removed exactly this class of problem.
 
 **Why it has to be fixed rather than local.** Dates are the stream's ordering axis, they are assigned automatically (R8), and re-dating is corruption (D9) — so the zone in which a date is computed is a **format decision v1 cannot revisit**. Local time fails twice over: fly to Zurich and today's file already exists under a different calendar date, and every device disagrees about which day a passage belongs to. A fixed offset also has no DST discontinuity, so no hour is ever doubled or skipped.
 
 **Two consequences, stated rather than discovered.**
 
-- **The day rolls at 00:00 PST, which is 01:00 local during PDT** — about eight months of the year. A note typed at 00:30 in summer files under the previous day. This is the trade a fixed offset buys and is correct, not a bug.
+- **The day rolls at 00:00 PST, which is 01:00 local during PDT** — about eight months of the year. A note typed at 00:30 in summer files under the previous day. This is the trade a fixed offset buys and is correct, not a bug. *(D62 goes further in the same direction: a note typed at 00:30 files under the previous day whatever the season, if you were still writing at the time.)*
 - **The choice of −8 specifically is about where the writing happens.** UTC−8 is nine hours behind CET, so a European working day from 09:00 to midnight maps entirely onto the same-numbered date; only writing before about 09:00 local falls back a day. Choosing a reference zone near the usual place of work is what keeps boundary oddities rare.
 
 **What would reopen this.** Effectively nothing — the corpus accumulates under this rule and re-dating is corruption. A different reference zone would have to be applied going forward, not retroactively.
@@ -2312,3 +2312,116 @@ form, via `destination()`, whenever the URL contains a space — **so inserting 
 link with a space in it produces something the app's own renderer will not
 render as a link.** One scanner with three consumers retires the disagreement
 along with the bug, and the bug is what the scanner's first test should be.
+
+## D62: The day boundary is a computed signal with one owner, and three days have three names
+
+**Date:** 2026-09-02
+**Status:** decided
+**Detail:** `solution/day-boundary.md`. Amends D38.
+
+**Decision.** Three names, for three questions that were all called "today":
+
+- **`clockDay`** — what the calendar says now, in the reference zone (D38).
+  What the interface means by today.
+- **`writingDay`** — the day the notebook is writing into. Advances to
+  `clockDay` only once writing has stopped long enough that the person has
+  plainly got up. **This is the filing date**, which is what amends D38.
+- **`openDay`** — one document's own: the day it currently has open.
+
+`openDay < writingDay` is a document saying it has a boundary to cross.
+`DayClock`, in main, owns both of the first two and publishes them; the renderer
+consumes and computes neither.
+
+**A level, not an edge, and that is the whole of why this shape works.** The
+first sketch was an event — `dayRolled` — which has to reach everyone exactly
+once and then be reset, and is simply lost for any window that was not open when
+it fired. A comparison of two published dates is idempotent: nothing is
+delivered, consumed, acknowledged or reset, and a window that was closed asks
+the same question on the way back in and gets the same answer. It is also why
+three windows cannot race: they can all evaluate it and the work happens once,
+in main, before the values change.
+
+**Derived, not timed.** The app being closed overnight is the ordinary case, so
+a live timer covers the rare one. `writingDay` is stateful — it cannot be a
+function of `(lastWrite, now)` alone, since writing at 00:15 having been up
+since yesterday makes the last write's date say Tuesday when the answer is
+Monday — but its **seed is read from the corpus** on startup: the newest day
+with content, and when it was last written. That makes it correct after a close,
+a crash, a sleeping laptop or a week away, which no timer is.
+
+**What forced it.** The day separator disappears — silently — when a day ends
+mid-line, because `days.ts` skips a block widget it cannot place. That is the
+second place compensating for the same missing invariant; `branch` carries a
+clamp for it too. **Defended twice, enforced nowhere**, which is the shape of a
+rule with no owner. The rule is that a day which has ended ends with a newline,
+and until now nothing knew where a day ended.
+
+**Three consequences, decided rather than discovered.**
+
+- **Terminating a day is a write caused by opening the app**: yesterday's file
+  is modified because time passed and you launched. That is what terminating
+  means, and it must not read as divergence.
+- **An empty today stays in memory** until something lands in it. The seam needs
+  a day below it to be a seam, but an empty segment with no file currently
+  counts as dirty — which would put a file on disk for every day the app is
+  opened and nothing written, against "days with nothing in them have no file".
+- **The terminating newline is not in anybody's undo stack.** A day terminator
+  you can undo into a mid-line day is a control with no meaning.
+
+**Accepted, not solved.** A day that never ends — forty hours of continuous
+writing gives one file dated Monday holding Wednesday — is judged not worth a
+rule. Two devices each deciding a boundary is left to sync, since the decision
+is recorded in the files themselves and the worst case is text in adjacent days.
+
+## D63: The day's zone is chosen and kept with the notebook, not fixed and not detected
+
+**Date:** 2026-09-02
+**Status:** decided — supersedes D38's fixed offset; D38's writing-day amendment (D62) stands
+**Detail:** `solution/day-boundary.md`
+
+**Decision.** `clockDay` is computed in an IANA zone the person chose, stored in
+`config/` with the notebook. When the system's zone differs, the interface says
+so and **offers** to change it; nothing detects and applies on its own. An unset
+notebook means UTC−8, so a corpus written under D38 is unaffected until somebody
+chooses. A new notebook is created with the system's zone.
+
+**D38 diagnosed this correctly and prescribed the wrong remedy.** It rejected
+local time because "fly to Zurich and today's file already exists under a
+different calendar date, and every device disagrees about which day a passage
+belongs to" — both true, and both failures of a zone that **changes itself**.
+The damaging word was never *local*, it was *automatic*. A fixed offset is one
+way to stop a zone changing itself; letting the person say where they are is a
+better one, because it is also right for somebody who moves. **The product is
+used by one person, who is in one place at a time** — that is what stabilises
+this, and it is a fact about the product that the fixed offset was standing in
+for.
+
+**`config/`, not `.tephra/`, and the distinction is load-bearing.** `.tephra/`
+is machine-local and never synced (D7, D52), so a zone kept there gives every
+device its own and reinstates D38's second failure exactly. The zone decides
+which date a passage is filed under; two devices must agree or one evening lands
+under two dates. `config/` is where authored configuration already lives, for
+the reason themes do (D41).
+
+**A real zone rather than an offset.** `America/Los_Angeles` survives a change
+to a country's rules; `UTC−8` does not. D38 avoided real zones partly for DST —
+"no hour is ever doubled or skipped" — which is true of hours and **irrelevant
+to dates**: every instant maps to exactly one calendar date in every zone,
+including zones that transition at midnight. A DST day is 23 or 25 hours long
+and is still one day with one name.
+
+**`writingDay` is monotonic, and this is what forces it.** Moving east pushes
+`clockDay` forward: one short day, harmless. Moving west pulls it backwards, and
+a writing day that went back would file new passages into a day already holding
+later content — re-dating going forward, which is D9's corruption arriving
+through the side door. So it never goes back; after a westward change it waits
+for the calendar, at a cost of one long day.
+
+**What this costs.** `shared/dates.ts` currently computes from a module
+constant, and every function in it has to take a zone instead — including in the
+renderer, which formats labels. The zone therefore travels with `clockDay` and
+`writingDay` as something main publishes, so that neither side computes its own.
+That is the same rule as D62's and for the same reason.
+
+**What would reopen it.** Multi-user, which this is not. The whole argument
+rests on one person being in one place at a time.

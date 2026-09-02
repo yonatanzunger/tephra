@@ -113,7 +113,7 @@ Three things above go past the evidence and should be treated as proposals: **sp
 **Forces:** the index answers *which tags have live items* and *items by tag* without loading the whole corpus. T6 exists for this and for completion in flow 1.
 
 **5. The due-soon band.** Always present, usually short, gone when empty. Never hunted for.
-**Forces:** a cheap *items with due dates inside a window* query, and re-evaluation when the day rolls over while the app is open.
+**Forces:** a cheap *items with due dates inside a window* query, and re-evaluation when the day rolls over while the app is open — against `clockDay`, which is what "in 3 days" is counted from, and not against the writing day (D62). A band that still says *tomorrow* at 00:30 while you are mid-sentence is telling the truth about the evening you are still in; one that has silently re-counted is not.
 
 **6. Finding a link.** A search box and a reverse-chronological list; the answer in about two seconds.
 **Forces:** a **differently shaped index** from the tag one — link → items, carrying each link's last appearance and a back-reference — populated from item text, and retaining links from completed and cancelled items indefinitely.
@@ -151,7 +151,7 @@ Three things above go past the evidence and should be treated as proposals: **sp
 
 **T10. A link directory.** Every link that has appeared in the list, reverse-chronological by last appearance, searchable, each with the context it appeared in and a link back to its item. This serves interaction 2 and is therefore core.
 
-**T11. A daily walk** that presents the whole live list, runs regardless of length, and exists to load the list into the head. It is offered, never compelled. **It reviews the day's working set rather than producing it** — the carry is automatic (T7), so a skipped walk costs the day's grooming and never the list's integrity. What the walk guarantees is that every live item is *seen* at least daily, whatever T12 does to the view. That guarantee is the reason T12 cannot ship without it.
+**T11. A daily walk** that presents the whole live list, runs regardless of length, and exists to load the list into the head. It is offered, never compelled, and **offered on the day boundary rather than on a trigger of its own** (D62): the carry already happens when the list is fetched and the writing day has moved past the day it has open, and that is the moment there is something new to walk. **It reviews the day's working set rather than producing it** — the carry is automatic (T7), so a skipped walk costs the day's grooming and never the list's integrity. What the walk guarantees is that every live item is *seen* at least daily, whatever T12 does to the view. That guarantee is the reason T12 cannot ship without it.
 
 **T12. A soft cap on the working view.** Items past it remain reachable and are never hidden. The cap is announced at the end of the walk and nowhere else — that is the only moment with enough context to act on it.
 

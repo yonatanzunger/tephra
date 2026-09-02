@@ -40,7 +40,9 @@ kind: markdown        # markdown | todo | fileset | stream
 
 **No origin fields** (D27). A branched document is not in the dated stream, and giving it a date to pretend otherwise is exactly the contortion this design keeps refusing. The relationship that matters is the **link left behind in the stream**, which points the useful direction — from where you were to where the material went. The reverse pointer is curious history.
 
-**`date` is computed in a fixed UTC−8, never in the device's local zone** (D38). It is the stream's ordering axis and is assigned automatically, so the zone it is computed in is part of the format rather than a runtime setting — local time would file the same passage differently on different devices and after any flight. Times are *displayed* locally; only the filing date is fixed. The day therefore rolls at 00:00 PST, which is 01:00 local during PDT.
+**`date` is computed in a zone the person chose, never in the device's current one** (D38 as superseded by D63). It is the stream's ordering axis and is assigned automatically, so the zone it is computed in belongs to the notebook rather than to the machine: it is kept in `config/` and travels with the corpus, because a zone that differed between devices would file the same evening under two dates. The system's zone is *offered* when it disagrees and never applied on its own — what fails is a zone that changes itself, not one that is local. An unset notebook means UTC−8, which is what every corpus written before this said.
+
+**And the date is the WRITING day, not the calendar day** (D62): it advances to the calendar date only once writing has stopped for long enough that somebody has plainly got up, so a passage typed at 00:30 files under the evening it was written in. Times are *displayed* locally; the filing date is the notebook's.
 
 **Frontmatter is authoritative; the filename mirrors it.** If they disagree — a human renamed a file — frontmatter wins and the mismatch is offered for repair. Enumeration may use filenames as a hint, verified lazily, so the common path does not open 5 000 files.
 
