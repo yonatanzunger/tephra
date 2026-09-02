@@ -18,7 +18,7 @@
 // minted. That is the document's, in `main/x/documents/kinds/todo.ts`.
 
 import type { DateKey } from '../document-api.ts'
-import { addDays, startOfDay } from '../dates.ts'
+import { addDays, weekdayOf } from '../dates.ts'
 
 /**
  * What an item is, in the order era 1 wrote them on paper (T4).
@@ -195,9 +195,9 @@ function absoluteFor(spelling: string, today: DateKey): DateKey | null {
 
   const weekday = WEEKDAYS.indexOf(spelling.slice(0, 3))
   if (weekday >= 0) {
-    // `startOfDay` puts the key in the reference zone, which is where every
-    // other date question in this app is answered (D38).
-    const ahead = (weekday - startOfDay(today).getUTCDay() + 7) % 7
+    // The weekday of a date is a property of the date: Tuesday is Tuesday
+    // wherever you are, so no zone is involved in getting from here to Friday.
+    const ahead = (weekday - weekdayOf(today) + 7) % 7
     return addDays(today, ahead === 0 ? 7 : ahead)
   }
 

@@ -55,6 +55,8 @@ import { markdownFromHtml } from './import/html.ts'
 import { destination } from '../../shared/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
+import { ZoneBar } from './frame/ZoneBar'
+import type { ZoneNotice } from '../../shared/ipc.ts'
 import { useTheme, typographyOf } from './theme/useTheme'
 import { ThemePanel } from './theme/ThemePanel'
 
@@ -175,6 +177,7 @@ export function App(): React.JSX.Element {
       }),
     [],
   )
+
 
   const metrics = useFrameMetrics(frameEl, typography)
 
@@ -649,6 +652,21 @@ export function App(): React.JSX.Element {
   }, [pane])
 
   /**
+   * What main says about the zone (D63), and nothing this side worked out.
+   *
+   * **Asked once and then listened for.** A window that opens between two polls
+   * still has to know, and a window that is already open has to stop showing
+   * the offer the moment somebody in another window takes or declines it — the
+   * defect being fixed was two windows disagreeing about this, so agreement is
+   * the property, not the display.
+   */
+  const [zoneNotice, setZoneNotice] = useState<ZoneNotice | null>(null)
+  useEffect(() => {
+    void window.tephra.doc.zoneNotice().then(setZoneNotice).catch(fail)
+    return window.tephra.doc.onZoneNotice(setZoneNotice)
+  }, [])
+
+  /**
    * The active set, drawn down the scroll track.
    *
    * **Recomputed when the window moves**, not only when the row changes: growth
@@ -1106,6 +1124,14 @@ export function App(): React.JSX.Element {
           </>
         }
       >
+        {zoneNotice !== null && (
+          <ZoneBar
+            notice={zoneNotice}
+            onAdopt={() => void window.tephra.doc.setZone(zoneNotice.system).catch(fail)}
+            onDismiss={() => void window.tephra.doc.dismissZone().catch(fail)}
+          />
+        )}
+
         {boundary?.earlier.kind === 'extendable' && (
           <button className="edge" onClick={() => void pane?.extend('earlier')}>
             ▲ earlier

@@ -13,7 +13,7 @@
 
 import type { Anomaly } from '../shared/anomalies.ts'
 import { isOutside, isStream, ONLY_SEGMENT, type Unsubscribe } from '../shared/document-api.ts'
-import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot } from '../shared/ipc.ts'
+import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
@@ -28,6 +28,9 @@ import {
 } from './w/layout.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { DayClock } from './x/day-clock.ts'
+import { systemZone } from './system-zone.ts'
+import { isKnownZone } from '../shared/dates.ts'
+import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
 import type { TodoItem, TodoStatus } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
@@ -92,6 +95,12 @@ const VERSION_MAX_MS = 30 * 60_000
 export interface ServiceOptions {
   /** The clock, so a test can be at any hour it likes without waiting. */
   readonly now?: () => Date
+  /**
+   * Where this machine says it is. Injected for the same reason `now` is: a
+   * test cannot change the operating system's timezone, and the interesting
+   * cases are all about that answer changing under a running app.
+   */
+  readonly systemZone?: () => string
   /** How often to notice midnight. Tests make it small. */
   readonly dayCheckMs?: number
   /**
@@ -166,6 +175,28 @@ export class DocumentService {
   #clock: DayClock
   /** The day through which every earlier one is known to be closed off. */
   #closedThrough: DateKey | null = null
+  /** The last writing day anybody was told about. */
+  #announced: DateKey | null = null
+  /**
+   * A system zone somebody has already declined to adopt.
+   *
+   * Held by main rather than by a window, so dismissing the offer in one window
+   * dismisses it everywhere — three windows each asking the same question is
+   * the same defect as three windows asking different ones.
+   */
+  #declined: string | null = null
+  /**
+   * The last zone notice anybody was told about, so a poll does not repeat it.
+   *
+   * **`undefined` is "nobody has been told anything", and null is "told there
+   * is nothing to say"** — two different states, and collapsing them cost the
+   * first bug this found: a window that got its notice from the opening
+   * question rather than from a push left this at its initial value, so
+   * adopting the zone computed the same value, decided nothing had changed, and
+   * never told the window to put the row away.
+   */
+  #offered: string | null | undefined = undefined
+  readonly #systemZone: () => string
   readonly #seeded: Promise<void>
   readonly #idleMs: number | undefined
   #dayTimer: ReturnType<typeof setInterval> | null = null
@@ -226,7 +257,13 @@ export class DocumentService {
     // object awaits `#seeded` first, so nothing can observe the wrong answer —
     // which is not hypothetical: the first draft raced, and a caller asking the
     // date immediately got the unseeded one.
+    // What the unseeded clock says is the baseline. **If the seed moves the
+    // writing day, that IS a boundary** — the app was closed when it happened
+    // and this is the moment it is noticed — so it has to be announced like any
+    // other, which it will be, because it will differ from this.
+    this.#announced = this.#clock.writingDay
     this.#seeded = this.#seedTheClock()
+    this.#systemZone = options.systemZone ?? systemZone
     this.#watchTheClock(options.dayCheckMs ?? DAY_CHECK_MS)
 
     // What went into the commit message, gathered as it happens. Reconstructing
@@ -365,6 +402,7 @@ export class DocumentService {
         generation: doc.generation,
         today: this.today,
         clockDay: this.clockDay,
+        zone: this.zone,
         extent: isStream(doc) ? await doc.extent() : null,
       }),
       { mode: 'read' },
@@ -555,15 +593,99 @@ export class DocumentService {
    * sleeping laptop or a week away, none of which a live timer survives.
    */
   async #seedTheClock(): Promise<void> {
+    const { zone } = await readSettings(this.#notebook)
     const stream = await this.#stream
     const days = await stream.dates()
     const newest = days[days.length - 1]
-    if (newest === undefined) return
-    const stamp = await this.#notebook.stamp(dayFile(newest))
+    const stamp = newest === undefined ? null : await this.#notebook.stamp(dayFile(newest))
     this.#clock = new DayClock(
-      { day: newest, writtenAt: stamp?.mtime ?? 0 },
-      { now: this.#now, ...(this.#idleMs === undefined ? {} : { idleMs: this.#idleMs }) },
+      newest === undefined ? null : { day: newest, writtenAt: stamp?.mtime ?? 0 },
+      { now: this.#now, zone, ...(this.#idleMs === undefined ? {} : { idleMs: this.#idleMs }) },
     )
+  }
+
+  /** What zone this notebook's dates are computed in (D63). */
+  get zone(): string {
+    return this.#clock.zone
+  }
+
+  /**
+   * Say where you are now, and keep it with the notebook.
+   *
+   * **Chosen, never detected.** The system's zone is offered when it differs
+   * and applied only here, because a zone that changes itself is what D38
+   * rightly rejected — travel would otherwise re-date the day you are in.
+   */
+  async setZone(zone: string): Promise<void> {
+    if (!isKnownZone(zone)) throw new Error(`this machine does not know the zone ${zone}`)
+    await this.#seeded
+    await writeSettings(this.#notebook, { zone })
+    this.#clock.moveTo(zone)
+    this.#touched()
+    // A zone somebody chose is not a zone somebody declined.
+    this.#declined = null
+    this.#tellAboutTheZone()
+    // A zone change can put the calendar past the writing day, which is an
+    // ordinary boundary and crossed the ordinary way.
+    await this.crossTheDay()
+    for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, this.#clock.writingDay)
+  }
+
+  /**
+   * What to say about the zone, if anything (D63).
+   *
+   * **Main answers this, not a window.** The zone is offered and never applied,
+   * and the offer is only useful if it is the same offer everywhere: two
+   * windows each resolving the system zone in their own process got two
+   * answers — a renderer's `Intl` is fixed when its context is created — and
+   * sat side by side proposing to move the notebook in opposite directions.
+   *
+   * Null while they agree, while the machine's zone is one this build cannot
+   * compute in, and while somebody has already said no to this one.
+   */
+  get zoneNotice(): ZoneNotice | null {
+    const system = this.#systemZone()
+    if (system === this.zone || system === this.#declined || !isKnownZone(system)) return null
+    return { notebook: this.zone, system }
+  }
+
+  /**
+   * No thanks — travelling, or the machine is wrong, and either way the
+   * notebook stays where it is. Silent until the machine moves somewhere new.
+   */
+  dismissZone(): void {
+    this.#declined = this.#systemZone()
+    this.#tellAboutTheZone()
+  }
+
+  /**
+   * The same answer, for a window that is asking on its way in.
+   *
+   * **Asking reconciles.** A window opening between two polls is the one moment
+   * main is asked a question it has not yet had a reason to ask itself, and the
+   * answer has to reach the OTHER windows too — otherwise the window that asked
+   * is the only one that is right, which is the entire defect this exists to
+   * fix, rebuilt out of new parts.
+   */
+  askZoneNotice(): ZoneNotice | null {
+    this.#tellAboutTheZone()
+    return this.zoneNotice
+  }
+
+  /**
+   * Push the notice when it has changed, from wherever noticed it.
+   *
+   * Every window is told the same thing at the same time, which is the property
+   * that was missing. Repeating an unchanged notice on every poll would be
+   * harmless and is still not done: a window that redraws itself twice a minute
+   * for no reason is a window somebody will eventually have to debug.
+   */
+  #tellAboutTheZone(): void {
+    const notice = this.zoneNotice
+    const key = notice === null ? null : `${notice.notebook} ${notice.system}`
+    if (key === this.#offered) return
+    this.#offered = key
+    for (const sink of this.#sinks) sink.send(CHANNEL.zoneNotice, notice)
   }
 
   /**
@@ -595,7 +717,22 @@ export class DocumentService {
       this.#closedThrough = writing
     }
 
-    if (advanced) for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
+    // **Announced when it DIFFERS, not when it just moved.** Using the tick's
+    // edge lost the announcement whenever the seed landed after a boundary had
+    // already passed: the seeded clock was born on the new day, so nothing ever
+    // "advanced" and nobody was told. The same level-rather-than-edge mistake
+    // this design was written to avoid, made in the one place that was still an
+    // event (D62).
+    if (writing !== this.#announced) {
+      this.#announced = writing
+      for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
+    }
+
+    // The same poll notices the machine moving. Changing the system zone is not
+    // an event anything reports, so noticing it means looking — and the thing
+    // that already looks at the clock every thirty seconds is this.
+    this.#tellAboutTheZone()
+    void advanced
   }
 
   #watchTheClock(everyMs: number): void {

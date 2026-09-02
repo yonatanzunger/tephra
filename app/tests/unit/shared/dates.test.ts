@@ -1,15 +1,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  dateKeyAt, asDateKey, startOfDay, compareDateKeys, addDays, daysBetween,
-  REFERENCE_ZONE_OFFSET_MINUTES,
+  dateKeyAt, asDateKey, weekdayOf, compareDateKeys, addDays, daysBetween,
+  msUntilNextDay, isKnownZone, DEFAULT_ZONE,
 } from '../../../src/shared/dates.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
 
 const key = (s: string): DateKey => s as DateKey
 
-test('the reference zone is a fixed UTC-8 (D38)', () => {
-  assert.equal(REFERENCE_ZONE_OFFSET_MINUTES, -480)
+test('an unset notebook still means the fixed UTC-8 D38 chose', () => {
+  // `Etc/GMT+8` is UTC−8 year-round with no DST rule — the sign is POSIX's
+  // convention, not a typo — so a corpus written under D38 reads as it was
+  // written while every date in the app takes one zone-aware path (D63).
+  assert.equal(DEFAULT_ZONE, 'Etc/GMT+8')
+  assert.equal(dateKeyAt(new Date('2026-03-14T07:59:00Z')), '2026-03-13', 'a minute before midnight')
+  assert.equal(dateKeyAt(new Date('2026-03-14T08:00:00Z')), '2026-03-14', 'and a minute after')
 })
 
 test('filing date is computed in the reference zone, not UTC', () => {
@@ -51,8 +56,36 @@ test('asDateKey validates shape and reality', () => {
   assert.equal(asDateKey('2024-02-29'), '2024-02-29', 'leap day is real')
 })
 
-test('startOfDay is the reference-zone midnight as a real instant', () => {
-  assert.equal(startOfDay(key('2026-03-14')).toISOString(), '2026-03-14T08:00:00.000Z')
+test('a different zone puts the same instant on a different day', () => {
+  // 23:30 in Zurich on the 14th is 14:30 in California on the same day — but
+  // 00:30 Zurich on the 15th is still the 14th in California, which is the
+  // whole of why the zone belongs to the notebook (D63).
+  const at = new Date('2026-03-14T23:30:00Z')
+  assert.equal(dateKeyAt(at, 'Europe/Zurich'), '2026-03-15', 'past midnight in Zurich')
+  assert.equal(dateKeyAt(at, 'America/Los_Angeles'), '2026-03-14', 'and still afternoon in California')
+})
+
+test('a DST day is 23 or 25 hours and is still one day with one name', () => {
+  // The US springs forward on 2026-03-08. Every instant of that day is still
+  // that day, and the count to the next one is still one.
+  const zone = 'America/Los_Angeles'
+  assert.equal(dateKeyAt(new Date('2026-03-08T09:59:00Z'), zone), '2026-03-08')
+  assert.equal(dateKeyAt(new Date('2026-03-08T10:01:00Z'), zone), '2026-03-08')
+  assert.equal(daysBetween(key('2026-03-08'), key('2026-03-09')), 1)
+  // And the wait to the boundary is the real one — 23 hours, not 24.
+  const from = new Date('2026-03-08T08:00:00Z') // midnight PST, the day begins
+  assert.ok(Math.abs(msUntilNextDay(from, zone) - 23 * 3_600_000) < 90_000)
+})
+
+test('a weekday is a property of the date, not of where you are', () => {
+  assert.equal(weekdayOf(key('2026-03-14')), 6, 'a Saturday')
+  assert.equal(weekdayOf(key('2026-09-04')), 5, 'a Friday')
+})
+
+test('a zone this machine has never heard of is not silently UTC', () => {
+  assert.equal(isKnownZone('Europe/Zurich'), true)
+  assert.equal(isKnownZone('Etc/GMT+8'), true)
+  assert.equal(isKnownZone('Middle/Earth'), false)
 })
 
 test('date keys sort chronologically as strings', () => {

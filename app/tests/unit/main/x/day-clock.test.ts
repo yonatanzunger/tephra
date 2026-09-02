@@ -117,6 +117,70 @@ test('the writing day never goes backwards', () => {
   assert.equal(clock.tick(), false, 'and the clock catching up does not move it back')
 })
 
+test('the zone is the notebook\'s, and a different one is a different day', () => {
+  const time = at('2026-09-01T05:00:00Z') // 21:00 in California, 07:00 in Zurich
+  const west = new DayClock(null, { now: time.now, zone: 'America/Los_Angeles' })
+  const east = new DayClock(null, { now: time.now, zone: 'Europe/Zurich' })
+  assert.equal(west.clockDay, '2026-08-31')
+  assert.equal(east.clockDay, '2026-09-01', 'the same instant, a day apart')
+})
+
+test('MOVING EAST costs one short day', () => {
+  const time = at('2026-09-01T05:00:00Z')
+  const clock = new DayClock({ day: d('2026-08-31'), writtenAt: new Date('2026-09-01T04:00:00Z').getTime() }, {
+    now: time.now,
+    zone: 'America/Los_Angeles',
+  })
+  assert.equal(clock.writingDay, '2026-08-31')
+  clock.moveTo('Europe/Zurich')
+  assert.equal(clock.clockDay, '2026-09-01', 'the calendar jumps ahead')
+  assert.equal(clock.writingDay, '2026-08-31', 'and the notebook follows only once you stop')
+  time.set('2026-09-01T06:00:00Z')
+  assert.equal(clock.tick(), true)
+  assert.equal(clock.writingDay, '2026-09-01')
+})
+
+test('MOVING WEST never re-dates: the writing day waits for the calendar', () => {
+  // Flying the other way pulls the calendar BACK, and a writing day that went
+  // with it would file new passages into a day already holding later content —
+  // D9's corruption through the side door. It stays put instead (D63).
+  const time = at('2026-09-01T05:00:00Z')
+  const clock = new DayClock({ day: d('2026-09-01'), writtenAt: new Date('2026-09-01T04:00:00Z').getTime() }, {
+    now: time.now,
+    zone: 'Europe/Zurich',
+  })
+  assert.equal(clock.writingDay, '2026-09-01')
+
+  clock.moveTo('America/Los_Angeles')
+  assert.equal(clock.clockDay, '2026-08-31', 'the calendar falls back a day')
+  assert.equal(clock.writingDay, '2026-09-01', 'and the notebook does NOT')
+  time.set('2026-09-02T00:00:00Z')
+  assert.equal(clock.tick(), false, 'still not past it')
+  assert.equal(clock.writingDay, '2026-09-01')
+
+  // One long day, and then it moves on normally.
+  time.set('2026-09-02T08:00:00Z')
+  assert.equal(clock.tick(), true)
+  assert.equal(clock.writingDay, '2026-09-02')
+})
+
+test('a file claiming to have been written in the future does not hold the day open', () => {
+  // Clock skew, or a file synced from a machine that is ahead. Untreated it
+  // reads as "somebody is writing right now" for as long as the skew lasts.
+  const time = at(MORNING)
+  const clock = new DayClock(
+    { day: d('2026-08-31'), writtenAt: new Date(MORNING).getTime() + 86_400_000 },
+    { now: time.now },
+  )
+  assert.ok(clock.idleFor() >= 0, 'never negative, however far ahead the file claims to be')
+  // It costs one idle period, not forever: the boundary is crossed as soon as
+  // that much time has actually passed.
+  assert.equal(clock.writingDay, '2026-08-31')
+  time.set('2026-09-01T18:00:00Z')
+  assert.equal(clock.tick(), true)
+  assert.equal(clock.writingDay, '2026-09-01')
+})
+
 test('the idle threshold is what decides, and it is configurable for tests', () => {
   const time = at(LATE)
   const clock = new DayClock({ day: d('2026-08-31'), writtenAt: new Date(LATE).getTime() }, {

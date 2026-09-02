@@ -19,7 +19,7 @@
 // when it was last written, the same rule reconstructs the answer after a
 // close, a crash, a sleeping laptop or a week away.
 
-import { compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
+import { compareDateKeys, dateKeyAt, DEFAULT_ZONE } from '../../shared/dates.ts'
 import type { DateKey } from '../../shared/document-api.ts'
 
 /**
@@ -42,11 +42,14 @@ export interface DaySeed {
 export interface DayClockOptions {
   readonly idleMs?: number
   readonly now?: () => Date
+  /** The notebook's zone (D63). Unset means the fixed UTC−8 D38 chose. */
+  readonly zone?: string
 }
 
 export class DayClock {
   #writingDay: DateKey
   #lastWriteAt: number
+  #zone: string
   readonly #idleMs: number
   readonly #now: () => Date
 
@@ -58,13 +61,20 @@ export class DayClock {
   constructor(seed: DaySeed | null, options: DayClockOptions = {}) {
     this.#idleMs = options.idleMs ?? IDLE_MS
     this.#now = options.now ?? (() => new Date())
-    this.#lastWriteAt = seed?.writtenAt ?? 0
+    this.#zone = options.zone ?? DEFAULT_ZONE
+    // **Never later than now.** The seed's timestamp is a file's mtime, and a
+    // file can claim to have been written in the future — a machine whose clock
+    // is fast, or one whose files arrived from a machine that was. Untreated,
+    // that reads as "somebody is writing right now" and holds the day open for
+    // as long as the skew lasts. A write time in the future is not evidence
+    // about the present.
+    this.#lastWriteAt = Math.min(seed?.writtenAt ?? 0, this.#now().getTime())
 
-    const clock = dateKeyAt(this.#now())
+    const clock = this.clockDay
     if (seed === null) {
       // A notebook with nothing in it is on today, whatever today is.
       this.#writingDay = clock
-    } else if (this.#now().getTime() - seed.writtenAt >= this.#idleMs) {
+    } else if (this.#now().getTime() - this.#lastWriteAt >= this.#idleMs) {
       // They have been away. Whichever is later: a corpus can hold a day ahead
       // of this machine's clock, and the writing day never goes backwards.
       this.#writingDay = later(clock, seed.day)
@@ -77,7 +87,24 @@ export class DayClock {
 
   /** What the calendar says now. What the interface means by "today". */
   get clockDay(): DateKey {
-    return dateKeyAt(this.#now())
+    return dateKeyAt(this.#now(), this.#zone)
+  }
+
+  get zone(): string {
+    return this.#zone
+  }
+
+  /**
+   * Somebody said where they are now (D63).
+   *
+   * **The writing day is left exactly where it was**, which is what keeps a
+   * flight west from re-dating going forward: moving east makes `clockDay` jump
+   * ahead and the next `tick` follows it, while moving west makes `clockDay`
+   * fall behind and nothing happens until the calendar catches up. One short
+   * day, or one long one, and never a day that goes backwards (D9).
+   */
+  moveTo(zone: string): void {
+    this.#zone = zone
   }
 
   /** The day the notebook is writing into. The filing date (D38 as amended). */
@@ -98,7 +125,7 @@ export class DayClock {
    * question anybody asks, it advances once and then answers false.
    */
   tick(): boolean {
-    const clock = dateKeyAt(this.#now())
+    const clock = this.clockDay
     if (compareDateKeys(clock, this.#writingDay) <= 0) return false
     if (this.#now().getTime() - this.#lastWriteAt < this.#idleMs) return false
     this.#writingDay = clock

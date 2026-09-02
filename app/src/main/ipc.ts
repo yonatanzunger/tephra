@@ -269,6 +269,12 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.resolveAnchor, (_e, name: string) => service.resolveAnchor(name))
   ipcMain.handle(CHANNEL.extent, () => service.extent())
   ipcMain.handle(CHANNEL.today, () => service.today)
+  ipcMain.handle(CHANNEL.setZone, (_e, zone: string) => service.setZone(zone))
+  // Asked on the way in as well as pushed: a window that opens between two
+  // polls still has to know, and the alternative is re-broadcasting to everyone
+  // every time anybody opens a window.
+  ipcMain.handle(CHANNEL.zoneNotice, () => service.askZoneNotice())
+  ipcMain.handle(CHANNEL.dismissZone, () => service.dismissZone())
 }
 
 /** Push messages to a renderer for as long as its window lives. */

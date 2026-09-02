@@ -2438,5 +2438,28 @@ renderer, which formats labels. The zone therefore travels with `clockDay` and
 `writingDay` as something main publishes, so that neither side computes its own.
 That is the same rule as D62's and for the same reason.
 
+**Amended 2026-09-02, from use: the SYSTEM's zone is published too.** The rule
+above was written about the notebook's zone and the implementation exempted the
+machine's, which the renderer resolved for itself. It does not get to: a
+renderer's `Intl` resolves the host zone once, when its context is created, and
+caches it forever — so changing the system timezone with two windows open gave
+two windows two different ideas of where the machine was, and they sat side by
+side offering to move the notebook in **opposite directions**. Main resolves it
+now, from `/etc/localtime` rather than from `Intl`, because the question is only
+ever interesting at the moment the answer has just changed. Every window is told
+the same thing, and **taking or declining the offer in one window settles it in
+all of them** — three windows each asking the same question is the same defect
+as three windows asking different ones.
+
+**And the offer is a row across the page, not a badge in the title bar.** It was
+a badge, and every part of that was wrong: too small to notice, and — because a
+title bar is a drag region, and drag regions swallow mouse events — the control
+did nothing at all when clicked. The handler was correct and unreachable, which
+no unit test can see. It says both zones, because the decision is a comparison
+and "you are in Jerusalem" is not actionable on its own. It takes no for an
+answer without asking twice: travelling is not a mistake to be corrected, and
+days already written keep the dates they were written under, so there is nothing
+to confirm.
+
 **What would reopen it.** Multi-user, which this is not. The whole argument
 rests on one person being in one place at a time.

@@ -326,6 +326,42 @@ body {
 .tx-track-beyond.earlier { top: 0; }
 .tx-track-beyond.later { bottom: 0; }
 
+/* ── somewhere else today (D63) ─────────────────────────
+   A row across the top of the page rather than a pill in the titlebar. It was
+   a pill, and it was unmissable in the wrong direction: too small to see, and
+   inside the title bar's drag region, which swallows clicks — the control did
+   nothing at all. Full width, in the flow, above what you are reading; the
+   page slides down by its height and slides back when it goes. */
+.zonebar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: .75rem;
+  margin: .4rem 0 .1rem;
+  padding: .5rem .75rem;
+  font-family: var(--font-ui); font-size: 12.5px;
+  color: rgb(var(--text));
+  background: rgb(var(--accent) / .11);
+  border: 1px solid rgb(var(--accent) / .38);
+  border-radius: 5px;
+}
+.zonebar-text { flex: 1; min-width: 0; }
+.zonebar-text b { font-weight: 600; color: rgb(var(--text-heading)); }
+/* The action reads as a button because it is one — the pill's whole failure
+   was looking like a label. */
+.zonebar-act {
+  flex: 0 0 auto; cursor: pointer;
+  font-family: var(--font-ui); font-size: 12.5px; font-weight: 500;
+  color: rgb(var(--surface)); background: rgb(var(--accent));
+  border: 1px solid rgb(var(--accent)); border-radius: 4px;
+  padding: .25rem .7rem;
+}
+.zonebar-act:hover { background: rgb(var(--accent) / .85); }
+.zonebar-close {
+  flex: 0 0 auto; cursor: pointer; line-height: 1; margin-left: .25rem;
+  font-size: 16px; color: rgb(var(--text-muted));
+  background: none; border: none; padding: 0 .15rem;
+}
+.zonebar-close:hover { color: rgb(var(--text)); }
+
 /* ── renaming a row where it sits ───────────────────────
    The field takes the row's own metrics — same font, same size, same padding
    — so the list does not shift by a pixel when a name goes from being read to

@@ -14,14 +14,34 @@ import type {
 export class RemoteStream extends RemoteDocument implements StreamDocumentApi {
   declare readonly meta: DocumentMeta & { readonly kind: 'stream' }
   #today: DateKey
+  readonly #zone: string
+  readonly #clockDay: DateKey
 
   constructor(info: DocumentInfo) {
     super(info)
     this.#today = info.today
+    this.#zone = info.zone
+    this.#clockDay = info.clockDay
   }
 
   get today(): DateKey {
     return this.#today
+  }
+
+  /**
+   * What the calendar says, and the zone it says it in (D62, D63).
+   *
+   * **Read from what main published, never worked out here.** A frontend with
+   * its own idea of the date, or of where it is, is the disagreement the whole
+   * arrangement exists to prevent — `today` above is the day the notebook is
+   * WRITING into, and these two are what the interface counts from.
+   */
+  get clockDay(): DateKey {
+    return this.#clockDay
+  }
+
+  get zone(): string {
+    return this.#zone
   }
 
   /** Sugar for the highest-frequency action: open at the end of today. */

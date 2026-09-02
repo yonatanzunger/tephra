@@ -1277,6 +1277,58 @@ console.log('\n\u2014 the task list \u2014')
   )
 }
 
+// ── the notebook is filing days somewhere you are not (D63) ────────────
+//
+// **Reported from use, and the report had three parts.** Changing the system
+// timezone with two windows open produced two windows offering to move the
+// notebook in OPPOSITE directions (each renderer had resolved the machine's
+// zone in its own process, where `Intl` is frozen at context creation); the
+// offer was a pill too small to notice; and clicking it did nothing at all,
+// because a title bar is a drag region and drag regions swallow clicks.
+//
+// The first is settled in `zone-notice.test.ts`, where main is the only thing
+// that answers. The other two are only settled by pixels and a click.
+{
+  // A zone that is not this machine's, whatever machine this is — so the suite
+  // says the same thing in California as it does in Tel Aviv.
+  const here = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const away = here === 'Asia/Jerusalem' ? 'America/Los_Angeles' : 'Asia/Jerusalem'
+  const city = zone => zone.split('/').pop().replace(/_/g, ' ')
+
+  const filed = async () => {
+    const root = await week(['A day filed somewhere else.\n'])
+    await mkdir(join(root, 'config'), { recursive: true })
+    await writeFile(join(root, 'config', 'notebook.json'), JSON.stringify({ zone: away }))
+    return root
+  }
+
+  const z = report(await launch('zonebar', await filed()))
+  check('the offer is a row across the page, not a pill in the corner', z.shown === true && z.widthOfPage >= 90,
+    `shown ${z.shown} \u00b7 ${z.widthOfPage}% of the page`)
+  check(
+    // "You are in Los Angeles" is not actionable; the comparison is.
+    'and it names BOTH zones, because the decision is a comparison',
+    String(z.says).includes(city(away)) && String(z.says).includes(city(here)),
+    String(z.says),
+  )
+  check(
+    // The defect: a handler that was correct and unreachable.
+    'THE BUG: the button actually moves the notebook',
+    z.before === away && z.after === here,
+    `${z.before} \u2192 ${z.after}`,
+  )
+  check('and the row goes away once there is nothing to offer', z.gone === true, String(z.gone))
+  check('nothing errored on the way', z.appError === 'none', String(z.appError))
+
+  const d = report(await launch('zonebar|dismiss', await filed()))
+  check(
+    // No is an answer. Travelling is not a mistake to be corrected.
+    'dismissing it puts the row away and leaves the notebook where it was',
+    d.gone === true && d.zoneKept === away,
+    `gone ${d.gone} \u00b7 filing in ${d.zoneKept}`,
+  )
+}
+
 if (process.env.TEPHRA_TIMING !== undefined) {
   const total = spent.reduce((n, one) => n + one.ms, 0)
   console.log(`\n\u2014 where the time went: ${(total / 1000).toFixed(1)}s across ${spent.length} launches \u2014`)

@@ -912,6 +912,41 @@ export async function runVerify(request: string): Promise<void> {
       await settle(1200)
     }
 
+    if (scene === 'zonebar') {
+      // **The control has to DO something.** The offer used to be a pill in the
+      // title bar, and the title bar is a drag region — which swallows mouse
+      // events, so the one thing it was for never happened. Nothing about that
+      // is visible in a unit test: the handler was correct and unreachable.
+      let waited = 0
+      while (waited < 20_000 && document.querySelector('.zonebar') === null) {
+        await settle(200)
+        waited += 200
+      }
+      const bar = document.querySelector('.zonebar') as HTMLElement | null
+      say('shown', bar !== null)
+      // Across the page rather than tucked in a corner: the complaint that
+      // started this was that it could not be seen.
+      const page = document.querySelector('.frame-reading')?.getBoundingClientRect()
+      const box = bar?.getBoundingClientRect()
+      say('widthOfPage', Math.round(((box?.width ?? 0) / (page?.width ?? 1)) * 100))
+      say('says', (bar?.querySelector('.zonebar-text')?.textContent ?? '').replace(/\s+/g, ' ').trim())
+      say('before', (await window.tephra.doc.open()).zone)
+
+      if (arg === 'dismiss') {
+        ;(bar?.querySelector('.zonebar-close') as HTMLElement | null)?.click()
+        await settle(800)
+        say('gone', document.querySelector('.zonebar') === null)
+        say('zoneKept', (await window.tephra.doc.open()).zone)
+      } else {
+        ;(bar?.querySelector('.zonebar-act') as HTMLElement | null)?.click()
+        await settle(1200)
+        say('after', (await window.tephra.doc.open()).zone)
+        say('gone', document.querySelector('.zonebar') === null)
+      }
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'rowmenu') {
       // Open a row's menu and leave it open, so the shot at the end of the run
       // has something to show. This project has found the invisible selection,

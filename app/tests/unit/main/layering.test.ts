@@ -107,13 +107,25 @@ async function importsOf(root: string, rel: string): Promise<readonly string[]> 
  */
 const STORAGE = ['w/notebook.ts', 'w/index-store.ts', 'w/git-repository.ts', 'node:fs']
 
+/**
+ * Files that read the machine rather than the notebook.
+ *
+ * **The rule is about notebook content**, and the price it names — a write no
+ * open document knows about — cannot be paid by a file that is not in the
+ * corpus and never could be. `/etc/localtime` is an operating system setting;
+ * there is no document to ask the Corpus for. Exempted by name so that adding
+ * to this list is a decision somebody makes on purpose.
+ */
+const NOT_THE_NOTEBOOK = ['system-zone.ts']
+
 /** Where the app is assembled, and so the one place allowed to make a Notebook. */
 const COMPOSITION = ['index.ts', 'document-service.ts', 'print.ts']
 
 test('only the floor touches storage', async () => {
   const offenders: string[] = []
   for (const rel of await sources('main')) {
-    if (COMPOSITION.includes(rel) || rel.startsWith('w/') || rel.startsWith('x/documents/')) continue
+    if (COMPOSITION.includes(rel) || NOT_THE_NOTEBOOK.includes(rel)) continue
+    if (rel.startsWith('w/') || rel.startsWith('x/documents/')) continue
     for (const from of await importsOf('main', rel)) {
       const target = from.replace(/^(\.\.\/)+/, '').replace(/^\.\//, '')
       if (STORAGE.some(s => target === s || target.startsWith(`${s}/`))) {

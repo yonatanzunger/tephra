@@ -67,6 +67,15 @@ export const CHANNEL = {
    * yesterday; a restart then filed the new day AFTER text that belonged in it.
    */
   dayRolled: 'tephra:doc:dayRolled',
+  /**
+   * This machine has moved, and the notebook has not been told to follow.
+   *
+   * Pushed rather than worked out per window: the zone is offered and never
+   * applied (D63), and an offer that two windows state differently is worse
+   * than no offer. Null means there is nothing to say.
+   */
+  zoneNotice: 'tephra:doc:zoneNotice',
+  dismissZone: 'tephra:doc:dismissZone',
   comments: 'tephra:doc:comments',
   emojiPanel: 'tephra:emojiPanel',
   readClipboard: 'tephra:readClipboard',
@@ -133,6 +142,7 @@ export const CHANNEL = {
   vimChanged: 'tephra:ui:vimChanged',
   /** main → renderer */
   setVim: 'tephra:ui:setVim',
+  setZone: 'tephra:ui:setZone',
   /** main → renderer: an Edit-menu command, which owns these keystrokes. */
   menuCommand: 'tephra:ui:menuCommand',
   /** renderer → main: what the caret is doing, so menus enable correctly. */
@@ -176,6 +186,14 @@ export interface DocumentInfo {
    * follows, and for the same reason.
    */
   readonly clockDay: DateKey
+  /**
+   * The zone both dates are computed in (D63).
+   *
+   * Published rather than resolved in the renderer: a frontend working out its
+   * own idea of the date while main files by another is the disagreement this
+   * whole arrangement exists to prevent.
+   */
+  readonly zone: string
   readonly extent: { readonly first: DateKey; readonly last: DateKey } | null
 }
 
@@ -186,6 +204,21 @@ export interface DocumentInfo {
  * several windows the answer is per-process, and main is the only thing that
  * can say which of them this is (MC6).
  */
+/**
+ * The notebook's zone and this machine's, when they differ (D63).
+ *
+ * **Both halves, because the offer is a comparison.** "You are in Jerusalem" is
+ * not actionable on its own; "this notebook files its days in Los Angeles, and
+ * you are in Jerusalem" is, and it is the sentence somebody needs in order to
+ * decide. Null when they agree, which is nearly always.
+ */
+export interface ZoneNotice {
+  /** Where the notebook computes its dates. What changing it would change. */
+  readonly notebook: string
+  /** Where this machine says it is. What it would change to. */
+  readonly system: string
+}
+
 export interface WindowInfo {
   readonly id: number
   readonly state: WindowState

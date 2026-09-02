@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
-import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
+import type { Clipboard, DayProse, PrintJob, ZoneNotice } from '../shared/ipc.ts'
 import type {
   Followed, IndexStatus, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow,
 } from '../shared/nav-api.ts'
@@ -254,6 +254,16 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.reactToComment, id, index, emoji, on),
     extent: (): Promise<{ first: DateKey; last: DateKey } | null> => ipcRenderer.invoke(CHANNEL.extent),
     today: (): Promise<DateKey> => ipcRenderer.invoke(CHANNEL.today),
+    /** Say where you are now. Offered when the system disagrees, never applied. */
+    setZone: (zone: string): Promise<void> => ipcRenderer.invoke(CHANNEL.setZone, zone),
+    /** What to say about the zone, if anything (D63). Main's answer, not ours. */
+    zoneNotice: (): Promise<ZoneNotice | null> => ipcRenderer.invoke(CHANNEL.zoneNotice),
+    dismissZone: (): Promise<void> => ipcRenderer.invoke(CHANNEL.dismissZone),
+    onZoneNotice(handler: Handler<ZoneNotice | null>): () => void {
+      const listener = (_e: unknown, notice: ZoneNotice | null): void => handler(notice)
+      ipcRenderer.on(CHANNEL.zoneNotice, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.zoneNotice, listener)
+    },
 
     anomalies: (): Promise<readonly Anomaly[]> => ipcRenderer.invoke(CHANNEL.anomalies),
     listThemes: (): Promise<readonly Theme[]> => ipcRenderer.invoke(CHANNEL.listThemes),

@@ -85,6 +85,30 @@ note rather than a warning, because nothing is wrong: somebody is travelling.
 Nothing detects and applies on its own, which is the whole of what makes this
 safe.
 
+**Main resolves BOTH zones, and this is not a detail.** A renderer's `Intl`
+resolves the host zone once, when its context is created, and caches it — so a
+window opened before somebody changed the system setting and a window opened
+after it disagree about where the machine is, forever. Shipped that way, and
+found in a morning: two windows side by side, one offering to move the notebook
+to Jerusalem and the other offering to move it to Los Angeles. Main reads
+`/etc/localtime` instead, which goes to the operating system every time, and
+pushes one notice to every window. `DocumentService` owns whether there is an
+offer, and owns the answer as well — **taking it or declining it in one window
+settles it in all of them**, because three windows each asking the same question
+is the same defect as three windows asking different ones. Asking on the way in
+reconciles too: a window that opens between two polls is the one moment main is
+asked something it has had no reason to look for yet, and the answer has to
+reach the other windows or the one that asked is the only one that is right.
+
+**The offer is a row across the top of the page.** It was a badge in the title
+bar, which failed twice: too small to notice, and inside the drag region, where
+mouse events never arrive — so the control did nothing when clicked, and the
+handler behind it was correct the whole time. Nothing above the renderer can see
+that. The row names both zones, because the decision is a comparison; it carries
+one button that performs the change; and it closes without argument, because
+travelling is not a mistake and days already written keep the dates they were
+written under, so there is nothing to confirm.
+
 **`writingDay` is monotonic, and the zone change is why.** Moving east pushes
 `clockDay` forward, which costs one short day. Moving west pulls it *backwards*,
 and a writing day that went back would file new passages into a day that already

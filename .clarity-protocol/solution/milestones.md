@@ -607,7 +607,7 @@ The judgements, which are:
   directory does not yet. If it should come sooner, the clean slot is after MT4,
   where MD2 and ML2 are interchangeable "away from the list" work.
 
-## MD1 — the day boundary *(next)*
+## MD1 — the day boundary ✅
 
 **Design: `solution/day-boundary.md`. Decisions: D62, D63, amending D38.**
 
@@ -635,7 +635,28 @@ it is right after a close, a crash or a week away.
 `shared/dates.ts`'s signature. That is what keeps the bug fix and the unblocking
 from waiting on a wide refactor.
 
-## MD2 — the notebook's own zone
+## MD2 — the notebook's own zone ✅
+
+**Done.** What building it taught, beyond the plan:
+
+- **The zone's whole surface was one function.** `dateKeyAt` is the only thing
+  that needs to know where you are — a weekday, a day's distance from another
+  and a day's name are all properties of a calendar date. The feared wide
+  refactor of `shared/dates.ts` was four call sites.
+- **`Etc/GMT+8` is UTC−8 exactly**, year-round and with no DST rule, so an unset
+  notebook keeps D38's behaviour while every date in the app takes one
+  zone-aware path. No dual code path for offsets and zones.
+- **Settings live in `w/`**, beside the themes, because files are W's — caught
+  by the layering test, which was right.
+- **A write time in the future does not hold the day open.** Clock skew, or a
+  file synced from a machine that is ahead, otherwise reads as "somebody is
+  writing right now" for as long as the skew lasts.
+- **The day-rolled announcement was the last edge left in an edge-free design.**
+  It fired on the tick rather than on the writing day differing from what was
+  announced, so a seed landing after a boundary had passed crossed it silently
+  and told nobody. The seed moving the day IS a boundary — it is the moment an
+  app that was closed notices — and it is announced like any other now.
+
 
 **Decision: D63.**
 
@@ -648,7 +669,7 @@ from waiting on a wide refactor.
 feature rather than the correctness fix, and it is wide-but-shallow work that
 would otherwise hold up MT4.
 
-## MT — the TODO list *(MT1–MT3 done)*
+## MT — the TODO list *(MT1–MT4 done; MT5 next)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**

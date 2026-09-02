@@ -78,6 +78,16 @@ export const STREAM_DIR = 'notebook.stream'
  */
 export const CONFIG_DIR = 'config'
 export const THEMES_DIR = `${CONFIG_DIR}/themes`
+/**
+ * The notebook's own settings, which travel with it (D63).
+ *
+ * **Beside the themes and not in `.tephra/`**, for the reason themes are: this
+ * is a choice somebody made about the notebook, not state this machine happens
+ * to hold. The zone in particular decides which date a passage is filed under,
+ * and two devices with different answers would file one evening under two
+ * dates.
+ */
+export const SETTINGS_FILE = `${CONFIG_DIR}/notebook.json`
 export const NOTES_DIR = 'notes'
 export const SECTIONS_DIR = 'sections'
 export const ATTACHMENTS_DIR = 'attachments'

@@ -55,6 +55,18 @@ function listen(svc: DocumentService): { of: (channel: string) => unknown[] } {
 
 const tick = (ms = 30): Promise<void> => new Promise(r => setTimeout(r, ms))
 
+/**
+ * Wait for something to have happened, rather than for long enough.
+ *
+ * **Crossing a boundary became asynchronous** when main took on closing off the
+ * day that ended before announcing it (D62) — so a single microtask flush no
+ * longer covers a poll's work, and a fixed sleep would only move the flake
+ * around.
+ */
+async function until(ready: () => boolean, capMs = 3000): Promise<void> {
+  for (let waited = 0; waited < capMs && !ready(); waited += 20) await tick(20)
+}
+
 test('the day rolling is announced, once, to whoever is listening', async t => {
   // 23:59 in the reference zone, which is where this bug lives.
   const clock = fixture(t, new Date('2026-08-28T06:59:00Z'))
@@ -65,7 +77,7 @@ test('the day rolling is announced, once, to whoever is listening', async t => {
   assert.deepEqual(heard.of('tephra:doc:dayRolled'), [], 'nothing yet: it is still today')
 
   clock.move(msUntilNextDay(clock.at()) + 1_000)
-  await tick()
+  await until(() => heard.of('tephra:doc:dayRolled').length > 0)
   assert.deepEqual(heard.of('tephra:doc:dayRolled'), [dateKeyAt(clock.at())])
 
   clock.move(60_000)
@@ -81,7 +93,7 @@ test('a machine asleep through midnight hears about it on waking', async t => {
   const heard = listen(svc)
 
   clock.move(9 * 60 * 60_000) // asleep from before midnight until morning
-  await tick()
+  await until(() => heard.of('tephra:doc:dayRolled').length > 0)
   assert.deepEqual(heard.of('tephra:doc:dayRolled'), [dateKeyAt(clock.at())])
 })
 
@@ -91,9 +103,12 @@ test('and the service files into the new day afterwards, not the old one', async
   const before = (await svc.info()).today
 
   clock.move(msUntilNextDay(clock.at()) + 1_000)
-  await tick()
-
-  const after = (await svc.info()).today
+  let after = before
+  await until(() => {
+    void svc.info().then(info => (after = info.today))
+    return after !== before
+  })
+  after = (await svc.info()).today
   assert.notEqual(after, before)
   assert.equal(after, dateKeyAt(clock.at()))
 })
