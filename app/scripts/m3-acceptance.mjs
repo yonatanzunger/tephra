@@ -1302,6 +1302,80 @@ console.log('\n\u2014 the task list \u2014')
   )
 }
 
+// ── a link in a task (ML) ───────────────────────
+//
+// **Reported from use: ⌘K did nothing in a task row.** Putting links into tasks
+// is half the reason the link directory exists, and the gesture has to be the
+// notebook's gesture. But a row is edited in an `<input>`, and the todo surface
+// honestly reports no editor handle (MT3, D54) — so the command reached nothing
+// and the menu item was greyed, which meant the accelerator was dead too.
+//
+// The cure is not to fake an editor. `EditorHandle` is the wrong shape to ask a
+// one-line field for; what a range command actually needs is "is anything
+// selected" and "put this around it", and `EditorHandle` satisfies that
+// structurally — so the command takes whichever target is present and branches
+// on nothing.
+console.log('\n— a link in a task —')
+{
+  const root = await week(['Today.\n'])
+  const [ty, tm] = dayFrom(-1).split('-')
+  await mkdir(join(root, 'tasks.todo', ty, tm), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', ty, tm, `${dayFrom(-1)}.md`),
+    `---\ntephra: 1\ndate: ${dayFrom(-1)}\nkind: todo\n---\n` +
+      `- [ ] call the surveyor about the boundary #house DUE ${dayFrom(2)} <!--tephra:item aaaa1111 1756600000 1756600000-->\n` +
+      `- [ ] read the survey DUE ${dayFrom(3)} <!--tephra:item aaaa7777 1756600006 1756600006-->\n`,
+  )
+
+  const k = report(await launch('todolink', root))
+  check('a task row can be edited, and \u2318K reaches it', k.editing === true && k.asked === true,
+    `editing ${k.editing} \u00b7 asked ${k.asked}`)
+  check(
+    // The asking takes the focus, and the row used to commit and unmount on
+    // blur — so the answer had nothing left to write into.
+    'THE ROW SURVIVES THE QUESTION: a dialog opened from it is not leaving it',
+    k.rowSurvived === true,
+    String(k.rowSurvived),
+  )
+  check(
+    'and the answer lands as markdown, around the words that were selected',
+    typeof k.afterLink === 'string' &&
+      k.afterLink.includes('[surveyor](https://example.com/survey)') &&
+      !k.afterLink.includes('surveyor about the boundary'),
+    JSON.stringify(k.afterLink),
+  )
+  check(
+    // Which is what ML1's shared scanner was built for: a row is a table cell
+    // rather than CodeMirror, so a live link in one means finding links in a
+    // string.
+    'the committed row draws it as a LIVE link',
+    Array.isArray(k.links) && k.links.includes('https://example.com/survey'),
+    JSON.stringify(k.links),
+  )
+  check(
+    // Reported from a screenshot: the rail showed the raw `[text](https://…)`.
+    // It cannot make the link live — a rail row is itself a button that scrolls
+    // to the item, and an anchor inside a button is both invalid and a second
+    // thing to hit — so it shows what the sentence SAYS and leaves following it
+    // to the row.
+    'the due-soon rail shows a link\'s words, not its markup',
+    k.railText === 'call the surveyor about the boundary' && k.railHasAnchor === false,
+    JSON.stringify(k.railText),
+  )
+  check(
+    // The same gesture as the notebook's, three cases and all: the second press
+    // is somebody changing their mind, and `****` reads as broken.
+    '\u2318B works in a row, and pressing it again takes it off',
+    typeof k.afterBold === 'string' &&
+      k.afterBold.includes('read the **survey**') &&
+      typeof k.afterBoldTwice === 'string' &&
+      k.afterBoldTwice.includes('read the survey') &&
+      !k.afterBoldTwice.includes('*'),
+    `${JSON.stringify(k.afterBold)} then ${JSON.stringify(k.afterBoldTwice)}`,
+  )
+  check('nothing errored on the way', k.appError === 'none', String(k.appError))
+}
+
 // ── the walk (MT5a, T11) ──────────────────────────
 //
 // **The mode in which deleting is cheap.** Era 2's ritual was copying

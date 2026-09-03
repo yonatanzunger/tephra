@@ -2,7 +2,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { destination, scanLinks } from '../../../src/shared/links.ts'
+import { destination, flattenLinks, scanLinks } from '../../../src/shared/links.ts'
 
 test('THE BUG THIS FIXES: a link with a space in its URL is still a link', () => {
   // `destination()` writes the angle-bracket form whenever a URL cannot survive
@@ -62,4 +62,40 @@ test('a link with no label is still a destination', () => {
   const found = scanLinks('[](https://example.com)')
   assert.equal(found[0]?.label, '')
   assert.equal(found[0]?.target, 'https://example.com')
+})
+
+// ── showing a line where links cannot be live ──────────
+//
+// A row in the due-soon rail is itself a button that scrolls to the item, and
+// an anchor inside a button is both invalid and a second thing to hit; a menu's
+// label is a label. Neither can render live links, and both were showing the
+// raw `[text](https://…)` — the file being honest in a place nobody asked it
+// to be. Labels rather than nothing, because the label is what the line SAYS.
+
+test('a link becomes the words it shows', () => {
+  assert.equal(
+    flattenLinks('Review [Steve\'s bio draft](https://docs.google.com/document/d/1t8/edit)'),
+    "Review Steve's bio draft",
+  )
+})
+
+test('text with no links is returned as it is', () => {
+  assert.equal(flattenLinks('call the surveyor #house'), 'call the surveyor #house')
+})
+
+test('several links in one line all flatten', () => {
+  assert.equal(
+    flattenLinks('compare [one](../a.md) against [two](../b.md) again'),
+    'compare one against two again',
+  )
+})
+
+test('an image leaves nothing behind, because its label is alt text', () => {
+  // A row is a line of type; there is nowhere for a picture to go, and "the
+  // words it shows" for an image is a description of a thing that is absent.
+  assert.equal(flattenLinks('the plan ![a floor plan](../plan.png) as drawn'), 'the plan as drawn')
+})
+
+test('a bare URL is left alone, because it already reads as itself', () => {
+  assert.equal(flattenLinks('see https://example.com/survey'), 'see https://example.com/survey')
 })

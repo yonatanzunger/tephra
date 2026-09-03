@@ -13,7 +13,7 @@ import type { RemoteStream } from './x/kinds/stream'
 import { Pane } from './pane/pane'
 import { usePaneBoundary, usePaneLocation, usePaneWindow } from './pane/usePane'
 import { surfaceFor } from './editor/kinds/registry.ts'
-import type { SurfaceHandle } from './editor/surface.ts'
+import type { SurfaceHandle, TextTarget } from './editor/surface.ts'
 import { asEditorHandle, type EditorHandle } from './editor/kinds/markdown/range-commands.ts'
 import { defaultTypography, type Typography } from './editor/typography.ts'
 import { Frame, useStream } from './frame/Frame'
@@ -443,7 +443,10 @@ export function App(): React.JSX.Element {
       if (id === 'bold' || id === 'italic' || id === 'strike') {
         // The one command that needs nothing but a caret: with no selection it
         // opens the markers and waits inside them.
-        editorRef.current?.toggleEmphasis(id === 'bold' ? '**' : id === 'strike' ? '~~' : '*')
+        // Whichever target is present — a task row is text too (ML, MT5a).
+        ;(editorRef.current ?? textRef.current)?.toggleEmphasis(
+          id === 'bold' ? '**' : id === 'strike' ? '~~' : '*',
+        )
         return
       }
 
@@ -484,8 +487,10 @@ export function App(): React.JSX.Element {
       }
 
       if (id === 'link') {
-        const selection = editorRef.current?.selection()
-        if (selection === undefined || selection.empty) return
+        // Whichever target is present: `EditorHandle` satisfies `TextTarget`
+        // structurally, so this branches on nothing.
+        const target: TextTarget | null = editorRef.current ?? textRef.current
+        if (target === null || target.selection().empty) return
         // Prefilled from the clipboard when it holds one, because the sequence
         // that ends in ⌘K almost always began with copying a URL.
         void window.tephra.readClipboard().then(board => {
@@ -495,7 +500,7 @@ export function App(): React.JSX.Element {
             placeholder: 'https://…  or  ../../../notes/something.md',
             ...(/^(https?:\/\/|\.{1,2}\/)\S+$/.test(copied) ? { initial: copied } : {}),
             submitLabel: 'Link',
-            onSubmit: target => editorRef.current?.wrapSelection('[', `](${destination(target)})`),
+            onSubmit: to => target.wrapSelection('[', `](${destination(to)})`),
           })
         })
         return
@@ -854,6 +859,8 @@ export function App(): React.JSX.Element {
 
   // How to ask the editor what is selected, for as long as one is mounted.
   const editorRef = useRef<EditorHandle | null>(null)
+  /** A plain text field a range command can write into, when a surface has one open. */
+  const textRef = useRef<TextTarget | null>(null)
 
   /** Day, heading chain and subjects around the caret — the sidebar's top line. */
   const [where, setWhere] = useState<Where>(EMPTY_WHERE)
@@ -1155,6 +1162,11 @@ export function App(): React.JSX.Element {
             // wrap, and the honest answer there is a null handle and greyed
             // menu items rather than a cast that would be a lie (D54).
             onHandle={(handle: SurfaceHandle | null) => (editorRef.current = asEditorHandle(handle))}
+            // **And a surface that is not text can still hold some.** A task
+            // being edited is an `<input>`, and ⌘K means there what it means in
+            // the notebook — so a range command takes whichever target is
+            // present rather than knowing which surface it is talking to (ML).
+            onTextTarget={(target: TextTarget | null) => (textRef.current = target)}
             annotations={{ onMark: setMark, onCommentAnchors: setAnchors, onRailHost: setRailHost }}
           />
         )}

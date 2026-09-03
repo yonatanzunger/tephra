@@ -92,3 +92,28 @@ export function destination(target: string): string {
   if (url === '') return ''
   return /[\s()<>]/.test(url) ? `<${url.replace(/[<>]/g, '')}>` : url
 }
+
+/**
+ * The text as a reader would read it: link labels, without their targets.
+ *
+ * **For the places that show a line but cannot make its links live.** A row in
+ * the due-soon rail is itself a button that scrolls to the item, and an anchor
+ * inside a button is both invalid and a second thing to hit; a menu's label is
+ * a label. Neither can render `Prose`, and both were showing the raw
+ * `[text](https://…)` — which is the file being honest in a place nobody asked
+ * it to be.
+ *
+ * Labels rather than nothing, because the label is what the sentence says. The
+ * URL is what you go to, and going there is the row's job.
+ */
+export function flattenLinks(text: string): string {
+  const links = scanLinks(text)
+  if (links.length === 0) return text
+  let out = ''
+  let at = 0
+  for (const link of links) {
+    out += text.slice(at, link.from) + (link.image ? '' : link.label)
+    at = link.to
+  }
+  return (out + text.slice(at)).replace(/\s{2,}/g, ' ').trim()
+}

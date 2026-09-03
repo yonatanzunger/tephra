@@ -53,12 +53,50 @@ export interface SurfaceHandle {
   revealAt(at: number): void
 }
 
+/**
+ * The least a thing has to be for a range command to reach it.
+ *
+ * **A surface that is not CodeMirror can still hold text.** The row a task is
+ * edited in is an `<input>`, and ⌘K means the same thing there as it does in
+ * the notebook — a link is a link. `EditorHandle` is the wrong shape to ask a
+ * text field for: most of it (emphasis toggling, scroll-track marks, revealing
+ * a buffer position) is about a document view and means nothing in a one-line
+ * field, and MT3 was right to answer `null` for it rather than fake it.
+ *
+ * So this is the part a range command actually uses, and `EditorHandle`
+ * satisfies it structurally — the caller does not branch, it just takes
+ * whichever target is present.
+ */
+export interface TextTarget {
+  /** Whether anything is selected. A range command needs something to act on. */
+  selection(): { readonly empty: boolean }
+  /** Put text around the selection, as ordinary typing would. */
+  wrapSelection(before: string, after: string): void
+  /**
+   * Put emphasis on, or take it off again.
+   *
+   * A toggle for the reason the editor's is: the second press of ⌘B is somebody
+   * changing their mind, and `****` reads as broken. From a bare caret it opens
+   * the pair and waits inside, which is why emphasis is `point` and not `range`.
+   */
+  toggleEmphasis(marker: string): void
+}
+
 export interface SurfaceProps {
   readonly window: DocumentWindow
   readonly settings: EditingSettings
   readonly onError?: (err: Error) => void
   /** Where the caret is, for the sidebar's where-you-are line and the saved cursor. */
   readonly onCursor?: (at: DocumentPosition) => void
+  /**
+   * Somewhere a range command can write, when this surface has one open.
+   *
+   * Null when it does not, which is most of the time and is what greys the
+   * menu. Separate from `onHandle` because a text field is not an editor: this
+   * says "there is text here with a selection in it", which is the only claim
+   * a command like ⌘K needs and the only one a field can honestly make.
+   */
+  readonly onTextTarget?: (target: TextTarget | null) => void
   /**
    * What is on screen. The Pane owns the extent policy and this is its input —
    * the surface reports a fact rather than being observed, which is what keeps

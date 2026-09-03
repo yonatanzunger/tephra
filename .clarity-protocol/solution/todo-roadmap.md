@@ -437,6 +437,55 @@ it is the one that is staged.
   disappears into the cream page and reads as slightly aged paper rather than as
   a state. The slate is the only cool thing in the app, which is the point.
 
+### And ⌘K reached nothing in a task row
+
+**Reported from use, and the fix was not to fake an editor.** Putting links into
+tasks is half the reason the link directory exists (ML), and the gesture has to
+be the notebook's gesture. But a row is edited in an `<input>`, and the todo
+surface honestly reports **no editor handle** — MT3 chose that deliberately: "a
+surface that is not text has no selection to wrap, and the honest answer there
+is a null handle and greyed menu items rather than a cast that would be a lie"
+(D54). So the command reached nothing, the menu item was greyed, and the
+accelerator was dead with it.
+
+MT3's answer was right and its premise was too narrow: **a surface that is not
+CodeMirror can still hold text.** `EditorHandle` is the wrong shape to ask a
+one-line field for — emphasis toggling, scroll-track marks and revealing a
+buffer position are all about a document view and mean nothing there. What a
+range command actually uses is *is anything selected* and *put this around it*,
+which is now `TextTarget`, and which `EditorHandle` satisfies structurally. The
+command takes whichever target is present and branches on nothing.
+
+- **A dialog opened from a row is not leaving the row.** The prompt takes the
+  focus, and the row's blur handler committed and unmounted it — so the answer
+  had nothing left to write into. Blur into a `.prompt` no longer commits, which
+  is the same rule that already exempted the row's own controls.
+- **The field's value is read through a ref, not closed over.** The target is
+  registered once; one holding the first render's value would splice the link
+  into whatever the row said before you started typing.
+- **⌘B and ⌘I work in a row too**, the same three cases as the notebook's —
+  markers outside the selection is the state the first press leaves and
+  therefore the one the second press has to recognise. Building it turned the
+  field's caret memory into a *range* memory, because a first press that
+  collapsed the selection to a caret left the second press nothing to recognise:
+  `⌘B ⌘B` produced `**survey******` instead of taking the emphasis off.
+
+### And a rail row was showing its markup
+
+**Reported from a screenshot.** The due-soon rail drew `Review [bio
+draft](https://docs.google.com/…)` — the raw line, URL and all, wrapped over
+four lines of a narrow gutter.
+
+**It cannot make the link live, and that is the right answer rather than a
+limitation.** A rail row is itself a button that scrolls to the item; an anchor
+inside a button is invalid markup and a second thing to hit, and the rail's job
+is recognising that something is due, not going somewhere. So it shows what the
+line *says* — the label, without the target — and following it stays the row's
+job. `flattenLinks` joins the shared scanner (ML1) beside `scanLinks`, because
+it is a fact about the link grammar and it has two callers already: the rail,
+and the row menu's label, which was showing the same markup for the same
+reason.
+
 ### A defect older than the walk, found by building it
 
 **A hand-written line was losing the day it was written on.** Flow 9's line has

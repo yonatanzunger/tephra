@@ -21,9 +21,10 @@
 // is already the interaction that dominates every other thing a list is asked.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { SurfaceProps } from '../surface.ts'
+import type { SurfaceProps, TextTarget } from '../surface.ts'
+import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
-import { scanLinks } from '../../../../shared/links.ts'
+import { flattenLinks, scanLinks } from '../../../../shared/links.ts'
 import { groupByTag, isLive, resolveDue, type TodoItem, type TodoStatus, type WalkState } from '../../../../shared/kinds/todo.ts'
 import { daysBetween } from '../../../../shared/dates.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
@@ -88,7 +89,7 @@ const TITLE: Readonly<Record<TodoStatus, string>> = {
   backlog: 'Backlogged',
 }
 
-export function TodoSurface({ window: docWindow, settings, onError }: SurfaceProps): React.JSX.Element {
+export function TodoSurface({ window: docWindow, settings, onError, onTextTarget }: SurfaceProps): React.JSX.Element {
   const list = docWindow.document.id as DocumentId
   const [today, setToday] = useState<DateKey | null>(null)
   const [items, setItems] = useState<readonly TodoItem[]>([])
@@ -331,6 +332,7 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
       key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}
       under={under}
       carried={carriedNow.has(item.id ?? '')}
+      {...(onTextTarget === undefined ? {} : { onTextTarget })}
       dropping={dropping.has(item.id ?? '')}
       {...(walking && item.id !== null ? { onDrop: () => toggleDrop(item.id as string) } : {})}
       item={item}
@@ -359,7 +361,7 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
         const id = item.id
         setMenu({
           at: { x: e.clientX, y: e.clientY },
-          about: prose(item),
+          about: flattenLinks(prose(item)),
           items: statusItems(status => {
             // Blocked asks WHY, because a block without the thing it is
             // waiting on is the one status that says nothing (T4).
@@ -440,6 +442,7 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
               <Field
                 initial={adding}
                 placeholder="what needs doing"
+                {...(onTextTarget === undefined ? {} : { onTextTarget })}
                 tags={live}
                 today={today}
                 onDone={text => {
@@ -535,7 +538,7 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
               onClick={() => document.getElementById(`todo-${item.id ?? ''}`)?.scrollIntoView({ block: 'center' })}
             >
               <span className="todo-when">{when(item.due as DateKey, today as DateKey)}</span>
-              <span className="todo-soon-text">{prose(item)}</span>
+              <span className="todo-soon-text">{flattenLinks(prose(item))}</span>
             </button>
           ))}
         </aside>
@@ -592,6 +595,7 @@ function Row({
   carried = false,
   dropping = false,
   onDrop,
+  onTextTarget,
 }: {
   item: TodoItem
   today: DateKey | null
@@ -617,7 +621,10 @@ function Row({
   dropping?: boolean
   /** Present only during a pass, which is the only time a row can be dropped. */
   onDrop?: () => void
+  /** Passed to whichever field this row opens, so ⌘K can reach it. */
+  onTextTarget?: (target: TextTarget | null) => void
 }): React.JSX.Element {
+  const target = onTextTarget === undefined ? {} : { onTextTarget }
   const done = item.status === 'done' || item.status === 'dropped'
   const chips = item.tags.filter(tag => tag !== under)
   return (
@@ -657,9 +664,16 @@ function Row({
         // **The raw line is what gets edited**, tags and date included: the
         // markers are what the line says, and hiding them from the editor would
         // make them uneditable without a second control for each (T16).
-        <Field initial={item.text} tags={tags} today={today} onDone={onDone} />
+        <Field initial={item.text} tags={tags} today={today} onDone={onDone} {...target} />
       ) : blocking ? (
-        <Field initial={item.note ?? ''} placeholder="waiting on what?" tags={tags} today={today} onDone={onBlocked} />
+        <Field
+          initial={item.note ?? ''}
+          placeholder="waiting on what?"
+          tags={tags}
+          today={today}
+          onDone={onBlocked}
+          {...target}
+        />
       ) : (
         <span className="todo-text">
           {prose(item) === '' ? (
@@ -767,6 +781,7 @@ function Field({
   tags,
   today,
   onDone,
+  onTextTarget,
 }: {
   initial: string
   placeholder?: string
@@ -774,6 +789,8 @@ function Field({
   tags: readonly string[]
   today: DateKey | null
   onDone: (text: string | null) => void
+  /** Publishes this field as somewhere a range command can write, while it lives. */
+  onTextTarget?: (target: TextTarget | null) => void
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement>(null)
   const [value, setValue] = useState(initial)
@@ -782,14 +799,93 @@ function Field({
   const [pick, setPick] = useState(0)
   const [hidden, setHidden] = useState(false)
   const done = useRef(false)
-  /** Where the caret goes once the field is holding the new value. */
-  const caretTo = useRef<number | null>(null)
+  /**
+   * Where the selection goes once the field is holding the new value.
+   *
+   * **A range and not a point**, because emphasis toggles: the second press of
+   * ⌘B has to recognise the state the first one left, and a first press that
+   * collapsed the selection to a caret left nothing to recognise — so `⌘B ⌘B`
+   * produced `**survey******` instead of taking the emphasis off again.
+   */
+  const caretTo = useRef<{ from: number; to: number } | null>(null)
 
   useEffect(() => {
     if (caretTo.current === null) return
-    field.current?.setSelectionRange(caretTo.current, caretTo.current)
+    field.current?.setSelectionRange(caretTo.current.from, caretTo.current.to)
     caretTo.current = null
   }, [value])
+
+  /**
+   * **A row being edited is somewhere ⌘K can write** (ML).
+   *
+   * Putting a link in a task is half the point of having links at all, and the
+   * gesture is the notebook's gesture — so it goes through the same command,
+   * reaching a target instead of an editor. Registered while the field exists
+   * and withdrawn when it goes, which is also what greys the menu again.
+   *
+   * The value is read through a ref rather than closed over: this registers
+   * once, and a target holding the first render's `value` would splice a link
+   * into whatever the row said before you started typing.
+   */
+  const latest = useRef(value)
+  latest.current = value
+  useEffect(() => {
+    const input = field.current
+    if (input === null || onTextTarget === undefined) return
+    const report = (): void =>
+      window.tephra.doc.selectionChanged({
+        hasPoint: document.activeElement === input,
+        hasRange: input.selectionStart !== input.selectionEnd,
+      })
+    onTextTarget({
+      selection: () => ({ empty: input.selectionStart === input.selectionEnd }),
+      wrapSelection: (before, after) => {
+        const from = input.selectionStart ?? 0
+        const to = input.selectionEnd ?? from
+        const text = latest.current
+        setValue(`${text.slice(0, from)}${before}${text.slice(from, to)}${after}${text.slice(to)}`)
+        // After the wrapped text, which is where you carry on writing.
+        const at = to + before.length + after.length
+        caretTo.current = { from: at, to: at }
+        input.focus()
+      },
+      // **The editor's three cases, because it has to be the same gesture.**
+      // Markers outside the selection is the state the first press leaves
+      // behind and therefore the one the second press must recognise; markers
+      // inside it is somebody who selected the whole thing, asterisks and all.
+      toggleEmphasis: marker => {
+        const n = marker.length
+        const text = latest.current
+        const from = input.selectionStart ?? 0
+        const to = input.selectionEnd ?? from
+        const outside = text.slice(Math.max(0, from - n), from) === marker && text.slice(to, to + n) === marker
+        const inside = to - from >= 2 * n && text.slice(from, to).startsWith(marker) && text.slice(from, to).endsWith(marker)
+        if (outside) {
+          setValue(text.slice(0, from - n) + text.slice(from, to) + text.slice(to + n))
+          caretTo.current = { from: from - n, to: to - n }
+        } else if (inside) {
+          setValue(text.slice(0, from) + text.slice(from + n, to - n) + text.slice(to))
+          caretTo.current = { from, to: to - 2 * n }
+        } else {
+          setValue(`${text.slice(0, from)}${marker}${text.slice(from, to)}${marker}${text.slice(to)}`)
+          // **Still selected**, which is what makes the next press a toggle —
+          // and from a bare caret is the same thing: it lands inside the pair,
+          // which is how a person types a bold word they have not written yet.
+          caretTo.current = { from: from + n, to: to + n }
+        }
+        input.focus()
+      },
+    })
+    // `select` fires for drag, double-click and shift-arrow alike; the others
+    // catch a caret that moved without changing what is selected.
+    for (const name of ['select', 'keyup', 'mouseup', 'focus']) input.addEventListener(name, report)
+    report()
+    return () => {
+      for (const name of ['select', 'keyup', 'mouseup', 'focus']) input.removeEventListener(name, report)
+      onTextTarget(null)
+      window.tephra.doc.selectionChanged(NO_SELECTION)
+    }
+  }, [onTextTarget])
 
   useEffect(() => {
     field.current?.focus()
@@ -845,7 +941,7 @@ function Field({
     const from = now - (word[0].length - (word[0].startsWith('#') ? 0 : 1))
     const text = written(tag)
     setValue(`${value.slice(0, from)}${text}${value.slice(now)}`)
-    caretTo.current = from + text.length
+    caretTo.current = { from: from + text.length, to: from + text.length }
     setPick(0)
     // **A tag that has been taken is finished, so the list goes away.**
     // Matching is by prefix and the completed word is a prefix of itself, so
@@ -888,6 +984,11 @@ function Field({
         onBlur={e => {
           // A click on one of this row's own controls is not leaving the row.
           if (e.relatedTarget instanceof HTMLElement && e.relatedTarget.closest('.todo-editing') !== null) return
+          // **Nor is a dialog opened FROM the row.** ⌘K asks where to link to,
+          // and the asking takes the focus — so without this the row committed
+          // and unmounted while the question was still on screen, and the
+          // answer had nothing left to write into.
+          if (e.relatedTarget instanceof HTMLElement && e.relatedTarget.closest('.prompt') !== null) return
           finish(e.currentTarget.value)
         }}
         onKeyDown={e => {

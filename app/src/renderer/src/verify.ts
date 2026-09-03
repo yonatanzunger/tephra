@@ -946,6 +946,93 @@ export async function runVerify(request: string): Promise<void> {
       await settle(1200)
     }
 
+    if (scene === 'todolink') {
+      // **⌘K in a task row** (ML). A link in a task is half the point of having
+      // links at all, and the gesture has to be the notebook's gesture — but
+      // the row is an `<input>` and the todo surface honestly reports no editor
+      // handle, so the command reached nothing and the menu stayed grey.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const texts = () =>
+        [...document.querySelectorAll('.todo-row')].map(r =>
+          (r.querySelector('.todo-text')?.textContent ?? '').trim(),
+        )
+
+      ;(document.querySelector('.todo-row') as HTMLElement | null)?.click()
+      await settle(500)
+      const input = document.querySelector('.todo-field') as HTMLInputElement | null
+      say('editing', input !== null)
+
+      // Select two words in the middle, the way a person would.
+      const at = (input?.value ?? '').indexOf('surveyor')
+      input?.setSelectionRange(at, at + 'surveyor'.length)
+      input?.dispatchEvent(new Event('select', { bubbles: true }))
+      await settle(400)
+
+      await window.tephra.clickMenu('Link\u2026')
+      await settle(700)
+      // The row must still be open: the asking takes the focus, and a row that
+      // committed while the question was on screen leaves nothing to write to.
+      say('rowSurvived', document.querySelector('.todo-field') !== null)
+      say('asked', document.querySelector('.prompt') !== null)
+
+      const box = document.querySelector('#prompt-input') as HTMLInputElement | null
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        box,
+        'https://example.com/survey',
+      )
+      box?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(200)
+      box?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      await settle(600)
+      say('afterLink', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+
+      ;(document.querySelector('.todo-field') as HTMLElement | null)?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      )
+      await settle(900)
+      say('committed', texts())
+      // And it is a LIVE link in the row, which is what ML1's scanner is for.
+      say('links', [...document.querySelectorAll('.todo-row a')].map(a => a.getAttribute('href')))
+      // **The rail cannot make a link live**, because a rail row is itself a
+      // button that scrolls to the item and an anchor inside a button is both
+      // invalid and a second thing to hit. So it shows the label — and it was
+      // showing the raw `[text](https://…)`, which is the file being honest in
+      // a place nobody asked it to be.
+      say('railText', document.querySelector('.todo-soon-text')?.textContent ?? '')
+      say('railHasAnchor', document.querySelector('.todo-soon a') !== null)
+
+      // **Emphasis works in a row too, and it is the same gesture** — three
+      // cases, the second press taking it off again.
+      ;(document.querySelectorAll('.todo-row')[1] as HTMLElement | null)?.click()
+      await settle(500)
+      {
+        const box = document.querySelector('.todo-field') as HTMLInputElement | null
+        const from = (box?.value ?? '').indexOf('survey')
+        box?.setSelectionRange(from, from + 'survey'.length)
+        box?.dispatchEvent(new Event('select', { bubbles: true }))
+        await settle(300)
+        await window.tephra.clickMenu('Bold')
+        await settle(500)
+        say('afterBold', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+        await window.tephra.clickMenu('Bold')
+        await settle(500)
+        say('afterBoldTwice', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+        ;(document.querySelector('.todo-field') as HTMLElement | null)?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        )
+        await settle(400)
+      }
+
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'walk') {
       await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
       let waited = 0
