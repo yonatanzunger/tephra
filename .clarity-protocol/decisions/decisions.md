@@ -2028,8 +2028,61 @@ way.
 `DateKey`, one list per directory: `<name>.todo/YYYY/MM/YYYY-MM-DD.md` (D59),
 with the `.todo` directory at the notebook root distinguished by position rather
 than by any special case in the layout. **Each day's file holds that day's
-working set in full**, carried forward automatically. All TODO lists share one
-format; there is no lightweight second form.
+working set in full**, carried forward automatically. ~~All TODO lists share one
+format; there is no lightweight second form.~~ *(Amended 2026-09-02; see below.)*
+
+**Amended 2026-09-02: there are two shapes, and they are one format.** The last
+clause is withdrawn. It reasoned that "a secondary list wants the walk and the
+history as much as the main one does", and the counter-example is an **overall
+todo file** — the blog posts you mean to write, the books you mean to read —
+which wants neither. It does not turn over daily, so the carry has nothing to carry
+and the day structure files a full copy of a monthly-changing list every time it
+is opened. The semantics are wrong before the storage is: *today's working set*
+is a meaningful idea for tasks and a meaningless one for an overall list, and so
+is *the first day this line appears*. **The day structure exists to serve the
+carry, and the carry exists because a working set turns over daily** — a list
+that does not turn over gets none of the benefit and all of the cost.
+
+**And the cost this clause was avoiding has collapsed since it was written.** It
+was taken before D54's kind machinery and D59 had settled, when "a second form"
+plausibly meant a second parse and a second surface. It does not: the item
+grammar, every verb and the whole surface are shared, and `SegmentedDocument`
+already models *same grammar, different segmentation* — `ONLY_SEGMENT` is what
+markdown and fileset are built on. What differs between the two shapes is
+`keys()`. So this is two shapes of one format rather than two formats, which is
+what the clause was actually protecting.
+
+**Two shapes, and the filesystem is what says which.** A `.todo` **directory**
+is day-paged; a single `.todo` **file** is not, and holds exactly what one day
+segment holds. Whether that file is spelled `<name>.todo` or `<name>.todo.md` is
+open and recorded in `solution/todo-roadmap.md`; either way this reinstates the
+single-file form MT2 retired — retired for this very clause, which is the clause
+being amended.
+
+**The distinguished list is named, not positional** — also amended here. The
+decision above chose "distinguished by position rather than by any special case
+in the layout", and the position rule does not survive contact with a second
+list: `todoList()` returns whichever root-level `.todo` comes first, so two of
+them means one silently wins. `tasks.todo` is *the* task list the way
+`notebook.stream` is *the* notebook — ⌘1 and ⌘⇧T always go to it, as ⌘0 goes to
+the stream. Position was chosen to keep a name out of `w/layout.ts`, but
+`STREAM_DIR` is already there: the special case exists, and the two
+distinguished documents should follow one rule rather than two. It is also
+simpler than what it replaces, since a constant is not a scan.
+
+**Every other list is an ordinary document.** Found in the sidebar, clicked,
+opened in the main window and drawn by the todo surface instead of the markdown
+editor — which is what `surfaceFor` already does with a kind. Nothing about
+reaching a second list is special, so almost none of it has to be built.
+
+**An overall todo file has no carry, no walk, no `today` and no per-day
+history**;
+git versions it the way it versions every other document. It keeps the item
+grammar, the verbs, the surface, the tag pivot, the due-soon rail and capture.
+Delivered in **MT7** (`solution/todo-roadmap.md`), which is ordered after MT5b
+because corpus-wide id minting is what lets `tephra:todo/<id>` resolve without a
+list name — a property this decision already specified and which does not matter
+until there is more than one list.
 
 **Revised the same day, on two points.**
 

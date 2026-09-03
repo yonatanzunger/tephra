@@ -497,6 +497,104 @@ cap cannot ship *before* the walk. Revisit from use.
 - The backlog drawer (T14) — reachable and counted. **Resurfacing is deferred**
   (Q3a), and until it lands T14 is knowingly unmet.
 
+## MT7 — More than one list: daily and overall todo files
+
+**Asked for from use, and it reverses a decision** — D55's "all TODO lists share
+one format; there is no lightweight second form". The amendment is recorded
+there; the short of it is that an **overall todo file** (the blog posts you mean to
+write) wants neither the carry nor the walk, and the cost of a second shape
+collapsed when D54's kind machinery landed.
+
+**There is still a distinguished list, and it is named the way the stream is.**
+`tasks.todo` is *the* task list: ⌘1 and ⌘⇧T always go to it, exactly as ⌘0 goes
+to `notebook.stream`. Every other list is an **ordinary document** — you find it
+in the sidebar and click it, and it opens in the main window drawn by the todo
+surface instead of the markdown editor, because that is what `surfaceFor`
+already does with a kind. Nothing about reaching a second list is special, which
+is why almost none of it has to be built.
+
+*This replaces D55's by-position rule* ("the `.todo` directory at the notebook
+root, distinguished by position rather than by any special case in the layout").
+Position was chosen to keep a name out of `w/layout.ts` — but `STREAM_DIR` is
+already there, so the special case exists and the two distinguished documents
+should follow one rule rather than two. It is also strictly simpler: `todoList()`
+stops scanning for whichever root-level `.todo` comes first and returns a
+constant, the way `STREAM_ID` does.
+
+**Two shapes, one format.**
+
+- **A daily todo file** is a `<name>.todo` **directory** of day files. Carried,
+  walked, with a working set that turns over daily. `tasks.todo` is this.
+- **An overall todo file** is a single file with no segmentation, in exactly the
+  format of one day segment. No carry, no walk, no `today`, no per-day history —
+  git versions it the way it versions every other document. It opens in the main
+  window like a note, because that is what it is.
+
+**Open: whether the overall form is `<name>.todo` or `<name>.todo.md`.** A bare
+`.todo` file lets one name mean both shapes, with the filesystem saying which —
+so a document that changes shape keeps its id. Against it: every prose file in
+the corpus ends in `.md`, which is load-bearing for R26/D20, and MT2 chose the
+`[ ]`/`[x]` glyphs precisely so a list "renders as task-list checkboxes where a
+renderer understands them" — an extension no tool knows throws that away for the
+single-file form alone. Read together the conventions are one, not two: `.todo`
+names the kind and `.md` says *this particular thing is a markdown file*, which
+is already how `tasks.todo/2026/09/2026-09-02.md` reads. It also costs something
+concrete: MT1 moved three call sites — the corpus listing, the sidebar's
+directory sections, restore's document sweep — onto `documentRoot(rel) !== null`,
+path-string logic with no disk access, and an ambiguous `.todo` makes them stat.
+The stable-id argument is real but smaller than it looks, since `tephra:todo/<id>`
+points at items and already resolves without naming the list (D56).
+
+They share the item grammar, every verb, the surface, the tag pivot, the
+due-soon rail and capture. **What differs is `keys()`** — an overall todo file
+answers `[ONLY_SEGMENT]`, which is what markdown and fileset already do. The
+verbs are already key-parameterised, so most of them need nothing; `add` skips
+the carry, and the walk is simply not offered.
+
+**Shape and distinction are independent axes, and nothing yet needs the fourth
+corner.** The distinguished list is daily; the lists you make are overall. A
+*second daily list* — something else with its own turnover — is possible under
+this design and is not built, because nobody has wanted one. The surface
+work is the same either way, so it stays cheap to add if that changes.
+
+**Ordered after MT5b, and the dependency is real.** `tephra:todo/<id>` resolves
+"without a list name" (D56) because ids are unique across the corpus — a
+property that costs nothing to state with one list and has to actually be true
+with several. MT5b's corpus-wide minting is what makes it true.
+
+### What has to change, and most of it is not the document
+
+The kind is the easy half. **Reaching a second list is the part that does not
+exist yet**, and it is worse than unbuilt — it is currently *unreachable*:
+
+- **`todoList()` returns whichever root-level `.todo` comes first** and makes
+  `tasks.todo` when there is none. With two lists the first one silently wins,
+  which is why MT3 noted that two `.todo` directories at the root should be
+  reported as an anomaly. That note is answered here rather than by an anomaly.
+- **`newDocument` always makes a markdown note.** The gesture the request asks
+  for — *"just like we create new md files"* — is that one, with a kind on it.
+  Both shapes are creatable this way; a daily one is the odd case, since a
+  directory document has no single file to create and is brought into being by
+  its first carry.
+- **Capture does NOT have to ask**, and that is settled rather than deferred:
+  ⌘⇧T goes to `tasks.todo`, always. A task noticed mid-sentence belongs to the
+  working list by definition. The consequence, stated so it is a choice and not
+  an oversight: **you cannot capture into an overall todo file** — you open it and
+  type, the way you would a note.
+- **The sidebar needs no new machinery for overall todo files**, because they
+  are files in `notes/` like any other. Only the distinguished list is a
+  directory document, and MT1 already excludes those from listings generically.
+
+### Open, and to be settled when this is built
+
+- **Can a list change shape later?** Overall → daily is a plausible thing to
+  want (a list you start treating as daily) and is a file-layout rewrite, not a
+  flag. Probably yes, probably a migration rather than a toggle. **Which spelling
+  wins above decides how much this costs**: one name for both shapes makes it a
+  move, two names make it a move and a rename.
+
+---
+
 ---
 
 ## ML — the link directory, which is not part of this

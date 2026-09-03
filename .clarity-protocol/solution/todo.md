@@ -82,7 +82,7 @@ So: **one index over every link in the corpus**, whatever file it appeared in, r
 
 ## 6. One format for every list, and an address for every item — *forced*
 
-**All TODO files have the same shape.** There is no lightweight second form: multiplying formats buys nothing, and a secondary list wants the walk and the history as much as the main one does. So every list is a directory of day files.
+**Two shapes, one format** *(amended 2026-09-02; D55)*. The first draft said there was no lightweight second form, on the grounds that a secondary list wants the walk and the history as much as the main one does. An **overall todo file** — the blog posts you mean to write — wants neither: it does not turn over daily, so the carry has nothing to carry, and *today's working set* is a meaningful idea for tasks and a meaningless one here. A **daily todo file** is a `.todo` directory of day files; an **overall todo file** is a single unsegmented one, holding exactly what one day segment holds. (Whether that is spelled `.todo` or `.todo.md` is open — `solution/todo-roadmap.md`.) They share the item grammar, every verb and the whole surface; what differs is `keys()`, which `SegmentedDocument` has modelled since D54 (`ONLY_SEGMENT` is what markdown and fileset are built on). Multiplying *formats* still buys nothing, and this does not multiply one.
 
 **A multi-file document is a directory named by its kind, exactly as a file is named by its kind.** `kindOf` already works this way in spirit — it answers `'stream'` for anything under `stream/`, so *the containing directory already decides a file's kind*. Making that a suffix instead of one hardcoded name turns the special case into a rule:
 
