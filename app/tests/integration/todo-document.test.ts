@@ -243,3 +243,139 @@ test('every write is an ordinary edit, so undo puts it back', async t => {
   await doc.undo()
   assert.equal((await doc.itemsOn(MON))[0]?.status, 'todo')
 })
+
+// ── the walk (MT5a, T11) ───────────────────────────────────
+//
+// **The mode in which deleting is cheap.** Era 2's morning ritual was copying
+// yesterday's list by hand and crossing swathes of it out — and deleting there
+// never felt like abandonment the way it did mid-afternoon, because the frame
+// around the act was different. So the walk's whole job is to supply that
+// frame: it is offered by the list looking different, and what it adds is
+// one-click deletion, a record that you looked, and nothing else.
+//
+// Driven through the document, with no surface, for the reason the rest of this
+// file is: what the pass writes is where a mistake would be expensive.
+
+test('a carried day knows where it came from, and which of its items are yesterday\'s', async t => {
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank', '- [ ] read the survey'] })
+  await doc.carry(TUE)
+  await doc.add('something new today', TUE)
+
+  const walk = await doc.walkOf(TUE)
+  assert.equal(walk.carriedFrom, MON)
+  assert.equal(walk.walked, false, 'nobody has looked at it yet')
+  assert.equal(walk.carried.length, 2, 'the two that came from Monday, and not the one added today')
+
+  const today = await doc.itemsOn(TUE)
+  const fresh = today.find(item => item.text.includes('something new'))
+  assert.ok(fresh?.id !== undefined && !walk.carried.includes(fresh.id))
+})
+
+test('and a day nothing was carried into has nothing to review', async t => {
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  const walk = await doc.walkOf(MON)
+  assert.equal(walk.carriedFrom, null)
+  assert.deepEqual(walk.carried, [])
+})
+
+test('an item carried in and deleted since is not offered for review', async t => {
+  // Intersected rather than trusted. The walk must never offer to review a line
+  // that is not in the day any more.
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank', '- [ ] read the survey'] })
+  await doc.carry(TUE)
+  const gone = (await doc.itemsOn(TUE))[0]?.id as string
+  await doc.remove(gone)
+  assert.deepEqual((await doc.walkOf(TUE)).carried.length, 1)
+})
+
+test('THE POINT: finishing a pass drops what was marked and records the review', async t => {
+  const { doc, fileOn } = await list(t, {
+    [MON]: ['- [ ] ring the bank', '- [ ] read the survey', '- [ ] chase the deeds'],
+  })
+  await doc.carry(TUE)
+  const ids = (await doc.itemsOn(TUE)).flatMap(item => (item.id === null ? [] : [item.id]))
+
+  const dropped = await doc.finishWalk(TUE, [ids[0] as string, ids[2] as string])
+  assert.equal(dropped, 2)
+
+  const left = await doc.itemsOn(TUE)
+  assert.deepEqual(left.map(item => item.text), ['read the survey'])
+  assert.equal((await doc.walkOf(TUE)).walked, true)
+
+  // In the day's own frontmatter, because it is metadata about that day — and
+  // it therefore travels with the corpus rather than with this machine.
+  const file = await fileOn(TUE)
+  assert.match(file, /^walked: true$/m)
+  assert.match(file, new RegExp(`^carriedFrom: ${MON}$`, 'm'))
+})
+
+test('and MONDAY still says what Monday looked like', async t => {
+  // This is why deleting during a walk is cheap in a way crossing out on paper
+  // never was: what is cut is today's copy, and every earlier day keeps its own.
+  const { doc, fileOn } = await list(t, { [MON]: ['- [ ] ring the bank', '- [ ] read the survey'] })
+  await doc.carry(TUE)
+  const ids = (await doc.itemsOn(TUE)).flatMap(item => (item.id === null ? [] : [item.id]))
+  await doc.finishWalk(TUE, ids)
+
+  assert.deepEqual((await doc.itemsOn(TUE)).length, 0, 'today is empty')
+  assert.equal((await doc.itemsOn(MON)).length, 2, 'and Monday is untouched')
+  assert.match(await fileOn(MON), /ring the bank/)
+})
+
+test('a walk that drops nothing still counts as a walk', async t => {
+  // The common case, and the one an "apply" button would have made nonsense of:
+  // you read the list, everything stands, and the day has still been reviewed.
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  await doc.carry(TUE)
+  assert.equal(await doc.finishWalk(TUE, []), 0)
+  assert.equal((await doc.walkOf(TUE)).walked, true)
+  assert.equal((await doc.itemsOn(TUE)).length, 1)
+})
+
+test('walking twice in a day is idempotent, and the second pass can still drop', async t => {
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank', '- [ ] read the survey'] })
+  await doc.carry(TUE)
+  await doc.finishWalk(TUE, [])
+  const ids = (await doc.itemsOn(TUE)).flatMap(item => (item.id === null ? [] : [item.id]))
+  assert.equal(await doc.finishWalk(TUE, [ids[0] as string]), 1)
+  assert.equal((await doc.itemsOn(TUE)).length, 1)
+})
+
+test('the drops are ONE write, so they are one undo step', async t => {
+  // A bulk delete that came back as eleven edits would let an undo leave the
+  // list half-groomed, and would cost eleven gestures to change your mind about
+  // one act. The carry is one write for the same reason.
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] ring the bank', '- [ ] read the survey', '- [ ] chase the deeds'],
+  })
+  await doc.carry(TUE)
+  const before = doc.generation
+  const ids = (await doc.itemsOn(TUE)).flatMap(item => (item.id === null ? [] : [item.id]))
+  await doc.finishWalk(TUE, ids)
+  assert.equal(doc.generation, before + 1, 'three lines, one edit')
+})
+
+test('the walk does not follow the day: Thursday is reviewed, Tuesday is not', async t => {
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  await doc.carry(TUE)
+  await doc.carry(THU)
+  await doc.finishWalk(THU, [])
+  assert.equal((await doc.walkOf(THU)).walked, true)
+  assert.equal((await doc.walkOf(TUE)).walked, false)
+})
+
+test('a hand-written line keeps the identity of the day it was WRITTEN on', async t => {
+  // Found by the walk and older than it. Flow 9's line has no marker; carried
+  // as-is it was adopted into today and claimed today's ctime, so an item that
+  // first appeared on Monday said it was born on Tuesday — D56's "first day
+  // this line appears", quietly wrong for every list ever hand-edited.
+  const { doc, fileOn } = await list(t, { [MON]: ['- [ ] a line somebody typed'] })
+  await doc.carry(TUE)
+
+  const monday = (await doc.itemsOn(MON))[0]
+  const tuesday = (await doc.itemsOn(TUE))[0]
+  assert.ok(monday?.id !== null && monday?.id !== undefined, 'Monday has its identity now')
+  assert.equal(tuesday?.id, monday.id, 'and Tuesday holds the SAME item, not a new one')
+  assert.equal(tuesday?.ctime, monday.ctime, 'born when it was written, not when it was copied')
+  assert.match(await fileOn(MON), /tephra:item/)
+})

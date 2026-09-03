@@ -372,24 +372,117 @@ without anything being told to.
 with its tag prefilled. The first is MT6's; the other two are cheap and nobody
 has asked.
 
-## MT5 — The walk, the tag index, and then the cap
+## MT5a — The walk *(done)*
 
-**Depends on MD** (`solution/day-boundary.md`): the walk is offered when the
-carry happens, which is when `openDay < writingDay`. It needs no trigger of its
-own, and building one before the boundary existed would have been a third
-subsystem learning the day rules by hand.
+**Done**, and verified by `npm run m3`. The design was settled in conversation
+and shrank twice on the way, which is the part worth recording.
 
+**What the walk turned out to be: the mode in which deleting is cheap.** Era 2's
+ritual was copying yesterday's list by hand and crossing swathes of it out — and
+the observation that started this milestone is that *deleting there never felt
+like abandonment the way it did mid-afternoon*. The frame around the act was
+different. That is not a preference, it is a mechanism, and a mode that supplies
+the frame does work no amount of "make delete easier" could. Everything else in
+the design is in service of it.
 
-**In that order, because the cap depends on the walk** and the walk's completion
-list wants the index.
+**And in Tephra the feeling is literally true.** Dropping during a walk cuts the
+line from today's file; yesterday's and every earlier day keep their copy
+untouched (MT3's rule for delete). On paper, crossing something out was the last
+time you saw it. Here the record of what yesterday looked like is unharmed, so
+the walk is not only a psychologically safer moment to delete but a genuinely
+safer one.
 
-- The walk: every live item, defaults to unchanged, one gesture when nothing has
-  moved. Offered on the first open of a day, never modal.
-- The tag index (T6): which tags have live items, which do not. This is what
-  makes MT4's completion useful, and it is where id minting starts being
-  checked (MT2).
-- **Then** the soft cap (T12): the count at the end of the walk, and the
-  overflow rule below the fold. Nothing hidden, nothing one click from lost.
+**No second surface, and no new interaction.** The first design was a walk mode
+with a moving highlight stepping down the list — a new surface and a new
+gesture. What replaced it is the list you already know with a temporary state on
+it, which satisfies T11's "prominent affordance, not a modal" more literally
+than a walk mode ever could: **the offer IS the list looking different.**
+
+**Exactly one control is added, and it is the destructive one.** An intermediate
+draft staged both fates and made the status glyph a staged binary inside the
+pass. That was the worst idea in it: a control that changes meaning depending on
+invisible state is how a UI becomes surprising. Marking done already has a
+control, it is reversible in a click, and it stays exactly where it is on every
+other day. Deleting is the one act that wants looking at before it happens, so
+it is the one that is staged.
+
+- **The marks are a SELECTION, not an edit**, which is what lets the pass be
+  abandoned with nothing undone. Ordinary editing stays live and immediate
+  throughout; *Cancel* clears the selection and nobody expects clearing a
+  selection to undo their typing. That framing is what stopped the two
+  mechanisms from competing, and it is why the button is not called Revert.
+- **Finishing is "I have looked", which sometimes also deletes.** A walk that
+  drops nothing is the common one and still has to record the review, so an
+  *Apply* that applied nothing would have been nonsense. It reads **Finish**,
+  and **Finish, dropping 6** when anything is staged — the count appears exactly
+  when there is something to be careful about, which guards a stray click better
+  than distance does.
+- **The way in is at the top and the way out is at the bottom**, which is both
+  the direction you read a list in and a guarantee that finishing is never the
+  same target you just clicked to start.
+- **The staged rows preview the outcome** rather than going generically grey.
+  Staging exists so you can look at what is about to happen; down a list of
+  eight, *which four are going* has to be answerable at a glance.
+- **`walked` and `carriedFrom` live in the day's own frontmatter**, because they
+  are metadata about that precise day. They travel with the corpus, so a second
+  device is looking at a day that has or has not been walked rather than at its
+  own opinion of one — which `.tephra/` could not have given.
+- **The drops are one write and therefore one undo step**, for the reason the
+  carry is. **The `walked` bit is not in that step**: it is not text somebody
+  typed, and it is kept where the title and the source are kept and written the
+  way they are. Undoing the drops brings the lines back and leaves the day
+  marked reviewed, which is true — you did review it — and the pass is always
+  re-enterable.
+- **Cool, not warm.** Built on a token and looked at both ways: a warm ochre
+  disappears into the cream page and reads as slightly aged paper rather than as
+  a state. The slate is the only cool thing in the app, which is the point.
+
+### A defect older than the walk, found by building it
+
+**A hand-written line was losing the day it was written on.** Flow 9's line has
+no identity marker; the carry copied it verbatim and `adopt` then minted an id
+*in today's file*, so an item that first appeared on Monday claimed a ctime of
+Tuesday — D56's "the first day this line appears", quietly wrong for every list
+that had ever been hand-edited. The carry now adopts the source day before
+reading it, which makes the copy a copy. It is also what lets the walk answer
+"which of today's items are yesterday's" at all: the question is an intersection
+of ids, and anonymous lines have none.
+
+**Does not do:** the tag index, the cap.
+
+## MT5b — The tag index
+
+**Narrower than this milestone was planned to be**, because MT3 found that the
+live tag set needs no index at all: it is the tags on today's live items, which
+are already on screen, and MT4a now groups by them. T6's *which tags have live
+items* is delivered. What is left is the half an index is actually needed for:
+
+- **The dormant tags** — tags with no live items, which the goal says stays
+  reachable. Only a corpus-wide view can answer that.
+- **Corpus-wide id minting.** `unusedItemId` currently checks a new id against
+  one segment's items; D56 wants every id in the corpus, which is what makes
+  `tephra:todo/<id>` resolvable without a list name.
+
+**But it is real work**, because the scanner deliberately contributes no span
+for the item marker: `markers.ts` knows `item` so that a todo file opened in the
+markdown surface does not read markers as prose, and stops there. So this is the
+first time `CorpusIndex` learns a new fact since it was built.
+
+**Per-tag recency is not here.** It belongs to Q3a's backlog resurfacing, which
+is deferred by decision.
+
+## MT5c — The soft cap *(deferred, on purpose)*
+
+**Punted, and the walk is what makes that safe.** T11 carried a promise — every
+live item *seen* daily — solely because T12's cap degrades visibility and
+something had to make that safe. No cap, no promise to keep, which is why MT5a's
+Finish button can honestly clear a list you did not read.
+
+The number is flagged in both `goal/todo.md` and `solution/todo.md` as the
+requirement with the least evidence behind it, and **the walk is what produces
+the evidence**: it ends with a count, and a week of real counts is a better
+basis than a number chosen now. The binding constraint was only ever that the
+cap cannot ship *before* the walk. Revisit from use.
 
 ## MT6 — The pivots and the drawer
 

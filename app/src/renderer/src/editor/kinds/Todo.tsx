@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { scanLinks } from '../../../../shared/links.ts'
-import { groupByTag, isLive, resolveDue, type TodoItem, type TodoStatus } from '../../../../shared/kinds/todo.ts'
+import { groupByTag, isLive, resolveDue, type TodoItem, type TodoStatus, type WalkState } from '../../../../shared/kinds/todo.ts'
 import { daysBetween } from '../../../../shared/dates.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 
@@ -119,6 +119,20 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
    */
   const [by, setBy] = useState<'time' | 'tag'>('time')
 
+  /**
+   * The walk (T11), and it is two pieces of state because they are two things.
+   *
+   * `walk` is what main says about the day — reviewed yet, and what arrived
+   * from before it. `walking` is whether a pass is open in THIS window, which
+   * is nobody else's business: a pass is a way of looking at the list, not a
+   * change to it, so opening one somewhere else must not put buttons on your
+   * rows. And `dropping` is a **selection**, not an edit — which is the whole
+   * reason it can be abandoned without anything being undone.
+   */
+  const [walk, setWalk] = useState<WalkState | null>(null)
+  const [walking, setWalking] = useState(false)
+  const [dropping, setDropping] = useState<ReadonlySet<string>>(new Set())
+
   const fail = useCallback(
     (err: unknown) => onError?.(err instanceof Error ? err : new Error(String(err))),
     [onError],
@@ -126,7 +140,12 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
 
   const refresh = useCallback(
     async (date: DateKey) => {
-      setItems(await window.tephra.todo.items(list, date))
+      const [got, state] = await Promise.all([
+        window.tephra.todo.items(list, date),
+        window.tephra.todo.walk(list, date),
+      ])
+      setItems(got)
+      setWalk(state)
     },
     [list],
   )
@@ -283,6 +302,23 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
   } as React.CSSProperties
 
   /**
+   * Which rows are yesterday's, right now.
+   *
+   * **Empty once the day has been reviewed**, which is what makes the highlight
+   * the offer: the list looking different IS how the walk is proposed (T11
+   * wants a prominent affordance and not a modal), and it stops looking
+   * different the moment you have looked.
+   */
+  const carriedNow = new Set(walk !== null && !walk.walked ? walk.carried : [])
+
+  const toggleDrop = (id: string): void =>
+    setDropping(before => {
+      const next = new Set(before)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+
+  /**
    * One row, wherever it is being drawn.
    *
    * **The same row in both views**, because the pivot changes where an item is
@@ -294,6 +330,9 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
     <Row
       key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}
       under={under}
+      carried={carriedNow.has(item.id ?? '')}
+      dropping={dropping.has(item.id ?? '')}
+      {...(walking && item.id !== null ? { onDrop: () => toggleDrop(item.id as string) } : {})}
       item={item}
       today={today}
       tags={live}
@@ -350,6 +389,27 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
           <button type="button" aria-pressed={by === 'tag'} onClick={() => setBy('tag')}>
             by tag
           </button>
+
+          {/* **The offer is the list looking different; this is only the way
+              in** (T11). Emphasised while the day is unreviewed and quiet
+              afterwards, because walking twice is allowed and worth nothing —
+              so the control stays and stops asking. It is at the TOP and the
+              finish is at the BOTTOM, which is both the direction you read a
+              list in and a guarantee that finishing is never the same target
+              you just clicked to start. */}
+          {!walking && walk !== null && (
+            <button
+              type="button"
+              className="todo-walk-start"
+              data-offered={!walk.walked}
+              onClick={() => {
+                setDropping(new Set())
+                setWalking(true)
+              }}
+            >
+              {walk.walked ? 'walk again' : 'walk the list'}
+            </button>
+          )}
         </div>
 
         <ol className="todo-list">
@@ -420,6 +480,43 @@ export function TodoSurface({ window: docWindow, settings, onError }: SurfacePro
         {items.length === 0 && adding === null && (
           // Absence that explains itself, as every empty state in this app does.
           <p className="todo-empty">Nothing on the list. That is allowed.</p>
+        )}
+
+        {/* **Finishing carries the count, because the count is the risk.** A
+            walk that drops nothing is the common one and it still has to record
+            that you looked — so this is not "apply", it is "I have looked",
+            which sometimes also deletes. Saying how many keeps a stray click
+            from being the expensive kind. */}
+        {walking && (
+          <div className="todo-walkbar" role="group" aria-label="Finish the walk">
+            <button
+              type="button"
+              className="todo-walk-finish"
+              data-dropping={dropping.size > 0}
+              onClick={() => {
+                const drop = [...dropping]
+                setWalking(false)
+                setDropping(new Set())
+                act(window.tephra.todo.finishWalk(list, today as DateKey, drop))
+              }}
+            >
+              {dropping.size === 0 ? 'Finish' : `Finish, dropping ${dropping.size}`}
+            </button>
+            {/* Nothing to undo: a selection was never a change. */}
+            <button
+              type="button"
+              className="todo-walk-cancel"
+              onClick={() => {
+                setWalking(false)
+                setDropping(new Set())
+              }}
+            >
+              Cancel
+            </button>
+            <span className="todo-walkbar-note">
+              Anything still on the list stays on it.
+            </span>
+          </div>
         )}
       </div>
 
@@ -492,6 +589,9 @@ function Row({
   onBlocked,
   onMenu,
   under = null,
+  carried = false,
+  dropping = false,
+  onDrop,
 }: {
   item: TodoItem
   today: DateKey | null
@@ -511,13 +611,22 @@ function Row({
    * reader wants — they say where else this thing also lives.
    */
   under?: string | null
+  /** Arrived from an earlier day and the day has not been reviewed (T11). */
+  carried?: boolean
+  /** Marked for deletion in an open pass. A selection, not an edit. */
+  dropping?: boolean
+  /** Present only during a pass, which is the only time a row can be dropped. */
+  onDrop?: () => void
 }): React.JSX.Element {
   const done = item.status === 'done' || item.status === 'dropped'
   const chips = item.tags.filter(tag => tag !== under)
   return (
     <li
       id={`todo-${item.id ?? ''}`}
-      className={`todo-row status-${item.status}${done ? ' finished' : ''}`}
+      className={
+        `todo-row status-${item.status}${done ? ' finished' : ''}` +
+        `${carried ? ' carried' : ''}${dropping ? ' dropping' : ''}`
+      }
       onContextMenu={onMenu}
       // **The whole row**, because an item whose text is empty had nothing to
       // click: the text button collapsed to nothing and the only way back into
@@ -579,6 +688,26 @@ function Row({
         <span className={`todo-due${today !== null && overdue(item, today) ? ' overdue' : ''}`}>
           {today === null ? item.due : when(item.due, today)}
         </span>
+      )}
+
+      {/* **The only control a pass adds.** Marking done already has a control
+          and it is the glyph, in the place it is on every other day — a
+          control that changed meaning inside a mode would be the surprise this
+          design was rearranged to avoid. Deleting is the one act that wants
+          looking at before it happens, so it is the one that is staged. */}
+      {onDrop !== undefined && (
+        <button
+          type="button"
+          className="todo-drop"
+          aria-pressed={dropping}
+          title={dropping ? 'Keep this one after all' : 'Drop this when the pass ends'}
+          onClick={e => {
+            e.stopPropagation()
+            onDrop()
+          }}
+        >
+          {dropping ? 'Keep' : 'Drop'}
+        </button>
       )}
     </li>
   )

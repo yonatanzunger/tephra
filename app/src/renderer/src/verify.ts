@@ -946,6 +946,66 @@ export async function runVerify(request: string): Promise<void> {
       await settle(1200)
     }
 
+    if (scene === 'walk') {
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const rows = () => [...document.querySelectorAll('.todo-row')]
+      const texts = () => rows().map(r => (r.querySelector('.todo-text')?.textContent ?? '').trim())
+
+      // **The list looking different IS the offer**, so what is checked first is
+      // that it looks different — and that the day's own items do not.
+      say('carriedRows', rows().filter(r => r.classList.contains('carried')).length)
+      say('allRows', rows().length)
+      const start = document.querySelector('.todo-walk-start') as HTMLElement | null
+      say('offered', start?.dataset['offered'] ?? '')
+      say('startSays', start?.textContent?.trim() ?? '')
+      say('noDropButtons', document.querySelectorAll('.todo-drop').length)
+
+      // For the picture: the list as it greets you, offering and not asking.
+      if (arg !== 'offer') {
+      start?.click()
+      await settle(400)
+      say('dropButtons', document.querySelectorAll('.todo-drop').length)
+      say('finishSays', document.querySelector('.todo-walk-finish')?.textContent?.trim() ?? '')
+
+      // Stage two, look at the preview, then change your mind about one.
+      const drops = [...document.querySelectorAll('.todo-drop')] as HTMLElement[]
+      drops[0]?.click()
+      await settle(200)
+      drops[2]?.click()
+      await settle(300)
+      say('staged', rows().filter(r => r.classList.contains('dropping')).length)
+      say('finishCounts', document.querySelector('.todo-walk-finish')?.textContent?.trim() ?? '')
+      say('nothingWrittenYet', texts().length)
+      drops[2]?.click()
+      await settle(300)
+      say('afterKeeping', rows().filter(r => r.classList.contains('dropping')).length)
+
+      if (arg === 'cancel') {
+        ;(document.querySelector('.todo-walk-cancel') as HTMLElement | null)?.click()
+        await settle(700)
+        say('rowsAfterCancel', texts().length)
+        say('stillOffered', (document.querySelector('.todo-walk-start') as HTMLElement | null)?.dataset['offered'] ?? '')
+        say('barGone', document.querySelector('.todo-walkbar') === null)
+      } else if (arg === 'stay') {
+        // For the picture, mid-pass with a fate staged.
+      } else {
+        ;(document.querySelector('.todo-walk-finish') as HTMLElement | null)?.click()
+        await settle(1200)
+        say('rowsAfterFinish', texts().length)
+        say('highlightGone', rows().filter(r => r.classList.contains('carried')).length)
+        say('startSaysAfter', document.querySelector('.todo-walk-start')?.textContent?.trim() ?? '')
+        await window.tephra.doc.flush()
+      }
+      }
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(900)
+    }
+
     if (scene === 'todoview') {
       // The pivot is a view over what is already on screen (T8's cheap half),
       // so what is worth checking is that it is the SAME list rearranged: no

@@ -429,6 +429,16 @@ export type TodoCommand =
     }
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
   | { readonly kind: 'remove'; readonly list: DocumentId; readonly item: string }
+  /** What the walk knows about a day: reviewed yet, and what arrived from before (T11). */
+  | { readonly kind: 'walk'; readonly list: DocumentId; readonly date: DateKey }
+  /**
+   * End a pass: delete what was marked, and record that the day was reviewed.
+   *
+   * **One command, because it is one act.** Two — drop these, then mark walked
+   * — could half-happen, and a day whose items went but whose review did not
+   * record is a day that offers to review a list it has already groomed.
+   */
+  | { readonly kind: 'finishWalk'; readonly list: DocumentId; readonly date: DateKey; readonly drop: readonly string[] }
   /**
    * Show the list with a row open for a task (T13).
    *

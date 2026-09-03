@@ -578,7 +578,7 @@ Three milestones are open at once — the task list, the link directory and the
 day boundary — and only three dependencies between them are real. The rest is a
 judgement about what is worth having soonest.
 
-**MD1 → MT4 → MD2 → MT4a → MT5 → ML2+ML3 → MT6.**
+**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6.** *(MT5c, the cap, is deferred until the walk has produced a week of counts to choose its number from — see `todo-roadmap.md`.)*
 
 *MT4a was not in this plan.* It arrived from use — "I'm already feeling the gap"
 — and cost nothing to insert because it depends on nothing: the tag pivot over
@@ -674,7 +674,7 @@ from waiting on a wide refactor.
 feature rather than the correctness fix, and it is wide-but-shallow work that
 would otherwise hold up MT4.
 
-## MT — the TODO list *(MT1–MT4 and MT4a done; MT5 next)*
+## MT — the TODO list *(MT1–MT4, MT4a and MT5a done; MT5b next)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**

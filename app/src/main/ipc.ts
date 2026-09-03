@@ -116,6 +116,10 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.todoEdit(command.list, command.item, command.text)
       case 'remove':
         return service.todoRemove(command.list, command.item)
+      case 'walk':
+        return service.todoWalk(command.list, command.date)
+      case 'finishWalk':
+        return service.todoFinishWalk(command.list, command.date, command.drop)
       case 'capture': {
         // **Left for the list to pull.** Pushing at a window that may have been
         // created a millisecond ago races its renderer: `did-finish-load` is

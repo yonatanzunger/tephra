@@ -452,6 +452,85 @@ body {
   border-color: rgb(var(--border));
 }
 
+/* ── the walk (T11) ─────────────────────────────────────
+   **The list looking different IS the offer.** The goal asks for a prominent
+   affordance and not a modal, and a tint across the rows that came from
+   yesterday is exactly that: it says what there is to review without asking
+   anything, and it stops saying it the moment you have looked.
+
+   On a token, because which hue this should be is a question to answer by
+   looking. Cool reads as "not from today" and is the only cool thing in a warm
+   app — which might be right, since the mode should feel different, or might
+   fight the page. Swap `--todo-carried` to try the other. */
+:root {
+  --todo-carried: 96 130 182;   /* a cool slate: yesterday, not today */
+  --todo-doomed: 180 83 60;     /* about to go */
+}
+.todo-row.carried { background: rgb(var(--todo-carried) / .07); box-shadow: inset 2px 0 0 rgb(var(--todo-carried) / .5); }
+
+/* **The outcome, previewed.** Staging exists so you can look at what is about
+   to happen before it does, so a marked row shows the fate rather than a
+   generic grey — down a list of eight, "which four are going" has to be
+   answerable at a glance. */
+.todo-row.dropping {
+  background: rgb(var(--todo-doomed) / .08);
+  box-shadow: inset 2px 0 0 rgb(var(--todo-doomed) / .55);
+  color: rgb(var(--text-muted));
+}
+.todo-row.dropping .todo-text { text-decoration: line-through; text-decoration-thickness: 1px; opacity: .75; }
+
+/* Present only during a pass, so it never competes with the list on an
+   ordinary day, and never occupies a place the eye has learned is empty. */
+.todo-drop {
+  flex: 0 0 auto; cursor: pointer;
+  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: .03em;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .05rem .4rem;
+}
+.todo-drop:hover { color: rgb(var(--todo-doomed)); border-color: rgb(var(--todo-doomed) / .6); }
+.todo-drop[aria-pressed='true'] {
+  color: rgb(var(--surface)); background: rgb(var(--todo-doomed)); border-color: rgb(var(--todo-doomed));
+}
+
+/* The way in. Quiet once the day has been reviewed, because walking twice is
+   allowed and worth nothing — the control stays and stops asking. */
+.todo-walk-start {
+  margin-left: auto; cursor: pointer;
+  font-family: var(--font-ui); font-size: 11.5px; letter-spacing: .02em;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid transparent; border-radius: 4px; padding: .12rem .5rem;
+}
+.todo-walk-start:hover { color: rgb(var(--text)); }
+.todo-walk-start[data-offered='true'] {
+  color: rgb(var(--todo-carried)); border-color: rgb(var(--todo-carried) / .45);
+  background: rgb(var(--todo-carried) / .07);
+}
+
+/* At the bottom, where reading down a list puts you — and structurally never
+   the same target as the button that started the pass. */
+.todo-walkbar {
+  display: flex; align-items: center; gap: .5rem;
+  margin-top: .8rem; padding-top: .7rem;
+  border-top: 1px solid rgb(var(--border));
+}
+.todo-walk-finish {
+  cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+  color: rgb(var(--surface)); background: rgb(var(--text-heading));
+  border: 1px solid rgb(var(--text-heading)); border-radius: 4px; padding: .22rem .7rem;
+}
+.todo-walk-finish[data-dropping='true'] {
+  background: rgb(var(--todo-doomed)); border-color: rgb(var(--todo-doomed));
+}
+.todo-walk-cancel {
+  cursor: pointer; font-family: var(--font-ui); font-size: 12px;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .22rem .7rem;
+}
+.todo-walk-cancel:hover { color: rgb(var(--text)); }
+.todo-walkbar-note {
+  font-family: var(--font-ui); font-size: 11px; color: rgb(var(--text-muted));
+}
+
 /* A group is a PLACE on the page, so its name is set as a heading rather than
    as another row — an eye scanning a left edge for status marks must never
    take a heading for an item with an odd-looking one. */

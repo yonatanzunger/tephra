@@ -28,7 +28,7 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  isLive, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId,
+  isLive, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId, type WalkState,
   type ScannedItem, type TodoItem, type TodoStatus,
 } from '../../../../shared/kinds/todo.ts'
 import type {
@@ -36,6 +36,19 @@ import type {
 } from '../../../../shared/document-api.ts'
 
 /** An item, and which day's file it was read from. */
+/**
+ * Frontmatter keys the walk keeps on a day (T11).
+ *
+ * **In the day's own frontmatter, because it is metadata about that precise
+ * day.** Whether Tuesday has been reviewed is a fact about Tuesday; it travels
+ * with the corpus the way the day's date does, and a second device opening the
+ * same notebook is looking at a day that has or has not been walked rather than
+ * at its own opinion of one. Unknown keys are preserved verbatim, so a person
+ * who wants them gone deletes the lines.
+ */
+const WALKED = 'walked'
+const CARRIED_FROM = 'carriedFrom'
+
 export interface LocatedItem {
   readonly item: TodoItem
   readonly date: DateKey
@@ -101,6 +114,7 @@ export class TodoDocument extends SegmentedDocument {
 
   // ── the carry (D55) ────────────────────────────────────────
 
+
   /**
    * Materialise a day from the most recent one before it, and adopt what is there.
    *
@@ -128,6 +142,14 @@ export class TodoDocument extends SegmentedDocument {
       .sort(compareDateKeys)
       .pop() as DateKey | undefined
 
+    // **Adopt the source before reading it**, which fixes a defect older than
+    // the walk that found it. A line somebody typed into yesterday's file by
+    // hand has no identity (flow 9); carried as-is it was given a fresh one
+    // *today*, so an item that first appeared on Monday claimed a ctime of
+    // Tuesday — D56's "first day this line appears", quietly wrong. Giving it
+    // its identity where it was actually written makes the copy a copy, and is
+    // what lets the walk say which of today's items are yesterday's at all.
+    if (source !== undefined) await this.adopt(source)
     const carried =
       source === undefined
         ? []
@@ -141,8 +163,75 @@ export class TodoDocument extends SegmentedDocument {
     // it is written to. Copying is not modifying.
     const body = carried.map(item => itemLine(item)).join('\n')
     await this.setBodyOf(date, (body === '' ? '' : `${body}\n`) as DocumentText)
+    // **Where it came from, so the walk can say which of these is yesterday's**
+    // (T11). Recorded rather than derived: an item's ctime says which day it
+    // was created, which is *almost* the same question and differs on the one
+    // that matters — a line typed at 00:30 belongs to the evening it was
+    // written in (D62) and its ctime does not know that. The carry is the one
+    // moment that knows for certain, so it writes it down.
+    if (source !== undefined) (await this.segment(date)).setExtra(CARRIED_FROM, source)
     await this.adopt(date)
     return carried.length
+  }
+
+  // ── the walk (T11) ─────────────────────────────────────────
+
+  /**
+   * What the walk knows about a day.
+   *
+   * **Two facts, not a display rule.** Whether the day has been reviewed, and
+   * which of its items arrived from an earlier one — the surface decides what
+   * to draw from those, because "highlight the unreviewed carried ones" is a
+   * sentence about pixels and these are sentences about the list.
+   */
+  async walkOf(date: DateKey): Promise<WalkState> {
+    const segment = await this.segment(date)
+    const extra = (key: string): string | undefined =>
+      segment.extra.find(([k]) => k.toLowerCase() === key.toLowerCase())?.[1]?.trim()
+
+    const from = extra(CARRIED_FROM)
+    const here = new Set((await this.#scan(date)).flatMap(s => (s.item.id === null ? [] : [s.item.id])))
+    // Intersected rather than trusted: an item carried in this morning and
+    // deleted since is not in this day any more, and the walk must not offer to
+    // review a line that is not there.
+    const carried =
+      from === undefined
+        ? []
+        : (await this.#scan(from as DateKey)).flatMap(s =>
+            s.item.id !== null && here.has(s.item.id) ? [s.item.id] : [],
+          )
+    return { walked: extra(WALKED) === 'true', carried, carriedFrom: (from ?? null) as DateKey | null }
+  }
+
+  /**
+   * Finish a pass: drop what was marked, and record that the day was walked.
+   *
+   * **The drops are one write and therefore one undo step**, for the reason the
+   * carry is: a bulk delete that came back as eleven edits would let an undo
+   * leave the list half-groomed, and would cost eleven gestures to change your
+   * mind about one act.
+   *
+   * **The `walked` bit is NOT in that undo step**, because it is not text
+   * somebody typed — it is a fact about the day, kept where the title and the
+   * source are kept and written the way they are. Undoing the drops therefore
+   * brings the lines back and leaves the day marked reviewed, which is true:
+   * you did review it. The pass can always be entered again.
+   */
+  async finishWalk(date: DateKey, drop: readonly string[]): Promise<number> {
+    const wanted = new Set(drop)
+    const found = (await this.#scan(date)).filter(s => s.item.id !== null && wanted.has(s.item.id))
+    if (found.length > 0) {
+      await this.replace(
+        found.map(one => ({
+          span: { begin: this.at(date, one.from), end: this.at(date, one.end) },
+          payload: '' as DocumentText,
+        })),
+        'operation',
+      )
+    }
+    ;(await this.segment(date)).setExtra(WALKED, 'true')
+    this.touch('operation')
+    return found.length
   }
 
   /**

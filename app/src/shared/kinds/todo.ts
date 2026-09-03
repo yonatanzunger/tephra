@@ -387,3 +387,22 @@ export function groupByTag(items: readonly TodoItem[]): readonly TodoGroup[] {
     .map(([tag, group]): TodoGroup => ({ tag, items: group }))
   return untagged.length === 0 ? named : [...named, { tag: null, items: untagged }]
 }
+
+/**
+ * What the walk knows about one day (T11).
+ *
+ * **Two facts and no display rule.** Whether the day has been reviewed, and
+ * which of its items arrived from an earlier one — "highlight the unreviewed
+ * carried ones" is a sentence about pixels, and these are sentences about the
+ * list. Kept here rather than in main because it crosses the wire, the way
+ * `TodoItem` does.
+ */
+export interface WalkState {
+  /** Whether this day has been reviewed. Set by finishing a pass, never unset. */
+  readonly walked: boolean
+  /** The ids in this day that arrived from an earlier one. */
+  readonly carried: readonly string[]
+  /** The day they arrived from, or null for a day nothing was carried into. */
+  readonly carriedFrom: DateKey | null
+}
+

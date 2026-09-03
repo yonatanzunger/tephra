@@ -21,7 +21,7 @@ import type { NavTarget } from '../shared/pane-api.ts'
 import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
-import type { TodoItem, TodoStatus } from '../shared/kinds/todo.ts'
+import type { TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 
 type Handler<T> = (message: T) => void
 
@@ -176,6 +176,12 @@ const tephra = {
     /** Off the list, for a line that was never a task. Earlier days keep theirs. */
     remove: (list: DocumentId, item: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'remove', list, item }),
+    /** Whether the day has been reviewed, and what arrived from before it (T11). */
+    walk: (list: DocumentId, date: DateKey): Promise<WalkState> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'walk', list, date }),
+    /** End a pass: delete what was marked and record the review, as one act. */
+    finishWalk: (list: DocumentId, date: DateKey, drop: readonly string[]): Promise<number> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'finishWalk', list, date, drop }),
     /** Show the list with a row open for a task, prefilled with `text` (T13). */
     capture: (text: string, wrap: boolean): Promise<DocumentId> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'capture', text, wrap }),

@@ -1302,6 +1302,83 @@ console.log('\n\u2014 the task list \u2014')
   )
 }
 
+// ── the walk (MT5a, T11) ──────────────────────────
+//
+// **The mode in which deleting is cheap.** Era 2's ritual was copying
+// yesterday's list by hand and crossing swathes of it out, and deleting there
+// never felt like abandonment the way it did mid-afternoon — the frame around
+// the act was different. So the pass supplies the frame and adds exactly one
+// control: marking done already has one, and it is the glyph, in the place it
+// is on every other day.
+console.log('\n— the walk —')
+{
+  const walkbook = async () => {
+    const root = await week(['Today.\n'])
+    const [ty, tm] = dayFrom(-1).split('-')
+    await mkdir(join(root, 'tasks.todo', ty, tm), { recursive: true })
+    await writeFile(
+      join(root, 'tasks.todo', ty, tm, `${dayFrom(-1)}.md`),
+      `---\ntephra: 1\ndate: ${dayFrom(-1)}\nkind: todo\n---\n` +
+        '- [ ] call the surveyor #house <!--tephra:item aaaa1111 1756600000 1756600000-->\n' +
+        '- [/] draft the copy #tephra <!--tephra:item aaaa2222 1756600001 1756600001-->\n' +
+        '- [ ] renew the permit #admin <!--tephra:item aaaa3333 1756600002 1756600002-->\n' +
+        '- [ ] think about it <!--tephra:item aaaa5555 1756600004 1756600004-->\n' +
+        '- [?] reroof the shed #house \u2014 waiting on the quote <!--tephra:item aaaa6666 1756600005 1756600005-->\n' +
+        '- [ ] read the survey #tephra <!--tephra:item aaaa7777 1756600006 1756600006-->\n',
+    )
+    return root
+  }
+
+  const w = report(await launch('walk', await walkbook()))
+  check(
+    // T11 wants a prominent affordance and not a modal. A tint across the rows
+    // that came from yesterday is exactly that: it says what there is to review
+    // without asking anything.
+    'THE OFFER IS THE LIST LOOKING DIFFERENT: yesterday\'s rows are marked',
+    w.carriedRows === 6 && w.allRows === 6 && w.offered === 'true',
+    `${w.carriedRows} of ${w.allRows} carried \u00b7 offered ${w.offered}`,
+  )
+  check(
+    // Marking done already has a control and it is the glyph. A control that
+    // changed meaning inside a mode would be the surprise this was rearranged
+    // to avoid, so the pass adds exactly one button and it is the destructive one.
+    'a pass adds ONE control per row, and only inside the pass',
+    w.noDropButtons === 0 && w.dropButtons === 6,
+    `${w.noDropButtons} before \u00b7 ${w.dropButtons} during`,
+  )
+  check(
+    // The whole reason staging exists: mark a swathe, look at what is about to
+    // happen, and only then commit.
+    'THE POINT: marking is a SELECTION \u2014 nothing is written until you finish',
+    w.staged === 2 && w.nothingWrittenYet === 6,
+    `${w.staged} staged \u00b7 ${w.nothingWrittenYet} rows still there`,
+  )
+  check('and un-marking one puts it back', w.afterKeeping === 1, String(w.afterKeeping))
+  check(
+    // A walk that drops nothing is the common one and still has to record that
+    // you looked \u2014 so this is not "apply", it is "I have looked", which
+    // sometimes also deletes. The count is there because the count is the risk.
+    'finishing says what it will do, and says it only when there is a risk',
+    w.finishSays === 'Finish' && w.finishCounts === 'Finish, dropping 2',
+    `${JSON.stringify(w.finishSays)} then ${JSON.stringify(w.finishCounts)}`,
+  )
+  check(
+    'finishing drops what was marked and takes the offer down',
+    w.rowsAfterFinish === 5 && w.highlightGone === 0 && w.startSaysAfter === 'walk again',
+    `${w.rowsAfterFinish} rows \u00b7 ${w.highlightGone} still marked \u00b7 ${JSON.stringify(w.startSaysAfter)}`,
+  )
+  check('nothing errored on the way', w.appError === 'none', String(w.appError))
+
+  const c = report(await launch('walk|cancel', await walkbook()))
+  check(
+    // Nothing to undo: a selection was never a change. And the day is still
+    // unreviewed, because you did not say you had looked.
+    'cancelling forgets the marks and leaves every item where it was',
+    c.rowsAfterCancel === 6 && c.barGone === true && c.stillOffered === 'true',
+    `${c.rowsAfterCancel} rows \u00b7 still offered ${c.stillOffered}`,
+  )
+}
+
 // ── arranging the list by tag (T8's cheap half) ────────────────
 //
 // **A regrouping of what is on screen, not a query.** Every live item is in the

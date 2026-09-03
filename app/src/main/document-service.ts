@@ -32,7 +32,7 @@ import { systemZone } from './system-zone.ts'
 import { isKnownZone } from '../shared/dates.ts'
 import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
-import type { TodoItem, TodoStatus } from '../shared/kinds/todo.ts'
+import type { TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
@@ -1241,6 +1241,20 @@ export class DocumentService {
   async todoRemove(id: DocumentId, item: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).remove(item)))
     this.#touched()
+  }
+
+  /** What the walk knows about a day (T11). A read: it decides nothing. */
+  async todoWalk(id: DocumentId, date: DateKey): Promise<WalkState> {
+    return this.#corpus.use(id, doc => (doc as TodoDocument).walkOf(date), { mode: 'read' })
+  }
+
+  /** End a pass. Serialised with every other write, for the reason D37 gives. */
+  async todoFinishWalk(id: DocumentId, date: DateKey, drop: readonly string[]): Promise<number> {
+    const dropped = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as TodoDocument).finishWalk(date, drop)),
+    )
+    this.#touched()
+    return dropped
   }
 
   async todoEdit(id: DocumentId, item: string, text: string): Promise<void> {
