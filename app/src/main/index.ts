@@ -10,7 +10,8 @@ import { author } from './x/comments.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
 import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
-import { Notebook } from './w/notebook.ts'
+import { Notebook, type OpenOptions } from './w/notebook.ts'
+import { LockHeldError } from './w/lock.ts'
 import { deleteTheme, listThemes, saveTheme, seedThemes } from './w/themes.ts'
 import type { Theme } from '../shared/theme.ts'
 import { CHANNEL } from '../shared/ipc.ts'
@@ -363,13 +364,66 @@ let notebook: Notebook | null = null
 let service: DocumentService | null = null
 let windows: Windows | null = null
 
+/**
+ * Open the notebook, and ASK if somebody appears to have it.
+ *
+ * **The lock's staleness test is good and cannot be perfect.** Liveness is
+ * decided by pid, and pids are recycled — so a lock left by a crash can be
+ * inherited by an unrelated process and read as held forever. Until now the
+ * error from that escaped `whenReady` unhandled, which is both symptoms
+ * reported: a stack trace from `run.sh`, and a packaged app that came up with
+ * no notebook behind it and every surface broken.
+ *
+ * Neither the guard nor a cleverer test is the answer. **The person knows
+ * whether they have another Tephra open**, and nothing else does — so the app
+ * asks, in a native dialog, because there is no window yet and this has to work
+ * when nothing else can start.
+ */
+async function openTheNotebook(options: OpenOptions): Promise<Notebook | null> {
+  try {
+    return await Notebook.open(options)
+  } catch (err) {
+    if (!(err instanceof LockHeldError)) throw err
+
+    // **Never a dialog in verification.** A scene that stops on a modal reads
+    // as a hang, and an orphaned run holding the lock would take the suite with
+    // it — which has happened here more than once.
+    if (verifyMode()) {
+      console.log(`TEPHRA: verification mode \u2014 taking over a lock held by pid ${err.holder.pid}`)
+      return Notebook.open({ ...options, seize: true })
+    }
+
+    const { response } = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['Open Anyway', 'Quit'],
+      defaultId: 1,
+      cancelId: 1,
+      message: 'This notebook is already open.',
+      detail:
+        `Another copy of Tephra (process ${err.holder.pid} on ${err.holder.host}) has held it ` +
+        `since ${err.holder.since}.\n\n` +
+        'If that copy is still running, opening this one will take the notebook away from it and ' +
+        'it will stop and ask you to quit. If it crashed, or the process number now belongs to ' +
+        'something else, opening anyway is safe.',
+    })
+    if (response === 1) return null
+    return Notebook.open({ ...options, seize: true })
+  }
+}
+
 app.whenReady().then(async () => {
   if (!DEV_SERVER) serveRenderer(outDir('renderer'))
 
   // X and W both live here (D37). The renderer holds Z and the live buffer,
   // and reaches everything else through the bridge.
   const configuredRoot = process.env['TEPHRA_ROOT']
-  notebook = await Notebook.open(configuredRoot === undefined ? {} : { root: configuredRoot })
+  const opened = await openTheNotebook(configuredRoot === undefined ? {} : { root: configuredRoot })
+  // The person said quit. Nothing has started; there is nothing to unwind.
+  if (opened === null) {
+    app.exit(0)
+    return
+  }
+  notebook = opened
   // The file tier's quiescence is supplied HERE rather than read there:
   // reading it goes through the verify gate, which imports Electron, and
   // `DocumentService` is deliberately free of Electron so that three
@@ -390,6 +444,31 @@ app.whenReady().then(async () => {
   // document missing its final seconds, and then change it under them.
   const recovered = await service.recover()
   if (recovered > 0) console.log(`Tephra: recovered ${recovered} unsaved edit(s) from the log`)
+
+  // **The other half of taking over: being taken from.** Once another Tephra
+  // has the notebook, this one must stop before it writes — so the tiers are
+  // stopped first and the telling comes second. `Notebook.write` refuses on its
+  // own as well, because "stop the timers" is the tidy half and a write that
+  // slips through while it happens is the half that costs a corpus.
+  ipcMain.on(CHANNEL.quit, () => app.exit(0))
+
+  notebook.onLost(() => {
+    void service?.stop()
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send(CHANNEL.notebookLost)
+    // A native dialog too, because a window may be mid-reload or may never have
+    // finished loading, and this is the one message that must always arrive.
+    void dialog
+      .showMessageBox({
+        type: 'error',
+        buttons: ['Quit'],
+        defaultId: 0,
+        message: 'Another copy of Tephra has taken over this notebook.',
+        detail:
+          'This window has stopped saving so the two copies cannot write over each other. ' +
+          'Anything typed since it stopped is still on screen and has not been written.',
+      })
+      .then(() => app.exit(0))
+  })
 
   await seedThemes(notebook)
 

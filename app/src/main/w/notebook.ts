@@ -33,17 +33,57 @@ export interface OpenOptions {
   /** Off for tests that only want the filesystem surface. */
   readonly lock?: boolean
   readonly watch?: boolean
+  /**
+   * Take the lock even if somebody appears to hold it.
+   *
+   * **Only ever from a person saying so** (see `lock.ts`). Pid liveness cannot
+   * tell a crashed Tephra from an unrelated process that inherited its pid, and
+   * the person is the only one who knows whether they have another window open.
+   */
+  readonly seize?: boolean
+  /**
+   * How often a holder checks the lock is still its own. Tests make it small.
+   *
+   * Overridable for the reason `dayCheckMs` is: a suite that waits out the real
+   * interval spends seconds of wall clock on milliseconds of work, and this one
+   * has already been made to pay that once.
+   */
+  readonly lockCheckMs?: number
 }
+
+/**
+ * Another Tephra has taken the notebook while we were holding it.
+ *
+ * Thrown from every write, so nothing reaches a corpus this process no longer
+ * owns — the corruption the lock exists to prevent, arriving through the door
+ * that taking over opened.
+ */
+export class NotebookLostError extends Error {
+  constructor() {
+    super('another copy of Tephra has taken over this notebook')
+    this.name = 'NotebookLostError'
+  }
+}
+
+/** How often a holder checks that the lock is still its own. */
+const LOCK_CHECK_MS = 3_000
 
 export class Notebook {
   readonly root: string
   readonly #lock: NotebookLock | null
   #watcher: NotebookWatcher | null = null
   readonly #listeners = new Set<(changes: readonly FileChange[]) => void>()
+  /** Set once somebody else's name is on the lock. Never unset: it is terminal. */
+  #lost = false
+  #lockTimer: ReturnType<typeof setInterval> | null = null
+  readonly #lostListeners = new Set<() => void>()
 
-  private constructor(root: string, lock: NotebookLock | null) {
+  readonly #lockCheckMs: number
+
+  private constructor(root: string, lock: NotebookLock | null, lockCheckMs: number) {
     this.root = root
     this.#lock = lock
+    this.#lockCheckMs = lockCheckMs
   }
 
   /**
@@ -57,8 +97,14 @@ export class Notebook {
 
     for (const dir of REQUIRED_DIRS) await mkdir(join(root, dir), { recursive: true })
 
-    const notebook = new Notebook(root, options.lock === false ? null : new NotebookLock(join(root, LOCAL.lock)))
-    await notebook.#lock?.acquire()
+    const notebook = new Notebook(
+      root,
+      options.lock === false ? null : new NotebookLock(join(root, LOCAL.lock)),
+      options.lockCheckMs ?? LOCK_CHECK_MS,
+    )
+    if (options.seize === true) await notebook.#lock?.seize()
+    else await notebook.#lock?.acquire()
+    notebook.#watchTheLock()
 
     // Watch BEFORE bootstrapping, not after. The writes below are ours, and a
     // watcher started afterwards has no record of them — so the events they
@@ -74,6 +120,43 @@ export class Notebook {
     }
 
     return notebook
+  }
+
+  /**
+   * Notice if the lock stops being ours, and say so once.
+   *
+   * **Polled rather than watched**, because the question is about a file this
+   * process did not write and the answer has to be right even if the watcher is
+   * off — and because one small read every few seconds is not worth being
+   * clever about. Terminal by design: there is no coming back from another
+   * process owning the notebook, so this fires once and stops asking.
+   */
+  #watchTheLock(): void {
+    if (this.#lock === null) return
+    this.#lockTimer = setInterval(() => {
+      void this.#lock?.stillMine().then(mine => {
+        if (mine || this.#lost) return
+        this.#lost = true
+        this.#stopWatchingTheLock()
+        for (const listener of this.#lostListeners) listener()
+      })
+    }, this.#lockCheckMs)
+    this.#lockTimer.unref?.()
+  }
+
+  #stopWatchingTheLock(): void {
+    if (this.#lockTimer !== null) clearInterval(this.#lockTimer)
+    this.#lockTimer = null
+  }
+
+  /** Somebody else has the notebook. Nothing this process does may reach disk. */
+  get lost(): boolean {
+    return this.#lost
+  }
+
+  onLost(handler: () => void): () => void {
+    this.#lostListeners.add(handler)
+    return () => this.#lostListeners.delete(handler)
   }
 
   /** Absolute path for a relative one. Not exported to X — W owns the root. */
@@ -95,11 +178,16 @@ export class Notebook {
    * mistaken for a hand-edit.
    */
   async write(rel: RelPath, content: string): Promise<void> {
+    // **The gate is here, on the one path everything writes through.** Stopping
+    // the tiers and closing the windows is the tidy half of losing the lock; a
+    // write that slips past while that happens is the half that costs a corpus.
+    if (this.#lost) throw new NotebookLostError()
     const { hash } = await writeAtomic(this.#abs(rel), content)
     this.#watcher?.noteOwnWrite(rel, hash)
   }
 
   async remove(rel: RelPath): Promise<void> {
+    if (this.#lost) throw new NotebookLostError()
     await remove(this.#abs(rel))
   }
 
@@ -203,6 +291,7 @@ export class Notebook {
     this.#watcher?.stop()
     this.#watcher = null
     this.#listeners.clear()
+    this.#stopWatchingTheLock()
     await this.#lock?.release()
   }
 }

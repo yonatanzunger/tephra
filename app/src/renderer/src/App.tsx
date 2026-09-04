@@ -672,6 +672,18 @@ export function App(): React.JSX.Element {
   }, [])
 
   /**
+   * Another Tephra has taken the notebook (the lock, `w/lock.ts`).
+   *
+   * **Terminal, and it covers everything.** Nothing typed after this can be
+   * written, so a surface that still accepts typing would be lying — and the
+   * one honest thing left to offer is the way out. Main shows a native dialog
+   * as well, because a window mid-reload would never render this; the two say
+   * the same thing and either one is enough.
+   */
+  const [lost, setLost] = useState(false)
+  useEffect(() => window.tephra.doc.onNotebookLost(() => setLost(true)), [])
+
+  /**
    * The active set, drawn down the scroll track.
    *
    * **Recomputed when the window moves**, not only when the row changes: growth
@@ -1179,6 +1191,20 @@ export function App(): React.JSX.Element {
               setAnomaliesOpen(false)
             }}
           />
+        )}
+        {lost && (
+          <div className="lost-scrim" role="alertdialog" aria-modal="true" aria-label="Notebook taken over">
+            <div className="lost">
+              <h2>Another copy of Tephra has taken over this notebook.</h2>
+              <p>
+                This window has stopped saving, so the two copies cannot write over each other.
+                Anything typed since it stopped is still on screen and has not been written.
+              </p>
+              <button type="button" onClick={() => void window.tephra.win.quit()}>
+                Quit
+              </button>
+            </div>
+          </div>
         )}
         {prompt !== null && <Prompt request={prompt} onClose={() => setPrompt(null)} />}
         {confirm !== null && <Confirm request={confirm} onClose={() => setConfirm(null)} />}

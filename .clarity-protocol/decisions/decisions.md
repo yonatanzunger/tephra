@@ -2516,3 +2516,49 @@ to confirm.
 
 **What would reopen it.** Multi-user, which this is not. The whole argument
 rests on one person being in one place at a time.
+
+## D64: A held lock is a question, and losing one stops the loser dead
+
+**Date:** 2026-09-04
+**Status:** decided
+**Detail:** `main/w/lock.ts`, `main/w/notebook.ts`
+
+**Decision.** When the lock is held on startup, Tephra **asks** — a native
+dialog offering *Open Anyway* or *Quit* — instead of refusing or failing. An
+instance whose lock is taken from it **stops writing immediately**, refuses
+every write at `Notebook.write`, and shows a modal whose only action is Quit.
+
+**Because pid liveness is a good test and cannot be a perfect one.** The lock
+decides staleness by asking whether the holding pid is alive, and pids are
+recycled — so a lock left behind by a crash can be inherited by an unrelated
+process and read as held *forever*. `lock.ts` recorded this as a residual risk
+costing "one manual deletion"; in use it cost more, because the error escaped
+`app.whenReady()` unhandled: a stack trace when launched from `run.sh`, and a
+packaged app that came up with no notebook behind it and every surface broken.
+
+**A cleverer liveness test is the wrong fix.** Whatever heuristic replaced it
+would be wrong in some new way, and the failure would again be silent. **The
+person knows whether they have another Tephra open, and nothing else does.** So
+the app asks, natively, because there is no window yet and this has to work when
+nothing else can start.
+
+**Which means an instance can be taken FROM, and that is the dangerous half.**
+Two processes writing one corpus is exactly the corruption the lock exists to
+prevent, now reachable through the door this opened. So the holder polls its own
+lock every three seconds, and on finding somebody else's name:
+
+- **`Notebook.write` refuses, and that gate is the load-bearing one.** Stopping
+  the write tiers and closing the windows is the tidy half; a write that slips
+  through while that happens is the half that costs a corpus.
+- **Reading still works.** What is already on screen is not a lie, and somebody
+  who has just been interrupted should be able to copy their words out.
+- **It is terminal and announced once.** There is no coming back from another
+  process owning the notebook.
+- **The loser does not remove the winner's lock on the way out**, which is the
+  rule `release` already followed and which is now reachable on purpose rather
+  than only by accident.
+
+**Never a dialog under verification.** A scene that stops on a modal reads as a
+hang, and an orphaned run holding the lock would take the whole suite with it —
+which has happened. In verify mode the lock is taken over, loudly, on the log.
+

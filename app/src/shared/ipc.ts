@@ -74,6 +74,14 @@ export const CHANNEL = {
    * applied (D63), and an offer that two windows state differently is worse
    * than no offer. Null means there is nothing to say.
    */
+  /**
+   * Another Tephra has taken the notebook. Terminal: nothing follows it.
+   *
+   * The window stops accepting edits, because anything typed after this cannot
+   * be written and pretending otherwise is the lie the lock exists to prevent.
+   */
+  notebookLost: 'tephra:doc:notebookLost',
+  quit: 'tephra:app:quit',
   zoneNotice: 'tephra:doc:zoneNotice',
   dismissZone: 'tephra:doc:dismissZone',
   comments: 'tephra:doc:comments',

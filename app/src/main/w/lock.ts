@@ -41,6 +41,36 @@ export class NotebookLock {
     return this.#held
   }
 
+  /**
+   * Take it, whoever has it.
+   *
+   * **Only ever from a person saying so.** Pid liveness is a good test and not
+   * a perfect one — pids are recycled, so a lock left behind by a crash can be
+   * inherited by an unrelated process and read as live forever. The answer to
+   * that is not a cleverer test, it is asking: the person knows whether they
+   * have another Tephra open, and nothing else does.
+   */
+  async seize(): Promise<void> {
+    const mine: LockHolder = { pid: process.pid, host: hostname(), since: new Date().toISOString() }
+    await writeFile(this.#path, JSON.stringify(mine, null, 2) + '\n', { flag: 'w' })
+    this.#held = true
+  }
+
+  /**
+   * Is the lock we took still ours?
+   *
+   * **The other half of seizing.** If taking over is possible then losing it is
+   * too, and an instance that goes on writing after another has taken the
+   * notebook is the corruption the lock exists to prevent — arrived at through
+   * the door the fix opened. False once somebody else's name is on it, or once
+   * it is gone.
+   */
+  async stillMine(): Promise<boolean> {
+    if (!this.#held) return false
+    const holder = await this.#read()
+    return holder !== null && holder.pid === process.pid && holder.host === hostname()
+  }
+
   /** Throws LockHeldError if another live process holds it. */
   async acquire(): Promise<void> {
     const mine: LockHolder = { pid: process.pid, host: hostname(), since: new Date().toISOString() }

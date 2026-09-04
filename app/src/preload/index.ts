@@ -133,6 +133,8 @@ const tephra = {
     /** Fire and forget: losing a cursor position is cheap and self-correcting. */
     report: (report: WindowReport): void => ipcRenderer.send(CHANNEL.windowReport, report),
     create: (target?: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowCreate, target),
+    /** The one thing left to offer once the notebook has been taken away. */
+    quit: (): void => ipcRenderer.send(CHANNEL.quit),
     /** Bring it to the front, in the window that already has it or a new one. */
     reveal: (target: NavTarget): Promise<void> => ipcRenderer.invoke(CHANNEL.windowReveal, target),
     /** This window was brought forward — by ⌘1, or by somebody capturing a task. */
@@ -266,6 +268,12 @@ const tephra = {
     /** What to say about the zone, if anything (D63). Main's answer, not ours. */
     zoneNotice: (): Promise<ZoneNotice | null> => ipcRenderer.invoke(CHANNEL.zoneNotice),
     dismissZone: (): Promise<void> => ipcRenderer.invoke(CHANNEL.dismissZone),
+    /** Another Tephra has the notebook. Terminal: nothing follows it. */
+    onNotebookLost(handler: Handler<void>): () => void {
+      const listener = (): void => handler(undefined)
+      ipcRenderer.on(CHANNEL.notebookLost, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.notebookLost, listener)
+    },
     onZoneNotice(handler: Handler<ZoneNotice | null>): () => void {
       const listener = (_e: unknown, notice: ZoneNotice | null): void => handler(notice)
       ipcRenderer.on(CHANNEL.zoneNotice, listener)

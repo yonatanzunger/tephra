@@ -452,6 +452,32 @@ body {
   border-color: rgb(var(--border));
 }
 
+/* ── the notebook was taken away ────────────────────────
+   Terminal, and it covers everything: nothing typed after this can be written,
+   so a surface that still looked usable would be lying. The one honest thing
+   left to offer is the way out. */
+.lost-scrim {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgb(var(--surface) / .92);
+  backdrop-filter: blur(2px);
+}
+.lost {
+  max-width: 30rem; padding: 1.5rem 1.75rem;
+  font-family: var(--font-ui);
+  color: rgb(var(--text));
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 8px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / .18);
+}
+.lost h2 { margin: 0 0 .6rem; font-size: 15px; font-weight: 600; color: rgb(var(--text-heading)); }
+.lost p { margin: 0 0 1.1rem; font-size: 13px; line-height: 1.5; color: rgb(var(--text-muted)); }
+.lost button {
+  cursor: pointer; font-family: var(--font-ui); font-size: 13px; font-weight: 500;
+  color: rgb(var(--surface)); background: rgb(var(--text-heading));
+  border: 1px solid rgb(var(--text-heading)); border-radius: 4px; padding: .3rem .9rem;
+}
+
 /* ── the walk (T11) ─────────────────────────────────────
    **The list looking different IS the offer.** The goal asks for a prominent
    affordance and not a modal, and a tint across the rows that came from
