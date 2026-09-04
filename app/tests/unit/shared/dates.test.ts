@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  dateKeyAt, asDateKey, weekdayOf, compareDateKeys, addDays, daysBetween,
+  dateKeyAt, asDateKey, dayLabel, weekdayOf, compareDateKeys, addDays, daysBetween,
   msUntilNextDay, isKnownZone, DEFAULT_ZONE,
 } from '../../../src/shared/dates.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
@@ -101,4 +101,18 @@ test('day arithmetic crosses month and year boundaries', () => {
   assert.equal(addDays(key('2024-02-28'), 1), '2024-02-29')
   assert.equal(daysBetween(key('2026-03-14'), key('2026-03-21')), 7)
   assert.equal(daysBetween(key('2026-03-21'), key('2026-03-14')), -7)
+})
+
+// ── a formatter that refuses what it cannot read ───────
+//
+// `dayLabel` used to bail only when there were fewer than three hyphen-parts,
+// so it answered confidently for text that was never a date — and a heading
+// reading `AI-driven, market-shaping` became a Timeline row reading
+// `NaN driven, market`. The caller that could do that is fixed; a formatter
+// that invents a label will find another caller eventually.
+test('a label is only made from something shaped like a date', () => {
+  assert.equal(dayLabel('2026-09-04' as DateKey), '4 Sep')
+  assert.equal(dayLabel('AI-driven, market-shaping' as DateKey), 'AI-driven, market-shaping')
+  assert.equal(dayLabel('content/uploads/2023-05-12-thing' as DateKey), 'content/uploads/2023-05-12-thing')
+  assert.equal(dayLabel('**Introduction**' as DateKey), '**Introduction**')
 })

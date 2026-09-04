@@ -4,6 +4,35 @@
 > the default section), D11 (reference by identity), D7 (when an index arrives),
 > D50 (annotations are one union with one policy).
 
+## The Timeline is days, and only days
+
+**Found in a real notebook, from a screenshot** (2026-09-04). After importing a
+few hundred markdown documents, the Timeline filled with their headings, drawn
+as dates: rows reading `NaN driven, market`, `**Introduction**`,
+`NaN content/uploads/2023…`.
+
+**Nothing was wrong with the index; the query was.** The method was called
+`outline`, and a corpus *outline* plausibly includes a note's headings — so for
+any file with no date span it pushed them in as top-level entries. With a
+handful of day files that never showed, and every test the sidebar had used a
+fixture of days alone.
+
+**The cast is what let it reach the screen.** `OutlineNode.title` was a string
+that was *sometimes* a `DateKey`, and the sidebar recovered the difference with
+`node.title as DateKey`. `dayLabel` then did what it was asked with
+`AI-driven, market-shaping`: split on hyphens, `Number('shaping')` is `NaN`, and
+the month falls back to the raw text. Three things had to be true at once and
+the type system had been told not to look.
+
+So: `timeline()` returns `TimelineDay`, which carries a real `DateKey` beside
+its headings — two things that are not the same type no longer share one, which
+is the rule already applied to positions. `dayLabel` refuses anything not shaped
+like a date instead of inventing a label for it. And the sidebar's fixture has
+documents in it that are not days, which is what a real notebook is full of.
+
+**A note's headings are a real thing to want in a sidebar.** They are not the
+Timeline, and whatever shows them will ask a differently-named question.
+
 ## The one verb
 
 **Every row in the sidebar names a set of places, and clicking it goes to the

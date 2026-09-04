@@ -51,11 +51,32 @@ export interface Subject {
   readonly first: Located
 }
 
+/** A heading, and whatever nests under it by the ranges they already have. */
 export interface OutlineNode {
   readonly at: Located
   readonly title: string
   readonly level: number
   readonly children: readonly OutlineNode[]
+}
+
+/**
+ * One day in the Timeline, and the headings written in it.
+ *
+ * **The date is its own field, and that is the whole point of this type.** The
+ * timeline used to be a list of `OutlineNode`, whose `title` was *sometimes* a
+ * `DateKey` and sometimes a heading — and the sidebar recovered the difference
+ * with `node.title as DateKey`. A cast is not a distinction: the day a note's
+ * headings reached this list, they were formatted as dates, and `dayLabel` did
+ * what it was asked with `## AI-driven, market-shaping` and produced a Timeline
+ * row reading **NaN driven, market**.
+ *
+ * Two things that are not the same type do not share one (the rule this
+ * codebase already applies to positions).
+ */
+export interface TimelineDay {
+  readonly date: DateKey
+  readonly at: Located
+  readonly headings: readonly OutlineNode[]
 }
 
 export interface ThreadRow {

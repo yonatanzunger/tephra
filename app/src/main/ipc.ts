@@ -53,7 +53,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   // is why they go through the index rather than through the document (D52).
   ipcMain.handle(CHANNEL.navSubjects, () => service.index.subjects())
   ipcMain.handle(CHANNEL.navBookmarks, () => service.index.bookmarks())
-  ipcMain.handle(CHANNEL.navOutline, () => service.index.outline())
+  ipcMain.handle(CHANNEL.navTimeline, () => service.index.timeline())
   ipcMain.handle(CHANNEL.navThreads, () => service.index.threads())
   ipcMain.handle(CHANNEL.navOccurrences, (_e, reference: Reference) =>
     service.index.occurrences(reference),

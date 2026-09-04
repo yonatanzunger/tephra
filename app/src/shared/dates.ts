@@ -146,6 +146,14 @@ export function msUntilNextDay(at: Date = new Date(), zone: string = DEFAULT_ZON
  * genuine ambiguity.
  */
 export function dayLabel(date: DateKey, now?: DateKey): string {
+  // **A date or nothing.** This used to accept whatever it was handed and only
+  // bail when there were fewer than three hyphen-separated parts, so a heading
+  // like `AI-driven, market-shaping` came back as `NaN driven, market` — a
+  // label invented out of text that was never a date. The caller that could do
+  // that is fixed (`TimelineDay` carries a real `DateKey`), and a formatter
+  // that answers confidently for input it does not understand will find another
+  // caller eventually.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date as string)) return date as string
   const [year, month, day] = (date as string).split('-')
   if (year === undefined || month === undefined || day === undefined) return date as string
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

@@ -16,7 +16,7 @@ import type { DateKey, DocumentId } from '../../../shared/document-api.ts'
 import { dayLabel } from '../../../shared/dates.ts'
 import { tagSlot } from '../../../shared/tags.ts'
 import type {
-  IndexStatus, Located, OutlineNode, Reference, SectionRow, SectionTree, Subject, ThreadRow,
+  IndexStatus, Located, OutlineNode, Reference, SectionRow, SectionTree, Subject, ThreadRow, TimelineDay,
 } from '../../../shared/nav-api.ts'
 
 /** What the caret is inside, in the order a person would say it. */
@@ -149,7 +149,7 @@ export function Nav({
   const [shown, setShown] = useState(FIRST_DAYS)
   /** Which days have their headings out. Today's, to begin with. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
-  const [outline, setOutline] = useState<readonly OutlineNode[]>([])
+  const [timeline, setTimeline] = useState<readonly TimelineDay[]>([])
   const [subjects, setSubjects] = useState<readonly Subject[]>([])
   const [bookmarks, setBookmarks] = useState<readonly { name: string; at: Located }[]>([])
   const [threads, setThreads] = useState<readonly ThreadRow[]>([])
@@ -177,7 +177,7 @@ export function Nav({
     let cancelled = false
     const load = async (): Promise<void> => {
       const [o, s, b, t, st, sec] = await Promise.all([
-        window.tephra.nav.outline(),
+        window.tephra.nav.timeline(),
         window.tephra.nav.subjects(),
         window.tephra.nav.bookmarks(),
         window.tephra.nav.threads(),
@@ -186,7 +186,7 @@ export function Nav({
       ])
       if (cancelled) return
       setSections(sec)
-      setOutline(o)
+      setTimeline(o)
       setExpanded(previous => (previous.size === 0 && today !== null ? new Set([today]) : previous))
       setSubjects(s)
       setBookmarks(b)
@@ -401,35 +401,35 @@ export function Nav({
             )
           })}
 
-      <Section id="timeline" title="Timeline" count={outline.length} open={open.has('timeline')} onToggle={toggle}>
+      <Section id="timeline" title="Timeline" count={timeline.length} open={open.has('timeline')} onToggle={toggle}>
         {/* Newest first: "the most recent five" is what a person means by
             recent, and it puts today where the hand already is. */}
-        {[...outline].reverse().slice(0, shown).map(day => (
+        {[...timeline].reverse().slice(0, shown).map(day => (
           <DayRows
-            key={day.at.file}
-            node={day}
+            key={day.date}
+            day={day}
             active={active?.key ?? null}
             onGo={go}
             today={today}
             here={here}
-            open={expanded.has(day.title)}
+            open={expanded.has(day.date)}
             onToggle={() =>
               setExpanded(previous => {
                 const next = new Set(previous)
-                if (next.has(day.title)) next.delete(day.title)
-                else next.add(day.title)
+                if (next.has(day.date)) next.delete(day.date)
+                else next.add(day.date)
                 return next
               })
             }
           />
         ))}
-        {outline.length > shown && (
+        {timeline.length > shown && (
           <button
             type="button"
             className="nav-more"
-            onClick={() => setShown(n => Math.min(n + MORE_DAYS, outline.length))}
+            onClick={() => setShown(n => Math.min(n + MORE_DAYS, timeline.length))}
           >
-            {outline.length - shown} earlier {outline.length - shown === 1 ? 'day' : 'days'} ▾
+            {timeline.length - shown} earlier {timeline.length - shown === 1 ? 'day' : 'days'} ▾
           </button>
         )}
         {shown > FIRST_DAYS && (
@@ -727,7 +727,7 @@ function RowName({
  * confusion the whole design exists to avoid.
  */
 function DayRows({
-  node,
+  day,
   active,
   onGo,
   today,
@@ -735,7 +735,7 @@ function DayRows({
   open,
   onToggle,
 }: {
-  node: OutlineNode
+  day: TimelineDay
   active: string | null
   /** `elsewhere` is a ⌘-click: the same there, in a window of its own. */
   onGo: (row: Row, elsewhere?: boolean) => void
@@ -744,26 +744,29 @@ function DayRows({
   open: boolean
   onToggle: () => void
 }): React.JSX.Element {
+  // **No cast.** `day.date` is a `DateKey` because a `TimelineDay` has one;
+  // this used to read `node.title as DateKey`, and the cast was the only thing
+  // standing between a note's heading and `dayLabel`.
   const row: Row = {
-    key: `date:${node.title}`,
-    label: shortDate(node.title as DateKey),
-    reference: { kind: 'date', date: node.title as DateKey },
+    key: `date:${day.date}`,
+    label: shortDate(day.date),
+    reference: { kind: 'date', date: day.date },
     count: 1,
   }
   return (
     <>
-      <div className={`nav-row-wrap${node.title === here ? ' here' : ''}`}>
+      <div className={`nav-row-wrap${day.date === here ? ' here' : ''}`}>
         {/* A day with nothing under it gets SPACE, not a disabled control. A
             dot that cannot be clicked teaches people to distrust the ones that
             can. */}
-        {node.children.length === 0 ? (
+        {day.headings.length === 0 ? (
           <span className="nav-caret nav-caret-empty" aria-hidden="true" />
         ) : (
           <button
             type="button"
             className="nav-caret"
             aria-expanded={open}
-            aria-label={open ? `Collapse ${node.title}` : `Expand ${node.title}`}
+            aria-label={open ? `Collapse ${row.label}` : `Expand ${row.label}`}
             onClick={onToggle}
           >
             {open ? '▾' : '▸'}
@@ -772,15 +775,15 @@ function DayRows({
         <button
           type="button"
           className={`nav-row${active === row.key ? ' active' : ''}`}
-          aria-current={node.title === here ? 'page' : undefined}
+          aria-current={day.date === here ? 'page' : undefined}
           onClick={e => void onGo(row, e.metaKey || e.ctrlKey)}
         >
           <span className="nav-label">{row.label}</span>
-          {node.title === today && <span className="nav-detail">today</span>}
-          {node.children.length > 0 && <span className="nav-count">{node.children.length}</span>}
+          {day.date === today && <span className="nav-detail">today</span>}
+          {day.headings.length > 0 && <span className="nav-count">{day.headings.length}</span>}
         </button>
       </div>
-      {open && node.children.map(child => (
+      {open && day.headings.map(child => (
         <HeadingRows key={`${child.at.file}:${child.at.from}`} node={child} depth={1} active={active} onGo={onGo} />
       ))}
     </>

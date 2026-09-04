@@ -204,13 +204,36 @@ console.log('\n— the sidebar —')
     'Six days ago.\n',
     'Seven days ago, which the timeline has to leave out at first.\n',
   ])
+  // **A notebook with documents in it that are not days**, which is what the
+  // Timeline had never been tested against and what a real one is full of. The
+  // headings are the ones that broke it: hyphens make `dayLabel` produce a
+  // month, and `NaN` for the day.
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'imported.md'),
+    '---\ntephra: 1\nkind: markdown\ntitle: An imported post\n---\n' +
+      '# AI-driven, market-shaping\n\nBody.\n\n## **Introduction**\n\nMore.\n',
+  )
   const r = report(await launch('sidebar', root))
 
   const sections = Array.isArray(r.sections) ? r.sections.map(s => s.title) : []
   check(
-    'the sections are the built-in ones (D51)',
-    sections.join('|') === 'Timeline|Subjects|Bookmarks|Comments',
+    // The built-ins keep their identity and their order however many directory
+    // sections a notebook grows.
+    'the sections are the built-in ones (D51), whatever else is there',
+    sections.slice(-4).join('|') === 'Timeline|Subjects|Bookmarks|Comments' && sections.includes('Notes'),
     JSON.stringify(r.sections),
+  )
+  check(
+    // **Reported from a screenshot of a real notebook.** After importing a few
+    // hundred markdown documents, the Timeline filled with their headings,
+    // formatted as dates: `NaN driven, market`, `**Introduction**`. Nothing was
+    // wrong with the index — the query was, and the sidebar's `title as
+    // DateKey` was what let a heading reach a date formatter at all.
+    'THE TIMELINE IS DAYS: a note\'s headings are not in it',
+    Array.isArray(r.timelineRows) &&
+      !r.timelineRows.some(t => t.includes('NaN') || t.includes('Introduction') || t.includes('market')),
+    JSON.stringify(r.timelineRows),
   )
   check(
     'subjects come from the whole corpus, not the loaded window',

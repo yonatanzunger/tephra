@@ -13,8 +13,9 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
 import { CorpusIndex } from '../../src/main/x/documents/corpus-index.ts'
-import { dayFile, indexFile, type RelPath } from '../../src/main/w/layout.ts'
+import { dayLabel } from '../../src/shared/dates.ts'
 import type { DateKey } from '../../src/shared/document-api.ts'
+import { dayFile, indexFile, type RelPath } from '../../src/main/w/layout.ts'
 import { rt } from '../support/text.ts'
 
 const d = (s: string): DateKey => s as DateKey
@@ -47,14 +48,14 @@ test('subjects come back with their counts and where they first appear', async t
   assert.equal(subjects[0]?.first.date, '2026-03-01')
 })
 
-test('the outline nests headings under their day, by the ranges they already have', async t => {
+test('the timeline nests headings under their day, by the ranges they already have', async t => {
   const { index } = await corpus(t, [
     ['2026-03-01', '# Chapter\n\na\n\n## Section\n\nb\n\n# Next\n\nc\n'],
   ])
-  const [day] = await index.outline()
-  assert.equal(day?.title, '2026-03-01')
-  assert.deepEqual(day?.children.map(h => h.title), ['Chapter', 'Next'])
-  assert.deepEqual(day?.children[0]?.children.map(h => h.title), ['Section'])
+  const [day] = await index.timeline()
+  assert.equal(day?.date, '2026-03-01')
+  assert.deepEqual(day?.headings.map(h => h.title), ['Chapter', 'Next'])
+  assert.deepEqual(day?.headings[0]?.children.map(h => h.title), ['Section'])
 })
 
 test('notes are in the corpus too, so a bookmark in one is findable', async t => {
@@ -169,4 +170,39 @@ test('and the index does not need the corpus to be the stream', async t => {
   // note's spans have no DocumentPosition, so they are the sidebar's business.
   assert.equal((await doc.spans('tag')).length, 1)
   assert.equal((await index.occurrences({ kind: 'tag', subject: 'Shared' })).length, 2)
+})
+
+// ── the Timeline is days, and only days ────────────────
+//
+// **Reported from a screenshot**, after importing a few hundred markdown
+// documents into a real notebook: the Timeline filled with their headings,
+// formatted as dates, reading `NaN driven, market` and `**Introduction**`.
+//
+// Nothing was wrong with the index. The query was: this method was called
+// `outline`, a corpus outline plausibly includes a note's headings, and so it
+// pushed them in as top-level entries for any file with no date span. With a
+// handful of day files that never showed. The sidebar then read every entry's
+// `title` as a `DateKey` — through a cast, which is what let a heading reach a
+// date formatter at all.
+
+test('THE BUG: a note\'s headings are not days, and are not in the timeline', async t => {
+  const { index } = await corpus(
+    t,
+    [['2026-03-01', '# A real day\n\nwritten in.\n']],
+    { 'imported.md': '# AI-driven, market-shaping\n\nbody\n\n## **Introduction**\n\nmore\n' },
+  )
+
+  const days = await index.timeline()
+  assert.deepEqual(days.map(d => d.date), ['2026-03-01'], 'one day, and it is the day')
+  assert.deepEqual(days[0]?.headings.map(h => h.title), ['A real day'])
+})
+
+test('and the day it carries is a DateKey, so nothing has to cast it', async t => {
+  // The sidebar formatted `node.title as DateKey`. `dayLabel` did what it was
+  // asked with `AI-driven, market-shaping` and produced `NaN driven, market`.
+  // Two things that are not the same type no longer share one.
+  const { index } = await corpus(t, [['2026-03-01', '# Chapter\n\na\n']])
+  const [day] = await index.timeline()
+  assert.equal(day?.date, '2026-03-01')
+  assert.equal(dayLabel(day?.date as DateKey), '1 Mar')
 })

@@ -24,10 +24,10 @@ import { parseFile } from '../frontmatter.ts'
 import type { StreamDocument } from './kinds/stream.ts'
 import type { DateKey } from '../../../shared/document-api.ts'
 import type {
-  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow,
+  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay,
 } from '../../../shared/nav-api.ts'
 
-export type { IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow }
+export type { IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay }
 
 /** What one file contributes. The unit of both the cache and the sweep. */
 interface Scanned {
@@ -106,32 +106,44 @@ export class CorpusIndex {
    * heading whose span contains another's is its parent (D51), which is exactly
    * what "equal or greater precedence" already arranged.
    */
-  async outline(): Promise<readonly OutlineNode[]> {
-    const out: OutlineNode[] = []
+  /**
+   * The days, oldest first, each with the headings written in it.
+   *
+   * **Days, and only days** — the name used to be `outline`, and that name is
+   * what let the bug in: a corpus outline plausibly includes a note's headings,
+   * and for a while this pushed them in as top-level entries whenever a file
+   * had no date span. With a handful of day files that was invisible. Import a
+   * few hundred markdown documents and the Timeline fills with their headings,
+   * formatted as dates, reading `NaN driven, market`.
+   *
+   * A note's headings are a real thing to want in a sidebar. They are not the
+   * Timeline, and whatever shows them will ask a differently-named question.
+   */
+  async timeline(): Promise<readonly TimelineDay[]> {
+    const out: TimelineDay[] = []
     const all = await this.#all()
     // **A day nobody wrote in is not in the timeline — unless it is the latest
     // one**, which is where you are about to write. Exactly the rule the day
     // seam already uses on screen (`days.ts`), because it is the same question.
     const latest = all.filter(f => f.date !== null).at(-1)?.file
     for (const { file, date, spans, blank } of all) {
-      if (blank && date !== null && file !== latest) continue
+      // Not a day: a note, a fileset, a task list. It has no place here at all,
+      // and `date` is the fact that says so — `dateOf` already answers null for
+      // anything outside the stream.
+      if (date === null) continue
+      if (blank && file !== latest) continue
       const day = spans.find(s => s.kind === 'date')
+      if (day === undefined) continue
       const headings = spans.filter(s => s.kind === 'heading')
-      const nodes = nest(headings.map(h => ({
-        at: { file, date, from: h.from, to: h.to },
-        title: h.name,
-        level: h.level,
-        children: [] as OutlineNode[],
-      })))
-      if (day === undefined) {
-        out.push(...nodes)
-        continue
-      }
       out.push({
+        date,
         at: { file, date, from: day.from, to: day.to },
-        title: day.name,
-        level: 0,
-        children: nodes,
+        headings: nest(headings.map(h => ({
+          at: { file, date, from: h.from, to: h.to },
+          title: h.name,
+          level: h.level,
+          children: [] as OutlineNode[],
+        }))),
       })
     }
     return out

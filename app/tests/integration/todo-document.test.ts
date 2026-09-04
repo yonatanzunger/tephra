@@ -268,7 +268,7 @@ test('a carried day knows where it came from, and which of its items are yesterd
 
   const today = await doc.itemsOn(TUE)
   const fresh = today.find(item => item.text.includes('something new'))
-  assert.ok(fresh?.id !== undefined && !walk.carried.includes(fresh.id))
+  assert.ok(fresh?.id != null && !walk.carried.includes(fresh.id))
 })
 
 test('and a day nothing was carried into has nothing to review', async t => {
