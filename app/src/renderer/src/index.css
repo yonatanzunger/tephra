@@ -478,21 +478,73 @@ body {
   border: 1px solid rgb(var(--text-heading)); border-radius: 4px; padding: .3rem .9rem;
 }
 
+/* ── pills ──────────────────────────────────────────────
+   **A pill says one of two things, and it should say which.** A LABEL is a fact
+   about the row — a tag, a subject — and has no border; a CONTROL does
+   something when clicked and has one. Every pill in the app already followed
+   that except the link directory's source, which filters and wore a label's
+   clothes: muted grey on a grey tint, unreadable and unclickable-looking at
+   once. That is the same mistake the zone badge made (D63).
+
+   **Sized in `em`, never in px.** A pill inside 20px prose and a pill inside
+   12px chrome are not the same size, and a constant makes the theme's slider
+   lie about what it controls — which MT3 found in the task list and `theme.ts`
+   says about code: a ratio, not a size of its own. */
+.pill {
+  flex: 0 0 auto;
+  /* **Relative to the line it sits beside**, so it is subordinate in a 20px
+     task list and subordinate in a 15.6px directory row without being illegible
+     in either. The first cut used .55em and compounded: inside a panel already
+     set at a fraction of the reading size it came out at 8.6px, smaller than
+     the constant it replaced. */
+  font-family: var(--font-ui); font-size: .7em; letter-spacing: .03em;
+  border-radius: 999px; padding: .1em .5em; line-height: 1.5;
+}
+/* A fact about the row: quiet, and nothing to click. **Quiet is not the same
+   as unreadable** — muted grey on a grey tint was two greys deep and the
+   reported complaint. The ink is the text colour held back, and the ground is
+   what separates it from the line. */
+.pill.label { color: rgb(var(--text) / .72); background: rgb(var(--text) / .075); border: 0; }
+/* Something you can do: bordered, and it lights on approach. */
+.pill.control {
+  cursor: pointer; color: rgb(var(--text-muted));
+  background: none; border: 1px solid rgb(var(--border));
+}
+.pill.control:hover {
+  color: rgb(var(--accent)); border-color: rgb(var(--accent) / .55);
+  background: rgb(var(--accent) / .08);
+}
+.pill.control[aria-pressed='true'] {
+  color: rgb(var(--accent)); border-color: rgb(var(--accent) / .6);
+  background: rgb(var(--accent) / .12);
+}
+
 /* ── the link directory (ML3, R10a) ─────────────────────
    A page you scan down a left edge, like the task list and unlike prose — so it
    takes a measure as a maximum and is set flush left, which is the lesson MT3
-   learned the hard way. */
-.links { min-width: 0; padding-top: .4rem; }
-.links-head { display: flex; align-items: baseline; gap: .6rem; padding-bottom: .5rem; }
+   learned the hard way.
+
+   **Two faces, by what each thing IS.** The line a link was written in is
+   quoted PROSE from the notebook — not chrome, a sentence you wrote — so it is
+   set in the reading face at a fraction of the reading size. Everything around
+   it is apparatus, and apparatus is the UI face. That is how an index has
+   always been set, and it is why the panel stopped feeling like a different,
+   smaller app than the notebook beside it.
+
+   The fraction is a knob rather than a constant to live with: it is expected to
+   move, and if it settles it belongs in the theme beside `codeSize`. */
+:root { --quoted: .78; }
+.links { min-width: 0; padding-top: .4rem; font-size: calc(var(--reading-size, 20px) * var(--quoted)); }
+.links-head { display: flex; align-items: baseline; gap: .6rem; padding-bottom: .6rem; }
 .links-query {
   flex: 1; min-width: 0; max-width: 22rem;
-  font-family: var(--font-ui); font-size: 12.5px; color: rgb(var(--text));
+  font-family: var(--font-ui); font-size: .8em; color: rgb(var(--text));
   background: rgb(var(--surface));
   border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .2rem .5rem;
 }
 .links-query:focus { outline: none; border-color: rgb(var(--accent) / .6); }
-.links-count { font-family: var(--font-ui); font-size: 11.5px; color: rgb(var(--text-muted)); }
-.links-empty { font-family: var(--font-ui); font-size: 13px; color: rgb(var(--text-muted)); }
+.links-count { font-family: var(--font-ui); font-size: .72em; color: rgb(var(--text-muted)); }
+.links-empty { font-family: var(--font-ui); font-size: .85em; color: rgb(var(--text-muted)); }
 
 .links-list { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
 .links-row { padding: .5rem 0; border-bottom: 1px solid rgb(var(--border) / .45); }
@@ -502,8 +554,9 @@ body {
    recognition is the directory's whole job. So the line it was written in takes
    the row's first line and its full size, and the destination follows. */
 .links-said {
+  /* The reading face, because this is a sentence from the notebook. */
   display: block; width: 100%; text-align: left; cursor: pointer;
-  font-family: var(--font-ui); font-size: 13.5px; line-height: 1.45;
+  font-family: var(--reading-face, inherit); font-size: 1em; line-height: 1.4;
   color: rgb(var(--text)); background: none; border: 0; padding: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -511,44 +564,39 @@ body {
 
 .links-under { display: flex; align-items: baseline; gap: .5rem; margin-top: .2rem; }
 
-/* **Where it goes**, in the accent so it reads as the thing you can follow. */
-.links-target {
-  flex: 0 1 auto; min-width: 0; text-align: left; cursor: pointer;
-  font-family: var(--font-ui); font-size: 11.5px;
-  color: rgb(var(--accent)); background: none; border: 0; padding: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.links-target:hover { text-decoration: underline; }
+/* **Where it goes is IN the sentence**, underlined where it was written — not
+   repeated beside the row, which was arbitrary: a row groups appearances by
+   destination and each may have been written with different words, so one of
+   them was being shown as if it spoke for all. `.tx-link` is the editor's own
+   link treatment, so a link reads the same wherever it is drawn. */
 
 /* A source is a filter you can click: "it was in the publication list" is how
    somebody narrows a directory of a thousand rows down to the one they want. */
-.links-source {
-  flex: 0 0 auto; cursor: pointer;
-  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: .03em;
-  color: rgb(var(--text-muted)); background: rgb(var(--text) / .06);
-  border: 0; border-radius: 999px; padding: .08rem .45rem;
-}
-.links-source:hover { color: rgb(var(--text)); background: rgb(var(--accent) / .14); }
 
 .links-when {
-  flex: 0 0 auto; margin-left: auto;
-  font-family: var(--font-ui); font-size: 11px;
-  color: rgb(var(--text-muted)); font-variant-numeric: tabular-nums;
+  flex: 0 0 auto; margin-left: auto; cursor: pointer;
+  font-family: var(--font-ui); font-size: .62em;
+  color: rgb(var(--text-muted)); background: none; border: 0; padding: 0;
+  font-variant-numeric: tabular-nums;
 }
+.links-when:hover { color: rgb(var(--text)); }
+.links-places .links-when { margin-left: 0; cursor: inherit; }
 .links-more {
   flex: 0 0 auto; cursor: pointer;
-  font-family: var(--font-ui); font-size: 11px; color: rgb(var(--text-muted));
+  font-family: var(--font-ui); font-size: .62em; color: rgb(var(--text-muted));
   background: none; border: 0; padding: 0;
 }
 .links-more:hover { color: rgb(var(--text)); }
 
 .links-places { list-style: none; margin: .3rem 0 0; padding: 0 0 0 1rem; }
-.links-places button {
-  display: flex; gap: .5rem; align-items: baseline; width: 100%; text-align: left; cursor: pointer;
-  font-family: var(--font-ui); font-size: 11.5px; color: rgb(var(--text-muted));
-  background: none; border: 0; padding: .15rem 0;
+/* **Smaller than the row they belong to**, because they are the same link seen
+   again — the row above is the answer and these are its provenance. */
+.links-place {
+  display: flex; gap: .5rem; align-items: baseline; width: 100%; cursor: pointer;
+  font-family: var(--reading-face, inherit); font-size: .82em; color: rgb(var(--text-muted));
+  padding: .18em 0;
 }
-.links-places button:hover { color: rgb(var(--text)); }
+.links-place:hover { color: rgb(var(--text)); }
 .links-line { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .links-places .links-source { cursor: inherit; }
 
@@ -706,11 +754,9 @@ body {
 .todo-note { margin-left: .5rem; font-size: .85em; font-style: italic; color: rgb(var(--text-muted)); }
 
 .todo-tags { display: flex; flex-wrap: wrap; gap: .25rem; flex: 0 0 auto; }
-.todo-tag {
-  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: .04em;
-  color: rgb(var(--text-muted)); background: rgb(var(--text) / .06);
-  border-radius: 999px; padding: .08rem .45rem;
-}
+/* Shape and colour come from `.pill.label`; a tag adds nothing but its place
+   in the row. It was 10.5px inside 20px prose, which is half the size of the
+   words it belongs to — `em` is what stops that happening again. */
 
 /* **The one thing allowed to be loud** (T9). Era 2 stored due dates and still
    missed them; what was missing was not storage. */

@@ -10,21 +10,24 @@
 // So: for the places that show a LINE rather than a document — the link
 // directory's context, a menu's label, a rail's summary — this is what it says.
 
-import { flattenLinks } from './links.ts'
-
 /** Everything the app wrote into the line, which a reader did not. */
 const MARKERS = /<!--tephra:[^>]*-->/g
 
 /**
  * The words, without the machinery.
  *
- * Markers go, link markup collapses to the words it was written with, and a
- * task's checkbox and bullet go with them — a row that says `- [ ]` in a list
- * of links is showing its filing system. What stays is tags and due dates,
- * because those are things a person typed and meant (T16).
+ * Markers go, and a task's bullet and checkbox go with them — a row that says
+ * `- [ ]` in a list of links is showing its filing system. What stays is tags
+ * and due dates, because a person typed those and meant them (T16).
+ *
+ * **Link markup stays too**, and that is the point: a caller that can draw
+ * links draws them live, in the sentence, exactly where they were written. Only
+ * a caller that cannot — a `<button>`'s label, a menu item — flattens as well,
+ * with `flattenLinks`, and the two compose in that order.
  */
 export function plainLine(text: string): string {
-  return flattenLinks(text.replace(MARKERS, ''))
+  return text
+    .replace(MARKERS, '')
     .replace(/^\s*[-*+]\s+(\[.\]\s*)?/, '')
     .replace(/\s{2,}/g, ' ')
     .trim()

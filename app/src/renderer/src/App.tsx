@@ -1178,8 +1178,16 @@ export function App(): React.JSX.Element {
           // title bar, back and forward — is unchanged, which is the point:
           // every filtered view after this one inherits the same shape.
           <Links
+            // **The notebook's own type, not a second set of numbers** (D41).
+            // The task list learned this the hard way: a hard-coded size made
+            // it quietly a different app from the notebook beside it, and made
+            // the theme panel's sliders lie about what they controlled.
+            typography={typography}
             today={doc?.clockDay ?? null}
             onError={setError}
+            // A link into the corpus is this app's to open (D54), and where it
+            // goes is a document — the same act the sidebar performs.
+            onOpenDocument={id => void pane?.goTo({ kind: 'document', id }).catch(fail)}
             onGoTo={(at, elsewhere) => {
               // **The DOCUMENT it was written in, which is not always the file**
               // — for a task list or the notebook the document is the directory

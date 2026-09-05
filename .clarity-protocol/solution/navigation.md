@@ -4,6 +4,37 @@
 > the default section), D11 (reference by identity), D7 (when an index arrives),
 > D50 (annotations are one union with one policy).
 
+## Pills say what they are, and size themselves against what they sit beside
+
+**Found by counting them.** Six pill-shaped things had been invented separately
+— a sidebar tag, a task tag, a link source, the date-range presets, the
+read-only badge, a comment reaction — at 10.5px, 10.5px, 10.5px, 12.5px, 11px
+and `inherit`. A system was *almost* there and nobody had said it out loud:
+
+**A label has no border; a control has one.** A label is a fact about the row —
+a tag, a subject. A control does something when clicked. Every pill followed
+that except the link directory's source, which filters and wore a label's
+clothes: muted grey on a grey tint, unreadable and unclickable-looking at once.
+That is the zone badge's mistake again (D63) — *a control that looks like a
+label* — and it is why the reported symptom was about colour.
+
+**And sizes are ratios, not constants.** `theme.ts` says it about code — "a
+ratio of the body size, not a size of its own… it should stay a little smaller
+when the body size changes, which an absolute number would not" — and MT3 found
+it in the task list, whose hard-coded 15px "made the theme panel's sliders lie
+about what they controlled". A pill at 10.5px inside 20px prose is half the size
+of the words it belongs to.
+
+**One trap in doing it.** The first ratio was `.55em`, which *compounds*: inside
+a panel already set at a fraction of the reading size, a pill came out at 8.6px
+— smaller than the constant it replaced. `.7em` against the line it sits beside
+is the right relation, because a pill is subordinate to that line and not to the
+page.
+
+**Applied to the two that were wrong** — the link source (now a control) and the
+task tag (now a label, in `em`). The sidebar tag, the range presets, the
+read-only badge and the comment reaction are unchanged and are candidates.
+
 ## The Timeline is days, and only days
 
 **Found in a real notebook, from a screenshot** (2026-09-04). After importing a

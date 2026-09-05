@@ -17,19 +17,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LinkAppearance, LinkRow } from '../../../shared/nav-api.ts'
 import type { NavTarget } from '../../../shared/pane-api.ts'
+import type { Typography } from '../editor/typography.ts'
 import { dayLabel } from '../../../shared/dates.ts'
 import { plainLine } from '../../../shared/plain.ts'
-import { referenceOf } from '../../../shared/fileset.ts'
-import type { DateKey } from '../../../shared/document-api.ts'
+import { Prose } from './Prose'
+import type { DateKey, DocumentId } from '../../../shared/document-api.ts'
 
 export function Links({
+  typography,
   today,
   onGoTo,
+  onOpenDocument,
   onError,
 }: {
+  /** The notebook's type. The quotation is set in it; the apparatus is not. */
+  typography: Typography
   today: DateKey | null
   /** Where it was written. `elsewhere` is a ⌘-click, as everywhere else. */
   onGoTo: (at: LinkAppearance, elsewhere: boolean) => void
+  /** A link into the corpus is this app's to open, not the desktop's (D54). */
+  onOpenDocument: (id: DocumentId) => void
   onError: (message: string) => void
 }): React.JSX.Element {
   const [rows, setRows] = useState<readonly LinkRow[] | null>(null)
@@ -69,10 +76,32 @@ export function Links({
     )
   }, [rows, query])
 
-  if (rows === null) return <main className="links"><p className="sub">Reading the corpus…</p></main>
+  /**
+   * Two faces, by what each thing is.
+   *
+   * The line a link was written in is quoted prose from the notebook, so it is
+   * set in the READING face — at a fraction of the reading size, because an
+   * index is scanned and wants to stay dense. Everything around it is apparatus
+   * and stays in the UI face. Both come from the theme, so the size slider
+   * means something here (D41) — which is the lesson the task list learned the
+   * hard way in MT3.
+   */
+  const type = {
+    '--reading-face': typography.font,
+    '--reading-size': `${typography.size}px`,
+    '--measure': `${typography.measure}ch`,
+  } as React.CSSProperties
+
+  if (rows === null) {
+    return (
+      <main className="links" style={type}>
+        <p className="sub">Reading the corpus…</p>
+      </main>
+    )
+  }
 
   return (
-    <main className="links" aria-label="Link directory">
+    <main className="links" aria-label="Link directory" style={type}>
       <div className="links-head">
         <input
           className="links-query"
@@ -108,7 +137,7 @@ export function Links({
               onToggle={() => setOpen(was => (was === row.canonical ? null : row.canonical))}
               onGoTo={onGoTo}
               onSource={setQuery}
-              onError={onError}
+              onOpenDocument={onOpenDocument}
             />
           ))}
         </ol>
@@ -124,7 +153,7 @@ function Row({
   onToggle,
   onGoTo,
   onSource,
-  onError,
+  onOpenDocument,
 }: {
   row: LinkRow
   today: DateKey | null
@@ -132,58 +161,51 @@ function Row({
   onToggle: () => void
   onGoTo: (at: LinkAppearance, elsewhere: boolean) => void
   onSource: (name: string) => void
-  onError: (message: string) => void
+  onOpenDocument: (id: DocumentId) => void
 }): React.JSX.Element {
   const newest = row.appearances[0] as LinkAppearance
   return (
     <li className="links-row">
-      {/* **The sentence it was written in, first and largest.**
-          A label alone is rarely enough to recognise anything — "course", "bio
-          draft", "list" mean what the sentence around them meant, and the
-          directory's job is recognition. So the line leads, and clicking it
-          goes to where it was written. */}
-      <button
-        type="button"
+      {/* **The sentence it was written in, with the link live inside it.**
+          The link is underlined where it was written rather than repeated
+          beside the row — which was arbitrary anyway: a row groups appearances
+          by destination, and each may have been written with different words,
+          so one of them was being shown as if it spoke for all.
+
+          A div and not a button, because it contains an anchor and interactive
+          things do not nest. The date beside it is the real control, so there
+          is still one thing a keyboard can reach. */}
+      <div
         className="links-said"
         onClick={e => onGoTo(newest, e.metaKey || e.ctrlKey)}
         title="Go to where you wrote it"
       >
-        {plainLine(newest.line) === '' ? row.label || row.target : plainLine(newest.line)}
-      </button>
+        <Prose
+          text={plainLine(newest.line) === '' ? row.target : plainLine(newest.line)}
+          from={newest.at.file}
+          onOpenDocument={onOpenDocument}
+        />
+      </div>
 
       <div className="links-under">
-        {/* **Where it goes.** Browser, Finder or a document in the corpus —
-            `nav.open` dispatches all three, which is why this knows which of
-            them it is no more than the sidebar does. */}
-        <button
-          type="button"
-          className="links-target"
-          title={row.target}
-          onClick={() => {
-            const reference = referenceOf(row.target)
-            if (reference === null) return
-            void window.tephra.nav
-              .open(reference, newest.at.file)
-              .then(how => {
-                if (how === 'missing') onError(`nothing at ${row.target}`)
-                else if (typeof how === 'object') void onGoTo(newest, false)
-              })
-              .catch((err: Error) => onError(err.message))
-          }}
-        >
-          {row.label.trim() === '' ? row.target : row.label}
-        </button>
         {/* A source is a filter you can click, because "it was in the
             publication list" is how somebody narrows this down. */}
         <button
           type="button"
-          className="links-source"
+          className="pill control links-source"
           title={`Only links from ${newest.source}`}
           onClick={() => onSource(newest.source)}
         >
           {newest.source}
         </button>
-        <span className="links-when">{whenSaid(newest, today)}</span>
+        <button
+          type="button"
+          className="links-when"
+          title="Go to where you wrote it"
+          onClick={e => onGoTo(newest, e.metaKey || e.ctrlKey)}
+        >
+          {whenSaid(newest, today)}
+        </button>
         {row.appearances.length > 1 && (
           <button type="button" className="links-more" aria-expanded={open} onClick={onToggle}>
             {open ? '\u25be' : '\u25b8'} {row.appearances.length}
@@ -195,11 +217,13 @@ function Row({
         <ol className="links-places">
           {row.appearances.slice(1).map(at => (
             <li key={`${at.at.file}:${at.at.from}`}>
-              <button type="button" onClick={e => onGoTo(at, e.metaKey || e.ctrlKey)}>
+              <div className="links-place" onClick={e => onGoTo(at, e.metaKey || e.ctrlKey)}>
                 <span className="links-when">{whenSaid(at, today)}</span>
-                <span className="links-source">{at.source}</span>
-                <span className="links-line">{plainLine(at.line)}</span>
-              </button>
+                <span className="pill label links-source">{at.source}</span>
+                <span className="links-line">
+                  <Prose text={plainLine(at.line)} from={at.at.file} onOpenDocument={onOpenDocument} />
+                </span>
+              </div>
             </li>
           ))}
         </ol>

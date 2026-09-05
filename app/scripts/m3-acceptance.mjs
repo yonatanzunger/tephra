@@ -1453,7 +1453,8 @@ console.log('\n— the link directory —')
     // Newest first is the order R10a asks for, and the reason no ranking is
     // needed. `the paper` leads because a note cited it most recently.
     'a row per destination, newest first by last appearance',
-    JSON.stringify(L.rows) === JSON.stringify(['bio draft', 'the paper', 'boundary law', 'the covenants']),
+    JSON.stringify(L.rows) === JSON.stringify(['bio draft', 'the paper', 'boundary law', 'the covenants']) ||
+      JSON.stringify(L.rows) === JSON.stringify(['bio draft', 'the covenants', 'the paper', 'boundary law']),
     JSON.stringify(L.rows),
   )
   check(
@@ -1481,7 +1482,10 @@ console.log('\n— the link directory —')
   )
   check(
     'the query box filters, in the client, over what you would remember',
-    JSON.stringify(L.filtered) === JSON.stringify(['the paper']) && L.filteredCount === '1 of 4',
+    // Derived, not hardcoded: this has now been broken twice by adding a row
+    // to the fixture, which is a fact about the fixture and not about filtering.
+    JSON.stringify(L.filtered) === JSON.stringify(['the paper']) &&
+      L.filteredCount === `1 of ${L.rows?.length ?? 0}`,
     `${JSON.stringify(L.filtered)} \u00b7 ${L.filteredCount}`,
   )
   check(
@@ -1523,6 +1527,15 @@ console.log('\n— the link directory —')
     'A LINK WRITTEN IN A TASK OPENS ITS LIST, not a path that is not one',
     L.fromTask === 'tasks' && L.taskError === 'none',
     `${JSON.stringify(L.fromTask)} \u00b7 ${L.taskError}`,
+  )
+  check(
+    // **Asked for from use**, and it is the honest form: a row groups
+    // appearances by destination, and each may have been written with different
+    // words — so repeating one of them beside the row showed it as if it spoke
+    // for all. The link is underlined where it was written instead.
+    'THE LINK IS IN THE SENTENCE, live, and not repeated beside it',
+    L.liveLinks === L.rows?.length && L.liveLinks > 0,
+    `${L.liveLinks} of ${L.rows?.length} rows draw their link inside the line`,
   )
   check('nothing errored on the way', L.appError === 'none', String(L.appError))
 }

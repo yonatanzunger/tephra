@@ -24,7 +24,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps, TextTarget } from '../surface.ts'
 import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
-import { flattenLinks, scanLinks } from '../../../../shared/links.ts'
+import { Prose } from '../../frame/Prose'
+import { flattenLinks } from '../../../../shared/links.ts'
 import { groupByTag, isLive, resolveDue, type TodoItem, type TodoStatus, type WalkState } from '../../../../shared/kinds/todo.ts'
 import { daysBetween } from '../../../../shared/dates.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
@@ -709,7 +710,7 @@ function Row({
       {chips.length > 0 && (
         <span className="todo-tags">
           {chips.map(tag => (
-            <span key={tag} className="todo-tag">
+            <span key={tag} className="pill label todo-tag">
               {tag}
             </span>
           ))}
@@ -743,44 +744,6 @@ function Row({
       )}
     </li>
   )
-}
-
-/**
- * The item's prose, with links live.
- *
- * Through the shared scanner (ML1), which is the same one the editor draws with
- * and the same one the link directory will index by — one grammar, three
- * consumers, and the angle-bracket spelling readable by all of them.
- */
-function Prose({ text }: { text: string }): React.JSX.Element {
-  const links = scanLinks(text).filter(link => !link.image)
-  if (links.length === 0) return <>{text}</>
-
-  const parts: React.ReactNode[] = []
-  let at = 0
-  links.forEach((link, i) => {
-    if (link.from > at) parts.push(text.slice(at, link.from))
-    parts.push(
-      <a
-        key={`link:${i}`}
-        className="tx-link"
-        href={link.target}
-        title={link.target}
-        onClick={e => {
-          // Following it is main's job: what a target means — whether it is
-          // inside the notebook at all — is a question about the notebook.
-          e.preventDefault()
-          e.stopPropagation()
-          void window.tephra.openLink(link.target)
-        }}
-      >
-        {link.label}
-      </a>,
-    )
-    at = link.to
-  })
-  if (at < text.length) parts.push(text.slice(at))
-  return <>{parts}</>
 }
 
 /**

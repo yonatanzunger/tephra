@@ -185,6 +185,34 @@ four of them were invisible until there was a real corpus behind it.
   publication list*. Every row names its source and the name is a filter you can
   click.
 
+**And then a sixth, from looking at it again: the link belongs IN the
+sentence.** Showing the label beside the row was arbitrary — a row groups
+appearances by destination, and each may have been written with different words,
+so one of them was being shown as if it spoke for all. It is underlined where it
+was written now, exactly as in the file, and the label is not repeated anywhere.
+
+That merged two renderers into one. The task list already drew links in its rows
+(MT3) and this needed the same thing; the two would have differed in precisely
+the way `shared/links.ts` exists to prevent — and the todo copy carried the same
+`openLink` defect, so **a URL in a task row had never done anything either**.
+One `Prose`, dispatching through `nav.open`, and `plainLine` stops flattening
+links so a caller that can draw one draws it live. Only a caller that cannot —
+a button's label, a menu item — composes `flattenLinks` on top.
+
+**And a seventh, about type.** Next to the task list the panel *felt* small and
+hard to read — 13.5px against the notebook's 20px, with 10.5px chips. Every
+number was a constant in a stylesheet where the theme should have owned it,
+which is MT3's finding word for word. The fix is not a bigger constant:
+
+**Two faces, by what each thing IS.** The line a link was written in is quoted
+prose from the notebook — not chrome, a sentence you wrote — so it is set in the
+READING face, at a fraction of the reading size (`--quoted`, .78 for now, a knob
+rather than a number to live with). Everything around it is apparatus and stays
+in the UI face. That is how an index has always been set, entry in the text face
+and apparatus in the UI face, and it is why the panel stopped feeling like a
+different, smaller app than the notebook beside it. The expansion rows are
+smaller again, because they are the same link seen a second time.
+
 **One more, found while fixing those.** The title bar asked the LOCATION what
 kind it was, so a window reached by a span — which is how the sidebar opens a
 note and how every directory row opens anything — fell past the document branch

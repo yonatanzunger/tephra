@@ -123,12 +123,25 @@ test('tags and due dates STAY, because a person typed them and meant them', () =
 })
 
 test('a bullet and a checkbox go, because a row is not showing its filing system', () => {
-  assert.equal(plainLine('* 2026-03-31 [Applying fundamentals](https://example.org/a)'), '2026-03-31 Applying fundamentals')
   assert.equal(plainLine('- [x] done with it'), 'done with it')
 })
 
-test('and link markup collapses to the words it was written with', () => {
-  assert.equal(plainLine('Read [the paper](https://example.com/x) this morning.'), 'Read the paper this morning.')
+test('but link markup STAYS, so a caller that can draw links draws them live', () => {
+  // Which is what the link directory does: the link is underlined in the
+  // sentence exactly where it was written, rather than repeated beside it —
+  // and repeating it was arbitrary anyway, since a row groups appearances by
+  // URL and each may have been written with different words.
+  assert.equal(
+    plainLine('Read [the paper](https://example.com/x) this morning.'),
+    'Read [the paper](https://example.com/x) this morning.',
+  )
+})
+
+test('and the two compose, for a caller that cannot draw one', () => {
+  assert.equal(
+    flattenLinks(plainLine('* 2026-03-31 [Applying fundamentals](https://example.org/a)')),
+    '2026-03-31 Applying fundamentals',
+  )
 })
 
 test('ordinary prose comes back as it is', () => {

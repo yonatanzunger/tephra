@@ -1053,12 +1053,23 @@ export async function runVerify(request: string): Promise<void> {
       say('noEditor', document.querySelector('.cm-content') === null)
 
       const rows = () => [...document.querySelectorAll('.links-row')]
-      const targets = () => rows().map(r => r.querySelector('.links-target')?.textContent?.trim() ?? '')
+      // **The link is IN the sentence now**, underlined where it was written —
+      // so reading the row's destination means reading the live anchor, which
+      // also proves it is one.
+      const targets = () => rows().map(r => r.querySelector('.links-said .tx-link')?.textContent?.trim() ?? '')
       say('rows', targets())
       say('whens', rows().map(r => r.querySelector('.links-when')?.textContent?.trim() ?? ''))
       say('where', rows().map(r => r.querySelector('.links-said')?.textContent?.trim() ?? ''))
       say('sources', rows().map(r => r.querySelector('.links-source')?.textContent?.trim() ?? ''))
       say('places', rows().map(r => r.querySelector('.links-more')?.textContent?.trim() ?? ''))
+      say('liveLinks', rows().filter(r => r.querySelector('.links-said .tx-link') !== null).length)
+      {
+        const said = document.querySelector('.links-said') as HTMLElement | null
+        const panel = document.querySelector('.links') as HTMLElement | null
+        say('quoteFace', said === null ? '' : getComputedStyle(said).fontFamily.slice(0, 30))
+        say('quoteSize', said === null ? '' : getComputedStyle(said).fontSize)
+        say('readingVar', panel === null ? '' : getComputedStyle(panel).getPropertyValue('--reading-face').slice(0, 30))
+      }
       say('count', document.querySelector('.links-count')?.textContent?.trim() ?? '')
 
       // Filtering is in the client; at this scale nothing else is warranted.
@@ -1096,7 +1107,7 @@ export async function runVerify(request: string): Promise<void> {
       await settle(700)
 
       const back = rows().find(r =>
-        (r.querySelector('.links-target')?.textContent ?? '').includes('the paper'),
+        (r.querySelector('.links-said .tx-link')?.textContent ?? '').includes('the paper'),
       )
       ;(back?.querySelector('.links-said') as HTMLElement | null)?.click()
       await settle(1200)
