@@ -16,7 +16,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { LinkAppearance, LinkRow } from '../../../shared/nav-api.ts'
-import type { NavTarget } from '../../../shared/pane-api.ts'
 import type { Typography } from '../editor/typography.ts'
 import { dayLabel } from '../../../shared/dates.ts'
 import { plainLine } from '../../../shared/plain.ts'
@@ -244,4 +243,3 @@ function whenSaid(at: LinkAppearance, today: DateKey | null): string {
   return dayLabel(at.on, today ?? undefined)
 }
 
-export const linksTarget: NavTarget = { kind: 'links' }

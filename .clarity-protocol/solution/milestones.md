@@ -680,7 +680,7 @@ from waiting on a wide refactor.
 feature rather than the correctness fix, and it is wide-but-shallow work that
 would otherwise hold up MT4.
 
-## MT — the TODO list *(MT1–MT5b done; ML2+ML3 next)*
+## MT — the TODO list *(MT1–MT5b done; MT6 next. MT5c deferred, MT7 planned.)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**
