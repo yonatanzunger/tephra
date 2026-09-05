@@ -699,7 +699,7 @@ something other than running text.
 
 **R10a, the link directory, is not part of it** (D57) and can land anywhere.
 
-## ML — the link directory *(ML1 done, in MT3)*
+## ML — the link directory *(ML1 and ML2 done; ML3 next)*
 
 **Roadmap: `solution/link-roadmap.md`. Requirement: R10a. Decisions: D57, D60,
 D61.**

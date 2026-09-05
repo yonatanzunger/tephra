@@ -79,6 +79,37 @@ export interface TimelineDay {
   readonly headings: readonly OutlineNode[]
 }
 
+/** One place a link was written (R10a, T10). */
+export interface LinkAppearance {
+  readonly at: Located
+  /** The words it was written with, which are usually the title. */
+  readonly label: string
+  /** The line it sat in, for recognising it without opening anything. */
+  readonly line: string
+  /** The destination exactly as written here, which two appearances may spell differently. */
+  readonly target: string
+  /** Sortable. A day file's day; otherwise when the file was last written. */
+  readonly when: number
+}
+
+/**
+ * One destination in the link directory, newest first by last appearance.
+ *
+ * **Grouped by a canonical form the index never stores alone** (D60): the key
+ * is derived on read, so changing what counts as the same destination is a
+ * cache rebuild rather than a reindex. What is shown is what was written.
+ */
+export interface LinkRow {
+  /** The grouping key. Not a thing to open — `target` is. */
+  readonly canonical: string
+  /** The destination as most recently written. */
+  readonly target: string
+  /** The label as most recently written. */
+  readonly label: string
+  /** Newest first, which is the order the directory itself is in. */
+  readonly appearances: readonly LinkAppearance[]
+}
+
 export interface ThreadRow {
   readonly id: string
   readonly resolved: boolean

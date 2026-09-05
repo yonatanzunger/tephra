@@ -25,6 +25,7 @@ import type { Notebook } from '../../w/notebook.ts'
 import { attachmentFile, dayFile, noteFile, parseDayFile, relativePath, type RelPath } from '../../w/layout.ts'
 import { createHash } from 'node:crypto'
 import { frontmatterFor, parseFile, renderFrontmatter } from '../frontmatter.ts'
+import { scanLinks, type ScannedLink } from '../../../shared/links.ts'
 import { markerRemoval, placeMarker, retagBody, subjectKey, tagBody, type ScannedSpan } from '../markers.ts'
 import type { Anomaly } from '../../../shared/anomalies.ts'
 import type { RestoreReport } from '../../../shared/history-api.ts'
@@ -347,9 +348,22 @@ export abstract class SegmentedDocument implements StoredDocument {
    * dropped. Asking `segment()` instead would have been one line and would have
    * loaded the corpus into memory to build a list of subjects.
    */
-  async scan(date: DateKey): Promise<{ spans: readonly ScannedSpan[]; blank: boolean }> {
+  async scan(
+    date: DateKey,
+  ): Promise<{ spans: readonly ScannedSpan[]; blank: boolean; links: readonly ScannedLink[]; body: string }> {
     const segment = this.segments.get(date) ?? (await this.load(date))
-    return { spans: segment.spans(), blank: segment.body.trim() === '' }
+    // **Links come from here too, and not from the index's generic path** (ML2).
+    // A day the editor is holding answers for itself, and a long day's later
+    // parts are covered by this one call — so an index that scanned day files
+    // the ordinary way would find no links in the notebook at all, which is
+    // where most of them are.
+    return {
+      spans: segment.spans(),
+      blank: segment.body.trim() === '',
+      links: scanLinks(segment.body),
+      // For the line a link sat in, which the index wants and only the body has.
+      body: segment.body,
+    }
   }
 
   // ── reading ────────────────────────────────────────────────

@@ -292,3 +292,132 @@ test('a line nobody has adopted yet has no id, and contributes none', async t =>
   assert.deepEqual([...(await index.itemIds())], [])
   assert.deepEqual(await index.todoTags(), [], 'and no tag either, until it is an item')
 })
+
+// ── the link directory (ML2, R10a, T10, D60, D61) ──────
+//
+// **Search's sibling, and the half nobody has ever served**: search finds text
+// you remember writing, this finds documents you remember opening. Era 1 had no
+// links at all; era 2 had them and no way to find them again.
+//
+// Driven straight through the index with no surface, the same discipline as
+// MT2 — the data model is where the decisions are.
+
+const linkDay = (date: string, body: string): [string, string] => [date, body]
+
+test('a link written in the notebook is in the directory', async t => {
+  const { index } = await corpus(t, [
+    linkDay('2026-03-01', 'Reading [the paper](https://example.com/a) today.\n'),
+  ])
+  const rows = await index.links()
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.target, 'https://example.com/a')
+  assert.equal(rows[0]?.label, 'the paper')
+  assert.equal(rows[0]?.appearances[0]?.line, 'Reading [the paper](https://example.com/a) today.')
+})
+
+test('THE POINT: two spellings of one destination are ONE row', async t => {
+  // Which is what the canonical form is for — and it is derived on read, so
+  // changing what counts as the same destination is a rebuild, not a reindex.
+  const { index } = await corpus(t, [
+    linkDay('2026-03-01', 'First: [the paper](https://example.com/a?utm_source=news).\n'),
+    linkDay('2026-03-02', 'Again: [that paper](https://example.com/a#part-2).\n'),
+  ])
+  const rows = await index.links()
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.appearances.length, 2)
+})
+
+test('and the row shows what was WRITTEN, most recently', async t => {
+  // The canonical form is a key, not a thing anybody typed.
+  const { index } = await corpus(t, [
+    linkDay('2026-03-01', 'First: [the paper](https://example.com/a?utm_source=news).\n'),
+    linkDay('2026-03-02', 'Again: [that paper](https://example.com/a#part-2).\n'),
+  ])
+  const [row] = await index.links()
+  assert.equal(row?.target, 'https://example.com/a#part-2')
+  assert.equal(row?.label, 'that paper')
+  assert.equal(row?.canonical, 'https://example.com/a', 'the key is neither of them')
+})
+
+test('newest first, which is the order the requirement asks for', async t => {
+  const { index } = await corpus(t, [
+    linkDay('2026-03-01', 'Old: [one](https://example.com/one).\n'),
+    linkDay('2026-03-05', 'New: [two](https://example.com/two).\n'),
+  ])
+  assert.deepEqual((await index.links()).map(r => r.label), ['two', 'one'])
+})
+
+test('a link in a NOTE is found too, and dated by the file', async t => {
+  const { index } = await corpus(t, [['2026-03-01', 'A day.\n']], {
+    'plan.md': 'See [the spec](https://example.com/spec).\n',
+  })
+  const rows = await index.links()
+  assert.deepEqual(rows.map(r => r.label), ['the spec'])
+  assert.equal(rows[0]?.appearances[0]?.at.date, null, 'a note has no day')
+  assert.ok((rows[0]?.appearances[0]?.when ?? 0) > 0, 'and is dated by its stamp instead')
+})
+
+test('a tephra: reference is not in the directory (D61)', async t => {
+  // The sidebar already serves those, and they would bury the documents.
+  const { index } = await corpus(t, [
+    linkDay('2026-03-01', 'See [that day](tephra:day/2026-02-01) and [a task](tephra:todo/aaaa1111).\n'),
+  ])
+  assert.deepEqual(await index.links(), [])
+})
+
+test('nor is an image, because an embedded picture is not a document', async t => {
+  const { index } = await corpus(t, [linkDay('2026-03-01', 'Here: ![a plan](../plan.png)\n')])
+  assert.deepEqual(await index.links(), [])
+})
+
+test('one document linked from two days, spelled differently, is one row', async t => {
+  // The relative spelling differs by where it was written; the document does
+  // not. This is why canonicalization takes the containing file.
+  const { index } = await corpus(
+    t,
+    [linkDay('2026-03-01', 'See [the covenants](../../../notes/c.md).\n')],
+    { 'c.md': 'The covenants.\n', 'plan.md': 'And [the covenants](c.md) again.\n' },
+  )
+  const rows = await index.links()
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0]?.canonical, 'notes/c.md')
+  assert.equal(rows[0]?.appearances.length, 2)
+})
+
+test('every appearance carries the way back to it', async t => {
+  const { index } = await corpus(t, [
+    linkDay('2026-03-01', 'Reading [the paper](https://example.com/a) today.\n'),
+  ])
+  const at = (await index.links())[0]?.appearances[0]?.at
+  assert.equal(at?.file, 'notebook.stream/2026/03/2026-03-01.md')
+  assert.equal(at?.date, '2026-03-01')
+  assert.ok((at?.from ?? -1) >= 0 && (at?.to ?? 0) > (at?.from ?? 0))
+})
+
+test('A LINK NOBODY WROTE ANY MORE IS GONE (D52, D60)', async t => {
+  // The index is a cache of the corpus as it stands, unweakened. What keeps
+  // links from finished work is the corpus's own shape — a past day keeps every
+  // line that ever stood in it — and not an index that accumulates.
+  const { index, root } = await corpus(t, [
+    linkDay('2026-03-01', 'Reading [the paper](https://example.com/a) today.\n'),
+  ])
+  assert.equal((await index.links()).length, 1)
+
+  await writeFile(join(root, dayFile(d('2026-03-01'))), '---\ntephra: 1\ndate: 2026-03-01\n---\nNothing now.\n')
+  await index.rebuild()
+  assert.deepEqual(await index.links(), [])
+})
+
+test('a long day\'s later parts are covered by its first file', async t => {
+  // Day files are scanned through the stream, not the generic path — which is
+  // deliberate (a loaded day answers for itself) and is exactly why the links
+  // had to be added there too. Scanned the ordinary way, the notebook — where
+  // most links are written — would have contributed none at all.
+  const { index, root } = await corpus(t, [linkDay('2026-03-01', 'One: [a](https://example.com/a)\n')])
+  await writeFile(
+    join(root, 'notebook.stream', '2026', '03', '2026-03-01.2.md'),
+    '---\ntephra: 1\ndate: 2026-03-01\npart: 2\n---\nTwo: [b](https://example.com/b)\n',
+  )
+  await index.rebuild()
+  assert.deepEqual((await index.links()).map(r => r.label).sort(), ['a', 'b'])
+})

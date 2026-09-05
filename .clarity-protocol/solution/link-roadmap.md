@@ -71,27 +71,49 @@ and without this that is the codebase's *third* link regex.
 
 **Does not do:** any index, any surface, any policy.
 
-## ML2 — the index
+## ML2 — the index *(done)*
 
-**No surface, and testable straight through the index** — the same discipline as
+**Done**, and verified by 26 tests that draw nothing — the same discipline as
 MT2, and for the same reason: the data model is where the decisions are.
 
-- `links` joins `Scanned` and `Payload` in `CorpusIndex`, as a **parallel array
-  rather than a `ScannedSpan` kind**: a link has a target *and* a label, and
-  `{kind, name, from, to}` has nowhere to put both. `isPayload` gains a guard,
-  which discards the cache once and rebuilds it — free, by design.
-- `canonicalizeLink()` in **its own module with its own tests** (D60). Pure
-  `(target) => CanonicalLink` for now: strip known tracking parameters and
-  fragments, resolve corpus-relative paths to one corpus path. Expected to grow.
-- **Store the raw target; group by the canonical form** (D60). The canonical
-  form is a derived key, recomputed on read, never the only record.
-- `indexable(reference)` (D61) — the one place that says what counts.
-- **Dating, which is free.** A day file dates by its `DateKey`; everything else
-  dates by the stamp `IndexStore` already keeps. Nothing new is stored.
-- Aggregation: link → appearances, each carrying the file, the date, the label it
-  was written with, the line it sat in, and the offset to get back to it.
+- **`canonicalizeLink()` and `indexable()` share one module**, `shared/link-index.ts`,
+  because they are one policy and they change together. `shared/links.ts` stays
+  the unopinionated scanner, which is D61's split expressed as files.
+- **`CanonicalLink` is branded**, so it cannot be stored where a target belongs.
+  That is D60's load-bearing half made structural rather than merely written
+  down: the index stores the raw target, the key is derived on read, and there
+  is deliberately no way back from a key to something you could open.
+- **Conservative canonicalization**, settled in conversation: drop the fragment,
+  drop tracking parameters, lowercase scheme and host, drop a default port,
+  resolve a corpus-relative path against the file it was written in. **Not**
+  stripping `www.`, not unifying `http` with `https`, not reordering query
+  parameters — each is a claim about host identity the URL does not make, and
+  *"we don't need a perfect, Internet corpus-wide URL canonicalizer"*. What is
+  actually worth merging is a thing to learn from use.
+- **Dating is free and slightly approximate, which is recorded rather than
+  hidden.** A day dates by its `DateKey`, exactly — and that covers the notebook,
+  where links are mostly written. Everything else dates by the stamp the store
+  already keeps, which moves when anything in the file changes, so "last
+  appearance" in a note means "the note was last touched". Accepted.
+- **The cache rebuilt itself**, as MT5b's did, on the rule `isPayload` has
+  carried since D52: a shape it does not recognise is a cache it throws away.
 
-**Does not do:** ranking, fetched titles, dead-link checking.
+### What the building found
+
+- **Day files do not go through the generic scan path**, and the roadmap did not
+  say so. `CorpusIndex.#scan` delegates a day to `SegmentedDocument.scan(date)`
+  — deliberately, because a day the editor is holding must answer for itself
+  including unsaved edits (D52), and a long day's later parts are covered once
+  by its first file. So `scan()` had to return links too. Missing it would have
+  indexed no links from **the notebook**, which is where nearly all of them are,
+  and every test over notes would still have passed. There is a test with a
+  two-part day for exactly this.
+- **`indexable` takes the link, not the reference**, which is a small amendment
+  to D61's wording. "Not images" is a fact about the link rather than about
+  where it points, so a reference argument would have split the policy across
+  two places — and one place is what the decision is for.
+
+**Does not do:** ranking, fetched titles, dead-link checking, or any surface.
 
 ## ML3 — the pane
 

@@ -20,15 +20,17 @@ import type { Notebook } from '../../w/notebook.ts'
 import { IndexStore, type Entries, type Cached } from '../../w/index-store.ts'
 import { dayFile, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../../w/layout.ts'
 import { scanItems } from '../../../shared/kinds/todo.ts'
+import { scanLinks, type ScannedLink } from '../../../shared/links.ts'
+import { canonicalizeLink, indexable, type CanonicalLink } from '../../../shared/link-index.ts'
 import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
 import { parseFile } from '../frontmatter.ts'
 import type { StreamDocument } from './kinds/stream.ts'
 import type { DateKey } from '../../../shared/document-api.ts'
 import type {
-  IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay,
+  IndexStatus, LinkAppearance, LinkRow, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay,
 } from '../../../shared/nav-api.ts'
 
-export type { IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay }
+export type { IndexStatus, LinkAppearance, LinkRow, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay }
 
 /**
  * A task item, as the corpus knows it (MT5b).
@@ -43,6 +45,27 @@ interface IndexedItem {
   readonly tags: readonly string[]
 }
 
+/**
+ * One appearance of a link, as the corpus knows it (ML2, D60).
+ *
+ * **The raw target, never only the canonical form.** The grouping key is
+ * derived on read, because canonicalization is expected to change and every
+ * change invalidates every key — with the target kept, that is a cache rebuild,
+ * which D52 makes free; with only the key kept, it is a reindex to recover what
+ * was thrown away.
+ */
+interface IndexedLink {
+  /** Exactly as written. */
+  readonly target: string
+  /** The words, which are usually the title — that is how people write links. */
+  readonly label: string
+  /** The line it sat in, for recognising it without opening anything. */
+  readonly line: string
+  /** Into the file's body, to get back to it. */
+  readonly from: number
+  readonly to: number
+}
+
 /** What one file contributes. The unit of both the cache and the sweep. */
 interface Scanned {
   readonly file: RelPath
@@ -51,6 +74,17 @@ interface Scanned {
   readonly blank: boolean
   /** Empty for everything that is not a day of a task list. */
   readonly items: readonly IndexedItem[]
+  readonly links: readonly IndexedLink[]
+  /**
+   * When this file was last written, for dating a link that has no day.
+   *
+   * A day file dates by its `DateKey` and is exact. Everything else dates by
+   * the stamp the store already keeps — which moves when *anything* in the file
+   * changes, so "last appearance" in a note really means "the note was last
+   * touched". Named here rather than discovered: most links are written in the
+   * stream, where the date is exact, so the approximation is mostly invisible.
+   */
+  readonly at: number | null
 }
 
 /**
@@ -65,6 +99,7 @@ type Payload = {
   readonly spans: readonly ScannedSpan[]
   readonly blank: boolean
   readonly items: readonly IndexedItem[]
+  readonly links: readonly IndexedLink[]
 }
 // **`items` is required, and that is how every existing cache gets rebuilt.**
 // An entry written before MT5b has no `items`, fails here, and is rescanned on
@@ -73,7 +108,7 @@ type Payload = {
 const isPayload = (value: unknown): value is Payload =>
   typeof value === 'object' && value !== null &&
   Array.isArray((value as Payload).spans) && typeof (value as Payload).blank === 'boolean' &&
-  Array.isArray((value as Payload).items)
+  Array.isArray((value as Payload).items) && Array.isArray((value as Payload).links)
 
 export class CorpusIndex {
   readonly #notebook: Notebook
@@ -172,6 +207,46 @@ export class CorpusIndex {
       })
     }
     return out
+  }
+
+  /**
+   * The link directory: every destination, newest first (R10a, T10, ML2).
+   *
+   * **A cache of the corpus as it stands** (D52, D60). A link whose text no
+   * longer appears in any file leaves the directory — and the requirement to
+   * keep links from finished work is delivered by the corpus's own shape rather
+   * than by an index that accumulates: a task is restatused and never destroyed
+   * (T2), and a past day keeps every line that ever stood in it.
+   *
+   * Reverse-chronological by last appearance, which is the order R10a asks for
+   * and the reason no ranking is needed.
+   */
+  async links(): Promise<readonly LinkRow[]> {
+    const rows = new Map<CanonicalLink, LinkAppearance[]>()
+    for (const scanned of await this.#all()) {
+      for (const link of scanned.links) {
+        const key = canonicalizeLink(link.target, scanned.file)
+        const appearance: LinkAppearance = {
+          at: { file: scanned.file, date: scanned.date, from: link.from, to: link.to },
+          label: link.label,
+          line: link.line,
+          target: link.target,
+          when: whenOf(scanned),
+        }
+        const into = rows.get(key)
+        if (into === undefined) rows.set(key, [appearance])
+        else into.push(appearance)
+      }
+    }
+    return [...rows.entries()]
+      .map(([canonical, appearances]): LinkRow => {
+        const newest = [...appearances].sort((a, b) => b.when - a.when || b.at.from - a.at.from)
+        const first = newest[0] as LinkAppearance
+        // **What is shown is what was WRITTEN**, and most recently written at
+        // that: the canonical form is a key and not a thing anybody typed.
+        return { canonical, target: first.target, label: first.label, appearances: newest }
+      })
+      .sort((a, b) => (b.appearances[0]?.when ?? 0) - (a.appearances[0]?.when ?? 0))
   }
 
   /**
@@ -292,7 +367,7 @@ export class CorpusIndex {
         if (stamp !== null) {
           const dir = dirOf(file)
           const entries = byDir.get(dir) ?? new Map()
-          entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank, items: scanned.items } })
+          entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank, items: scanned.items, links: scanned.links } })
           byDir.set(dir, entries)
         }
         done += 1
@@ -314,7 +389,7 @@ export class CorpusIndex {
       const cached = (await this.#store.read(dirOf(file))).get(nameOf(file))
       const fresh = await this.#scan(file)
       if (fresh === null) continue
-      const payload = { spans: fresh.spans, blank: fresh.blank, items: fresh.items }
+      const payload = { spans: fresh.spans, blank: fresh.blank, items: fresh.items, links: fresh.links }
       if (JSON.stringify(cached?.payload ?? null) !== JSON.stringify(payload)) wrong.push(file)
     }
     return wrong
@@ -366,18 +441,22 @@ export class CorpusIndex {
           // hold edits that have not reached the file at all.
           if (loaded !== null) {
             // A stream day holds prose, never task items.
-            this.#known.set(file, { file, date: loaded, items: [], ...(await (await this.#stream()).scan(loaded)) })
+            const { spans, blank, links, body } = await (await this.#stream()).scan(loaded)
+            this.#known.set(file, {
+              file, date: loaded, at: stamp?.mtime ?? null, items: [], spans, blank,
+              links: keptLinks(links, body),
+            })
           } else if (
             held !== undefined && stamp !== null && same(held.stamp, stamp) && isPayload(held.payload)
           ) {
-            this.#known.set(file, { file, date: dateOf(file), ...held.payload })
+            this.#known.set(file, { file, date: dateOf(file), at: held.stamp.mtime, ...held.payload })
           } else {
-            const scanned = await this.#scan(file)
+            const scanned = await this.#scan(file, stamp?.mtime ?? null)
             if (scanned === null) continue
             this.#known.set(file, scanned)
             if (stamp !== null) {
               const entries = dirty.get(dir) ?? new Map(cached)
-              entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank, items: scanned.items } })
+              entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank, items: scanned.items, links: scanned.links } })
               dirty.set(dir, entries)
             }
           }
@@ -412,13 +491,14 @@ export class CorpusIndex {
    * scan does not care whether it is a note, a fileset or something a person
    * put there by hand.
    */
-  async #scan(file: RelPath): Promise<Scanned | null> {
+  async #scan(file: RelPath, at: number | null = null): Promise<Scanned | null> {
     const date = dateOf(file)
     if (date !== null) {
       // Later parts belong to their day's first file, which has already covered
       // them; indexing them separately would double every span in a long day.
       if (parseDayFile(file)?.part !== 1) return null
-      return { file, date, items: [], ...(await (await this.#stream()).scan(date)) }
+      const { spans, blank, links, body } = await (await this.#stream()).scan(date)
+      return { file, date, at, items: [], spans, blank, links: keptLinks(links, body) }
     }
     const text = await this.#notebook.read(file)
     if (text === null) return null
@@ -426,6 +506,7 @@ export class CorpusIndex {
     return {
       file,
       date: null,
+      at,
       spans: scanSpans(body, scanMarkers(body)),
       blank: body.trim() === '',
       // **Asked of the kind, not of the text.** `- [ ] something #house` is a
@@ -434,6 +515,7 @@ export class CorpusIndex {
       // them out of prose would invent tags nobody wrote. `scanSpans` is
       // deliberately left alone for the same reason: it is generic.
       items: kindOf(file) === 'todo' ? itemsIn(body) : [],
+      links: keptLinks(scanLinks(body), body),
     }
   }
 }
@@ -463,10 +545,51 @@ const dateOf = (file: RelPath): DateKey | null => {
  * Unadopted lines have no id yet and contribute nothing — they get one the next
  * time the day is written, and are indexed then.
  */
+/**
+ * The links worth keeping, with the line each sat in.
+ *
+ * The scanner has no opinion (D61); `indexable` is the one place that has one,
+ * and it lives with `canonicalizeLink` because the two change together. The
+ * line is carried so a row can be recognised without opening anything — capped,
+ * because a paragraph is not context.
+ */
+function keptLinks(found: readonly ScannedLink[], body: string): readonly IndexedLink[] {
+  return found.filter(indexable).map(link => ({
+    target: link.target,
+    label: link.label,
+    line: lineAround(body, link.from),
+    from: link.from,
+    to: link.to,
+  }))
+}
+
+/** How much of a line is context. Beyond this it is a paragraph. */
+const CONTEXT = 240
+
+function lineAround(body: string, at: number): string {
+  const begin = body.lastIndexOf('\n', at) + 1
+  const stop = body.indexOf('\n', at)
+  const line = body.slice(begin, stop === -1 ? body.length : stop).trim()
+  return line.length <= CONTEXT ? line : `${line.slice(0, CONTEXT).trimEnd()}\u2026`
+}
+
 function itemsIn(body: string): readonly IndexedItem[] {
   return scanItems(body).flatMap(found =>
     found.item.id === null ? [] : [{ id: found.item.id, tags: found.item.tags }],
   )
+}
+
+/**
+ * When a file's links are dated from.
+ *
+ * A day dates by its day, exactly, and that covers the notebook — which is
+ * where links are mostly written. Everything else dates by the stamp, which
+ * moves when anything in the file changes: "last appearance" in a note really
+ * means "the note was last touched". Accepted and named rather than hidden.
+ */
+function whenOf(scanned: { date: DateKey | null; at: number | null }): number {
+  if (scanned.date !== null) return Date.parse(`${scanned.date}T12:00:00Z`)
+  return scanned.at ?? 0
 }
 
 const same = (a: { size: number; mtime: number }, b: { size: number; mtime: number }): boolean =>
