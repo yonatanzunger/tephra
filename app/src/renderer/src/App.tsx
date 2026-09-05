@@ -56,6 +56,7 @@ import { destination } from '../../shared/links.ts'
 import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { ZoneBar } from './frame/ZoneBar'
+import { Links } from './frame/Links'
 import type { ZoneNotice } from '../../shared/ipc.ts'
 import { useTheme, typographyOf } from './theme/useTheme'
 import { ThemePanel } from './theme/ThemePanel'
@@ -338,13 +339,13 @@ export function App(): React.JSX.Element {
         // Rename moves this document and rewrites the sections pointing at it;
         // Save a Copy leaves the original exactly where it was.
         const showing = pane?.document
-        if (showing === undefined) return
+        if (showing == null) return
         const named = showing.title ?? nameOf(showing.id)
         if (command === 'renameFile') askRename(showing.id, named)
         else askCopy(showing.id, named)
       } else if (command === 'deleteFile') {
         const showing = pane?.document
-        if (showing === undefined) return
+        if (showing == null) return
         askDelete(showing.id, showing.title ?? nameOf(showing.id))
 
       } else if (command === 'printDocument') {
@@ -754,9 +755,13 @@ export function App(): React.JSX.Element {
         generation,
       })
       const held = pane.window
-      const showing = held !== null && pane.document.id === id && held.toWindow(where(held.generation)) !== null
+      const showing = held !== null && pane.document?.id === id && held.toWindow(where(held.generation)) !== null
       if (!showing) {
-        const g = pane.document.generation
+        // **A query pane has no document to take a generation from**, and this
+        // is the path a link directory row uses to reach where it was written.
+        // The stream's answers for it: the generation is a staleness claim, and
+        // the read that follows re-establishes it.
+        const g = pane.document?.generation ?? doc.generation
         await pane.goTo({ kind: 'span', doc: id, span: { begin: where(g), end: where(g) } })
       }
       const now = pane.window
@@ -912,9 +917,18 @@ export function App(): React.JSX.Element {
    * A document is whatever it calls itself, falling back to its filename, which
    * is the only other name it has.
    */
+  const showingDoc = pane?.document ?? null
   const title =
-    location?.kind === 'document'
-      ? (pane?.document.title ?? nameOf(location.id))
+    // **A window can be showing a query** (ML3), which has no document to be
+    // named after and is called what it is.
+    location?.kind === 'links'
+      ? 'Links'
+      : // **Asked of the DOCUMENT, not of how we arrived at it.** This tested
+        // the location's kind, so a window reached by a span — which is how the
+        // sidebar opens a note and how every link-directory row opens anything
+        // — fell through to the date logic and called a task list "5 Sep".
+        showingDoc !== null && showingDoc.id !== STREAM_ID
+      ? (showingDoc.title ?? nameOf(showingDoc.id))
       : where.date !== null
         ? dayLabel(where.date as DateKey, doc?.today)
         : location?.kind === 'date'
@@ -941,7 +955,7 @@ export function App(): React.JSX.Element {
     if (!ready) return
     reportRef.current = (): void => {
       tephra.name = title
-      const showing = pane?.document.id
+      const showing = pane?.document?.id
       window.tephra.win.report({
         location: location ?? defaultWindowState.location,
         cursor: cursorRef.current,
@@ -1158,7 +1172,45 @@ export function App(): React.JSX.Element {
         )}
         {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
 
-        {docWindow === null || Surface === null ? (
+        {location?.kind === 'links' ? (
+          // **A location that is not a document draws something that is not a
+          // surface** (ML3). Everything around it — the frame, the sidebar, the
+          // title bar, back and forward — is unchanged, which is the point:
+          // every filtered view after this one inherits the same shape.
+          <Links
+            today={doc?.clockDay ?? null}
+            onError={setError}
+            onGoTo={(at, elsewhere) => {
+              // **The DOCUMENT it was written in, which is not always the file**
+              // — for a task list or the notebook the document is the directory
+              // and the file is one of its segments (D59). Opening the file path
+              // as a document is what produced `ENOTDIR` on a link written in a
+              // task; main answers both now, so this does not have to guess.
+              if (elsewhere) {
+                void window.tephra.win.create(
+                  at.at.date !== null ? { kind: 'date', date: at.at.date } : { kind: 'document', id: at.doc },
+                )
+                return
+              }
+              if (pane === null) return
+              const where = (generation: SessionGeneration): DocumentPosition => ({
+                segment: at.segment as unknown as SegmentKey,
+                offset: at.at.from as never,
+                generation,
+              })
+              const g = pane.document?.generation ?? doc?.generation
+              if (g === undefined) return
+              void pane
+                .goTo({ kind: 'span', doc: at.doc, span: { begin: where(g), end: where(g) } })
+                .then(() => {
+                  const now = pane.window
+                  const buffer = now === null ? null : now.toWindow(where(now.generation))
+                  if (buffer !== null) editorRef.current?.revealAt(buffer as number)
+                })
+                .catch(fail)
+            }}
+          />
+        ) : docWindow === null || Surface === null ? (
           <main className="scaffold">
             <p className="sub">Opening…</p>
           </main>

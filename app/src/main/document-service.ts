@@ -12,6 +12,7 @@
 // document would be reordered relative to what the typist saw.
 
 import type { Anomaly } from '../shared/anomalies.ts'
+import type { LinkRow } from '../shared/nav-api.ts'
 import { isOutside, isStream, ONLY_SEGMENT, type Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
@@ -23,7 +24,8 @@ import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import {
-  dayFile, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath, resolveInsideNotebook, SECTIONS_DIR, slug,
+  dayFile, documentRoot, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath, resolveInsideNotebook,
+  SECTIONS_DIR, slug, STREAM_DIR,
   type RelPath,
 } from './w/layout.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
@@ -1254,6 +1256,27 @@ export class DocumentService {
    */
   readonly #takenIds = (): Promise<ReadonlySet<string>> => this.#index.itemIds()
 
+  /**
+   * The link directory, dated (R10a, ML3).
+   *
+   * **The index finds them; this says what day each was seen on.** A day file's
+   * day is exact and the index already knows it; everything else is its stamp,
+   * turned into a date in the notebook's zone — which the index does not have
+   * and should not, because there is one answer about what day it is and it
+   * lives here (D62, D63).
+   */
+  async links(): Promise<readonly LinkRow[]> {
+    const zone = this.zone
+    return (await this.#index.links()).map(row => ({
+      ...row,
+      appearances: row.appearances.map(at => ({
+        ...at,
+        on: at.at.date ?? dateKeyAt(new Date(at.when), zone),
+        ...whereWritten(at.at.file as RelPath),
+      })),
+    }))
+  }
+
   /** Every tag that has ever been on a task (T6). The full set; live is today's. */
   async todoTags(): Promise<readonly string[]> {
     return this.#index.todoTags()
@@ -1496,4 +1519,35 @@ function directoryFor(section?: string): string {
 
 /** A path's filename, with the extensions this app puts on documents taken off. */
 const nameOf = (path: string): string =>
-  (path.split('/').pop() ?? path).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')
+  (path.split('/').pop() ?? path)
+    .replace(/\.fileset\.md$/, '')
+    .replace(/\.md$/, '')
+    // Directory documents wear their kind too (D59).
+    .replace(/\.(stream|todo)$/, '')
+
+/**
+ * Which document a file belongs to, and what to call it.
+ *
+ * **A file is not an id.** For a directory document — the notebook, a task list
+ * (D59) — the document is the directory and the file is one of its segments, so
+ * a caller handed `tasks.todo/2026/09/2026-09-05.md` and told it was a document
+ * asks to open a path that is not one. That was the error a link row produced
+ * when clicked. A note is its own file and answers the same way, so nothing
+ * downstream has to branch.
+ */
+function whereWritten(file: RelPath): { doc: DocumentId; segment: string; source: string } {
+  const root = documentRoot(file)
+  if (root === null) {
+    return {
+      doc: file as unknown as DocumentId,
+      segment: ONLY_SEGMENT as unknown as string,
+      source: nameOf(file),
+    }
+  }
+  return {
+    doc: root as unknown as DocumentId,
+    segment: parseDayFile(file)?.date ?? (ONLY_SEGMENT as unknown as string),
+    // The notebook is called the notebook; a list is called what it is named.
+    source: root === STREAM_DIR ? 'notebook' : nameOf(root),
+  }
+}

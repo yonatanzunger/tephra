@@ -221,12 +221,12 @@ export class CorpusIndex {
    * Reverse-chronological by last appearance, which is the order R10a asks for
    * and the reason no ranking is needed.
    */
-  async links(): Promise<readonly LinkRow[]> {
-    const rows = new Map<CanonicalLink, LinkAppearance[]>()
+  async links(): Promise<readonly UndatedRow[]> {
+    const rows = new Map<CanonicalLink, Undated[]>()
     for (const scanned of await this.#all()) {
       for (const link of scanned.links) {
         const key = canonicalizeLink(link.target, scanned.file)
-        const appearance: LinkAppearance = {
+        const appearance: Undated = {
           at: { file: scanned.file, date: scanned.date, from: link.from, to: link.to },
           label: link.label,
           line: link.line,
@@ -239,9 +239,9 @@ export class CorpusIndex {
       }
     }
     return [...rows.entries()]
-      .map(([canonical, appearances]): LinkRow => {
+      .map(([canonical, appearances]): UndatedRow => {
         const newest = [...appearances].sort((a, b) => b.when - a.when || b.at.from - a.at.from)
-        const first = newest[0] as LinkAppearance
+        const first = newest[0] as Undated
         // **What is shown is what was WRITTEN**, and most recently written at
         // that: the canonical form is a key and not a thing anybody typed.
         return { canonical, target: first.target, label: first.label, appearances: newest }
@@ -578,6 +578,18 @@ function itemsIn(body: string): readonly IndexedItem[] {
     found.item.id === null ? [] : [{ id: found.item.id, tags: found.item.tags }],
   )
 }
+
+/**
+ * The index's own shape: everything but the date, which needs the zone.
+ *
+ * **Dating is main's, and so is what a file BELONGS to.** The zone is the
+ * notebook's (D63) and the index has neither it nor the layout's opinion about
+ * which document a path is part of — it knows files and stamps.
+ * `DocumentService` adds the day, the document and the name, which is where
+ * both of those answers already live.
+ */
+type Undated = Omit<LinkAppearance, 'on' | 'doc' | 'segment' | 'source'>
+export type UndatedRow = Omit<LinkRow, 'appearances'> & { readonly appearances: readonly Undated[] }
 
 /**
  * When a file's links are dated from.

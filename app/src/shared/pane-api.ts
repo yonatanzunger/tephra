@@ -29,6 +29,18 @@ export type NavTarget =
   | { readonly kind: 'anchor'; readonly name: string }
   | { readonly kind: 'document'; readonly id: DocumentId; readonly at?: NavTarget }
   | { readonly kind: 'span'; readonly doc: DocumentId; readonly span: Span } // a search result
+  /**
+   * The link directory (R10a, ML3) — **a window's location that is not a
+   * document at all.**
+   *
+   * The first of these, and the shape every filtered view after it inherits: a
+   * window shows a document *or* a query, and back/forward, restore and the
+   * title bar all follow from that one change rather than from a special case
+   * per view. Deliberately concrete rather than a general `{kind:'query'}`:
+   * there is one query, and what a shared shape should look like is a thing the
+   * second one will say.
+   */
+  | { readonly kind: 'links' }
   | { readonly kind: 'url'; readonly href: string } // browser
   | { readonly kind: 'external'; readonly path: string } // OS intent
 

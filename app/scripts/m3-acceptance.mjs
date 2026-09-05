@@ -1405,6 +1405,128 @@ console.log('\n— a link in a task —')
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
 }
 
+// ── the link directory (ML3, R10a, T10) ────────────
+//
+// **The first window location that is not a document at all.** `NavTarget`
+// already carried a variant commented "a search result", so the shape was
+// anticipated; what changes is that a window shows a document *or a query*, and
+// the title bar, back/forward, restore and "bring it to the front" all follow
+// from that one change rather than from a special case per view. Every filtered
+// view after this one inherits it, which is why this is the part M4 pays for
+// anyway.
+console.log('\n— the link directory —')
+{
+  const root = await week([
+    'A note on [boundary law](https://law.example.org/boundaries) for later.\n',
+    'Back to [that paper](https://example.com/survey-methods#part-2) again, and also\n' +
+      '[the covenants](../../../notes/covenants.md) which I keep losing.\n',
+    'Read [the paper](https://example.com/survey-methods?utm_source=news) this morning.\n',
+  ])
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'covenants.md'),
+    '---\ntephra: 1\nkind: markdown\ntitle: The covenants\n---\n' +
+      'And [the paper](https://example.com/survey-methods) is cited here.\n',
+  )
+  // **A link written inside a TASK**, which is where clicking a row produced
+  // `ENOTDIR`: a task list is a directory document (D59), so the file is one of
+  // its segments and is not an id.
+  const [ly, lm] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', ly, lm), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', ly, lm, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      "- [ ] Review Steve's [bio draft](https://docs.example.com/d/1t8/edit) #career " +
+      '<!--tephra:item oqacmjoh 1788311075 1788397350-->\n',
+  )
+
+  const L = report(await launch('linkdir', root))
+  check(
+    // The whole of ML3's structural claim, in one assertion: the window is
+    // showing something, it is called something, and it is not an editor.
+    'THE POINT: a window can be on a QUERY \u2014 named, and with no document under it',
+    L.title === 'Links' && L.noEditor === true,
+    `${JSON.stringify(L.title)} \u00b7 no editor: ${L.noEditor}`,
+  )
+  check('and \u23182 reaches it from the menu', L.clicked === true, String(L.clicked))
+  check(
+    // Newest first is the order R10a asks for, and the reason no ranking is
+    // needed. `the paper` leads because a note cited it most recently.
+    'a row per destination, newest first by last appearance',
+    JSON.stringify(L.rows) === JSON.stringify(['bio draft', 'the paper', 'boundary law', 'the covenants']),
+    JSON.stringify(L.rows),
+  )
+  check(
+    // Three spellings — a tracking parameter, a fragment, and neither — written
+    // across two days and a note. The canonical form is what joins them, and it
+    // is a key that never appears on screen (D60).
+    'THE CANONICAL FORM DOES ITS WORK: three spellings are ONE row, in three places',
+    Array.isArray(L.places) && L.places.filter(p => String(p) === '\u25b8 3').length === 1,
+    JSON.stringify(L.places),
+  )
+  check(
+    // Reported once already, on the due-soon rail: a place that cannot make a
+    // link live must show the words rather than the markup.
+    'the line it was written in reads as a sentence, not as markup',
+    Array.isArray(L.where) && !L.where.some(w => String(w).includes('](')),
+    JSON.stringify(L.where),
+  )
+  check(
+    // A column that sorts by one thing and shows another is the inconsistency;
+    // a note dates by its file's stamp, in the notebook's zone, computed in
+    // main because there is one answer about what day it is (D62, D63).
+    'every row says WHEN, and every when is a date',
+    Array.isArray(L.whens) && L.whens.every(w => /^\d+ \w{3}/.test(String(w))),
+    JSON.stringify(L.whens),
+  )
+  check(
+    'the query box filters, in the client, over what you would remember',
+    JSON.stringify(L.filtered) === JSON.stringify(['the paper']) && L.filteredCount === '1 of 4',
+    `${JSON.stringify(L.filtered)} \u00b7 ${L.filteredCount}`,
+  )
+  check(
+    // **The second place per row**, and the question behind the question.
+    'clicking where you WROTE it goes there',
+    L.wentBack === true && typeof L.titleAfter === 'string' && L.titleAfter !== 'Links',
+    `editor ${L.wentBack} \u00b7 now showing ${JSON.stringify(L.titleAfter)}`,
+  )
+  check(
+    // Which is the shape paying for itself: history does not know or care that
+    // one of its entries is not a document.
+    'and BACK returns to the directory, across a location that is not a document',
+    L.canGoBack === true && L.backToLinks === true,
+    `can go back: ${L.canGoBack} \u00b7 returned: ${L.backToLinks}`,
+  )
+  check(
+    // **Reported from use.** A label alone is rarely enough to recognise
+    // anything — "course", "bio draft", "list" mean what the sentence around
+    // them meant — so the line leads and the destination follows.
+    'THE SENTENCE LEADS, and it reads as one: no markers, no markup, no bullet',
+    Array.isArray(L.where) &&
+      L.where.some(w => String(w) === "Review Steve's bio draft #career") &&
+      !L.where.some(w => /tephra:item|\]\(|^- \[/.test(String(w))),
+    JSON.stringify(L.where),
+  )
+  check(
+    // Among the few things anybody reliably remembers about a link: it was in a
+    // task, it was in the publication list.
+    'every row says where it came from, and the source is a filter you can click',
+    Array.isArray(L.sources) && L.sources.includes('tasks') && L.sources.includes('notebook') &&
+      Array.isArray(L.bySource) && L.bySource.length > 0 &&
+      L.bySource.every(t => String(t) === 'bio draft'),
+    `${JSON.stringify(L.sources)} \u00b7 filtered to ${JSON.stringify(L.bySource)}`,
+  )
+  check(
+    // THE BUG: `tasks.todo/2026/09/2026-09-05.md` is a segment of a directory
+    // document, not a document id. Handing the file over as one asked to open a
+    // path that is not a path.
+    'A LINK WRITTEN IN A TASK OPENS ITS LIST, not a path that is not one',
+    L.fromTask === 'tasks' && L.taskError === 'none',
+    `${JSON.stringify(L.fromTask)} \u00b7 ${L.taskError}`,
+  )
+  check('nothing errored on the way', L.appError === 'none', String(L.appError))
+}
+
 // ── the tag index (MT5b, T6, D56) ──────────────────
 //
 // **Narrower than the milestone was planned to be, and this is the half that

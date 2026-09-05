@@ -20,7 +20,9 @@ import { home } from '../x/kinds/registry'
 export class Pane {
   readonly #documents: Documents
   /** The document the pane is currently showing. Navigation may change it. */
-  #doc: RemoteDocument
+  #doc: RemoteDocument | null
+  /** Whether anything has been loaded yet, which is what history counts from. */
+  #loaded = false
   #window: RemoteWindow | null = null
   #location: NavTarget = { kind: 'today' }
 
@@ -43,8 +45,14 @@ export class Pane {
     this.#doc = doc
   }
 
-  /** Whose undo stack a keystroke in this pane means (D54). */
-  get document(): RemoteDocument {
+  /**
+   * Whose undo stack a keystroke in this pane means (D54).
+   *
+   * **Null on a pane showing a query** (ML3), which has no document behind it
+   * and therefore nothing to undo into. Keeping the last one would have been
+   * one character less and would have put ⌘Z on a document nobody is looking at.
+   */
+  get document(): RemoteDocument | null {
     return this.#doc
   }
 
@@ -101,7 +109,10 @@ export class Pane {
   }
 
   async goTo(target: NavTarget, options: { push?: boolean } = {}): Promise<void> {
-    if (options.push !== false && this.#window !== null) {
+    // **`#location`, not `#window`.** A pane showing a query has no window, and
+    // testing for one lost the history entry on the way out of the directory —
+    // so back from a link you followed would have skipped it.
+    if (options.push !== false && this.#loaded) {
       this.#back.push(this.#location)
       this.#forward.length = 0
     }
@@ -124,12 +135,14 @@ export class Pane {
 
   async #load(target: NavTarget): Promise<void> {
     const previous = this.#window
-    const { doc, window } = await this.#open(target)
+    const opened = await this.#open(target)
     previous?.release()
 
-    this.#doc = doc
-    this.#window = window as RemoteWindow
+    // Null for a query, which is the whole of what ML3 changes here.
+    this.#doc = opened?.doc ?? null
+    this.#window = (opened?.window ?? null) as RemoteWindow | null
     this.#location = target
+    this.#loaded = true
     for (const h of this.#windowHandlers) h()
     for (const h of this.#locationHandlers) h()
     for (const h of this.#boundaryHandlers) h()
@@ -147,8 +160,13 @@ export class Pane {
    * a pane that assumed one document could express the first three and threw on
    * the rest (D35, D54).
    */
-  async #open(target: NavTarget): Promise<{ doc: RemoteDocument; window: DocumentWindow }> {
+  async #open(target: NavTarget): Promise<{ doc: RemoteDocument; window: DocumentWindow } | null> {
     switch (target.kind) {
+      // **A query has nothing to open.** The pane holds the location and the
+      // renderer draws the view; there is no document behind it and no window
+      // to read (ML3).
+      case 'links':
+        return null
       case 'today': {
         const stream = await this.#documents.stream()
         return { doc: stream, window: await stream.readToday() }

@@ -90,6 +90,38 @@ export interface LinkAppearance {
   readonly target: string
   /** Sortable. A day file's day; otherwise when the file was last written. */
   readonly when: number
+  /**
+   * The day this appearance is dated to — always a day, whichever way it came.
+   *
+   * **Computed in main, never in the renderer** (D62, D63). A day file's day is
+   * exact; everything else is its file's stamp turned into a date *in the
+   * notebook's zone*, and a renderer working that out for itself is the
+   * disagreement the published `clockDay` exists to prevent. It is also the
+   * date the row is SORTED by, and a column that sorts by one thing and shows
+   * another is the real inconsistency — which is what showing a filename here
+   * turned out to be.
+   */
+  readonly on: DateKey
+  /**
+   * The DOCUMENT it was written in, which is not always the file.
+   *
+   * **A file is not an id** — for a directory document (the notebook, a task
+   * list) the document is the directory and the file is one of its segments
+   * (D59). Opening `tasks.todo/2026/09/2026-09-05.md` as a document was the
+   * defect this exists to remove; a note is its own file and answers the same
+   * way, so the caller does not branch.
+   */
+  readonly doc: DocumentId
+  /** Which segment of it: a day, or the one segment a single-file kind has. */
+  readonly segment: string
+  /**
+   * What to CALL where it was written — 'notebook', 'tasks', a note's name.
+   *
+   * For reading and for filtering: *"it was in a task"* and *"it was in the
+   * publication list"* are among the few things anybody reliably remembers
+   * about a link.
+   */
+  readonly source: string
 }
 
 /**

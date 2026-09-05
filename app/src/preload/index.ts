@@ -8,7 +8,7 @@ import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
 import type { Clipboard, DayProse, PrintJob, ZoneNotice } from '../shared/ipc.ts'
 import type {
-  Followed, IndexStatus, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
+  Followed, IndexStatus, LinkRow, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
 } from '../shared/nav-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
@@ -84,6 +84,8 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.navBookmarks),
     /** The days, oldest first, each with the headings written in it. Days only. */
     timeline: (): Promise<readonly TimelineDay[]> => ipcRenderer.invoke(CHANNEL.navTimeline),
+    /** The link directory: every destination, newest first by last appearance (R10a). */
+    links: (): Promise<readonly LinkRow[]> => ipcRenderer.invoke(CHANNEL.navLinks),
     threads: (): Promise<readonly ThreadRow[]> => ipcRenderer.invoke(CHANNEL.navThreads),
     occurrences: (reference: Reference): Promise<readonly Located[]> =>
       ipcRenderer.invoke(CHANNEL.navOccurrences, reference),

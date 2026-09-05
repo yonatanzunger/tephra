@@ -54,6 +54,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.navSubjects, () => service.index.subjects())
   ipcMain.handle(CHANNEL.navBookmarks, () => service.index.bookmarks())
   ipcMain.handle(CHANNEL.navTimeline, () => service.index.timeline())
+  ipcMain.handle(CHANNEL.navLinks, () => service.links())
   ipcMain.handle(CHANNEL.navThreads, () => service.index.threads())
   ipcMain.handle(CHANNEL.navOccurrences, (_e, reference: Reference) =>
     service.index.occurrences(reference),

@@ -114,6 +114,8 @@ export interface MenuActions {
    * question a renderer cannot answer about windows it is not (MC6).
    */
   tasks: () => void
+  /** The link directory (ML3): a window's location that is not a document. */
+  links: () => void
   /**
    * Ask for a file, the way every other application asks for one.
    *
@@ -140,6 +142,7 @@ let actions: MenuActions = {
   newWindow: () => undefined,
   notebook: () => undefined,
   tasks: () => undefined,
+  links: () => undefined,
   open: () => undefined,
   import: () => undefined,
   newFile: () => undefined,
@@ -336,6 +339,15 @@ export function installMenu(next?: MenuActions): void {
           label: 'Task List',
           accelerator: 'CmdOrCtrl+1',
           click: () => actions.tasks(),
+        },
+        {
+          // **The third place you are always going**, and the first that is not
+          // a document at all (ML3): a window's location can be a query. Same
+          // gesture as its neighbours — there should be a window with this in
+          // it, in front — because it is still one subject.
+          label: 'Links',
+          accelerator: 'CmdOrCtrl+2',
+          click: () => actions.links(),
         },
         { type: 'separator' },
         // **Minimize without ⌘M.** The role carries the system accelerator, and

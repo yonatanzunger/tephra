@@ -42,6 +42,7 @@ export const CHANNEL = {
   navSubjects: 'tephra:nav:subjects',
   navBookmarks: 'tephra:nav:bookmarks',
   navTimeline: 'tephra:nav:timeline',
+  navLinks: 'tephra:nav:links',
   navThreads: 'tephra:nav:threads',
   navOccurrences: 'tephra:nav:occurrences',
   navStatus: 'tephra:nav:status',

@@ -478,6 +478,80 @@ body {
   border: 1px solid rgb(var(--text-heading)); border-radius: 4px; padding: .3rem .9rem;
 }
 
+/* ── the link directory (ML3, R10a) ─────────────────────
+   A page you scan down a left edge, like the task list and unlike prose — so it
+   takes a measure as a maximum and is set flush left, which is the lesson MT3
+   learned the hard way. */
+.links { min-width: 0; padding-top: .4rem; }
+.links-head { display: flex; align-items: baseline; gap: .6rem; padding-bottom: .5rem; }
+.links-query {
+  flex: 1; min-width: 0; max-width: 22rem;
+  font-family: var(--font-ui); font-size: 12.5px; color: rgb(var(--text));
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .2rem .5rem;
+}
+.links-query:focus { outline: none; border-color: rgb(var(--accent) / .6); }
+.links-count { font-family: var(--font-ui); font-size: 11.5px; color: rgb(var(--text-muted)); }
+.links-empty { font-family: var(--font-ui); font-size: 13px; color: rgb(var(--text-muted)); }
+
+.links-list { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
+.links-row { padding: .5rem 0; border-bottom: 1px solid rgb(var(--border) / .45); }
+
+/* **The sentence leads.** A label alone is rarely enough to recognise anything
+   — "course", "bio draft", "list" mean what the sentence around them meant, and
+   recognition is the directory's whole job. So the line it was written in takes
+   the row's first line and its full size, and the destination follows. */
+.links-said {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  font-family: var(--font-ui); font-size: 13.5px; line-height: 1.45;
+  color: rgb(var(--text)); background: none; border: 0; padding: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.links-said:hover { color: rgb(var(--text-heading)); }
+
+.links-under { display: flex; align-items: baseline; gap: .5rem; margin-top: .2rem; }
+
+/* **Where it goes**, in the accent so it reads as the thing you can follow. */
+.links-target {
+  flex: 0 1 auto; min-width: 0; text-align: left; cursor: pointer;
+  font-family: var(--font-ui); font-size: 11.5px;
+  color: rgb(var(--accent)); background: none; border: 0; padding: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.links-target:hover { text-decoration: underline; }
+
+/* A source is a filter you can click: "it was in the publication list" is how
+   somebody narrows a directory of a thousand rows down to the one they want. */
+.links-source {
+  flex: 0 0 auto; cursor: pointer;
+  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: .03em;
+  color: rgb(var(--text-muted)); background: rgb(var(--text) / .06);
+  border: 0; border-radius: 999px; padding: .08rem .45rem;
+}
+.links-source:hover { color: rgb(var(--text)); background: rgb(var(--accent) / .14); }
+
+.links-when {
+  flex: 0 0 auto; margin-left: auto;
+  font-family: var(--font-ui); font-size: 11px;
+  color: rgb(var(--text-muted)); font-variant-numeric: tabular-nums;
+}
+.links-more {
+  flex: 0 0 auto; cursor: pointer;
+  font-family: var(--font-ui); font-size: 11px; color: rgb(var(--text-muted));
+  background: none; border: 0; padding: 0;
+}
+.links-more:hover { color: rgb(var(--text)); }
+
+.links-places { list-style: none; margin: .3rem 0 0; padding: 0 0 0 1rem; }
+.links-places button {
+  display: flex; gap: .5rem; align-items: baseline; width: 100%; text-align: left; cursor: pointer;
+  font-family: var(--font-ui); font-size: 11.5px; color: rgb(var(--text-muted));
+  background: none; border: 0; padding: .15rem 0;
+}
+.links-places button:hover { color: rgb(var(--text)); }
+.links-line { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.links-places .links-source { cursor: inherit; }
+
 /* ── the walk (T11) ─────────────────────────────────────
    **The list looking different IS the offer.** The goal asks for a prominent
    affordance and not a modal, and a tint across the rows that came from

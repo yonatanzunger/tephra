@@ -3,6 +3,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { destination, flattenLinks, scanLinks } from '../../../src/shared/links.ts'
+import { plainLine } from '../../../src/shared/plain.ts'
 
 test('THE BUG THIS FIXES: a link with a space in its URL is still a link', () => {
   // `destination()` writes the angle-bracket form whenever a URL cannot survive
@@ -98,4 +99,38 @@ test('an image leaves nothing behind, because its label is alt text', () => {
 
 test('a bare URL is left alone, because it already reads as itself', () => {
   assert.equal(flattenLinks('see https://example.com/survey'), 'see https://example.com/survey')
+})
+
+// ── a line of the corpus, as a reader would read it ────
+//
+// **Reported from use**, in the link directory: a task's context line showed
+// `- [ ] Review Steve's bio draft #career <!--tephra:item oqacmjoh 178… 178…-->`,
+// which is exactly what is in the file and is not the sentence. The file being
+// what it appears to be (R26, D20) is the premise of the storage, and it means
+// a line pulled out for display carries what the app wrote beside what a person
+// did.
+
+test('THE POINT: an item marker is machinery, and a reader is not shown it', () => {
+  assert.equal(
+    plainLine("- [ ] Review Steve's bio draft #career <!--tephra:item oqacmjoh 1788311075 1788397350-->"),
+    "Review Steve's bio draft #career",
+  )
+})
+
+test('tags and due dates STAY, because a person typed them and meant them', () => {
+  // T16: there is one notation, and it is the one in the file.
+  assert.equal(plainLine('- [ ] file the return #hmrc DUE 2026-09-07'), 'file the return #hmrc DUE 2026-09-07')
+})
+
+test('a bullet and a checkbox go, because a row is not showing its filing system', () => {
+  assert.equal(plainLine('* 2026-03-31 [Applying fundamentals](https://example.org/a)'), '2026-03-31 Applying fundamentals')
+  assert.equal(plainLine('- [x] done with it'), 'done with it')
+})
+
+test('and link markup collapses to the words it was written with', () => {
+  assert.equal(plainLine('Read [the paper](https://example.com/x) this morning.'), 'Read the paper this morning.')
+})
+
+test('ordinary prose comes back as it is', () => {
+  assert.equal(plainLine('Just a sentence.'), 'Just a sentence.')
 })

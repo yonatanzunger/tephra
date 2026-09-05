@@ -230,13 +230,14 @@ export class Windows {
 /**
  * Which document a target names — the question `reveal` is really asking.
  *
- * **A window is on a DOCUMENT, not on a place inside one.** Somebody asking for
+ * **A window is on a SUBJECT — a document or a query — not on a place inside
+ * one.** Somebody asking for
  * the notebook wants the window that has the notebook in it, whatever day it
  * happens to be showing; comparing the targets themselves would open a second
  * window every time the first one had scrolled. A date, a bookmark and "today"
  * are all the stream.
  */
-function documentOf(target: NavTarget): DocumentId | null {
+function documentOf(target: NavTarget): string | null {
   switch (target.kind) {
     case 'today':
     case 'date':
@@ -246,6 +247,12 @@ function documentOf(target: NavTarget): DocumentId | null {
       return target.id
     case 'span':
       return target.doc
+    // **A window can be on a query, not only on a document** (ML3). It is still
+    // one subject and still the thing "bring it to the front" means, so it
+    // answers here rather than earning a second comparison — which is what a
+    // second filtered view would otherwise have to add again.
+    case 'links':
+      return 'links'
     default:
       return null // a URL and an OS file are not windows of ours
   }

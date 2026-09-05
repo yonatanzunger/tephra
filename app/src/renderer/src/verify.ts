@@ -1033,6 +1033,88 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'linkdir') {
+      // **A window's location that is not a document** (ML3). Everything around
+      // it is unchanged — frame, sidebar, title bar, back and forward — which
+      // is the point: every filtered view after this one inherits the shape.
+      // Navigated to rather than opened from the menu, for the reason the
+      // `todo` scene is: \u23182 means "there should be a WINDOW with this in
+      // it, in front" (the rule \u23180 and \u23181 follow), and a scene runs in
+      // window 1. The menu item is checked separately, below.
+      say('clicked', await window.tephra.clickMenu('Links'))
+      await settle(1500)
+      await pane.goTo({ kind: 'links' })
+      let waited = 0
+      while (waited < 20_000 && document.querySelector('.links-row') === null) {
+        await settle(200)
+        waited += 200
+      }
+      say('title', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('noEditor', document.querySelector('.cm-content') === null)
+
+      const rows = () => [...document.querySelectorAll('.links-row')]
+      const targets = () => rows().map(r => r.querySelector('.links-target')?.textContent?.trim() ?? '')
+      say('rows', targets())
+      say('whens', rows().map(r => r.querySelector('.links-when')?.textContent?.trim() ?? ''))
+      say('where', rows().map(r => r.querySelector('.links-said')?.textContent?.trim() ?? ''))
+      say('sources', rows().map(r => r.querySelector('.links-source')?.textContent?.trim() ?? ''))
+      say('places', rows().map(r => r.querySelector('.links-more')?.textContent?.trim() ?? ''))
+      say('count', document.querySelector('.links-count')?.textContent?.trim() ?? '')
+
+      // Filtering is in the client; at this scale nothing else is warranted.
+      const box = document.querySelector('.links-query') as HTMLInputElement | null
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(box, 'survey')
+      box?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(400)
+      say('filtered', targets())
+      say('filteredCount', document.querySelector('.links-count')?.textContent?.trim() ?? '')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(box, '')
+      box?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(300)
+
+      // **Where you wrote it**, which is the question behind the question.
+      // **Clicking a source filters by it**, which is how a directory of a
+      // thousand rows becomes the handful you meant.
+      ;(rows().find(r => (r.querySelector('.links-source')?.textContent ?? '').includes('tasks'))
+        ?.querySelector('.links-source') as HTMLElement | null)?.click()
+      await settle(400)
+      say('bySource', targets())
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(box, '')
+      box?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(300)
+
+      // **Where it goes**, for a link written inside a task — the row that
+      // produced `ENOTDIR` when a file path was handed over as a document id.
+      const inTask = rows().find(r =>
+        (r.querySelector('.links-source')?.textContent ?? '').includes('tasks'),
+      )
+      ;(inTask?.querySelector('.links-said') as HTMLElement | null)?.click()
+      await settle(1400)
+      say('fromTask', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('taskError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await pane.goTo({ kind: 'links' })
+      await settle(700)
+
+      const back = rows().find(r =>
+        (r.querySelector('.links-target')?.textContent ?? '').includes('the paper'),
+      )
+      ;(back?.querySelector('.links-said') as HTMLElement | null)?.click()
+      await settle(1200)
+      say('wentBack', document.querySelector('.cm-content') !== null)
+      say('titleAfter', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      // And back/forward work across a location that is not a document at all.
+      const backButton = [...document.querySelectorAll('.titlebar button.nav')].find(
+        b => (b.textContent ?? '').trim() === '\u2039',
+      ) as HTMLButtonElement | undefined
+      say('canGoBack', backButton?.disabled === false)
+      backButton?.click()
+      await settle(900)
+      say('backToLinks', document.querySelector('.links-row') !== null)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'tagindex') {
       // **The full set, offered after the live one** (T6, MT5b). A tag whose
       // last task was finished in March is in no list on screen — the live set
@@ -3026,6 +3108,10 @@ interface EditorViewLike {
 }
 interface PaneLike {
   readonly location: unknown
-  /** Structural, like the rest of this file: the harness drives the real Pane. */
-  goTo(target: { kind: 'document'; id: unknown }): Promise<void>
+  /**
+   * Structural, like the rest of this file: the harness drives the real Pane.
+   *
+   * A window's location is a document **or a query** (ML3), so this takes both.
+   */
+  goTo(target: { kind: 'document'; id: unknown } | { kind: 'links' }): Promise<void>
 }
