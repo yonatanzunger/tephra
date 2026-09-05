@@ -195,10 +195,10 @@ body {
 .nav-here-sep { color: rgb(var(--panel-text-muted)); padding-right: .25rem; }
 .nav-here-part { color: rgb(var(--panel-text) / .85); }
 .nav-here-tags { display: flex; flex-wrap: wrap; gap: .2rem; width: 100%; }
-.nav-here-tag {
-  font-size: 10.5px; padding: 0 .35rem; border-radius: 999px;
-  color: rgb(var(--panel-text)); background: rgb(var(--tag) / .3);
-}
+/* A subject, in the sidebar's palette — and the ground carries the subject's
+   own colour, which is a fact worth keeping rather than a decoration. That is
+   the whole reason a pill's tint is a variable and not a constant. */
+.nav-here-tag { --pill-ink: rgb(var(--panel-text)); --pill-ground: rgb(var(--tag) / .3); }
 
 /* ── rows: one verb, and apparatus for the sets (D51) ─────────────────────
    Every row is a button that goes somewhere. The count is what tells a reader,
@@ -432,6 +432,14 @@ body {
 .todo-column { min-width: 0; }
 .todo-list { list-style: none; margin: 0; padding: 0; }
 
+/* **One size for everything in a row that is not the task**, and it is a
+   variable so the parts cannot drift apart. They had: the due date was 11px and
+   the tag became .7em — 14px beside 20px prose — and the two sat in the same
+   row disagreeing, which is what two independent constants always come to. The
+   pill's .7em is right where a pill is the only apparatus on the line; in a row
+   that already carries a date, the row decides. */
+.todo-row, .todo-adding { --row-note: .58em; --pill-size: var(--row-note); }
+
 /* ── how the list is arranged (T8) ──────────────────────
    Small, quiet and always present: it is a control for a decision somebody
    makes occasionally, so it should not compete with the list it arranges. Both
@@ -478,45 +486,73 @@ body {
   border: 1px solid rgb(var(--text-heading)); border-radius: 4px; padding: .3rem .9rem;
 }
 
-/* ── pills ──────────────────────────────────────────────
-   **A pill says one of two things, and it should say which.** A LABEL is a fact
-   about the row — a tag, a subject — and has no border; a CONTROL does
-   something when clicked and has one. Every pill in the app already followed
-   that except the link directory's source, which filters and wore a label's
-   clothes: muted grey on a grey tint, unreadable and unclickable-looking at
-   once. That is the same mistake the zone badge made (D63).
+@property --note-lift {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
 
-   **Sized in `em`, never in px.** A pill inside 20px prose and a pill inside
-   12px chrome are not the same size, and a constant makes the theme's slider
-   lie about what it controls — which MT3 found in the task list and `theme.ts`
-   says about code: a ratio, not a size of its own. */
+/* ── pills ──────────────────────────────────────────────
+   **A pill says one of two things, and it should say which.** A LABEL is a
+   fact about the row — a tag, a subject, where a link came from as a name. A
+   CONTROL does something when clicked. Labels have no edge; controls have one,
+   and light on approach.
+
+   Six of these had been invented separately, at 10.5px, 10.5px, 10.5px, 12.5px,
+   11px and `inherit`, and the system was almost there without being said: every
+   one followed the border rule except the link directory's source, which
+   filters and wore a label's clothes — muted grey on a grey tint, unreadable
+   and unclickable-looking at once. That is the zone badge's mistake (D63), *a
+   control that looks like a label*, and it is why the complaint arrived as one
+   about colour.
+
+   **Tinted through two variables**, because the app has two palettes: the
+   content area's `--text`, and the sidebar and title bar's `--panel-text`. A
+   pill that hard-coded either would be wrong in half the places it appears, so
+   the shape and the behaviour live here and the ink is set by whoever is
+   showing it.
+
+   **And sized in `em`**, against the line it sits beside rather than the page,
+   because that is what makes it subordinate in a 20px task list and subordinate
+   in a 15.6px directory row alike (`theme.ts` on code: a ratio, not a size of
+   its own). `--pill-size` overrides it for the one kind that is not a chip
+   beside a line but a primary control in its own right. */
 .pill {
   flex: 0 0 auto;
-  /* **Relative to the line it sits beside**, so it is subordinate in a 20px
-     task list and subordinate in a 15.6px directory row without being illegible
-     in either. The first cut used .55em and compounded: inside a panel already
-     set at a fraction of the reading size it came out at 8.6px, smaller than
-     the constant it replaced. */
-  font-family: var(--font-ui); font-size: .7em; letter-spacing: .03em;
+  font-family: var(--font-ui); font-size: var(--pill-size, .7em); letter-spacing: .03em;
   border-radius: 999px; padding: .1em .5em; line-height: 1.5;
+  color: var(--pill-ink); background: var(--pill-ground);
+  border: 1px solid var(--pill-edge);
 }
-/* A fact about the row: quiet, and nothing to click. **Quiet is not the same
-   as unreadable** — muted grey on a grey tint was two greys deep and the
-   reported complaint. The ink is the text colour held back, and the ground is
-   what separates it from the line. */
-.pill.label { color: rgb(var(--text) / .72); background: rgb(var(--text) / .075); border: 0; }
-/* Something you can do: bordered, and it lights on approach. */
+/* A fact about the row: quiet, and nothing to click. **Quiet is not the same as
+   unreadable** — muted grey on a grey tint was two greys deep, which is what was
+   reported. The ink is the text colour held back; the ground is what separates
+   it from the line. */
+.pill.label {
+  --pill-ink: rgb(var(--text) / .72);
+  --pill-ground: rgb(var(--text) / .075);
+  --pill-edge: transparent;
+}
+/* Something you can do: an edge at rest, and the accent when reached for. */
 .pill.control {
-  cursor: pointer; color: rgb(var(--text-muted));
-  background: none; border: 1px solid rgb(var(--border));
+  cursor: pointer;
+  --pill-ink: rgb(var(--text-muted));
+  --pill-ground: transparent;
+  --pill-edge: rgb(var(--border));
 }
 .pill.control:hover {
-  color: rgb(var(--accent)); border-color: rgb(var(--accent) / .55);
-  background: rgb(var(--accent) / .08);
+  --pill-ink: rgb(var(--accent));
+  --pill-ground: rgb(var(--accent) / .08);
+  --pill-edge: rgb(var(--accent) / .55);
 }
+.pill.control:focus-visible { outline: 2px solid rgb(var(--accent) / .5); outline-offset: 1px; }
+/* On. A toggle that is set says so in the accent, which is what `.reaction.mine`
+   was already doing by hand — and it says it to a screen reader too, now that
+   the state is `aria-pressed` rather than a class. */
 .pill.control[aria-pressed='true'] {
-  color: rgb(var(--accent)); border-color: rgb(var(--accent) / .6);
-  background: rgb(var(--accent) / .12);
+  --pill-ink: rgb(var(--accent));
+  --pill-ground: rgb(var(--accent) / .12);
+  --pill-edge: rgb(var(--accent) / .6);
 }
 
 /* ── the link directory (ML3, R10a) ─────────────────────
@@ -631,9 +667,9 @@ body {
    ordinary day, and never occupies a place the eye has learned is empty. */
 .todo-drop {
   flex: 0 0 auto; cursor: pointer;
-  font-family: var(--font-ui); font-size: 10.5px; letter-spacing: .03em;
+  font-family: var(--font-ui); font-size: var(--row-note); letter-spacing: .03em;
   color: rgb(var(--text-muted)); background: none;
-  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .05rem .4rem;
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .1em .5em;
 }
 .todo-drop:hover { color: rgb(var(--todo-doomed)); border-color: rgb(var(--todo-doomed) / .6); }
 .todo-drop[aria-pressed='true'] {
@@ -753,6 +789,29 @@ body {
 .todo-unwritten { color: rgb(var(--text-muted)); font-style: italic; }
 .todo-note { margin-left: .5rem; font-size: .85em; font-style: italic; color: rgb(var(--text-muted)); }
 
+/* **Centred on the first line, by the same arithmetic the mark uses.** The row
+   is `flex-start` so that everything stays on line one when an item wraps to
+   three — and small type left at the top of a 1.72em line box rides visibly
+   above the words it belongs to.
+
+   Baseline alignment is the obvious answer and is the wrong one here: a chip is
+   a BOX with a ground, and a small box's baseline sits well above its middle,
+   so baseline-aligning left it almost as high. What these want is the mark's
+   rule — half the difference between the line box and their own height — and
+   One number does both only because they are made the same height: a pill is a
+   box with a line-height and padding, and a bare span is its font metrics, so
+   the due date is given the pill's box to sit in. Two nudges for two heights
+   would have been two magic numbers waiting to disagree. */
+/* **Registered, so it is computed ONCE and on the ROW.** An unregistered custom
+   property is substituted as text and its `em` resolves wherever it lands — and
+   the due date sets its own font-size, so the identical expression came out at
+   7.34px on the tags and 4.26px on the date, which is exactly the 3px of
+   riding-high that was left. `<length>` makes it compute where it is written,
+   in the row's em, and inherit as a number of pixels. */
+.todo-row, .todo-adding {
+  --note-lift: calc((1em * var(--todo-leading, 1.5) - var(--row-note) * 1.7) / 2);
+}
+.todo-tags, .todo-due { margin-top: var(--note-lift); }
 .todo-tags { display: flex; flex-wrap: wrap; gap: .25rem; flex: 0 0 auto; }
 /* Shape and colour come from `.pill.label`; a tag adds nothing but its place
    in the row. It was 10.5px inside 20px prose, which is half the size of the
@@ -761,7 +820,12 @@ body {
 /* **The one thing allowed to be loud** (T9). Era 2 stored due dates and still
    missed them; what was missing was not storage. */
 .todo-due {
-  flex: 0 0 auto; font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  flex: 0 0 auto;
+  /* The pill's box exactly, transparent edge and all, so the two share one
+     nudge rather than needing two magic numbers that would drift apart. */
+  display: inline-block; line-height: 1.5; padding: .1em 0;
+  border: 1px solid transparent;
+  font-family: var(--font-ui); font-size: var(--row-note); font-weight: 600;
   font-variant-numeric: tabular-nums; letter-spacing: .02em;
   color: rgb(var(--accent));
 }
@@ -913,13 +977,11 @@ body {
 
 /* ── the date range, which is the same dialog asking a two-part question ── */
 .range-presets { display: flex; flex-wrap: wrap; gap: .35rem; }
-.range-presets button {
-  font: inherit; font-size: 12.5px; cursor: pointer;
-  color: rgb(var(--text)); background: rgb(var(--text) / .05);
-  border: 1px solid rgb(var(--border)); border-radius: 999px; padding: .2rem .7rem;
-}
-.range-presets button:hover { background: rgb(var(--accent) / .12); border-color: rgb(var(--accent) / .5); }
-.range-presets button:focus-visible { outline: 2px solid rgb(var(--accent) / .5); outline-offset: 1px; }
+/* **The one pill that is not a chip beside a line.** A preset is a primary
+   control in its own dialog, so it keeps the dialog's size rather than shrinking
+   to seven tenths of it — which is what `--pill-size` is for. Everything else
+   about it is the shared language. */
+.range-presets button { --pill-size: 12.5px; --pill-ink: rgb(var(--text)); padding: .2em .7em; }
 .range-fields { display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: .4rem .5rem; }
 .range-fields label { margin: 0; }
 .range-fields input { font-size: 13px; padding: .25rem .4rem; }
@@ -1097,20 +1159,17 @@ body {
    error, so it is not red; it is a condition of this file, and importing is
    what changes the condition. Styled as a chip rather than a button so it reads
    as a label first — which is what it is until you want it (MC6). */
+/* A control that reads as a label until you want it, which is exactly what
+   `.pill.control` is: an edge at rest, the accent on approach. The title bar is
+   a drag region and drag regions swallow clicks (D63), so this one carries
+   `no-drag` — the property that makes the difference between a control and a
+   picture of one. */
 .titlebar .badge.readonly {
   -webkit-app-region: no-drag;
   display: inline-flex; align-items: center; gap: .35rem;
-  padding: .15rem .5rem;
-  border: 1px solid rgb(var(--border));
-  border-radius: 999px;
-  background: rgb(var(--surface-muted));
-  color: rgb(var(--panel-text-muted));
-  font: inherit; font-size: 11px; letter-spacing: .02em;
-  cursor: pointer;
-}
-.titlebar .badge.readonly:hover {
-  border-color: rgb(var(--accent));
-  color: rgb(var(--panel-text));
+  --pill-size: 11px;
+  --pill-ink: rgb(var(--panel-text-muted));
+  --pill-ground: rgb(var(--surface-muted));
 }
 .titlebar label, .titlebar input { -webkit-app-region: no-drag; }
 .toggle { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
@@ -1309,12 +1368,9 @@ body {
 }
 .note .link { text-decoration: underline; }
 .note .link:hover, .note .quick:hover { color: rgb(var(--accent)); }
-.reaction {
-  border: 1px solid rgb(var(--border)); border-radius: 999px; cursor: pointer;
-  background: transparent; font: inherit; color: rgb(var(--text-muted));
-  padding: 0 .35rem; line-height: 1.5;
-}
-.reaction.mine { border-color: rgb(var(--accent) / .6); color: rgb(var(--text)); }
+/* A toggle, and the on-state is the shared one — `.mine` said it in CSS only,
+   so a screen reader was told nothing. It is `aria-pressed` now. */
+.reaction { --pill-size: 1em; padding: 0 .4em; }
 
 .composer { display: flex; flex-direction: column; gap: .25rem; margin: .2rem 0; }
 .composer textarea {

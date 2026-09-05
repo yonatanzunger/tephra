@@ -159,6 +159,16 @@ console.log('— printing —')
     JSON.stringify(r.presets),
   )
   check(
+    // Folded into the pill language, and the one exception to its sizing: a
+    // preset is a primary control in its own dialog rather than a chip beside a
+    // line, so it keeps the dialog's size instead of shrinking to seven tenths
+    // of it. `--pill-size` is what that exception is spelled with.
+    'a preset is a pill, and the one that keeps its own size',
+    typeof r.presetPill === 'object' && r.presetPill !== null &&
+      r.presetPill.edge === 'edge' && r.presetPill.round === '999px' && r.presetPill.size >= 12,
+    JSON.stringify(r.presetPill),
+  )
+  check(
     'a preset fills both ends of the range',
     Array.isArray(r.range) && r.range.length === 2 && r.range[1] === DAY && r.range[0] < r.range[1],
     `${JSON.stringify(r.range)} count=${r.count}`,
@@ -1403,6 +1413,79 @@ console.log('\n— a link in a task —')
     `${JSON.stringify(k.afterBold)} then ${JSON.stringify(k.afterBoldTwice)}`,
   )
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
+}
+
+// ── pills say what they are ────────────────────
+//
+// **Six of these had been invented separately** — at 10.5px, 10.5px, 10.5px,
+// 12.5px, 11px and `inherit` — and a system was almost there without anybody
+// saying it: a LABEL is a fact about the row and has no edge; a CONTROL does
+// something and has one. Every pill followed that except the link directory's
+// source, which filters and wore a label's clothes, which is why the reported
+// symptom was about colour.
+console.log('\n— pills —')
+{
+  const root = await week(['Read [the paper](https://example.com/a) today.\n'])
+  const [py, pm] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', py, pm), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', py, pm, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      `- [ ] read the survey #house DUE ${dayFrom(2)} <!--tephra:item aaaa1111 100 100-->\n`,
+  )
+
+  const P = report(await launch('pills', root))
+  const tag = P.todoTag ?? {}
+  const source = P.linkSource ?? {}
+  check(
+    // Nothing to click, so nothing that says you could.
+    'a TAG is a label: no edge, and a ground to separate it from the line',
+    tag.edge === 'none' && tag.ground !== 'none',
+    JSON.stringify(tag),
+  )
+  check(
+    // The one that was wrong. It filters, and it looked like a tag.
+    'a SOURCE is a control: an edge, because it does something',
+    source.edge === 'edge',
+    JSON.stringify(source),
+  )
+  check(
+    // `theme.ts` on code: a ratio, not a size of its own. A pill is subordinate
+    // to the line it sits beside — 20px prose and a 15.6px directory row — and
+    // an absolute number makes the theme's slider lie about what it controls.
+    // Two pills in two panels come out at two sizes, which is the whole claim:
+    // neither is a constant, and each is a fraction of the line it sits beside.
+    'and both are sized against the line they sit beside, not against the page',
+    tag.size !== source.size && tag.size >= 11 && source.size >= 10,
+    `tag ${tag.size}px beside 20px prose \u00b7 source ${source.size}px beside a 15.6px row`,
+  )
+  check(
+    // **Reported from use**: they sat in the same row at 14px and 11px, because
+    // they were two independent constants — which is what two constants always
+    // come to. One variable now, so they cannot drift apart again.
+    'a tag and a due date are the same size, because they share one',
+    tag.size === (P.todoDue ?? {}).size,
+    `tag ${tag.size}px \u00b7 due ${(P.todoDue ?? {}).size}px`,
+  )
+  check(
+    // **Reported from use**: they sat at the top of a 1.72em line box, riding
+    // visibly above the words they belong to. Centred on the FIRST line by the
+    // same arithmetic the status mark uses — which keeps them on line one when
+    // an item wraps to three, the thing `flex-start` was protecting.
+    'a tag and a due date sit on the middle of the line, not the top of it',
+    typeof P.middles === 'object' && P.middles !== null &&
+      Math.abs(P.middles.tag - P.middles.text) <= 2 &&
+      Math.abs(P.middles.due - P.middles.text) <= 2,
+    JSON.stringify(P.middles),
+  )
+  check(
+    // Quiet is not the same as unreadable: muted grey on a grey tint was two
+    // greys deep, which is what was reported.
+    'a label\'s ink is the text colour held back, not a second grey',
+    typeof tag.ink === 'string' && tag.ink.includes('0.72'),
+    String(tag.ink),
+  )
+  check('nothing errored on the way', P.appError === 'none', String(P.appError))
 }
 
 // ── the link directory (ML3, R10a, T10) ────────────

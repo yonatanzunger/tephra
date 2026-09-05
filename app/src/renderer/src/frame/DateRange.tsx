@@ -114,6 +114,7 @@ export function DateRange({
             <button
               key={preset.label}
               type="button"
+              className="pill control"
               ref={i === 0 ? first : null}
               onClick={() => {
                 const [a, b] = preset.of(today, request.extent)

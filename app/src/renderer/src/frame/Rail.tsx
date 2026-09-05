@@ -160,7 +160,11 @@ function Note({
               <button
                 type="button"
                 key={emoji}
-                className={who.includes(me) ? 'reaction mine' : 'reaction'}
+                className="pill control reaction"
+                // **The state, said out loud.** `.mine` was a class and nothing
+                // else: a screen reader was told this was a button and never
+                // told whether it was set.
+                aria-pressed={who.includes(me)}
                 title={who.join(', ')}
                 onClick={() =>
                   run(window.tephra.doc.reactToComment(thread.id, index, emoji, !who.includes(me)))

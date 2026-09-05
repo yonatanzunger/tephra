@@ -1027,7 +1027,7 @@ export function App(): React.JSX.Element {
         {readOnly && (
           <button
             type="button"
-            className="badge readonly"
+            className="pill control badge readonly"
             title="This file is outside your notebook: it can be read, but not changed. Import it to keep it here."
             onClick={() => void window.tephra.win.import().catch(fail)}
           >

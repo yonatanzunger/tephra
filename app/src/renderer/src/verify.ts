@@ -1033,6 +1033,68 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'pills') {
+      // **One language, two palettes.** A pill is a label or a control, and the
+      // ink is set by whoever shows it — the content area's `--text` or the
+      // sidebar and title bar's `--panel-text`. What is checked here is that
+      // each pill reads as the kind of thing it IS: labels without an edge,
+      // controls with one, and nothing at a size that ignores its context.
+      await settle(700)
+      const seen = (sel: string) => {
+        const el = document.querySelector(sel) as HTMLElement | null
+        if (el === null) return null
+        const css = getComputedStyle(el)
+        // **The edge is its COLOUR, not its width.** A label carries a 1px
+        // transparent border so that labels and controls have identical
+        // metrics and nothing shifts when one becomes the other.
+        const clear = (c: string): boolean => /,\s*0\)$/.test(c) || c === 'transparent'
+        return {
+          size: Math.round(parseFloat(css.fontSize) * 10) / 10,
+          edge: clear(css.borderTopColor) ? 'none' : 'edge',
+          ink: css.color,
+          ground: clear(css.backgroundColor) ? 'none' : css.backgroundColor,
+        }
+      }
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelector('.todo-tag') === null) {
+        await settle(200)
+        waited += 200
+      }
+      say('todoTag', seen('.todo-tag'))
+      // **They sit in the same row and must agree.** Two independent constants
+      // is what made them disagree in the first place.
+      say('todoDue', seen('.todo-due'))
+      // **Where they sit, not just how big they are.** Small type at the top of
+      // a 1.72em line box rides visibly above the words it belongs to.
+      {
+        const row = [...document.querySelectorAll('.todo-row')].find(
+          r => r.querySelector('.todo-due') !== null && r.querySelector('.todo-tag') !== null,
+        )
+        const mid = (sel: string): number | null => {
+          const b = row?.querySelector(sel)?.getBoundingClientRect()
+          return b === undefined ? null : Math.round(b.top + b.height / 2)
+        }
+        say('middles', { text: mid('.todo-text'), tag: mid('.todo-tag'), due: mid('.todo-due') })
+        const box = (sel: string) => {
+          const b = row?.querySelector(sel)?.getBoundingClientRect()
+          const css = row?.querySelector(sel) === null || row?.querySelector(sel) === undefined
+            ? null : getComputedStyle(row.querySelector(sel) as Element)
+          return b === undefined ? null : {
+            top: Math.round(b.top), h: Math.round(b.height * 10) / 10,
+            mt: css?.marginTop, lh: css?.lineHeight, d: css?.display,
+          }
+        }
+        say('boxes', { tags: box('.todo-tags'), tag: box('.todo-tag'), due: box('.todo-due') })
+      }
+
+      await pane.goTo({ kind: 'links' })
+      await settle(900)
+      say('linkSource', seen('.links-source'))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'linkdir') {
       // **A window's location that is not a document** (ML3). Everything around
       // it is unchanged — frame, sidebar, title bar, back and forward — which
@@ -1997,6 +2059,18 @@ export async function runVerify(request: string): Promise<void> {
       const dialog = document.querySelector('.prompt.range')
       say('dialogShown', dialog !== null)
       say('presets', [...(dialog?.querySelectorAll('.range-presets button') ?? [])].map(b => b.textContent))
+      // Folded into the pill language, but a preset is a primary control in its
+      // own dialog rather than a chip beside a line — so it keeps the dialog's
+      // size instead of shrinking to seven tenths of it.
+      {
+        const one = dialog?.querySelector('.range-presets button') as HTMLElement | null
+        const css = one === null || one === undefined ? null : getComputedStyle(one)
+        say('presetPill', css === null ? null : {
+          size: Math.round(parseFloat(css.fontSize) * 10) / 10,
+          edge: /,\s*0\)$/.test(css.borderTopColor) ? 'none' : 'edge',
+          round: css.borderTopLeftRadius,
+        })
+      }
 
       // "Past month" rather than typing dates: it is the path a person takes,
       // and it exercises the extent the dialog was handed.

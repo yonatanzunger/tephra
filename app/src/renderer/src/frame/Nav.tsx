@@ -487,7 +487,7 @@ export function Nav({
             {where.subjects.length > 0 && (
               <span className="nav-here-tags">
                 {where.subjects.map(s => (
-                  <span key={s} className="nav-here-tag" style={{ '--tag': `var(--tag-${tagSlot(s)})` } as React.CSSProperties}>
+                  <span key={s} className="pill label nav-here-tag" style={{ '--tag': `var(--tag-${tagSlot(s)})` } as React.CSSProperties}>
                     {s}
                   </span>
                 ))}

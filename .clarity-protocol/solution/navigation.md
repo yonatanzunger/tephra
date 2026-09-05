@@ -31,9 +31,59 @@ a panel already set at a fraction of the reading size, a pill came out at 8.6px
 is the right relation, because a pill is subordinate to that line and not to the
 page.
 
-**Applied to the two that were wrong** — the link source (now a control) and the
-task tag (now a label, in `em`). The sidebar tag, the range presets, the
-read-only badge and the comment reaction are unchanged and are candidates.
+**All six are in it now**, which is what makes it a language rather than a fix.
+Three things the folding taught:
+
+- **Two variables, because the app has two palettes.** The content area's
+  `--text` and the sidebar and title bar's `--panel-text`. A pill that
+  hard-coded either would be wrong in half the places it appears, so the shape
+  and the behaviour are shared and `--pill-ink` / `--pill-ground` are set by
+  whoever is showing it. That is also what lets the sidebar's subject tag keep
+  the *subject's own colour* as its ground — a fact worth keeping rather than a
+  decoration to standardise away.
+- **A label carries a transparent edge**, not no edge, so labels and controls
+  have identical metrics and nothing shifts when one becomes the other.
+- **One pill is not a chip beside a line.** A date-range preset is a primary
+  control in its own dialog, and at `.7em` of that dialog it would have been
+  9px. `--pill-size` is where that exception is spelled, and having exactly one
+  exception with a name is the sign the rule is right.
+
+**And one place where `.7em` is the wrong relation.** In a task row the pill
+came out at 14px beside a due date at 11px — two independent constants sitting
+in the same row disagreeing, which is what two constants always come to. `.7em`
+is right where a pill is the *only* apparatus on the line; a row that already
+carries a date has its own idea of how loud its apparatus should be. So
+`--row-note` is one variable for everything in a row that is not the task, and
+the pill takes it. The general rule survives with a named local override, which
+is the second time that has been the answer.
+
+**Then: where they sit, not just how big they are.** Small type left at the top
+of a 1.72em line box rides visibly above the words it belongs to. Two attempts
+before the right one:
+
+- **Baseline alignment is the obvious answer and is wrong here.** A chip is a
+  box with a ground, and a small box's baseline sits well above its middle, so
+  it stayed almost as high. The status mark's rule is the right one — half the
+  difference between the line box and the item's own height — which also keeps
+  everything on line ONE when an item wraps to three, the thing `flex-start` was
+  protecting in the first place.
+- **`em` inside a `calc()` resolves where the value LANDS, not where it is
+  written.** The due date sets its own font-size, so one expression came out at
+  7.34px on the tags and 4.26px on the date — exactly the 3px of riding-high
+  that was left over. `@property --note-lift { syntax: '<length>' }` makes it
+  compute where it is written, in the row's em, and inherit as pixels. This is
+  the kind of thing that reads as correct in the stylesheet and is wrong on
+  screen, which is why it was measured rather than looked at.
+
+And the two are made the *same box* — the due date takes the pill's line-height,
+padding and a transparent border — so one lift does both. Two lifts for two
+heights would have been two numbers waiting to disagree, which is the whole
+lesson of the tag and the due date having disagreed in the first place.
+
+**And a real accessibility fix fell out.** `.reaction.mine` said "this reaction
+is yours" in CSS and nowhere else, so a screen reader was told the button
+existed and never told whether it was set. The shared on-state is
+`[aria-pressed='true']`, so saying it visually now requires saying it at all.
 
 ## The Timeline is days, and only days
 
