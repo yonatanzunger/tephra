@@ -1141,13 +1141,14 @@ console.log('\n\u2014 the task list \u2014')
     `${JSON.stringify(r.statusMenu)} \u00b7 ${r.afterBacklog}`,
   )
   check(
-    // THE POINT of T6: the live set is dramatically smaller than every tag ever
-    // used, and it is what makes completion useful rather than a list of
-    // everything. By this point in the scene `#house` is on one item that is
-    // done and one that is backlogged, so it is not offered — while `#term`,
-    // on an item still live, is.
-    'completion offers the tags that have LIVE items, and only those (T6)',
-    Array.isArray(r.completions) && r.completions.includes('term') && !r.completions.includes('house'),
+    // THE POINT of T6, and MT5b moved half of it: the live set is dramatically
+    // smaller than every tag ever used and is what makes completion useful, so
+    // it comes FIRST — but the full set stays reachable rather than vanishing,
+    // so the rest follow, marked. By this point in the scene `#house` is on one
+    // item that is done and one that is backlogged, so it is no longer live and
+    // has dropped behind `#term`, which is still on a live item.
+    'completion leads with the tags that have LIVE items (T6)',
+    Array.isArray(r.completions) && r.completions[0] === 'term',
     JSON.stringify(r.completions),
   )
   check(
@@ -1208,11 +1209,16 @@ console.log('\n\u2014 the task list \u2014')
     r.railRight === true,
   )
   check(
+    // **Three moments, asserted separately.** This used to tie `picked` to
+    // `afterTab` — but they are two different lists: the arrow is pressed
+    // against everything matching `#`, and Tab is pressed later against
+    // everything matching `#te`. It only ever passed because both lists happened
+    // to hold one entry, and MT5b's dormant tags gave the first list a second.
     'completion is a keyboard\'s: arrows move, Tab takes, Escape dismisses',
     typeof r.picked === 'string' && r.picked !== '' &&
       Array.isArray(r.completions) && r.completions.includes(r.picked) &&
       r.escapeHidesTheList === true && r.escapeKeptTheLine === true &&
-      String(r.afterTab).endsWith(`#${r.picked}`),
+      r.afterTab === 'read the survey #term',
     `picked ${JSON.stringify(r.picked)} \u00b7 hid ${r.escapeHidesTheList} \u00b7 kept ${r.escapeKeptTheLine} \u00b7 tab ${JSON.stringify(r.afterTab)}`,
   )
   check(
@@ -1397,6 +1403,61 @@ console.log('\n— a link in a task —')
     `${JSON.stringify(k.afterBold)} then ${JSON.stringify(k.afterBoldTwice)}`,
   )
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
+}
+
+// ── the tag index (MT5b, T6, D56) ──────────────────
+//
+// **Narrower than the milestone was planned to be, and this is the half that
+// needed an index.** MT3 found the LIVE tag set needs none at all: it is the
+// tags on today's items, which are already on screen. But a tag whose last task
+// was finished in March is in no list on screen, and T6 asks that the full set
+// stay reachable — so the corpus is asked for the whole of it, and *dormant* is
+// the subtraction between the two.
+console.log('\n— the tag index —')
+{
+  const root = await week(['Today.\n'])
+  const [y, m] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', '2026', '03'), { recursive: true })
+  await mkdir(join(root, 'tasks.todo', y, m), { recursive: true })
+  // Finished months ago, so nothing on screen knows these tags exist.
+  await writeFile(
+    join(root, 'tasks.todo', '2026', '03', '2026-03-01.md'),
+    '---\ntephra: 1\ndate: 2026-03-01\nkind: todo\n---\n' +
+      '- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->\n' +
+      '- [x] file the return #hmrc <!--tephra:item aaaa2222 100 100-->\n',
+  )
+  await writeFile(
+    join(root, 'tasks.todo', y, m, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      '- [ ] read the survey #here <!--tephra:item bbbb1111 100 100-->\n',
+  )
+
+  const g = report(await launch('tagindex', root))
+  check(
+    'the corpus knows every tag ever put on a task, live or not',
+    JSON.stringify(g.everyTag) === JSON.stringify(['here', 'hmrc', 'house']),
+    JSON.stringify(g.everyTag),
+  )
+  check(
+    // One list in one order, because the arrow keys move through one thing. A
+    // second panel of dormant tags would be a second place to look.
+    'THE POINT: completion offers the live one FIRST, then the rest',
+    JSON.stringify(g.offered) === JSON.stringify(['here', 'hmrc', 'house']) && g.firstIsLive === true,
+    `${JSON.stringify(g.offered)} \u00b7 first is live: ${g.firstIsLive}`,
+  )
+  check(
+    // Marked rather than hidden: "the full set stays reachable" is the other
+    // half of the requirement whose first half is "offer the live ones".
+    'and says which of them have no live task',
+    JSON.stringify(g.dormant) === JSON.stringify(['hmrc', 'house']),
+    JSON.stringify(g.dormant),
+  )
+  check(
+    'a dormant tag completes exactly as a live one does',
+    g.afterTaking === 'a new one #hmrc',
+    JSON.stringify(g.afterTaking),
+  )
+  check('nothing errored on the way', g.appError === 'none', String(g.appError))
 }
 
 // ── the walk (MT5a, T11) ──────────────────────────

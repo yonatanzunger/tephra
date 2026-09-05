@@ -499,26 +499,56 @@ of ids, and anonymous lines have none.
 
 **Does not do:** the tag index, the cap.
 
-## MT5b — The tag index
+## MT5b — The tag index *(done)*
 
-**Narrower than this milestone was planned to be**, because MT3 found that the
-live tag set needs no index at all: it is the tags on today's live items, which
-are already on screen, and MT4a now groups by them. T6's *which tags have live
-items* is delivered. What is left is the half an index is actually needed for:
+**Done**, and verified by `npm run m3`. **Half of what this milestone was
+planned to be had already been delivered by accident**: MT3 found that the live
+tag set needs no index at all — it is the tags on today's items, which are
+already on screen — and MT4a came to depend on that. So T6's *offer the live
+ones by default* was finished before this started, and what was left is the
+sentence after it: **the full set stays reachable.**
 
-- **The dormant tags** — tags with no live items, which the goal says stays
-  reachable. Only a corpus-wide view can answer that.
-- **Corpus-wide id minting.** `unusedItemId` currently checks a new id against
-  one segment's items; D56 wants every id in the corpus, which is what makes
-  `tephra:todo/<id>` resolvable without a list name.
+- **The corpus answers `todoTags()`: every tag ever put on a task.** A tag whose
+  last item was finished in March is in no list on screen, and that is exactly
+  the one an index is needed for. *Dormant* is then a subtraction done where
+  both halves are known, rather than a third thing to store.
+- **And `itemIds()`: every id in the corpus**, which is what D56 always wanted.
+  `solution/todo.md` said ids "must be unique across the corpus for
+  `tephra:todo/<id>` to resolve without a list name"; MT2 shipped eight base-36
+  characters, which is wide enough on its own, and left the check for here.
+  Minting is checked against the whole corpus now, which is what makes it
+  certain rather than merely likely.
+- **Per-tag recency is deliberately absent.** It belongs to Q3a's backlog
+  resurfacing, deferred by decision.
 
-**But it is real work**, because the scanner deliberately contributes no span
-for the item marker: `markers.ts` knows `item` so that a todo file opened in the
-markdown surface does not read markers as prose, and stops there. So this is the
-first time `CorpusIndex` learns a new fact since it was built.
+**The scan asks the KIND, not the text.** `- [ ] buy paint #house` is a markdown
+task list wherever it appears, and `#house` is a tag only inside a task list —
+TODO tags are their own namespace (T5), so reading them out of prose would
+invent tags nobody wrote. `scanSpans` is left generic for the same reason; the
+index branches on `kindOf(file) === 'todo'` and runs the shared grammar.
 
-**Per-tag recency is not here.** It belongs to Q3a's backlog resurfacing, which
-is deferred by decision.
+**Existing caches rebuilt themselves, with no migration code.** `isPayload`
+already documented the rule — "a shape it does not recognise is a cache it
+throws away, rescanned on the spot" — so requiring the new `items` field is the
+whole of the migration.
+
+### What the building found
+
+- **A thunk that is called eagerly is a set.** `adopt` runs on every carry and
+  mints on almost none of them, and answering "what ids are taken" means
+  sweeping the corpus. The first cut passed a thunk *and then awaited it at the
+  top of `adopt`* — so every list fetch paid for a sweep to answer a question
+  nobody asked. It resolves on the first mint now, and a test asserts the corpus
+  is not asked when nothing is minted.
+- **`verify()` built its comparison payload by hand**, so it did not know about
+  the new field and reported every file as drifted. Caught by the test that
+  exists for exactly that.
+- **Two MT3 checks asserted the old rule**, that completion offers live tags
+  "and only those". That is deliberately no longer true, and they were updated
+  rather than worked around. One of them was fragile in a way worth recording:
+  it tied `picked` to `afterTab`, which are two *different* completion lists —
+  one matching `#`, one matching `#te` typed later — and only ever passed
+  because both happened to hold a single entry.
 
 ## MT5c — The soft cap *(deferred, on purpose)*
 

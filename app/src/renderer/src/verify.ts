@@ -1033,6 +1033,45 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'tagindex') {
+      // **The full set, offered after the live one** (T6, MT5b). A tag whose
+      // last task was finished in March is in no list on screen — the live set
+      // is today's items and needed no index — so this is the half the corpus
+      // is actually asked for.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      say('everyTag', await window.tephra.todo.tags())
+
+      ;(document.querySelector('.todo-add') as HTMLElement | null)?.click()
+      await settle(400)
+      const field = document.querySelector('.todo-field') as HTMLInputElement | null
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'a new one #h')
+      field?.dispatchEvent(new Event('input', { bubbles: true }))
+      await settle(500)
+
+      const options = () => [...document.querySelectorAll('.todo-complete button')]
+      say('offered', options().map(b => b.textContent ?? ''))
+      // Live first, and the dormant ones marked as such rather than hidden.
+      say('dormant', options().filter(b => b.classList.contains('dormant')).map(b => b.textContent ?? ''))
+      say('firstIsLive', options()[0]?.classList.contains('dormant') === false)
+
+      // And a dormant one completes exactly as a live one does.
+      const older = options().find(b => b.classList.contains('dormant')) as HTMLElement | undefined
+      older?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await settle(400)
+      say('afterTaking', (document.querySelector('.todo-field') as HTMLInputElement | null)?.value ?? '')
+      ;(document.querySelector('.todo-field') as HTMLElement | null)?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      )
+      await settle(400)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'walk') {
       await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
       let waited = 0

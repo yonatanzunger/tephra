@@ -1194,7 +1194,7 @@ export class DocumentService {
     const made = 'tasks.todo' as DocumentId
     // No `create`: a directory document has no single file to be created, and
     // the day the carry materialises IS what brings it into being.
-    await this.#corpus.use(made, doc => (doc as TodoDocument).carry(this.today))
+    await this.#corpus.use(made, doc => (doc as TodoDocument).carry(this.today, this.#takenIds))
     this.#touched()
     return made
   }
@@ -1213,7 +1213,7 @@ export class DocumentService {
     // carries when they have stopped — the same boundary the notebook uses,
     // asked at the moment the list is looked at.
     const today = this.today
-    await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today))
+    await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds))
     this.#touched()
     return today
   }
@@ -1225,7 +1225,7 @@ export class DocumentService {
   /** Serialised with every other write, for the reason D37 gives. */
   async todoAdd(id: DocumentId, text: string): Promise<string> {
     const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as TodoDocument).add(text, this.today)),
+      this.#corpus.use(id, doc => (doc as TodoDocument).add(text, this.today, this.#takenIds)),
     )
     this.#touched()
     return made
@@ -1241,6 +1241,22 @@ export class DocumentService {
   async todoRemove(id: DocumentId, item: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).remove(item)))
     this.#touched()
+  }
+
+  /**
+   * Ids already spoken for anywhere in the corpus (MT5b, D56).
+   *
+   * **Handed to the document rather than looked up by it.** A `TodoDocument`
+   * knows one list; `tephra:todo/<id>` resolves without naming a list, so the
+   * id has to be unique across all of them, and only the index can say. Held as
+   * a field so it is one function rather than a closure made at each call site,
+   * and called only when an id is actually being minted.
+   */
+  readonly #takenIds = (): Promise<ReadonlySet<string>> => this.#index.itemIds()
+
+  /** Every tag that has ever been on a task (T6). The full set; live is today's. */
+  async todoTags(): Promise<readonly string[]> {
+    return this.#index.todoTags()
   }
 
   /** What the walk knows about a day (T11). A read: it decides nothing. */

@@ -732,6 +732,12 @@ body {
   color: rgb(var(--text)); background: none; border: 0; border-radius: 4px;
   padding: .15rem .5rem;
 }
+/* **A tag with no live task is still offered, and says so** (T6). The live
+   ones lead because they are what somebody almost always means; these follow,
+   quieter, because "the full set stays reachable" is the other half of the same
+   requirement — and because muted is how this app says *older* everywhere. */
+.todo-complete button.dormant { color: rgb(var(--text-muted)); font-style: italic; }
+
 /* Which one Return and Tab would take. */
 .todo-complete button.picked { background: rgb(var(--accent) / .18); color: rgb(var(--text-heading)); }
 .todo-complete button:hover, .todo-dates button:hover { background: rgb(var(--accent) / .14); }

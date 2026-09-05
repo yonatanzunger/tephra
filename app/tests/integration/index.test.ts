@@ -206,3 +206,89 @@ test('and the day it carries is a DateKey, so nothing has to cast it', async t =
   assert.equal(day?.date, '2026-03-01')
   assert.equal(dayLabel(day?.date as DateKey), '1 Mar')
 })
+
+// ── the tag index (MT5b, T6, D56) ──────────────────────
+//
+// **Narrower than the milestone was planned to be**, because MT3 found the
+// *live* tag set needs no index at all: it is the tags on today's items, which
+// are already on screen. So what the corpus is asked for is the FULL set, and
+// dormant is a subtraction done where both halves are known.
+//
+// And ids, which is the half D56 always wanted: an id minted against one day is
+// unique enough within a list and says nothing about a second one, while
+// `tephra:todo/<id>` resolves without naming a list at all.
+
+const TODO = (date: string, lines: readonly string[]): string =>
+  `---\ntephra: 1\ndate: ${date}\nkind: todo\n---\n${lines.join('\n')}\n`
+
+async function withList(t: TestContext, days: Record<string, readonly string[]>) {
+  const made = await corpus(t, [['2026-03-01', 'A day.\n']])
+  for (const [date, lines] of Object.entries(days)) {
+    const [y, m] = date.split('-') as [string, string]
+    await mkdir(join(made.root, 'tasks.todo', y, m), { recursive: true })
+    await writeFile(join(made.root, 'tasks.todo', y, m, `${date}.md`), TODO(date, lines))
+  }
+  return made
+}
+
+test('every tag ever put on a task is in the full set', async t => {
+  const { index } = await withList(t, {
+    '2026-02-01': ['- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-01': [
+      '- [ ] call the surveyor #house #urgent <!--tephra:item aaaa2222 100 100-->',
+      '- [ ] read the survey #tephra <!--tephra:item aaaa3333 100 100-->',
+    ],
+  })
+  // Sorted, and `#house` once though it is on two items in two different days.
+  assert.deepEqual(await index.todoTags(), ['house', 'tephra', 'urgent'])
+})
+
+test('THE POINT: a tag whose items are all finished is still in the set', async t => {
+  // Which is the whole of what the index adds. `#house` has no live item, so
+  // today's list cannot know about it — and T6 asks that the full set stay
+  // reachable rather than vanish with the last live task.
+  const { index } = await withList(t, {
+    '2026-02-01': ['- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+  })
+  assert.deepEqual(await index.todoTags(), ['house'])
+})
+
+test('a hashtag in ordinary prose is not a task tag', async t => {
+  // TODO tags are their own namespace (T5), and `#house` means nothing in a
+  // day of the notebook. Read out of prose it would invent tags nobody wrote.
+  const { index } = await corpus(t, [['2026-03-01', 'Thinking about #house and #money today.\n']])
+  assert.deepEqual(await index.todoTags(), [])
+})
+
+test('and a markdown checkbox in a note is not a task either', async t => {
+  // `- [ ] something #house` is a markdown task list wherever it appears. What
+  // makes it an item is the file it is in, which is why the scan asks the kind.
+  const { index } = await corpus(t, [['2026-03-01', 'A day.\n']], {
+    'plan.md': '- [ ] buy paint #house <!--tephra:item bbbb1111 100 100-->\n',
+  })
+  assert.deepEqual(await index.todoTags(), [])
+  assert.deepEqual([...(await index.itemIds())], [])
+})
+
+test('every item id in the corpus is known, across days and across lists', async t => {
+  const { index, root } = await withList(t, {
+    '2026-02-01': ['- [ ] fix the gate <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-01': ['- [ ] fix the gate <!--tephra:item aaaa1111 100 100-->'],
+  })
+  // A second list, which is what corpus-wide uniqueness is actually for.
+  await mkdir(join(root, 'blog.todo', '2026', '03'), { recursive: true })
+  await writeFile(
+    join(root, 'blog.todo', '2026', '03', '2026-03-01.md'),
+    TODO('2026-03-01', ['- [ ] write the post <!--tephra:item bbbb2222 100 100-->']),
+  )
+
+  const ids = await index.itemIds()
+  // Carried forward, so it is one item in two days and one id.
+  assert.deepEqual([...ids].sort(), ['aaaa1111', 'bbbb2222'])
+})
+
+test('a line nobody has adopted yet has no id, and contributes none', async t => {
+  const { index } = await withList(t, { '2026-03-01': ['- [ ] typed in by hand #house'] })
+  assert.deepEqual([...(await index.itemIds())], [])
+  assert.deepEqual(await index.todoTags(), [], 'and no tag either, until it is an item')
+})

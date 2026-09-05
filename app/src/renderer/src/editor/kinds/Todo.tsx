@@ -130,6 +130,17 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * rows. And `dropping` is a **selection**, not an edit — which is the whole
    * reason it can be abandoned without anything being undone.
    */
+  /**
+   * Every tag the corpus has ever seen on a task (T6, MT5b).
+   *
+   * **The full set, offered after the live one.** T6 asks that the live tags be
+   * what the interface offers by default and that the full set stay reachable —
+   * and the live set is exactly the tags on today's items, already on screen,
+   * which is why it never needed an index. This is the half that did: a tag
+   * whose last task was finished in March is in no list on screen, and typing
+   * `#ho` should still find it.
+   */
+  const [known, setKnown] = useState<readonly string[]>([])
   const [walk, setWalk] = useState<WalkState | null>(null)
   const [walking, setWalking] = useState(false)
   const [dropping, setDropping] = useState<ReadonlySet<string>>(new Set())
@@ -141,12 +152,14 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
 
   const refresh = useCallback(
     async (date: DateKey) => {
-      const [got, state] = await Promise.all([
+      const [got, state, everyTag] = await Promise.all([
         window.tephra.todo.items(list, date),
         window.tephra.todo.walk(list, date),
+        window.tephra.todo.tags(),
       ])
       setItems(got)
       setWalk(state)
+      setKnown(everyTag)
     },
     [list],
   )
@@ -338,6 +351,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       item={item}
       today={today}
       tags={live}
+      known={known}
       editing={editing === item.id}
       blocking={blocking === item.id}
       onEdit={() => setEditing(item.id)}
@@ -444,6 +458,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                 placeholder="what needs doing"
                 {...(onTextTarget === undefined ? {} : { onTextTarget })}
                 tags={live}
+                known={known}
                 today={today}
                 onDone={text => {
                   setAdding(null)
@@ -584,6 +599,7 @@ function Row({
   item,
   today,
   tags,
+  known,
   editing,
   blocking,
   onEdit,
@@ -600,6 +616,7 @@ function Row({
   item: TodoItem
   today: DateKey | null
   tags: readonly string[]
+  known: readonly string[]
   editing: boolean
   blocking: boolean
   onEdit: () => void
@@ -664,12 +681,13 @@ function Row({
         // **The raw line is what gets edited**, tags and date included: the
         // markers are what the line says, and hiding them from the editor would
         // make them uneditable without a second control for each (T16).
-        <Field initial={item.text} tags={tags} today={today} onDone={onDone} {...target} />
+        <Field initial={item.text} tags={tags} known={known} today={today} onDone={onDone} {...target} />
       ) : blocking ? (
         <Field
           initial={item.note ?? ''}
           placeholder="waiting on what?"
           tags={tags}
+          known={known}
           today={today}
           onDone={onBlocked}
           {...target}
@@ -779,6 +797,7 @@ function Field({
   initial,
   placeholder,
   tags,
+  known,
   today,
   onDone,
   onTextTarget,
@@ -787,6 +806,8 @@ function Field({
   placeholder?: string
   /** Tags that currently have live items — the short set worth completing (T6). */
   tags: readonly string[]
+  /** Every tag the corpus has ever seen. Offered after the live ones (MT5b). */
+  known: readonly string[]
   today: DateKey | null
   onDone: (text: string | null) => void
   /** Publishes this field as somewhere a range command can write, while it lives. */
@@ -918,10 +939,21 @@ function Field({
 
   const caret = field.current?.selectionStart ?? value.length
   const partial = wordAt(caret)
-  const matching =
-    partial === null || hidden
-      ? []
-      : tags.filter(tag => tag.toLowerCase().startsWith((partial[1] ?? '').toLowerCase())).slice(0, 6)
+  /**
+   * What to offer, live first and then the rest (T6).
+   *
+   * **One list in one order**, because the arrow keys move through one thing —
+   * a second panel of dormant tags would be a second place to look and a second
+   * thing to learn. The live ones lead because they are what somebody almost
+   * always means; the older ones follow, marked, because "the full set stays
+   * reachable" is the other half of the same requirement.
+   */
+  const wanted = (partial?.[1] ?? '').toLowerCase()
+  const starts = (tag: string): boolean => tag.toLowerCase().startsWith(wanted)
+  const live = partial === null || hidden ? [] : tags.filter(starts)
+  const dormant =
+    partial === null || hidden ? [] : known.filter(tag => starts(tag) && !tags.includes(tag))
+  const matching = [...live, ...dormant].slice(0, 6)
   const at = Math.min(pick, Math.max(0, matching.length - 1))
 
   /**
@@ -1050,8 +1082,9 @@ function Field({
             <button
               key={tag}
               type="button"
-              className={n === at ? 'picked' : ''}
+              className={`${n === at ? 'picked' : ''}${live.includes(tag) ? '' : ' dormant'}`.trim()}
               aria-selected={n === at}
+              title={live.includes(tag) ? undefined : 'No live tasks have this one'}
               onMouseDown={e => { e.preventDefault(); complete(tag) }}
             >
               {tag}

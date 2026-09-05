@@ -578,7 +578,7 @@ Three milestones are open at once — the task list, the link directory and the
 day boundary — and only three dependencies between them are real. The rest is a
 judgement about what is worth having soonest.
 
-**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7.** *(MT5c, the cap, is deferred until the walk has produced a week of counts to choose its number from — see `todo-roadmap.md`.)*
+**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7.** *(MT5b done.)* *(MT5c, the cap, is deferred until the walk has produced a week of counts to choose its number from — see `todo-roadmap.md`.)*
 
 *MT7 — more than one list, in two shapes — was also asked for from use. It sits
 after MT5b for a real reason: `tephra:todo/<id>` resolves without a list name
@@ -680,7 +680,7 @@ from waiting on a wide refactor.
 feature rather than the correctness fix, and it is wide-but-shallow work that
 would otherwise hold up MT4.
 
-## MT — the TODO list *(MT1–MT4, MT4a and MT5a done; MT5b next)*
+## MT — the TODO list *(MT1–MT5b done; ML2+ML3 next)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**

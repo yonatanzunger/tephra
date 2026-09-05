@@ -438,6 +438,8 @@ export type TodoCommand =
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
   | { readonly kind: 'remove'; readonly list: DocumentId; readonly item: string }
   /** What the walk knows about a day: reviewed yet, and what arrived from before (T11). */
+  /** Every tag that has ever been on a task (T6). The full set; live is today's. */
+  | { readonly kind: 'tags' }
   | { readonly kind: 'walk'; readonly list: DocumentId; readonly date: DateKey }
   /**
    * End a pass: delete what was marked, and record that the day was reviewed.

@@ -179,6 +179,14 @@ const tephra = {
     /** Off the list, for a line that was never a task. Earlier days keep theirs. */
     remove: (list: DocumentId, item: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'remove', list, item }),
+    /**
+     * Every tag ever put on a task (T6).
+     *
+     * The FULL set. The live one is the tags on today's items, which the
+     * surface already has — so this is the half that needed an index, and
+     * *dormant* is the subtraction between them.
+     */
+    tags: (): Promise<readonly string[]> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'tags' }),
     /** Whether the day has been reviewed, and what arrived from before it (T11). */
     walk: (list: DocumentId, date: DateKey): Promise<WalkState> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'walk', list, date }),

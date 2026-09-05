@@ -379,3 +379,63 @@ test('a hand-written line keeps the identity of the day it was WRITTEN on', asyn
   assert.equal(tuesday?.ctime, monday.ctime, 'born when it was written, not when it was copied')
   assert.match(await fileOn(MON), /tephra:item/)
 })
+
+// ── minting against the whole corpus (MT5b, D56) ───────
+//
+// **Eight base-36 characters were always meant to be checked, not just wide.**
+// `solution/todo.md`: ids "must be unique across the corpus for
+// `tephra:todo/<id>` to resolve without a list name", and minting against one
+// day's items is unique enough within a list while saying nothing about a
+// second one. MT2 shipped the width and left the check for here.
+
+test('an id is not reused when another list already has it', async t => {
+  const { doc } = await list(t, { [MON]: [] })
+  // Everything the corpus has, which this document cannot see for itself.
+  const elsewhere = async (): Promise<ReadonlySet<string>> => new Set(['aaaa1111', 'bbbb2222'])
+  const minted: string[] = []
+  for (let i = 0; i < 25; i++) minted.push(await doc.add(`item ${i}`, MON, elsewhere))
+
+  assert.equal(new Set(minted).size, minted.length, 'and not reused within this list either')
+  assert.ok(!minted.includes('aaaa1111'))
+  assert.ok(!minted.includes('bbbb2222'))
+})
+
+test('adopting a hand-written line respects ids taken elsewhere too', async t => {
+  // Flow 9's line gets its identity on the next write, and that identity has to
+  // be as unique as a minted one — it addresses the same namespace.
+  const { doc } = await list(t, { [MON]: ['- [ ] typed in by hand'] })
+  const taken = new Set<string>()
+  // Every id the rest of the corpus holds, contrived so a careless mint would
+  // collide: the document's own day is empty, so only `elsewhere` can stop it.
+  for (let i = 0; i < 200; i++) taken.add(`z${i.toString(36).padStart(7, '0')}`)
+  await doc.adopt(MON, async () => taken)
+
+  const id = (await doc.itemsOn(MON))[0]?.id
+  assert.ok(id !== null && id !== undefined)
+  assert.ok(!taken.has(id), 'the new id belongs to nobody else')
+})
+
+test('and a document with nobody to ask is still right about itself', async t => {
+  // Which is what keeps the kind drivable in a test with no corpus behind it,
+  // and what `add` does on every call that does not care.
+  const { doc } = await list(t, { [MON]: [] })
+  const a = await doc.add('one', MON)
+  const b = await doc.add('two', MON)
+  assert.notEqual(a, b)
+})
+
+test('the corpus is asked ONLY when an id is actually minted', async t => {
+  // `adopt` runs on every carry and mints on almost none of them, and answering
+  // costs a sweep of the corpus. That is why it is a thunk and not a set.
+  const { doc } = await list(t, { [MON]: ['- [ ] already mine <!--tephra:item aaaa1111 100 100-->'] })
+  let asked = 0
+  const elsewhere = async (): Promise<ReadonlySet<string>> => {
+    asked += 1
+    return new Set<string>()
+  }
+  await doc.carry(TUE, elsewhere)
+  assert.equal(asked, 0, 'nothing was minted, so nothing was asked')
+
+  await doc.add('something new', TUE, elsewhere)
+  assert.equal(asked, 1)
+})

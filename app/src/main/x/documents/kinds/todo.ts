@@ -49,6 +49,18 @@ import type {
 const WALKED = 'walked'
 const CARRIED_FROM = 'carriedFrom'
 
+/**
+ * Ids taken somewhere this document cannot see (MT5b, D56).
+ *
+ * **A thunk, because the answer is expensive and almost never needed.** An id
+ * has to be unique across the corpus for `tephra:todo/<id>` to resolve without
+ * naming a list, and a document knows only itself — so whoever holds the index
+ * hands this in, and it is called only at the moment an id is actually minted.
+ * Absent, the document is still correct about itself, which is what keeps it
+ * drivable in a test with no corpus behind it.
+ */
+export type TakenIds = () => Promise<ReadonlySet<string>>
+
 export interface LocatedItem {
   readonly item: TodoItem
   readonly date: DateKey
@@ -130,10 +142,10 @@ export class TodoDocument extends SegmentedDocument {
    *
    * Returns the number of items carried, or -1 when the day already existed.
    */
-  async carry(date: DateKey): Promise<number> {
+  async carry(date: DateKey, elsewhere?: TakenIds): Promise<number> {
     const already = await this.#exists(date)
     if (already) {
-      await this.adopt(date)
+      await this.adopt(date, elsewhere)
       return -1
     }
 
@@ -149,7 +161,7 @@ export class TodoDocument extends SegmentedDocument {
     // Tuesday — D56's "first day this line appears", quietly wrong. Giving it
     // its identity where it was actually written makes the copy a copy, and is
     // what lets the walk say which of today's items are yesterday's at all.
-    if (source !== undefined) await this.adopt(source)
+    if (source !== undefined) await this.adopt(source, elsewhere)
     const carried =
       source === undefined
         ? []
@@ -170,7 +182,7 @@ export class TodoDocument extends SegmentedDocument {
     // written in (D62) and its ctime does not know that. The carry is the one
     // moment that knows for certain, so it writes it down.
     if (source !== undefined) (await this.segment(date)).setExtra(CARRIED_FROM, source)
-    await this.adopt(date)
+    await this.adopt(date, elsewhere)
     return carried.length
   }
 
@@ -246,9 +258,9 @@ export class TodoDocument extends SegmentedDocument {
    * moment: `DUE FRIDAY` sitting in a file would mean something different every
    * week (T16).
    */
-  async adopt(date: DateKey): Promise<number> {
+  async adopt(date: DateKey, elsewhere?: TakenIds): Promise<number> {
     const found = await this.#scan(date)
-    const taken = new Set(found.flatMap(s => (s.item.id === null ? [] : [s.item.id])))
+    const taken = this.#taken(found, elsewhere)
     const now = nowSeconds()
     const edits: { span: Span; payload: DocumentText }[] = []
 
@@ -257,8 +269,12 @@ export class TodoDocument extends SegmentedDocument {
       const needsId = scanned.item.id === null
       if (!needsId && resolved === scanned.item.text) continue
 
-      const id = scanned.item.id ?? unusedItemId(taken)
-      if (needsId) taken.add(id)
+      let id = scanned.item.id
+      if (id === null) {
+        const pool = await taken()
+        id = unusedItemId(pool)
+        pool.add(id)
+      }
       const line = itemLine({
         ...scanned.item,
         text: resolved,
@@ -285,11 +301,11 @@ export class TodoDocument extends SegmentedDocument {
    * moment of noticing: status is *not started*, ctime is now, and the tags and
    * the due date are whatever the string already said (T13, T16).
    */
-  async add(text: string, date: DateKey): Promise<string> {
-    await this.carry(date)
+  async add(text: string, date: DateKey, elsewhere?: TakenIds): Promise<string> {
+    await this.carry(date, elsewhere)
     const now = nowSeconds()
     const found = await this.#scan(date)
-    const id = unusedItemId(new Set(found.flatMap(s => (s.item.id === null ? [] : [s.item.id]))))
+    const id = unusedItemId(await this.#taken(found, elsewhere)())
     // **Flattened first.** A quick-add box and a share sheet both hand over
     // whatever was selected, and an item is a line — a newline in the middle of
     // one would silently become two items, the second of them unmarked.
@@ -405,6 +421,33 @@ export class TodoDocument extends SegmentedDocument {
   // day it has open and is *told* which day to work in; one that asked a clock
   // would be a fourth answer to a question that now has one, and would go on
   // believing the calendar while the notebook was still in last night.
+
+  /**
+   * The ids that are already spoken for, this day's and the corpus's.
+   *
+   * **Asked only when something is actually being minted**, which is why it is
+   * a thunk and not a set: `adopt` runs on every carry and mints on almost none
+   * of them, and answering it means sweeping the corpus.
+   */
+  #taken(
+    found: readonly ScannedItem[],
+    elsewhere: TakenIds | undefined,
+    // Mutable on purpose: `adopt` mints a batch and each new id has to be
+    // spoken for before the next one is drawn.
+  ): () => Promise<Set<string>> {
+    let pool: Set<string> | null = null
+    // **Resolved on the first mint and not before.** The first cut awaited this
+    // at the top of `adopt` — which runs on every carry and mints on almost
+    // none of them, so every list fetch paid for a sweep of the corpus to
+    // answer a question nobody asked. A thunk that is called eagerly is a set.
+    return async () => {
+      if (pool !== null) return pool
+      const mine = new Set<string>(found.flatMap(s => (s.item.id === null ? [] : [s.item.id])))
+      if (elsewhere !== undefined) for (const id of await elsewhere()) mine.add(id)
+      pool = mine
+      return mine
+    }
+  }
 
   // ── internals ──────────────────────────────────────────────
 

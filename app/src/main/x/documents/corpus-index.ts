@@ -18,7 +18,8 @@
 
 import type { Notebook } from '../../w/notebook.ts'
 import { IndexStore, type Entries, type Cached } from '../../w/index-store.ts'
-import { dayFile, parseDayFile, STREAM_DIR, type RelPath } from '../../w/layout.ts'
+import { dayFile, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../../w/layout.ts'
+import { scanItems } from '../../../shared/kinds/todo.ts'
 import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
 import { parseFile } from '../frontmatter.ts'
 import type { StreamDocument } from './kinds/stream.ts'
@@ -29,12 +30,27 @@ import type {
 
 export type { IndexStatus, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay }
 
+/**
+ * A task item, as the corpus knows it (MT5b).
+ *
+ * **Two facts, and neither of them is status.** The index answers what is
+ * *in* the corpus; whether a tag has live items is a question about today, and
+ * today's items are already on screen (MT3 found this, MT4a relies on it). So
+ * the live set needs no index and the full set is exactly what does.
+ */
+interface IndexedItem {
+  readonly id: string
+  readonly tags: readonly string[]
+}
+
 /** What one file contributes. The unit of both the cache and the sweep. */
 interface Scanned {
   readonly file: RelPath
   readonly date: DateKey | null
   readonly spans: readonly ScannedSpan[]
   readonly blank: boolean
+  /** Empty for everything that is not a day of a task list. */
+  readonly items: readonly IndexedItem[]
 }
 
 /**
@@ -45,10 +61,19 @@ interface Scanned {
  * not recognise is a cache it throws away**, rescanned on the spot. That is
  * what a cache with no versioning and no migration has to do to stay honest.
  */
-type Payload = { readonly spans: readonly ScannedSpan[]; readonly blank: boolean }
+type Payload = {
+  readonly spans: readonly ScannedSpan[]
+  readonly blank: boolean
+  readonly items: readonly IndexedItem[]
+}
+// **`items` is required, and that is how every existing cache gets rebuilt.**
+// An entry written before MT5b has no `items`, fails here, and is rescanned on
+// the spot — which is the rule this guard was already written to follow, doing
+// the migration that a versioned cache would have needed code for.
 const isPayload = (value: unknown): value is Payload =>
   typeof value === 'object' && value !== null &&
-  Array.isArray((value as Payload).spans) && typeof (value as Payload).blank === 'boolean'
+  Array.isArray((value as Payload).spans) && typeof (value as Payload).blank === 'boolean' &&
+  Array.isArray((value as Payload).items)
 
 export class CorpusIndex {
   readonly #notebook: Notebook
@@ -149,6 +174,42 @@ export class CorpusIndex {
     return out
   }
 
+  /**
+   * Every item id in the corpus (MT5b, D56).
+   *
+   * **What makes eight characters certain rather than merely likely.** An id
+   * used to be minted against one day's items, which is unique enough within a
+   * list and says nothing about a second one — and `tephra:todo/<id>` resolves
+   * without naming a list, so the id has to be unique across everything or the
+   * address is ambiguous. Minting checks here now.
+   */
+  async itemIds(): Promise<ReadonlySet<string>> {
+    const out = new Set<string>()
+    for (const scanned of await this.#all()) for (const item of scanned.items) out.add(item.id)
+    return out
+  }
+
+  /**
+   * Every tag that has ever been on a task, sorted (T6).
+   *
+   * **The full set, and only the full set.** T6 asks the interface to
+   * distinguish tags with live items from tags without, and offer the live ones
+   * by default — but the live set is exactly the tags on today's items, which
+   * are already on screen and needed no index at all (MT3). So the half worth
+   * building is this one, and *dormant* is a subtraction done where both halves
+   * are known.
+   *
+   * Per-tag recency is deliberately absent: it belongs to Q3a's backlog
+   * resurfacing, which is deferred by decision.
+   */
+  async todoTags(): Promise<readonly string[]> {
+    const out = new Set<string>()
+    for (const scanned of await this.#all()) {
+      for (const item of scanned.items) for (const tag of item.tags) out.add(tag)
+    }
+    return [...out].sort((a, b) => a.localeCompare(b))
+  }
+
   /** Comment anchors, open first. The bodies live in the document (D47). */
   async threads(): Promise<readonly ThreadRow[]> {
     const out: ThreadRow[] = []
@@ -231,7 +292,7 @@ export class CorpusIndex {
         if (stamp !== null) {
           const dir = dirOf(file)
           const entries = byDir.get(dir) ?? new Map()
-          entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank } })
+          entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank, items: scanned.items } })
           byDir.set(dir, entries)
         }
         done += 1
@@ -253,7 +314,7 @@ export class CorpusIndex {
       const cached = (await this.#store.read(dirOf(file))).get(nameOf(file))
       const fresh = await this.#scan(file)
       if (fresh === null) continue
-      const payload = { spans: fresh.spans, blank: fresh.blank }
+      const payload = { spans: fresh.spans, blank: fresh.blank, items: fresh.items }
       if (JSON.stringify(cached?.payload ?? null) !== JSON.stringify(payload)) wrong.push(file)
     }
     return wrong
@@ -304,7 +365,8 @@ export class CorpusIndex {
           // A loaded day answers for itself, whatever the cache believes: it may
           // hold edits that have not reached the file at all.
           if (loaded !== null) {
-            this.#known.set(file, { file, date: loaded, ...(await (await this.#stream()).scan(loaded)) })
+            // A stream day holds prose, never task items.
+            this.#known.set(file, { file, date: loaded, items: [], ...(await (await this.#stream()).scan(loaded)) })
           } else if (
             held !== undefined && stamp !== null && same(held.stamp, stamp) && isPayload(held.payload)
           ) {
@@ -315,7 +377,7 @@ export class CorpusIndex {
             this.#known.set(file, scanned)
             if (stamp !== null) {
               const entries = dirty.get(dir) ?? new Map(cached)
-              entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank } })
+              entries.set(nameOf(file), { stamp, payload: { spans: scanned.spans, blank: scanned.blank, items: scanned.items } })
               dirty.set(dir, entries)
             }
           }
@@ -356,12 +418,23 @@ export class CorpusIndex {
       // Later parts belong to their day's first file, which has already covered
       // them; indexing them separately would double every span in a long day.
       if (parseDayFile(file)?.part !== 1) return null
-      return { file, date, ...(await (await this.#stream()).scan(date)) }
+      return { file, date, items: [], ...(await (await this.#stream()).scan(date)) }
     }
     const text = await this.#notebook.read(file)
     if (text === null) return null
     const body = parseFile(text).body
-    return { file, date: null, spans: scanSpans(body, scanMarkers(body)), blank: body.trim() === '' }
+    return {
+      file,
+      date: null,
+      spans: scanSpans(body, scanMarkers(body)),
+      blank: body.trim() === '',
+      // **Asked of the kind, not of the text.** `- [ ] something #house` is a
+      // markdown task list wherever it appears, and `#house` is a tag only
+      // inside a task list — TODO tags are their own namespace (T5), so reading
+      // them out of prose would invent tags nobody wrote. `scanSpans` is
+      // deliberately left alone for the same reason: it is generic.
+      items: kindOf(file) === 'todo' ? itemsIn(body) : [],
+    }
   }
 }
 
@@ -381,6 +454,21 @@ const dateOf = (file: RelPath): DateKey | null => {
   const ref = parseDayFile(file)
   return ref === null || ref.root !== STREAM_DIR ? null : ref.date
 }
+/**
+ * The items in one day of a task list, through the shared grammar.
+ *
+ * One parse, for the reason `shared/kinds/todo.ts` exists: main reads day files
+ * off disk and the renderer parses the one in the editor, and two
+ * implementations of one grammar is the failure this codebase keeps meeting.
+ * Unadopted lines have no id yet and contribute nothing — they get one the next
+ * time the day is written, and are indexed then.
+ */
+function itemsIn(body: string): readonly IndexedItem[] {
+  return scanItems(body).flatMap(found =>
+    found.item.id === null ? [] : [{ id: found.item.id, tags: found.item.tags }],
+  )
+}
+
 const same = (a: { size: number; mtime: number }, b: { size: number; mtime: number }): boolean =>
   a.size === b.size && a.mtime === b.mtime
 
