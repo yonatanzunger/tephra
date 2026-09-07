@@ -98,6 +98,17 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   /** Not adding, or the text to start the new item with. */
   const [adding, setAdding] = useState<string | null>(null)
   /**
+   * Where the caret goes in the add row, when "everything" is not the answer.
+   *
+   * Null means select it all, which is what an offer wants. A number is set by
+   * whoever opened the field and knows better: the end, for a character
+   * somebody just typed; the start, for a group's tag they are typing in front
+   * of.
+   */
+  const [addCaret, setAddCaret] = useState<number | null>(null)
+  /** Which group the open add row belongs to, or null for the foot of the list. */
+  const [addIn, setAddIn] = useState<string | null>(null)
+  /**
    * This row is somebody's captured thought, not an item typed here.
    *
    * **Which makes abandoning it a real answer**, and one that has to be
@@ -181,6 +192,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
         .then(asked => {
           if (asked === null) return
           setAdding(asked.text)
+          setAddCaret(null)
+          setAddIn(null)
           setCapturing(true)
         })
         .catch(fail)
@@ -276,6 +289,9 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       if (document.activeElement?.closest('button') != null) return
       e.preventDefault()
       setAdding(e.key)
+      // After the character, not over it.
+      setAddCaret(e.key.length)
+      setAddIn(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -332,6 +348,56 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       if (!next.delete(id)) next.add(id)
       return next
     })
+
+  /**
+   * The row being typed into, wherever it was asked for.
+   *
+   * **One field, drawn in one place at a time.** In the tag view it belongs
+   * inside the group you asked from — a field that opened at the foot of the
+   * page after you clicked *add to house* is answering a different question
+   * from the one asked.
+   */
+  const addRow = (): React.JSX.Element => (
+    <li className="todo-row todo-adding">
+      <span className="todo-glyph" aria-hidden="true">
+        <StatusMark status="todo" />
+      </span>
+      <Field
+        initial={adding ?? ''}
+        placeholder="what needs doing"
+        {...(addCaret === null ? {} : { caretAt: addCaret })}
+        {...(onTextTarget === undefined ? {} : { onTextTarget })}
+        tags={live}
+        known={known}
+        today={today}
+        onDone={text => {
+          setAdding(null)
+          setAddIn(null)
+          const wanted = text === null ? '' : text.trim()
+          if (!capturing) {
+            if (wanted !== '') act(window.tephra.todo.add(list, wanted))
+            return
+          }
+          setCapturing(false)
+          // **Escape eliminates it, and that costs nothing** because it
+          // was never made: a captured item exists only once the row is
+          // committed. Either way the window that asked gets its
+          // sentence back.
+          if (wanted === '') {
+            void window.tephra.todo.settle(null).catch(fail)
+            return
+          }
+          void window.tephra.todo
+            .add(list, wanted)
+            .then(async item => {
+              if (today !== null) await refresh(today)
+              await window.tephra.todo.settle(item)
+            })
+            .catch(fail)
+        }}
+      />
+    </li>
+  )
 
   /**
    * One row, wherever it is being drawn.
@@ -441,59 +507,48 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                     {group.tag === null ? 'Untagged' : group.tag}
                     <span className="todo-group-count">{group.items.length}</span>
                   </h2>
-                  <ol className="todo-list">{group.items.map(item => row(item, group.tag))}</ol>
+                  <ol className="todo-list">
+                    {group.items.map(item => row(item, group.tag))}
+                    {adding !== null && addIn === group.tag && addRow()}
+                  </ol>
+                  {/* **Add INTO a group, which is where you are looking.** The
+                      tag is already written and the caret is in front of it, so
+                      typing produces `buy paint #house` — one gesture, and the
+                      item lands in the group you asked from rather than in
+                      Untagged at the foot of the page. */}
+                  {group.tag !== null && adding === null && (
+                    <button
+                      type="button"
+                      className="todo-add todo-add-here"
+                      onClick={() => {
+                        setAdding(` #${group.tag as string}`)
+                        setAddCaret(0)
+                        setAddIn(group.tag)
+                      }}
+                    >
+                      + Add to {group.tag}
+                    </button>
+                  )}
                 </li>
               ))}
 
-          {/* **Adding is a row, and it is the SAME row.** It wears the list's
-              own geometry — the mark, the padding, the field at the width an
-              item is — so the line you are typing lands exactly where it will
-              sit, and nothing shifts when it does. */}
-          {adding !== null ? (
-            <li className="todo-row todo-adding">
-              <span className="todo-glyph" aria-hidden="true">
-                <StatusMark status="todo" />
-              </span>
-              <Field
-                initial={adding}
-                placeholder="what needs doing"
-                {...(onTextTarget === undefined ? {} : { onTextTarget })}
-                tags={live}
-                known={known}
-                today={today}
-                onDone={text => {
-                  setAdding(null)
-                  const wanted = text === null ? '' : text.trim()
-                  if (!capturing) {
-                    if (wanted !== '') act(window.tephra.todo.add(list, wanted))
-                    return
-                  }
-                  setCapturing(false)
-                  // **Escape eliminates it, and that costs nothing** because it
-                  // was never made: a captured item exists only once the row is
-                  // committed. Either way the window that asked gets its
-                  // sentence back.
-                  if (wanted === '') {
-                    void window.tephra.todo.settle(null).catch(fail)
-                    return
-                  }
-                  void window.tephra.todo
-                    .add(list, wanted)
-                    .then(async item => {
-                      if (today !== null) await refresh(today)
-                      await window.tephra.todo.settle(item)
-                    })
-                    .catch(fail)
-                }}
-              />
-            </li>
-          ) : (
+          {adding !== null && addIn === null ? (
+            addRow()
+          ) : adding === null ? (
             <li className="todo-addrow">
-              <button type="button" className="todo-add" onClick={() => setAdding('')}>
+              <button
+                type="button"
+                className="todo-add"
+                onClick={() => {
+                  setAdding('')
+                  setAddCaret(null)
+                  setAddIn(null)
+                }}
+              >
                 + Add
               </button>
             </li>
-          )}
+          ) : null}
         </ol>
 
         {items.length === 0 && adding === null && (
@@ -762,6 +817,7 @@ function Field({
   tags,
   known,
   today,
+  caretAt,
   onDone,
   onTextTarget,
 }: {
@@ -772,6 +828,8 @@ function Field({
   /** Every tag the corpus has ever seen. Offered after the live ones (MT5b). */
   known: readonly string[]
   today: DateKey | null
+  /** Where to put the caret instead of selecting everything. See below. */
+  caretAt?: number
   onDone: (text: string | null) => void
   /** Publishes this field as somewhere a range command can write, while it lives. */
   onTextTarget?: (target: TextTarget | null) => void
@@ -871,10 +929,21 @@ function Field({
     }
   }, [onTextTarget])
 
+  /**
+   * Where the caret goes when the field opens.
+   *
+   * **Selecting all is right when the text is an OFFER and wrong when it is
+   * what you just typed.** A row being edited and a captured sentence are both
+   * offers — Return takes them, typing replaces them (MT4). But the field also
+   * opens because somebody started typing at the list, and there the first
+   * character is not an offer, it is the first character: selecting it meant
+   * the second keystroke deleted the first.
+   */
   useEffect(() => {
     field.current?.focus()
-    field.current?.select()
-  }, [])
+    if (caretAt === undefined) field.current?.select()
+    else field.current?.setSelectionRange(caretAt, caretAt)
+  }, [caretAt])
 
   /** Commit once, however it was reached: Return, blur, or a button. */
   const finish = (text: string | null): void => {

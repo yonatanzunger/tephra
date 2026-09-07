@@ -437,6 +437,26 @@ it is the one that is staged.
   disappears into the cream page and reads as slightly aged paper rather than as
   a state. The slate is the only cool thing in the app, which is the point.
 
+### Three the list got wrong, reported in one sitting
+
+None findable except by using it — a list you cannot scroll needs more items
+than a fixture has, and the other two are about where a caret lands.
+
+- **Typing started an item and then ate the first character.** The field
+  selected everything on open, which is right when the text is an *offer* — a
+  row being edited, a captured sentence (MT4) — and wrong when it is the
+  character you just typed. Selecting all is now the default and the caller says
+  otherwise, because the caller is the one that knows which of the two it has.
+- **The list did not scroll.** `.frame-reading` is a flex column that does not
+  scroll, because the editor carries CodeMirror's own scroller inside it and
+  nothing had ever asked. **A surface scrolls itself**; the link directory had
+  the same hole and was fixed with it.
+- **In the tag view there was no way to add to a group.** There is one per
+  group now, and it opens the row *inside* that group with the tag already
+  written and the caret in front of it — so typing produces `buy paint #house`
+  in one gesture. A field that appeared at the foot of the page after *add to
+  house* would be answering a different question from the one asked.
+
 ### And ⌘K reached nothing in a task row
 
 **Reported from use, and the fix was not to fake an editor.** Putting links into

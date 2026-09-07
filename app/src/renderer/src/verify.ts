@@ -1033,6 +1033,58 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'listbugs') {
+      // Three reported from use in one sitting, all in the task list.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+
+      // **1. Typing starts an item, and the first character is not an offer.**
+      // The field selected everything on open, which is right for a row being
+      // edited and wrong for the character you just typed: the second keystroke
+      // deleted the first.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', bubbles: true }))
+      await settle(500)
+      {
+        const f = document.querySelector('.todo-field') as HTMLInputElement | null
+        say('typedOpens', f?.value ?? '')
+        say('caretAfter', { start: f?.selectionStart, end: f?.selectionEnd })
+        f?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      }
+      await settle(400)
+
+      // **2. A list longer than the window could not be reached past the fold.**
+      {
+        const el = document.querySelector('.todo') as HTMLElement | null
+        say('scrolls', el === null ? '' : getComputedStyle(el).overflowY)
+      }
+
+      // **3. In the tag view, adding belongs to the group you asked from.**
+      ;([...document.querySelectorAll('.todo-views button')].find(
+        b => (b.textContent ?? '').trim() === 'by tag',
+      ) as HTMLElement | null)?.click()
+      await settle(500)
+      const groups = () => [...document.querySelectorAll('.todo-group')]
+      const named = (tag: string) =>
+        groups().find(g => (g.querySelector('.todo-group-name')?.textContent ?? '').startsWith(tag))
+      say('addHere', groups().map(g => g.querySelector('.todo-add-here')?.textContent?.trim() ?? ''))
+      ;(named('house')?.querySelector('.todo-add-here') as HTMLElement | null)?.click()
+      await settle(500)
+      {
+        const f = document.querySelector('.todo-field') as HTMLInputElement | null
+        say('prefilled', f?.value ?? '')
+        say('caretBeforeTag', { start: f?.selectionStart, end: f?.selectionEnd })
+        // And it opened INSIDE the group, not at the foot of the page.
+        say('openedInGroup', named('house')?.querySelector('.todo-field') !== null)
+        say('notAtFoot', document.querySelector('.todo-column > .todo-list > .todo-adding') === null)
+      }
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(700)
+    }
+
     if (scene === 'pills') {
       // **One language, two palettes.** A pill is a label or a control, and the
       // ink is set by whoever shows it — the content area's `--text` or the

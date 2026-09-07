@@ -1415,6 +1415,59 @@ console.log('\n— a link in a task —')
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
 }
 
+// ── three the list got wrong ──────────────────
+//
+// Reported from use in one sitting, and none of them findable except by using
+// the thing: a list you cannot scroll needs more items than a fixture has, and
+// the other two are about where a caret lands.
+console.log('\n— three the list got wrong —')
+{
+  const root = await week(['Today.\n'])
+  const [by2, bm2] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', by2, bm2), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', by2, bm2, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      '- [ ] fix the gate #house <!--tephra:item aaaa1111 100 100-->\n' +
+      '- [ ] paint the shed #house <!--tephra:item aaaa2222 100 100-->\n' +
+      '- [ ] read the survey #tephra <!--tephra:item aaaa3333 100 100-->\n',
+  )
+
+  const B = report(await launch('listbugs', root))
+  check(
+    // The field selected everything on open, which is right for a row being
+    // edited and for a captured sentence — both are offers, and typing replaces
+    // them (MT4). The character you just typed is not an offer.
+    'TYPING STARTS AN ITEM, and the second keystroke does not delete the first',
+    B.typedOpens === 'b' && B.caretAfter?.start === 1 && B.caretAfter?.end === 1,
+    `${JSON.stringify(B.typedOpens)} \u00b7 caret ${JSON.stringify(B.caretAfter)}`,
+  )
+  check(
+    // `.frame-reading` is a flex column that does not scroll — the editor has
+    // CodeMirror's own scroller inside it, so nothing had ever asked. A list
+    // longer than the window simply could not be reached past the fold.
+    'THE LIST SCROLLS, because a surface scrolls itself',
+    B.scrolls === 'auto',
+    String(B.scrolls),
+  )
+  check(
+    'in the tag view, every group offers to add to itself',
+    Array.isArray(B.addHere) && B.addHere.includes('+ Add to house'),
+    JSON.stringify(B.addHere),
+  )
+  check(
+    // The tag is already written and the caret is in front of it, so typing
+    // produces `buy paint #house` in one gesture — and the row opens INSIDE the
+    // group, because a field that appeared at the foot of the page after
+    // "add to house" is answering a different question from the one asked.
+    'and it opens in the group, tag written, caret in front of it',
+    B.prefilled === ' #house' && B.caretBeforeTag?.start === 0 &&
+      B.openedInGroup === true && B.notAtFoot === true,
+    `${JSON.stringify(B.prefilled)} \u00b7 caret ${JSON.stringify(B.caretBeforeTag)} \u00b7 in group ${B.openedInGroup}`,
+  )
+  check('nothing errored on the way', B.appError === 'none', String(B.appError))
+}
+
 // ── pills say what they are ────────────────────
 //
 // **Six of these had been invented separately** — at 10.5px, 10.5px, 10.5px,

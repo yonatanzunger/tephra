@@ -428,6 +428,11 @@ body {
   grid-template-columns: minmax(0, var(--measure)) var(--gutter);
   margin: 0; padding: 2rem 0 6rem 2.25rem;
   color: rgb(var(--text));
+  /* **A surface scrolls itself.** `.frame-reading` is a flex column that does
+     not scroll — the editor has CodeMirror's own scroller inside it, so nothing
+     ever asked. A list long enough to need one simply could not be reached
+     past the fold. */
+  min-height: 0; overflow-y: auto;
 }
 .todo-column { min-width: 0; }
 .todo-list { list-style: none; margin: 0; padding: 0; }
@@ -570,7 +575,12 @@ body {
    The fraction is a knob rather than a constant to live with: it is expected to
    move, and if it settles it belongs in the theme beside `codeSize`. */
 :root { --quoted: .78; }
-.links { min-width: 0; padding-top: .4rem; font-size: calc(var(--reading-size, 20px) * var(--quoted)); }
+.links {
+  min-width: 0; padding-top: .4rem;
+  font-size: calc(var(--reading-size, 20px) * var(--quoted));
+  /* Its own scroller, for the reason the task list needs one. */
+  min-height: 0; overflow-y: auto;
+}
 .links-head { display: flex; align-items: baseline; gap: .6rem; padding-bottom: .6rem; }
 .links-query {
   flex: 1; min-width: 0; max-width: 22rem;
@@ -937,6 +947,7 @@ body {
   color: rgb(var(--text-muted)); background: none; border: 0; border-radius: 4px;
 }
 .todo-add:hover { color: rgb(var(--accent)); background: rgb(var(--accent) / .08); }
+.todo-add-here { margin-top: .2rem; margin-left: 1.9em; font-size: .7em; }
 .todo-empty { margin: 1.4rem 0 0; font-size: 13px; font-style: italic; color: rgb(var(--text-muted)); }
 
 /* ── prompt ───────────────────────────────────────────────────────────────
