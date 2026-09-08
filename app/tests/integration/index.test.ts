@@ -421,3 +421,91 @@ test('a long day\'s later parts are covered by its first file', async t => {
   await index.rebuild()
   assert.deepEqual((await index.links()).map(r => r.label).sort(), ['a', 'b'])
 })
+
+// ── what became of the items that stopped being carried (MT6) ──
+//
+// **The one question today's list cannot answer.** Today's items are on screen
+// and answer for themselves; these are the ones that were done, or dropped, or
+// put down, on some earlier day and are no longer carried forward. All three of
+// MT6's views ask it, which is why the index learned status here and not in
+// MT5b — where nobody needed it.
+
+const RESOLVED = '2026-03-05' as DateKey
+
+test('an item is what its NEWEST instance says it is', async t => {
+  // A carry copies an item forward verbatim (D56), so one id appears in as many
+  // days as it survived, each holding that day's status. Reading the newest is
+  // the rule `tephra:todo/<id>` already resolves by.
+  const { index } = await withList(t, {
+    '2026-03-01': ['- [ ] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-02': ['- [/] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-03': ['- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+  })
+  const now = await index.itemsNow()
+  assert.equal(now.size, 1, 'one item, not three')
+  assert.equal(now.get('aaaa1111')?.status, 'done')
+  assert.equal(now.get('aaaa1111')?.on, '2026-03-03')
+})
+
+test('THE RESOLVED TAIL: what was finished under a tag, newest first', async t => {
+  const { index } = await withList(t, {
+    '2026-03-01': ['- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-03': ['- [x] paint the shed #house <!--tephra:item aaaa2222 100 100-->'],
+    '2026-03-02': ['- [-] reroof it #house <!--tephra:item aaaa3333 100 100-->'],
+  })
+  const byTag = await index.resolvedByTag(RESOLVED)
+  assert.deepEqual(byTag.get('house')?.map(i => i.text), [
+    'paint the shed #house',
+    'reroof it #house',
+    'fix the gate #house',
+  ])
+})
+
+test('and a LIVE item is not in it, however old', async t => {
+  const { index } = await withList(t, {
+    '2026-03-01': ['- [ ] still going #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-02': ['- [?] blocked, not finished #house <!--tephra:item aaaa2222 100 100-->'],
+  })
+  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+})
+
+test('nor is one finished TODAY, because it is still on the list', async t => {
+  // It is carried, greyed and on screen (T7). Showing it underneath as well
+  // would be showing it twice.
+  const { index } = await withList(t, {
+    '2026-03-05': ['- [x] done this morning #house <!--tephra:item aaaa1111 100 100-->'],
+  })
+  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+})
+
+test('THE DRAWER: backlogged items, which nothing else can see', async t => {
+  // A backlogged item is not carried forward (D55), so it sits in the day it
+  // was put down and only the corpus knows it is there. That is the graveyard
+  // risk T14 names, which is why it is counted rather than merely reachable.
+  const { index } = await withList(t, {
+    '2026-03-01': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-02': ['- [x] and this one got done <!--tephra:item aaaa2222 100 100-->'],
+    '2026-03-03': ['- [>] someday, the fence <!--tephra:item aaaa3333 100 100-->'],
+  })
+  const drawer = await index.backlog()
+  assert.deepEqual(drawer.map(i => i.text), ['someday, the fence', 'someday, the loft #house'])
+})
+
+test('and a backlogged item is NOT in the resolved tail, because it is waiting', async t => {
+  // Resolved means finished with. Backlogged means put down — a different
+  // thing, with a different place to live.
+  const { index } = await withList(t, {
+    '2026-03-01': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
+  })
+  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+  assert.equal((await index.backlog()).length, 1)
+})
+
+test('an item picked back UP is live again, and leaves both', async t => {
+  const { index } = await withList(t, {
+    '2026-03-01': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-04': ['- [ ] actually, now #house <!--tephra:item aaaa1111 100 100-->'],
+  })
+  assert.deepEqual(await index.backlog(), [])
+  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+})

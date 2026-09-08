@@ -21,7 +21,7 @@ import type { NavTarget } from '../shared/pane-api.ts'
 import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
-import type { TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
+import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 
 type Handler<T> = (message: T) => void
 
@@ -189,6 +189,14 @@ const tephra = {
      * *dormant* is the subtraction between them.
      */
     tags: (): Promise<readonly string[]> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'tags' }),
+    /** Which days this list has, oldest first — what scrubbing steps through (MT6). */
+    days: (list: DocumentId): Promise<readonly DateKey[]> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'days', list }),
+    /** What was finished under each tag before today — T8's other half (MT6). */
+    resolved: (): Promise<Record<string, readonly ResolvedItem[]>> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'resolved' }),
+    /** Everything put down and not picked up again (T14). */
+    backlog: (): Promise<readonly ResolvedItem[]> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'backlog' }),
     /** Whether the day has been reviewed, and what arrived from before it (T11). */
     walk: (list: DocumentId, date: DateKey): Promise<WalkState> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'walk', list, date }),

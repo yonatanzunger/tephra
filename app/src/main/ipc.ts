@@ -119,6 +119,12 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.todoRemove(command.list, command.item)
       case 'tags':
         return service.todoTags()
+      case 'days':
+        return service.todoDays(command.list)
+      case 'resolved':
+        return service.todoResolved()
+      case 'backlog':
+        return service.todoBacklog()
       case 'walk':
         return service.todoWalk(command.list, command.date)
       case 'finishWalk':

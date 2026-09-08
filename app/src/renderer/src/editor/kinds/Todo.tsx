@@ -26,7 +26,10 @@ import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { Prose } from '../../frame/Prose'
 import { flattenLinks } from '../../../../shared/links.ts'
-import { groupByTag, isLive, resolveDue, type TodoItem, type TodoStatus, type WalkState } from '../../../../shared/kinds/todo.ts'
+import {
+  groupByTag, isLive, resolveDue,
+  type ResolvedItem, type TodoItem, type TodoStatus, type WalkState,
+} from '../../../../shared/kinds/todo.ts'
 import { daysBetween } from '../../../../shared/dates.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 
@@ -153,6 +156,47 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * `#ho` should still find it.
    */
   const [known, setKnown] = useState<readonly string[]>([])
+
+  /**
+   * What became of the items that stopped being carried (MT6).
+   *
+   * **Fetched once beside the list, because it changes as rarely as it is
+   * looked at.** `resolved` is T8's other half — the things finished under a
+   * tag on some earlier day, which today's file cannot know about. `backlog` is
+   * T14's drawer.
+   */
+  const [resolved, setResolved] = useState<Record<string, readonly ResolvedItem[]>>({})
+  const [backlog, setBacklog] = useState<readonly ResolvedItem[]>([])
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  /**
+   * Scrubbing to a past day (T7's flow 7, MT6).
+   *
+   * **Rare, read-only, cheap** — and cheap because a past working set is not
+   * reconstructed, it is a file (D55). `showing` is null for today, which is
+   * both the common case and the only writable one: a day that has gone past is
+   * the record of what that day looked like, and editing it would be re-dating
+   * by the side door (D9).
+   *
+   * Surface-local like the sort order, and for the same reason: it is a way of
+   * looking rather than a place you are. It resets when the window reopens,
+   * which is right for something you do to check one thing.
+   */
+  const [showing, setShowing] = useState<DateKey | null>(null)
+  const [days, setDays] = useState<readonly DateKey[]>([])
+  const past = showing !== null && today !== null && showing !== today
+  /**
+   * One step through the days that EXIST, which is not the same as one day.
+   *
+   * A list is not written in every day, so stepping by date would land on days
+   * with no file — and the answer to "what did this look like on a day nobody
+   * touched it" is the previous day it WAS touched. Null at either end.
+   */
+  const stepTo = (by: -1 | 1): DateKey | null => {
+    const here = days.indexOf(showing ?? (today as DateKey))
+    if (here < 0) return null
+    return days[here + by] ?? null
+  }
   const [walk, setWalk] = useState<WalkState | null>(null)
   const [walking, setWalking] = useState(false)
   const [dropping, setDropping] = useState<ReadonlySet<string>>(new Set())
@@ -164,14 +208,20 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
 
   const refresh = useCallback(
     async (date: DateKey) => {
-      const [got, state, everyTag] = await Promise.all([
+      const [got, state, everyTag, tail, put, had] = await Promise.all([
         window.tephra.todo.items(list, date),
         window.tephra.todo.walk(list, date),
         window.tephra.todo.tags(),
+        window.tephra.todo.resolved(),
+        window.tephra.todo.backlog(),
+        window.tephra.todo.days(list),
       ])
       setItems(got)
+      setDays(had)
       setWalk(state)
       setKnown(everyTag)
+      setResolved(tail)
+      setBacklog(put)
     },
     [list],
   )
@@ -256,10 +306,12 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    */
   useEffect(() => {
     if (today === null) return
-    const again = (): void => void refresh(today).catch(fail)
+    // **The day being SHOWN**, which is today unless somebody scrubbed back.
+    const again = (): void => void refresh(showing ?? today).catch(fail)
+    again()
     const stop = [docWindow.onChanged(again), docWindow.onReset(again)]
     return () => stop.forEach(off => off())
-  }, [docWindow, today, refresh, fail])
+  }, [docWindow, today, showing, refresh, fail])
 
   const act = useCallback(
     (work: Promise<unknown>) => {
@@ -409,6 +461,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    */
   const row = (item: TodoItem, under: string | null = null): React.JSX.Element => (
     <Row
+      readOnly={past}
       key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}
       under={under}
       carried={carriedNow.has(item.id ?? '')}
@@ -455,7 +508,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   )
 
   return (
-    <div className="todo" role="region" aria-label="Task list" style={type}>
+    <div className="todo" role="region" aria-label="Task list" style={type} data-past={past}>
       {/* **The list keeps the notebook's own two columns** — a measure, and a
           gutter beside it — so a task list and a page of prose are the same
           page laid out the same way (D42, R27). */}
@@ -473,6 +526,36 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
             by tag
           </button>
 
+          {/* **Scrubbing to a past day** (T7's flow 7). Rare, so it is one
+              step at a time through the days that EXIST rather than a date
+              picker over days that mostly do not — and there is one way back to
+              today, because that is where you always want to end up. */}
+          {days.length > 1 && (
+            <span className="todo-scrub">
+              <button
+                type="button"
+                title="The day before this one"
+                disabled={stepTo(-1) === null}
+                onClick={() => setShowing(stepTo(-1))}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                title="The day after this one"
+                disabled={stepTo(1) === null}
+                onClick={() => setShowing(stepTo(1))}
+              >
+                ›
+              </button>
+              {past && (
+                <button type="button" className="todo-scrub-back" onClick={() => setShowing(null)}>
+                  {showing} · back to today
+                </button>
+              )}
+            </span>
+          )}
+
           {/* **The offer is the list looking different; this is only the way
               in** (T11). Emphasised while the day is unreviewed and quiet
               afterwards, because walking twice is allowed and worth nothing —
@@ -480,7 +563,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               finish is at the BOTTOM, which is both the direction you read a
               list in and a guarantee that finishing is never the same target
               you just clicked to start. */}
-          {!walking && walk !== null && (
+          {!walking && !past && walk !== null && (
             <button
               type="button"
               className="todo-walk-start"
@@ -511,12 +594,20 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                     {group.items.map(item => row(item, group.tag))}
                     {adding !== null && addIn === group.tag && addRow()}
                   </ol>
+                  {/* **T8's other half** (MT6). What was finished under this
+                      tag on some earlier day, which today's file cannot know
+                      about — the live half above is a regrouping of today and
+                      needed nothing built (MT4a). Read-only, and quiet: it is
+                      context for the live items, not more of them. */}
+                  {group.tag !== null && (resolved[group.tag]?.length ?? 0) > 0 && (
+                    <Resolved items={resolved[group.tag] as readonly ResolvedItem[]} today={today} />
+                  )}
                   {/* **Add INTO a group, which is where you are looking.** The
                       tag is already written and the caret is in front of it, so
                       typing produces `buy paint #house` — one gesture, and the
                       item lands in the group you asked from rather than in
                       Untagged at the foot of the page. */}
-                  {group.tag !== null && adding === null && (
+                  {group.tag !== null && adding === null && !past && (
                     <button
                       type="button"
                       className="todo-add todo-add-here"
@@ -534,7 +625,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
 
           {adding !== null && addIn === null ? (
             addRow()
-          ) : adding === null ? (
+          ) : adding === null && !past ? (
             <li className="todo-addrow">
               <button
                 type="button"
@@ -550,6 +641,28 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
             </li>
           ) : null}
         </ol>
+
+        {/* **The drawer** (T14). Reachable and counted, which is all T14 asks
+            of it — and T14 stays knowingly unmet until something RESURFACES
+            what is in here, which is Q3a and deferred. A backlogged item is not
+            carried forward (D55), so it sits in the day it was put down and
+            nothing on this page would otherwise show it. That is exactly the
+            graveyard the goal warns about, which is why the count is on the
+            outside: you can see how much you have put down without opening it. */}
+        {backlog.length > 0 && (
+          <div className="todo-drawer">
+            <button
+              type="button"
+              className="todo-drawer-open"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(open => !open)}
+            >
+              {drawerOpen ? '\u25be' : '\u25b8'} Backlog
+              <span className="todo-drawer-count">{backlog.length}</span>
+            </button>
+            {drawerOpen && <Resolved items={backlog} today={today} />}
+          </div>
+        )}
 
         {items.length === 0 && adding === null && (
           // Absence that explains itself, as every empty state in this app does.
@@ -666,6 +779,7 @@ function Row({
   under = null,
   carried = false,
   dropping = false,
+  readOnly = false,
   onDrop,
   onTextTarget,
 }: {
@@ -692,6 +806,15 @@ function Row({
   carried?: boolean
   /** Marked for deletion in an open pass. A selection, not an edit. */
   dropping?: boolean
+  /**
+   * A day that has gone past, which is READ (T7's flow 7).
+   *
+   * Every earlier day is the record of what that day looked like, and editing
+   * one would be re-dating through the side door (D9). So the verbs come off —
+   * not greyed with a tooltip, simply absent, because a control that refuses is
+   * a control you learn to distrust.
+   */
+  readOnly?: boolean
   /** Present only during a pass, which is the only time a row can be dropped. */
   onDrop?: () => void
   /** Passed to whichever field this row opens, so ⌘K can reach it. */
@@ -707,31 +830,39 @@ function Row({
         `todo-row status-${item.status}${done ? ' finished' : ''}` +
         `${carried ? ' carried' : ''}${dropping ? ' dropping' : ''}`
       }
-      onContextMenu={onMenu}
+      {...(readOnly ? {} : { onContextMenu: onMenu })}
       // **The whole row**, because an item whose text is empty had nothing to
       // click: the text button collapsed to nothing and the only way back into
       // it was to delete the file. A row is one thing and clicking it edits it.
       onClick={() => {
-        if (!editing && !blocking) onEdit()
+        if (!readOnly && !editing && !blocking) onEdit()
       }}
     >
       {/* **A click advances one step**; the other three statuses are on the
           right-click menu. The mark stays where it was until tomorrow's carry
           leaves it behind — exactly as an X'd row stayed on the paper page,
           and the eye learns to skip them in about a week. */}
-      <button
-        type="button"
-        className="todo-glyph"
-        aria-label={`${TITLE[item.status]}: ${prose(item)}`}
-        title={`${TITLE[item.status]} \u2014 click for ${TITLE[advance(item.status)].toLowerCase()}`}
-        onClick={e => {
-          e.stopPropagation() // the row edits; the box changes the status
-          onStatus(advance(item.status))
-        }}
-        onContextMenu={onMenu}
-      >
-        <StatusMark status={item.status} />
-      </button>
+      {readOnly ? (
+        // Drawn, not offered: on a day that has gone past there is nothing to
+        // click, so it is a mark rather than a control.
+        <span className="todo-glyph" aria-label={TITLE[item.status]}>
+          <StatusMark status={item.status} />
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="todo-glyph"
+          aria-label={`${TITLE[item.status]}: ${prose(item)}`}
+          title={`${TITLE[item.status]} \u2014 click for ${TITLE[advance(item.status)].toLowerCase()}`}
+          onClick={e => {
+            e.stopPropagation() // the row edits; the box changes the status
+            onStatus(advance(item.status))
+          }}
+          onContextMenu={onMenu}
+        >
+          <StatusMark status={item.status} />
+        </button>
+      )}
 
       {editing ? (
         // **The raw line is what gets edited**, tags and date included: the
@@ -798,6 +929,43 @@ function Row({
         </button>
       )}
     </li>
+  )
+}
+
+/**
+ * Items the corpus remembers and today does not (MT6).
+ *
+ * **Read-only, and it says so by being quiet.** These are not on the list — they
+ * were finished, or dropped, or put down, on a day that has since gone past.
+ * Drawing them like rows with marks you could click would be offering a verb
+ * that does not apply; drawing them like a footnote is what they are.
+ */
+function Resolved({
+  items,
+  today,
+}: {
+  items: readonly ResolvedItem[]
+  today: DateKey | null
+}): React.JSX.Element {
+  return (
+    <ul className="todo-resolved">
+      {items.map(item => (
+        <li key={item.id} className={`todo-resolved-row status-${item.status}`}>
+          {/* Relative, because "9 days ago" is what you want to know about
+              something you finished and "2026-03-05" is not. */}
+          <span className="todo-resolved-when">
+            {today === null ? item.on : when(item.on, today)}
+          </span>
+          <span className="todo-resolved-text">
+            {/* **`text` as it was written**, and no cast to `TodoItem`: a
+                resolved item carries the line and not the spans inside it, and
+                `prose` reads those. Tags and the due date stay because a person
+                typed them (T16) — the same rule the live rows follow. */}
+            <Prose text={item.text} />
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

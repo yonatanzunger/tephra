@@ -578,7 +578,11 @@ Three milestones are open at once — the task list, the link directory and the
 day boundary — and only three dependencies between them are real. The rest is a
 judgement about what is worth having soonest.
 
-**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7.** *(ML complete; MT6 next.)* *(MT5c, the cap, is deferred until the walk has produced a week of counts to choose its number from — see `todo-roadmap.md`.)*
+**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → M4 → M5.**
+*(MT6 done; MT7 next.)*
+
+**MT5c and M6 are not in that line**; they are in the backlog below, which is a
+different kind of thing from a deferral — see there.
 
 *MT7 — more than one list, in two shapes — was also asked for from use. It sits
 after MT5b for a real reason: `tephra:todo/<id>` resolves without a list name
@@ -680,7 +684,7 @@ from waiting on a wide refactor.
 feature rather than the correctness fix, and it is wide-but-shallow work that
 would otherwise hold up MT4.
 
-## MT — the TODO list *(MT1–MT5b done; MT6 next. MT5c deferred, MT7 planned.)*
+## MT — the TODO list *(MT1–MT6 done; MT7 next. MT5c is in the backlog.)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**
@@ -733,7 +737,32 @@ v1**: in scope, after the core works.
 - Typography and the visual system, tunable (R1.3)
 - Rendered editing of inline constructs (◆ in `features.md`)
 
-## M6 — the shreddable notebook
+## The backlog — built when we decide we want them
+
+**Not deferred, and not scheduled: wanted-on-demand.** These are whole features
+that v1 could ship without and that nothing else waits on. They are here rather
+than in the ordered plan because their position is not a judgement anybody has
+made yet — each moves to the front the day it is actually wanted, and may be
+reordered freely against anything else on this page.
+
+That is a different thing from the deferrals recorded elsewhere. **Q3a's backlog
+resurfacing is deferred because the design has no answer yet** and says so;
+these have answers and no demand.
+
+### MT5c — the soft cap on the working view (T12)
+
+**The number is the whole of what is missing.** Both `goal/todo.md` and
+`solution/todo.md` flag it as the requirement with the least evidence behind it,
+and the walk — which now runs daily — is what produces that evidence: it ends
+with a count. The binding constraint was only ever that the cap cannot ship
+before the walk (T11 makes it safe), and the walk shipped in MT5a.
+
+**And the walk is what makes waiting free.** T11 carried its promise — every
+live item *seen* daily — solely because a cap degrades visibility. With no cap
+there is no promise to keep, so nothing about the list is unsafe in the
+meantime; it is simply longer than it might be.
+
+### M6 — the shreddable notebook
 
 **Design: `shreddable-notebook.md`. Decision: D46.** A second notebook, opened by
 the same app, whose storage makes deletion real: per-file encryption with
@@ -748,31 +777,17 @@ destroyable keys, no history, no WAL, no sync.
 - Its own theme, so the two notebooks are never mistaken for each other
 - The three verification tests, including restore-from-backup
 
-**Placed last by choice, not by dependency.** It touches only the bottom of W
-plus a config file and a theme, so nothing above it changes and nothing else in
-the plan waits on it — it could move earlier or later, or slip past v2, at no
-cost to anything else.
+**It was already placed last by choice rather than by dependency**, and this is
+that observation taken to its conclusion. It touches only the bottom of W plus a
+config file and a theme, so nothing above it changes and nothing else waits on
+it.
 
 **Checked against the deferral rule** (`goal/scope.md`: *data cannot be
-backfilled; mechanisms can be deferred*): this defers cleanly. The notebook is a
+backfilled; mechanisms can be deferred*): it defers cleanly. The notebook is a
 new directory with its own storage, so it needs nothing recorded in the primary
 corpus beforehand, and the one format addition — the explicit split marker —
-applies to files that will not exist until it does. **No coverage obligation
-falls on M0–M5.**
-
-**The interim policy is unchanged:** material that must be genuinely deletable
-goes to paper or the typewriter until this exists. M6 does not open a gap; it
-closes one that is open today.
-
----
-
-**Done, immediately after MV:** the mobile proof sheet (Q10), judged on a Pixel 9.
-20px and ~35ch, the Aldine face and palette carrying over unchanged, commentary
-as a marker with an open-all control, controls at the bottom — and the keyboard
-behaving: the caret slides and nothing hides behind it. Original note: The
-frame decision D42 is desktop-only by construction, and the mobile questions —
-what replaces the margin, capture or reading, and what the keyboard does to both
-— are recorded now so they keep their edge while MV is built.
+applies to files that will not exist until it does. **No coverage obligation is
+incurred by waiting.**
 
 ## After v1
 

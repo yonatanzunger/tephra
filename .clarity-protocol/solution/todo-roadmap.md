@@ -570,31 +570,68 @@ whole of the migration.
   one matching `#`, one matching `#te` typed later — and only ever passed
   because both happened to hold a single entry.
 
-## MT5c — The soft cap *(deferred, on purpose)*
+## MT5c — The soft cap *(in the backlog)*
 
-**Punted, and the walk is what makes that safe.** T11 carried a promise — every
-live item *seen* daily — solely because T12's cap degrades visibility and
-something had to make that safe. No cap, no promise to keep, which is why MT5a's
-Finish button can honestly clear a list you did not read.
+**Moved out of the ordered plan on 2026-09-08**, to the backlog in
+`solution/milestones.md`: a whole feature that v1 can ship without, that nothing
+waits on, and whose position is a decision nobody has had to make yet. It comes
+forward the day the list is long enough to want it.
 
-The number is flagged in both `goal/todo.md` and `solution/todo.md` as the
-requirement with the least evidence behind it, and **the walk is what produces
-the evidence**: it ends with a count, and a week of real counts is a better
-basis than a number chosen now. The binding constraint was only ever that the
-cap cannot ship *before* the walk. Revisit from use.
+The reasoning is unchanged and is recorded there: the number is the only thing
+missing, the walk is what produces the evidence for it, and the walk is also
+what makes waiting free — T11's promise existed to make a cap safe, so with no
+cap there is no promise to keep.
 
-## MT6 — The pivots and the drawer
+## MT6 — The pivots and the drawer *(done)*
 
-- Tag pivot (T8) — **the resolved tail only; the live half shipped in MT4a.**
-  `scope.md` feared this and it was cheaper than feared for the reason recorded
-  there: every live item is in today's file, so the live half is a regrouping of
-  one segment and needed nothing built. What is left is the part that reaches
-  into other days for recently resolved items, which is read-only and wants
-  MT5's index.
-- Scrub to a past day (T7's flow 7) — read-only, and nearly free: it is opening
-  a file.
-- The backlog drawer (T14) — reachable and counted. **Resurfacing is deferred**
-  (Q3a), and until it lands T14 is knowingly unmet.
+**Done**, and verified by `npm run m3`. Three views over **one question the
+corpus can answer and today's list cannot**: what became of the items that
+stopped being carried.
+
+**MT5b left status out of the index on purpose, and MT6 put it back** — which is
+the shape of the milestone in one sentence. MT5b's question was *which tags
+exist*, and status is a fact about today that today's items already answer, so
+storing it would have been storing what nobody needed. All three of these ask
+about status *somewhere other than today*, which is the half no list on screen
+can see.
+
+- **`itemsNow()` — the newest instance, by id.** A carry copies an item forward
+  verbatim (D56), so one id appears in as many days as it survived, each holding
+  that day's status. The newest is what the item IS, which is the rule
+  `tephra:todo/<id>` already resolves by — and the inverse of `tephra:mark`,
+  which answers with the first. The day comes from the file's PATH, exactly, so
+  it needs no zone and D63 has no opinion to have.
+- **The resolved tail (T8).** What was finished under a tag on an earlier day.
+  Not what was finished *today* — that is carried, greyed and on screen (T7),
+  and showing it underneath as well would be showing it twice. Not backlogged
+  items either: put down is not finished with, and it has its own place.
+- **The drawer (T14), counted on the outside.** A backlogged item is not carried
+  forward (D55), so it sits in the day it was put down and nothing else on the
+  page would show it — which is exactly the graveyard `goal/todo.md` warns
+  about. So the count is visible without opening it. **T14 stays knowingly
+  unmet** until something *resurfaces* what is in there, which is Q3a.
+- **Scrubbing (T7's flow 7), nearly free.** A past working set is not
+  reconstructed, it is a file — the property flow 7 was said to constrain the
+  format for, and D55 paid for it. One step at a time through the days that
+  EXIST rather than a date picker over days that mostly do not, and one way back
+  to today.
+- **A day that has gone past is READ.** Editing one would be re-dating through
+  the side door (D9), so the verbs are *absent* rather than greyed: a control
+  that refuses is a control you learn to distrust. The status mark is drawn
+  instead of being a button.
+
+### What the building found
+
+- **A cast waiting to throw.** The resolved rows first rendered through
+  `prose(item as unknown as TodoItem)` — and `prose` reads `tagSpans`, which a
+  resolved item does not carry. It typechecked because the cast said it would.
+  The line as written is what those rows want anyway.
+- **JSX text does not process escape sequences**, and three of them went in as
+  `\u2039`, `\u203a`, `\u00b7`. The same characters inside `{'…'}` are string
+  literals and are fine — which is why the drawer's caret rendered and the
+  scrub's arrows did not. It reads identically in the source and differs
+  entirely on screen; the scene caught it because it clicks by label.
+
 
 ## MT7 — More than one list: daily and overall todo files
 

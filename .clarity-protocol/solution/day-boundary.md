@@ -216,10 +216,10 @@ compensating for a missing owner.
 
 **And a corpus that predates this keeps its mid-line days** until each is closed
 — the boundary only closes the day it is crossing, not the history behind it. So
-the skip is still doing work on any notebook written before today. A one-time
-sweep could fix those, and is deliberately not part of this: it would mean
-writing to every day file in the corpus to fix a rule that only bites the day
-before the newest one.
+the skip is still doing work on any notebook written before today. **A one-time
+sweep was offered and declined** (2026-09-08), which closes the question: it
+would mean writing to every day file in the corpus to fix a rule that only bites
+the day before the newest one, and the skip renders those days correctly anyway.
 
 What this *does* remove is the reason the symptom appeared in ordinary use: a
 day that ends because time passed now ends with a newline.

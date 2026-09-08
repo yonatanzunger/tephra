@@ -19,7 +19,8 @@
 import type { Notebook } from '../../w/notebook.ts'
 import { IndexStore, type Entries, type Cached } from '../../w/index-store.ts'
 import { dayFile, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../../w/layout.ts'
-import { scanItems } from '../../../shared/kinds/todo.ts'
+import { isLive, scanItems, type ResolvedItem, type TodoStatus } from '../../../shared/kinds/todo.ts'
+import { compareDateKeys } from '../../../shared/dates.ts'
 import { scanLinks, type ScannedLink } from '../../../shared/links.ts'
 import { canonicalizeLink, indexable, type CanonicalLink } from '../../../shared/link-index.ts'
 import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
@@ -33,17 +34,30 @@ import type {
 export type { IndexStatus, LinkAppearance, LinkRow, Located, OutlineNode, Reference, Subject, ThreadRow, TimelineDay }
 
 /**
- * A task item, as the corpus knows it (MT5b).
+ * A task item, as the corpus knows it (MT5b, extended in MT6).
  *
- * **Two facts, and neither of them is status.** The index answers what is
- * *in* the corpus; whether a tag has live items is a question about today, and
- * today's items are already on screen (MT3 found this, MT4a relies on it). So
- * the live set needs no index and the full set is exactly what does.
+ * **Status was deliberately left out and MT6 put it back**, which is worth the
+ * two sentences. MT5b's question was *which tags exist*, and status is a fact
+ * about today that today's items already answer — so storing it would have been
+ * storing something nobody needed. MT6 asks three questions that only the
+ * corpus can answer, and all three are about status somewhere OTHER than today:
+ * what was resolved under this tag last week, what is in the backlog, what a
+ * past day looked like.
+ *
+ * The item is copied forward verbatim on every carry (D56), so one id appears
+ * in many days with the status it had on each. **The newest instance is what
+ * the item IS**, which is the same rule `tephra:todo/<id>` resolves by.
  */
 interface IndexedItem {
   readonly id: string
   readonly tags: readonly string[]
+  readonly status: TodoStatus
+  /** The words, for showing a resolved item without re-reading its day. */
+  readonly text: string
 }
+
+/** An item and the day its newest instance is in — what it IS now (MT6). */
+type ItemNow = ResolvedItem
 
 /**
  * One appearance of a link, as the corpus knows it (ML2, D60).
@@ -108,7 +122,10 @@ type Payload = {
 const isPayload = (value: unknown): value is Payload =>
   typeof value === 'object' && value !== null &&
   Array.isArray((value as Payload).spans) && typeof (value as Payload).blank === 'boolean' &&
-  Array.isArray((value as Payload).items) && Array.isArray((value as Payload).links)
+  Array.isArray((value as Payload).items) && Array.isArray((value as Payload).links) &&
+  // MT6 added `status` and `text` to an item; an entry without them is a shape
+  // this does not recognise, and is therefore a cache it throws away.
+  (value as Payload).items.every(item => typeof item.status === 'string')
 
 export class CorpusIndex {
   readonly #notebook: Notebook
@@ -262,6 +279,78 @@ export class CorpusIndex {
     const out = new Set<string>()
     for (const scanned of await this.#all()) for (const item of scanned.items) out.add(item.id)
     return out
+  }
+
+  /**
+   * Every item in the corpus as it stands NOW, by id (MT6).
+   *
+   * **The newest instance, which is what the item is.** A carry copies an item
+   * forward verbatim (D56), so one id appears in as many days as it survived,
+   * each holding the status it had that day. Reading the newest is the same
+   * rule `tephra:todo/<id>` resolves by, and the inverse of `tephra:mark`,
+   * which answers with the first — a bookmark means where something was first
+   * said and an item means where it stands.
+   *
+   * This is the one question the corpus can answer and today's list cannot:
+   * what happened to the things that are no longer carried.
+   */
+  async itemsNow(): Promise<ReadonlyMap<string, ItemNow>> {
+    const out = new Map<string, ItemNow>()
+    for (const scanned of await this.#all()) {
+      // **From the PATH, exactly, and needing no zone.** Items only ever come
+      // from a task list's day files, and a day file's name is its day — so
+      // there is nothing to infer and nothing for D63 to have an opinion about.
+      const on = parseDayFile(scanned.file)?.date
+      if (on === undefined) continue
+      for (const item of scanned.items) {
+        const held = out.get(item.id)
+        // Ties go to the later file, which for one day's parts is the later
+        // part; within a file, to the later line.
+        if (held !== undefined && compareDateKeys(held.on, on) > 0) continue
+        out.set(item.id, { ...item, on })
+      }
+    }
+    return out
+  }
+
+  /**
+   * What was finished under each tag, newest first (T8's resolved tail, MT6).
+   *
+   * **Only what is no longer on the list.** An item finished TODAY is still in
+   * today's file, still carried, and still on screen greyed (T7) — showing it
+   * again underneath would be showing it twice. What this answers is the half
+   * today cannot: the things that were done and have since fallen away.
+   */
+  async resolvedByTag(before: DateKey): Promise<ReadonlyMap<string, readonly ResolvedItem[]>> {
+    const out = new Map<string, ResolvedItem[]>()
+    for (const item of (await this.itemsNow()).values()) {
+      if (isLive(item.status) || compareDateKeys(item.on, before) >= 0) continue
+      // Backlogged is not resolved — it is waiting, and it has its own drawer.
+      if (item.status === 'backlog') continue
+      for (const tag of new Set(item.tags)) {
+        const into = out.get(tag)
+        if (into === undefined) out.set(tag, [item])
+        else into.push(item)
+      }
+    }
+    for (const list of out.values()) list.sort((a, b) => compareDateKeys(b.on, a.on))
+    return out
+  }
+
+  /**
+   * The backlog: everything put down and not picked up again (T14).
+   *
+   * **Reachable and counted, which is all T14 asks of the drawer** — and T14 is
+   * knowingly unmet until something *resurfaces* what is in here, which is Q3a
+   * and deferred. A backlogged item is not carried forward (D55), so it sits in
+   * the day it was put down and only the corpus knows it is there. That is
+   * exactly the graveyard risk the goal names, which is why the count is part
+   * of the answer rather than something a caller works out.
+   */
+  async backlog(): Promise<readonly ResolvedItem[]> {
+    return [...(await this.itemsNow()).values()]
+      .filter(item => item.status === 'backlog')
+      .sort((a, b) => compareDateKeys(b.on, a.on))
   }
 
   /**
@@ -575,7 +664,14 @@ function lineAround(body: string, at: number): string {
 
 function itemsIn(body: string): readonly IndexedItem[] {
   return scanItems(body).flatMap(found =>
-    found.item.id === null ? [] : [{ id: found.item.id, tags: found.item.tags }],
+    found.item.id === null
+      ? []
+      : [{
+          id: found.item.id,
+          tags: found.item.tags,
+          status: found.item.status,
+          text: found.item.text,
+        }],
   )
 }
 

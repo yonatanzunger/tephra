@@ -1415,6 +1415,96 @@ console.log('\n— a link in a task —')
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
 }
 
+// ── the pivots and the drawer (MT6) ──────────────
+//
+// **Three views over one question the corpus can answer and today's list
+// cannot**: what became of the items that stopped being carried. MT5b left
+// status out of the index deliberately — nobody needed it, because today's
+// items answer for themselves — and all three of these needed it, about
+// somewhere other than today.
+console.log('\n— the pivots and the drawer —')
+{
+  const root = await week(['Today.\n'])
+  const day = (back) => dayFrom(-back)
+  const put = async (back, lines) => {
+    const [yy, mm] = day(back).split('-')
+    await mkdir(join(root, 'tasks.todo', yy, mm), { recursive: true })
+    await writeFile(
+      join(root, 'tasks.todo', yy, mm, `${day(back)}.md`),
+      `---\ntephra: 1\ndate: ${day(back)}\nkind: todo\n---\n${lines.join('\n')}\n`,
+    )
+  }
+  await put(9, [
+    '- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->',
+    '- [>] someday, the loft #house <!--tephra:item aaaa2222 100 100-->',
+    '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
+  ])
+  await put(4, [
+    '- [-] reroof it #house <!--tephra:item aaaa4444 100 100-->',
+    '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
+    '- [>] someday, a pond <!--tephra:item aaaa5555 100 100-->',
+  ])
+  await put(0, [
+    '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
+    '- [ ] read the survey #tephra <!--tephra:item aaaa6666 100 100-->',
+  ])
+
+  const V = report(await launch('mt6', root))
+  check(
+    // T8's other half. The live half is a regrouping of today and needed
+    // nothing built (MT4a); this is the part only the corpus knows.
+    'THE RESOLVED TAIL: what was finished under a tag, newest first',
+    JSON.stringify(V.tailUnderHouse) === JSON.stringify(['reroof it #house', 'fix the gate #house']),
+    JSON.stringify(V.tailUnderHouse),
+  )
+  check(
+    // It is carried, greyed and on screen (T7); showing it underneath as well
+    // would be showing it twice. And a live item never appears there at all.
+    'and the LIVE item stays where it is, once',
+    JSON.stringify(V.liveUnderHouse) === JSON.stringify(['paint the shed']),
+    JSON.stringify(V.liveUnderHouse),
+  )
+  check(
+    'the tail is dated in the language of a thing you finished',
+    Array.isArray(V.tailWhen) && V.tailWhen.every(w => /ago$/.test(String(w))),
+    JSON.stringify(V.tailWhen),
+  )
+  check(
+    // **Counted on the outside** (T14): a backlogged item is not carried
+    // forward (D55), so it sits in the day it was put down and nothing else on
+    // the page would show it. That is the graveyard the goal warns about, which
+    // is why how much you have put down is visible without opening it.
+    'THE DRAWER: counted before it is opened, and holding what nothing else shows',
+    V.drawerLabel === '\u25b8 Backlog2' &&
+      JSON.stringify(V.drawer) === JSON.stringify(['someday, a pond', 'someday, the loft #house']),
+    `${JSON.stringify(V.drawerLabel)} \u00b7 ${JSON.stringify(V.drawer)}`,
+  )
+  check(
+    // Nearly free, and this is why: a past working set is not reconstructed, it
+    // is a file (D55) \u2014 which is the property flow 7 was said to constrain the
+    // format for.
+    'SCRUBBING to a past day shows that day, not this one',
+    JSON.stringify(V.todayRows) === JSON.stringify(['paint the shed', 'read the survey']) &&
+      JSON.stringify(V.pastRows) === JSON.stringify(['reroof it', 'paint the shed', 'someday, a pond']),
+    `${JSON.stringify(V.todayRows)} \u2192 ${JSON.stringify(V.pastRows)}`,
+  )
+  check(
+    // Every earlier day is the record of what that day looked like, and editing
+    // one would be re-dating through the side door (D9). The verbs are ABSENT
+    // rather than refusing: a control that says no is one you learn to distrust.
+    'and a day that has gone past is read \u2014 the verbs are gone, not greyed',
+    V.readOnly === 'true' && V.noAdd === true && V.noWalk === true && V.markNotAButton === true,
+    `read-only ${V.readOnly} \u00b7 no add ${V.noAdd} \u00b7 no walk ${V.noWalk} \u00b7 mark drawn ${V.markNotAButton}`,
+  )
+  check(
+    'and there is one way back to today, which is where you end up',
+    typeof V.wayHome === 'string' && V.wayHome.endsWith('back to today') &&
+      JSON.stringify(V.backToday) === JSON.stringify(V.todayRows) && V.writableAgain === true,
+    `${JSON.stringify(V.wayHome)} \u00b7 writable again ${V.writableAgain}`,
+  )
+  check('nothing errored on the way', V.appError === 'none', String(V.appError))
+}
+
 // ── three the list got wrong ──────────────────
 //
 // Reported from use in one sitting, and none of them findable except by using

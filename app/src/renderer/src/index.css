@@ -646,6 +646,54 @@ body {
 .links-line { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .links-places .links-source { cursor: inherit; }
 
+/* Scrubbing to a past day (T7's flow 7). Two steps and one way home. */
+.todo-scrub { display: inline-flex; align-items: baseline; gap: .1rem; margin-left: .4rem; }
+.todo-scrub button {
+  font-family: var(--font-ui); font-size: .58em; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid transparent; border-radius: 4px; padding: .1em .4em;
+}
+.todo-scrub button:hover:not(:disabled) { color: rgb(var(--text)); border-color: rgb(var(--border)); }
+.todo-scrub button:disabled { opacity: .35; cursor: default; }
+.todo-scrub-back { font-variant-numeric: tabular-nums; }
+
+/* A day that has gone past is READ. The page says so once, quietly, rather than
+   putting a refusal on every control that is no longer there. */
+.todo[data-past='true'] .todo-row { cursor: default; }
+
+/* ── what the corpus remembers and today does not (MT6) ──
+   **Read-only, and it says so by being quiet.** These were finished, dropped or
+   put down on a day that has gone past; drawing them like rows with marks you
+   could click would offer a verb that does not apply. A footnote is what they
+   are. */
+.todo-resolved { list-style: none; margin: .2em 0 .6em; padding: 0 0 0 1.9em; }
+.todo-resolved-row {
+  display: flex; align-items: baseline; gap: .5rem;
+  font-size: .72em; line-height: 1.5; color: rgb(var(--text-muted));
+}
+.todo-resolved-when {
+  flex: 0 0 auto; min-width: 6em;
+  font-family: var(--font-ui); font-size: .8em;
+  font-variant-numeric: tabular-nums;
+}
+.todo-resolved-text { flex: 1; min-width: 0; }
+/* Finished and abandoned read differently: one was carried to its end. */
+.todo-resolved-row.status-done .todo-resolved-text { text-decoration: line-through; }
+.todo-resolved-row.status-dropped .todo-resolved-text { text-decoration: line-through; opacity: .7; }
+
+/* **The count is on the OUTSIDE**, so you can see how much you have put down
+   without opening it — which is the graveyard risk T14 names, stated in the one
+   place that can answer it. */
+.todo-drawer { margin-top: 1.4rem; }
+.todo-drawer-open {
+  display: flex; align-items: baseline; gap: .4rem; cursor: pointer;
+  font-family: var(--font-ui); font-size: .6em; letter-spacing: .06em;
+  text-transform: uppercase; font-weight: 600;
+  color: rgb(var(--text-muted)); background: none; border: 0; padding: 0;
+}
+.todo-drawer-open:hover { color: rgb(var(--text)); }
+.todo-drawer-count { font-weight: 400; letter-spacing: 0; }
+
 /* ── the walk (T11) ─────────────────────────────────────
    **The list looking different IS the offer.** The goal asks for a prominent
    affordance and not a modal, and a tint across the rows that came from

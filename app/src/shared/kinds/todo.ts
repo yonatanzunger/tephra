@@ -406,3 +406,19 @@ export interface WalkState {
   readonly carriedFrom: DateKey | null
 }
 
+
+/**
+ * An item as the corpus holds it now, for the views that reach past today (MT6).
+ *
+ * **Everything here is about somewhere OTHER than today**, which is the whole
+ * reason it exists: today's items are on screen and answer for themselves. This
+ * is what became of the ones that stopped being carried.
+ */
+export interface ResolvedItem {
+  readonly id: string
+  readonly text: string
+  readonly tags: readonly string[]
+  readonly status: TodoStatus
+  /** The day its newest instance sits in — where it was when it stopped moving. */
+  readonly on: DateKey
+}

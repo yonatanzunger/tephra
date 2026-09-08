@@ -438,6 +438,12 @@ export type TodoCommand =
     }
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
   | { readonly kind: 'remove'; readonly list: DocumentId; readonly item: string }
+  /** Which days this list has, oldest first (T7's flow 7). */
+  | { readonly kind: 'days'; readonly list: DocumentId }
+  /** What was finished under each tag before today (T8's tail). */
+  | { readonly kind: 'resolved' }
+  /** Everything put down and not picked up again (T14). */
+  | { readonly kind: 'backlog' }
   /** What the walk knows about a day: reviewed yet, and what arrived from before (T11). */
   /** Every tag that has ever been on a task (T6). The full set; live is today's. */
   | { readonly kind: 'tags' }

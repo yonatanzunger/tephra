@@ -34,7 +34,7 @@ import { systemZone } from './system-zone.ts'
 import { isKnownZone } from '../shared/dates.ts'
 import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
-import type { TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
+import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
@@ -1220,6 +1220,18 @@ export class DocumentService {
     return today
   }
 
+  /**
+   * Which days this list has, oldest first (T7's flow 7, MT6).
+   *
+   * **Scrubbing is nearly free and this is why**: a past working set is not
+   * reconstructed, it is a file. That is the property flow 7 was said to
+   * constrain the format for — "if flow 3's designated set is persisted per
+   * day, this is nearly free" — and D55 persisted it, so here is the bill.
+   */
+  async todoDays(id: DocumentId): Promise<readonly DateKey[]> {
+    return this.#corpus.use(id, async doc => [...(await doc.keys())] as DateKey[], { mode: 'read' })
+  }
+
   async todoItems(id: DocumentId, date: DateKey): Promise<readonly TodoItem[]> {
     return this.#corpus.use(id, doc => (doc as TodoDocument).itemsOn(date), { mode: 'read' })
   }
@@ -1275,6 +1287,23 @@ export class DocumentService {
         ...whereWritten(at.at.file as RelPath),
       })),
     }))
+  }
+
+  /**
+   * What was finished under each tag before today (T8's tail, MT6).
+   *
+   * **`today` is the service's**, because there is one answer about what day it
+   * is and it lives here (D62). The index knows which day a file is; it does
+   * not know which day it is now, and should not.
+   */
+  async todoResolved(): Promise<Record<string, readonly ResolvedItem[]>> {
+    const byTag = await this.#index.resolvedByTag(this.today)
+    return Object.fromEntries(byTag)
+  }
+
+  /** Everything put down and not picked up again (T14). */
+  async todoBacklog(): Promise<readonly ResolvedItem[]> {
+    return this.#index.backlog()
   }
 
   /** Every tag that has ever been on a task (T6). The full set; live is today's. */

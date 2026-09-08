@@ -1033,6 +1033,69 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'mt6') {
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      // **The drawer** (T14): counted on the outside, so how much you have put
+      // down is visible without opening it.
+      say('drawerLabel', document.querySelector('.todo-drawer-open')?.textContent?.trim() ?? '')
+      ;(document.querySelector('.todo-drawer-open') as HTMLElement | null)?.click()
+      await settle(400)
+      say('drawer', [...document.querySelectorAll('.todo-drawer .todo-resolved-row')].map(r =>
+        (r.querySelector('.todo-resolved-text')?.textContent ?? '').trim(),
+      ))
+
+      // **T8's other half**: what was finished under this tag on an earlier day.
+      ;([...document.querySelectorAll('.todo-views button')].find(
+        b => (b.textContent ?? '').trim() === 'by tag',
+      ) as HTMLElement | null)?.click()
+      await settle(500)
+      const house = [...document.querySelectorAll('.todo-group')].find(g =>
+        (g.querySelector('.todo-group-name')?.textContent ?? '').startsWith('house'),
+      )
+      say('liveUnderHouse', [...(house?.querySelectorAll('.todo-row .todo-text') ?? [])].map(t =>
+        (t.textContent ?? '').trim(),
+      ))
+      say('tailUnderHouse', [...(house?.querySelectorAll('.todo-resolved-row') ?? [])].map(r =>
+        (r.querySelector('.todo-resolved-text')?.textContent ?? '').trim(),
+      ))
+      say('tailWhen', [...(house?.querySelectorAll('.todo-resolved-when') ?? [])].map(w =>
+        (w.textContent ?? '').trim(),
+      ))
+      // **Scrubbing to a past day** (T7's flow 7): rare, read-only, cheap —
+      // cheap because a past working set is not reconstructed, it is a file.
+      ;([...document.querySelectorAll('.todo-views button')].find(
+        b => (b.textContent ?? '').trim() === 'by time',
+      ) as HTMLElement | null)?.click()
+      await settle(300)
+      say('todayRows', [...document.querySelectorAll('.todo-row .todo-text')].map(t => (t.textContent ?? '').trim()))
+      const step = (which: string) =>
+        [...document.querySelectorAll('.todo-scrub button')].find(
+          b => (b.textContent ?? '').trim() === which,
+        ) as HTMLElement | undefined
+      step('\u2039')?.click()
+      await settle(900)
+      say('pastRows', [...document.querySelectorAll('.todo-row .todo-text')].map(t => (t.textContent ?? '').trim()))
+      say('readOnly', document.querySelector('.todo')?.getAttribute('data-past') ?? '')
+      // The verbs are absent rather than refusing: a control that says no is a
+      // control you learn to distrust.
+      say('noAdd', document.querySelector('.todo-addrow') === null)
+      say('noWalk', document.querySelector('.todo-walk-start') === null)
+      say('markNotAButton', document.querySelector('.todo-row button.todo-glyph') === null)
+      say('wayHome', document.querySelector('.todo-scrub-back')?.textContent?.trim() ?? '')
+      ;(document.querySelector('.todo-scrub-back') as HTMLElement | null)?.click()
+      await settle(900)
+      say('backToday', [...document.querySelectorAll('.todo-row .todo-text')].map(t => (t.textContent ?? '').trim()))
+      say('writableAgain', document.querySelector('.todo-addrow') !== null)
+
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(700)
+    }
+
     if (scene === 'listbugs') {
       // Three reported from use in one sitting, all in the task list.
       await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
