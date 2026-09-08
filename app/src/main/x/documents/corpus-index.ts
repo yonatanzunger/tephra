@@ -20,7 +20,7 @@ import type { Notebook } from '../../w/notebook.ts'
 import { IndexStore, type Entries, type Cached } from '../../w/index-store.ts'
 import { dayFile, kindOf, parseDayFile, STREAM_DIR, type RelPath } from '../../w/layout.ts'
 import { isLive, scanItems, type ResolvedItem, type TodoStatus } from '../../../shared/kinds/todo.ts'
-import { compareDateKeys } from '../../../shared/dates.ts'
+import { compareDateKeys, daysBetween } from '../../../shared/dates.ts'
 import { scanLinks, type ScannedLink } from '../../../shared/links.ts'
 import { canonicalizeLink, indexable, type CanonicalLink } from '../../../shared/link-index.ts'
 import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
@@ -316,15 +316,23 @@ export class CorpusIndex {
   /**
    * What was finished under each tag, newest first (T8's resolved tail, MT6).
    *
-   * **Only what is no longer on the list.** An item finished TODAY is still in
-   * today's file, still carried, and still on screen greyed (T7) — showing it
-   * again underneath would be showing it twice. What this answers is the half
-   * today cannot: the things that were done and have since fallen away.
+   * **Only what is no longer on the list, and only recently.** An item finished
+   * TODAY is still in today's file, still carried, and still on screen greyed
+   * (T7) — showing it again underneath would be showing it twice. Anything
+   * older than `within` days is a question for the scrub rather than for this,
+   * which is a reminder of recent work and not a record of all of it.
    */
-  async resolvedByTag(before: DateKey): Promise<ReadonlyMap<string, readonly ResolvedItem[]>> {
+  async resolvedByTag(
+    before: DateKey,
+    within: number,
+  ): Promise<ReadonlyMap<string, readonly ResolvedItem[]>> {
     const out = new Map<string, ResolvedItem[]>()
     for (const item of (await this.itemsNow()).values()) {
       if (isLive(item.status) || compareDateKeys(item.on, before) >= 0) continue
+      // **A reminder, not an archive.** How far back is policy and arrives from
+      // the caller, the way the day does — the corpus knows when things
+      // happened and has no opinion about which of them still matter.
+      if (daysBetween(item.on, before) > within) continue
       // Backlogged is not resolved — it is waiting, and it has its own drawer.
       if (item.status === 'backlog') continue
       for (const tag of new Set(item.tags)) {

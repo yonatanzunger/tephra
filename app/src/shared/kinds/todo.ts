@@ -490,6 +490,22 @@ export interface WalkState {
 
 
 /**
+ * How far back the resolved tail reaches (T8).
+ *
+ * **Three days, and it is a reminder rather than an archive.** T8 asks for
+ * "recently resolved" and the first cut delivered *resolved* — every task ever
+ * finished under a tag, forever, which on a year-old list buries the live items
+ * under a wall of history.
+ *
+ * A window rather than a count, and the reason is that these are FULLY resolved
+ * items: there is no picking one up again, so a tag returned to after months
+ * needs no reminder of what was last done under it. What the tail is for is the
+ * work of the last few days, and anything older is a question for the scrub
+ * (T7's flow 7), which is the history view and answers it exactly.
+ */
+export const RESOLVED_DAYS = 3
+
+/**
  * An item as the corpus holds it now, for the views that reach past today (MT6).
  *
  * **Everything here is about somewhere OTHER than today**, which is the whole

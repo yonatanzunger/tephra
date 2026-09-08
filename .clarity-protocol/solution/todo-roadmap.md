@@ -601,10 +601,20 @@ can see.
   `tephra:todo/<id>` already resolves by — and the inverse of `tephra:mark`,
   which answers with the first. The day comes from the file's PATH, exactly, so
   it needs no zone and D63 has no opinion to have.
-- **The resolved tail (T8).** What was finished under a tag on an earlier day.
+- **The resolved tail (T8), within three days.** What was finished under a tag
+  on an earlier day.
   Not what was finished *today* — that is carried, greyed and on screen (T7),
   and showing it underneath as well would be showing it twice. Not backlogged
   items either: put down is not finished with, and it has its own place.
+
+  **The window was missing from the first cut and was reported the same week.**
+  T8 asks for "recently resolved" and what shipped was *resolved* — every task
+  ever finished under a tag, forever, which on a year-old list buries the live
+  items under a wall of history. A window rather than a count, and the reason is
+  the user's: these are FULLY resolved items, so there is no picking one up
+  again and no tag that needs reminding what was last done under it months ago.
+  The tail is a reminder of recent work; anything older is a question for the
+  scrub, which is the history view and answers it exactly.
 - **The drawer (T14), counted on the outside.** A backlogged item is not carried
   forward (D55), so it sits in the day it was put down and nothing else on the
   page would show it — which is exactly the graveyard `goal/todo.md` warns

@@ -34,6 +34,7 @@ import { systemZone } from './system-zone.ts'
 import { isKnownZone } from '../shared/dates.ts'
 import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
+import { RESOLVED_DAYS } from '../shared/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
@@ -1303,7 +1304,7 @@ export class DocumentService {
    * not know which day it is now, and should not.
    */
   async todoResolved(): Promise<Record<string, readonly ResolvedItem[]>> {
-    const byTag = await this.#index.resolvedByTag(this.today)
+    const byTag = await this.#index.resolvedByTag(this.today, RESOLVED_DAYS)
     return Object.fromEntries(byTag)
   }
 

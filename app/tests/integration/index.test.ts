@@ -17,6 +17,7 @@ import { dayLabel } from '../../src/shared/dates.ts'
 import type { DateKey } from '../../src/shared/document-api.ts'
 import { dayFile, indexFile, type RelPath } from '../../src/main/w/layout.ts'
 import { rt } from '../support/text.ts'
+import { RESOLVED_DAYS } from '../../src/shared/kinds/todo.ts'
 
 const d = (s: string): DateKey => s as DateKey
 const TAG = (s: string, text: string): string =>
@@ -449,24 +450,38 @@ test('an item is what its NEWEST instance says it is', async t => {
 
 test('THE RESOLVED TAIL: what was finished under a tag, newest first', async t => {
   const { index } = await withList(t, {
-    '2026-03-01': ['- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-04': ['- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->'],
     '2026-03-03': ['- [x] paint the shed #house <!--tephra:item aaaa2222 100 100-->'],
     '2026-03-02': ['- [-] reroof it #house <!--tephra:item aaaa3333 100 100-->'],
   })
-  const byTag = await index.resolvedByTag(RESOLVED)
+  const byTag = await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)
   assert.deepEqual(byTag.get('house')?.map(i => i.text), [
+    'fix the gate #house',
     'paint the shed #house',
     'reroof it #house',
-    'fix the gate #house',
   ])
 })
 
-test('and a LIVE item is not in it, however old', async t => {
+test('THE WINDOW: three days back, and the fourth is the scrub\'s business', async t => {
+  // A reminder of recent work, not a record of all of it — the first cut had no
+  // window at all, so a tag buried its live items under every task ever
+  // finished under it. These are FULLY resolved items, so there is no picking
+  // one up again: what is older than a few days is a question for a past day
+  // (T7's flow 7), which answers it exactly.
   const { index } = await withList(t, {
-    '2026-03-01': ['- [ ] still going #house <!--tephra:item aaaa1111 100 100-->'],
-    '2026-03-02': ['- [?] blocked, not finished #house <!--tephra:item aaaa2222 100 100-->'],
+    '2026-03-02': ['- [x] three days back #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-01': ['- [x] four days back #house <!--tephra:item aaaa2222 100 100-->'],
   })
-  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+  const byTag = await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)
+  assert.deepEqual(byTag.get('house')?.map(i => i.text), ['three days back #house'])
+})
+
+test('and a LIVE item is not in it, however recent', async t => {
+  const { index } = await withList(t, {
+    '2026-03-03': ['- [ ] still going #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-04': ['- [?] blocked, not finished #house <!--tephra:item aaaa2222 100 100-->'],
+  })
+  assert.equal((await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)).get('house'), undefined)
 })
 
 test('nor is one finished TODAY, because it is still on the list', async t => {
@@ -475,7 +490,7 @@ test('nor is one finished TODAY, because it is still on the list', async t => {
   const { index } = await withList(t, {
     '2026-03-05': ['- [x] done this morning #house <!--tephra:item aaaa1111 100 100-->'],
   })
-  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+  assert.equal((await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)).get('house'), undefined)
 })
 
 test('THE DRAWER: backlogged items, which nothing else can see', async t => {
@@ -495,17 +510,17 @@ test('and a backlogged item is NOT in the resolved tail, because it is waiting',
   // Resolved means finished with. Backlogged means put down — a different
   // thing, with a different place to live.
   const { index } = await withList(t, {
-    '2026-03-01': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-04': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
   })
-  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+  assert.equal((await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)).get('house'), undefined)
   assert.equal((await index.backlog()).length, 1)
 })
 
 test('an item picked back UP is live again, and leaves both', async t => {
   const { index } = await withList(t, {
-    '2026-03-01': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
+    '2026-03-03': ['- [>] someday, the loft #house <!--tephra:item aaaa1111 100 100-->'],
     '2026-03-04': ['- [ ] actually, now #house <!--tephra:item aaaa1111 100 100-->'],
   })
   assert.deepEqual(await index.backlog(), [])
-  assert.equal((await index.resolvedByTag(RESOLVED)).get('house'), undefined)
+  assert.equal((await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)).get('house'), undefined)
 })

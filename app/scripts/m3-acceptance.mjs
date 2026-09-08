@@ -1578,15 +1578,23 @@ console.log('\n— the pivots and the drawer —')
       `---\ntephra: 1\ndate: ${day(back)}\nkind: todo\n---\n${lines.join('\n')}\n`,
     )
   }
+  // **Nine days back is outside the window and two is inside**, which is what
+  // makes the tail a reminder rather than an archive. The backlogged ones are
+  // NOT bounded by it: the drawer is where you look for what you put down,
+  // whenever that was.
   await put(9, [
-    '- [x] fix the gate #house <!--tephra:item aaaa1111 100 100-->',
+    '- [x] fix the gate long ago #house <!--tephra:item aaaa1111 100 100-->',
     '- [>] someday, the loft #house <!--tephra:item aaaa2222 100 100-->',
     '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
   ])
-  await put(4, [
-    '- [-] reroof it #house <!--tephra:item aaaa4444 100 100-->',
+  await put(3, [
+    '- [x] fix the gate #house <!--tephra:item aaaa7777 100 100-->',
     '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
     '- [>] someday, a pond <!--tephra:item aaaa5555 100 100-->',
+  ])
+  await put(2, [
+    '- [-] reroof it #house <!--tephra:item aaaa4444 100 100-->',
+    '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
   ])
   await put(0, [
     '- [ ] paint the shed #house <!--tephra:item aaaa3333 100 100-->',
@@ -1599,6 +1607,15 @@ console.log('\n— the pivots and the drawer —')
     // nothing built (MT4a); this is the part only the corpus knows.
     'THE RESOLVED TAIL: what was finished under a tag, newest first',
     JSON.stringify(V.tailUnderHouse) === JSON.stringify(['reroof it #house', 'fix the gate #house']),
+    JSON.stringify(V.tailUnderHouse),
+  )
+  check(
+    // **A reminder, not an archive.** The first cut had no window at all, so a
+    // tag buried its live items under every task ever finished under it. These
+    // are FULLY resolved, so nothing is picked up again — what is older than a
+    // few days is a question for the scrub, which answers it exactly.
+    'and THE WINDOW holds: nine days back is the scrub\'s business, not the tail\'s',
+    Array.isArray(V.tailUnderHouse) && !V.tailUnderHouse.some(t => String(t).includes('long ago')),
     JSON.stringify(V.tailUnderHouse),
   )
   check(
@@ -1629,7 +1646,7 @@ console.log('\n— the pivots and the drawer —')
     // format for.
     'SCRUBBING to a past day shows that day, not this one',
     JSON.stringify(V.todayRows) === JSON.stringify(['paint the shed', 'read the survey']) &&
-      JSON.stringify(V.pastRows) === JSON.stringify(['reroof it', 'paint the shed', 'someday, a pond']),
+      JSON.stringify(V.pastRows) === JSON.stringify(['reroof it', 'paint the shed']),
     `${JSON.stringify(V.todayRows)} \u2192 ${JSON.stringify(V.pastRows)}`,
   )
   check(
