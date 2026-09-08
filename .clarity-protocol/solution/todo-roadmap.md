@@ -633,6 +633,41 @@ can see.
   entirely on screen; the scene caught it because it clicks by label.
 
 
+## Four from use, before MT7 *(done)*
+
+- **Print printed the notebook, whatever was on screen.** ⌘P asked the stream
+  for its extent unconditionally, so printing from a note printed the notebook —
+  a command that reads as *print this* and did not. Only the stream has days to
+  choose between, which is why only the stream is asked which ones. The fix
+  turned up a type saying the wrong thing: `PrintJob.segment: DateKey` was
+  really *which directory relative links resolve from*, which has an answer for
+  a day and none for a note. It is a `base` now, and only the two kinds of thing
+  that can answer it may.
+- **Notes under an item** (D56 amended). Indented continuation lines; nothing in
+  them parsed; carried with the item. Recorded on the decision.
+- **The list's arrangement is sticky.** MT4a left it unpersisted on purpose and
+  named where it would go if that was wrong — "where the theme's selection
+  already is, rather than into a second place soft state lives". It was wrong:
+  the window stays open all day, so the reset is rare, and a rare surprise is
+  worse than a frequent one because you have stopped expecting it.
+- **A fourth went to the backlog**: snippets, daily and weekly summaries of what
+  got done. It needs design before it needs code, and the design turns on where
+  a generated summary is allowed to live.
+
+### What the building found
+
+- **An unclosed brace that compiled.** Splicing two functions in after the row's
+  `</li>` left `Row` unterminated — so `Notes` and `NoteField` became functions
+  *nested inside it*, after its `return`, and a stray `}` further down closed
+  it. Perfectly legal JavaScript, dead code, zero type errors. Only reading the
+  braces found it; nothing else would have, because the row still rendered.
+- **The verbs needed no change at all**, which is the part of the format worth
+  keeping: every one of them replaces the item's LINE and nothing else, so notes
+  survive a status change, a re-tag and a re-dating without being told to. Only
+  two spans had to grow — `end`, so deleting an item takes its notes, and a new
+  `blockTo`, so rewriting the notes does not leave the old ones sitting after
+  the new.
+
 ## MT7 — More than one list: daily and overall todo files
 
 **Asked for from use, and it reverses a decision** — D55's "all TODO lists share

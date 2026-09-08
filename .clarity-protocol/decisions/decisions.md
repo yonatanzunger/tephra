@@ -2027,7 +2027,16 @@ way.
 **Decision.** `TodoDocument extends SegmentedDocument`, segments keyed by
 `DateKey`, one list per directory: `<name>.todo/YYYY/MM/YYYY-MM-DD.md` (D59),
 with the `.todo` directory at the notebook root distinguished by position rather
-than by any special case in the layout. **Each day's file holds that day's
+than by any special case in the layout. **An item is one line, and what
+is written UNDER it is indented continuation lines** *(added 2026-09-08)* —
+markdown's own way of attaching a paragraph to a list item, so any renderer
+shows them as part of the item and hand-editing is adding a line and indenting
+it. Nothing in a note is parsed: no `#tag`, no `DUE`, no status glyph, because a
+note is prose about the task and not more task. They travel with the item on
+every carry, so today's list holds the running record and each past day keeps
+the notes as they stood that day. *(The trailing `— …` clause on a blocked item
+is now `reason`, not `note`: two fields on one type differing by a letter is a
+bug with a date on it.)* **Each day's file holds that day's
 working set in full**, carried forward automatically. ~~All TODO lists share one
 format; there is no lightweight second form.~~ *(Amended 2026-09-02; see below.)*
 

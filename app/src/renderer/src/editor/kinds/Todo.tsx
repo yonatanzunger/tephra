@@ -20,7 +20,7 @@
 // rule (MT5), and the pivots (MT6). The list is the whole list, in order, which
 // is already the interaction that dominates every other thing a list is asked.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps, TextTarget } from '../surface.ts'
 import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
@@ -462,9 +462,11 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * places for those verbs to drift apart.
    */
   const row = (item: TodoItem, under: string | null = null): React.JSX.Element => (
+    // **The row and what is written under it**, as a fragment, because they are
+    // one item on the page and two elements in the list.
+    <Fragment key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}>
     <Row
       readOnly={past}
-      key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}
       under={under}
       carried={carriedNow.has(item.id ?? '')}
       {...(onTextTarget === undefined ? {} : { onTextTarget })}
@@ -507,6 +509,14 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
         })
       }}
     />
+    {item.id !== null && (
+      <Notes
+        item={item}
+        readOnly={past}
+        onNotes={notes => act(window.tephra.todo.setNotes(list, item.id as string, notes))}
+      />
+    )}
+    </Fragment>
   )
 
   return (
@@ -873,7 +883,7 @@ function Row({
         <Field initial={item.text} tags={tags} known={known} today={today} onDone={onDone} {...target} />
       ) : blocking ? (
         <Field
-          initial={item.note ?? ''}
+          initial={item.reason ?? ''}
           placeholder="waiting on what?"
           tags={tags}
           known={known}
@@ -891,7 +901,7 @@ function Row({
           ) : (
             <Prose text={prose(item)} />
           )}
-          {item.note !== null && <span className="todo-note">{item.note}</span>}
+          {item.reason !== null && <span className="todo-reason">{item.reason}</span>}
         </span>
       )}
 
@@ -933,6 +943,129 @@ function Row({
     </li>
   )
 }
+
+/**
+ * The lines written under an item (2026-09-08).
+ *
+ * **Inset, and plainly not tasks.** They are prose about the item — progress,
+ * who was called, what they said — and nothing in them is parsed: no `#tag`, no
+ * `DUE`, no status glyph. That is the point of them, and it is why they are
+ * drawn as text rather than as rows with marks.
+ *
+ * The item's line stays one line, which is what keeps the list scannable: the
+ * running record lives underneath and does not push the next task down a
+ * paragraph.
+ */
+function Notes({
+  item,
+  readOnly,
+  onNotes,
+}: {
+  item: TodoItem
+  readOnly: boolean
+  onNotes: (notes: readonly string[]) => void
+}): React.JSX.Element | null {
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<number | null>(null)
+  if (item.notes.length === 0 && (readOnly || !adding)) {
+    return readOnly ? null : (
+      <li className="todo-notes">
+        <button type="button" className="todo-note-add" onClick={() => setAdding(true)}>
+          + note
+        </button>
+      </li>
+    )
+  }
+  return (
+    <li className="todo-notes">
+      {item.notes.map((note, at) =>
+        editing === at && !readOnly ? (
+          <NoteField
+            key={`note:${at}`}
+            initial={note}
+            onDone={text => {
+              setEditing(null)
+              if (text === null) return
+              // An emptied note is a deleted note — the same rule the document
+              // follows, said once here so the two cannot disagree.
+              const next = [...item.notes]
+              next[at] = text
+              onNotes(next)
+            }}
+          />
+        ) : (
+          <div
+            key={`note:${at}`}
+            className="todo-note"
+            onClick={() => {
+              if (!readOnly) setEditing(at)
+            }}
+          >
+            <Prose text={note} />
+          </div>
+        ),
+      )}
+      {adding && (
+        <NoteField
+          initial=""
+          onDone={text => {
+            setAdding(false)
+            if (text !== null && text.trim() !== '') onNotes([...item.notes, text])
+          }}
+        />
+      )}
+      {!readOnly && !adding && editing === null && (
+        <button type="button" className="todo-note-add" onClick={() => setAdding(true)}>
+          + note
+        </button>
+      )}
+    </li>
+  )
+}
+
+/** A note being typed. Plain text: none of the item grammar applies here. */
+function NoteField({
+  initial,
+  onDone,
+}: {
+  initial: string
+  onDone: (text: string | null) => void
+}): React.JSX.Element {
+  const [value, setValue] = useState(initial)
+  const field = useRef<HTMLInputElement>(null)
+  const done = useRef(false)
+  const finish = (text: string | null): void => {
+    if (done.current) return
+    done.current = true
+    onDone(text)
+  }
+  useEffect(() => {
+    field.current?.focus()
+    field.current?.setSelectionRange(initial.length, initial.length)
+  }, [initial])
+  return (
+    <input
+      ref={field}
+      className="todo-note-field"
+      value={value}
+      placeholder="what happened"
+      spellCheck={false}
+      onChange={e => setValue(e.currentTarget.value)}
+      onBlur={e => finish(e.currentTarget.value)}
+      onKeyDown={e => {
+        e.stopPropagation()
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          finish(e.currentTarget.value)
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          finish(null)
+        }
+      }}
+    />
+  )
+}
+
 
 /**
  * Items the corpus remembers and today does not (MT6).

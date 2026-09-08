@@ -452,6 +452,13 @@ export type TodoCommand =
       readonly note?: string
     }
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
+  /** The lines written UNDER an item — progress, who was called. Nothing is parsed. */
+  | {
+      readonly kind: 'notes'
+      readonly list: DocumentId
+      readonly item: string
+      readonly notes: readonly string[]
+    }
   | { readonly kind: 'remove'; readonly list: DocumentId; readonly item: string }
   /** Which days this list has, oldest first (T7's flow 7). */
   | { readonly kind: 'days'; readonly list: DocumentId }

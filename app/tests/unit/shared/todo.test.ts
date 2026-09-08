@@ -101,11 +101,11 @@ test('THE NOTE RULE: a dash clause is a reason only on a blocked item', () => {
   // Otherwise "call the surveyor — the one from Tuesday" acquires a reason it
   // does not have, and the text loses its second half.
   const blocked = parseItem('- [?] get the survey — waiting on the surveyor')
-  assert.equal(blocked?.note, 'waiting on the surveyor')
+  assert.equal(blocked?.reason, 'waiting on the surveyor')
   assert.equal(blocked?.text, 'get the survey')
 
   const plain = parseItem('- [ ] call the surveyor — the one from Tuesday')
-  assert.equal(plain?.note, null)
+  assert.equal(plain?.reason, null)
   assert.equal(plain?.text, 'call the surveyor — the one from Tuesday')
 })
 
@@ -196,7 +196,7 @@ test('ids are eight characters and avoid what is taken', () => {
 test('an item with no text is still a line', () => {
   const empty: TodoItem = {
     id: null, status: 'todo', ctime: null, mtime: null,
-    text: '', tags: [], due: null, note: null, tagSpans: [], dueSpan: null,
+    text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
   }
   assert.equal(itemLine(empty), '- [ ]')
   assert.equal(parseItem('- [ ]')?.text, '')

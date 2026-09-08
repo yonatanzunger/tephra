@@ -92,7 +92,7 @@ test('THE CARRY: a new day is materialised from the last one that has a file', a
   // the day they were finished — nothing evicts them, they simply do not come.
   assert.deepEqual(carried.map(i => i.id), ['aaaaaaaa', 'bbbbbbbb', 'cccccccc'])
   assert.deepEqual(carried.map(i => i.status), ['todo', 'doing', 'blocked'])
-  assert.equal(carried[2]?.note, 'waiting on the solicitor', 'and a blocked item keeps its reason')
+  assert.equal(carried[2]?.reason, 'waiting on the solicitor', 'and a blocked item keeps its reason')
   // Copying is not modifying: identity, ctime and mtime all survive.
   assert.equal(carried[0]?.ctime, 1000)
   assert.equal(carried[0]?.mtime, 1000)
@@ -190,10 +190,10 @@ test('blocking keeps a reason; unblocking does not keep it lying around', async 
     [MON]: ['- [ ] get the deeds <!--tephra:item aaaaaaaa 1000 1000-->'],
   })
   await doc.setStatus('aaaaaaaa', 'blocked', 'waiting on the solicitor')
-  assert.equal((await doc.itemsOn(MON))[0]?.note, 'waiting on the solicitor')
+  assert.equal((await doc.itemsOn(MON))[0]?.reason, 'waiting on the solicitor')
 
   await doc.setStatus('aaaaaaaa', 'doing')
-  assert.equal((await doc.itemsOn(MON))[0]?.note, null)
+  assert.equal((await doc.itemsOn(MON))[0]?.reason, null)
   assert.equal((await doc.itemsOn(MON))[0]?.text, 'get the deeds')
 })
 
@@ -438,4 +438,122 @@ test('the corpus is asked ONLY when an id is actually minted', async t => {
 
   await doc.add('something new', TUE, elsewhere)
   assert.equal(asked, 1)
+})
+
+// ── notes under an item (2026-09-08) ───────────────────
+//
+// **Indented continuation lines, which is markdown's own way** of attaching a
+// paragraph to a list item — so the file is what it appears to be (R26, D20),
+// any renderer shows them as part of the item, and hand-editing is adding a
+// line and indenting it. Nothing in them is parsed: a note is prose about the
+// task and not more task.
+
+test('notes are the indented lines under an item', async t => {
+  const { doc } = await list(t, {
+    [MON]: [
+      '- [ ] call the surveyor #house <!--tephra:item aaaa1111 100 100-->',
+      '  Left a message Tuesday.',
+      '  The boundary map is with the council.',
+      '- [ ] renew the permit <!--tephra:item aaaa2222 100 100-->',
+    ],
+  })
+  const items = await doc.itemsOn(MON)
+  assert.equal(items.length, 2, 'an indented line is not an item')
+  assert.deepEqual(items[0]?.notes, ['Left a message Tuesday.', 'The boundary map is with the council.'])
+  assert.deepEqual(items[1]?.notes, [])
+})
+
+test('NOTHING in a note is parsed — not a tag, not a date, not a status', async t => {
+  const { doc } = await list(t, {
+    [MON]: [
+      '- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->',
+      '  Chase #house about DUE 2026-09-30 and the [x] form.',
+    ],
+  })
+  const item = (await doc.itemsOn(MON))[0]
+  assert.deepEqual(item?.tags, [], 'a hash in a note is a hash')
+  assert.equal(item?.due, null)
+  assert.equal(item?.status, 'todo')
+  assert.equal((await doc.itemsOn(MON)).length, 1)
+})
+
+test('a blank line ends them, so a paragraph is not adopted by the item above', async t => {
+  const { doc } = await list(t, {
+    [MON]: [
+      '- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->',
+      '  Left a message.',
+      '',
+      '  Something else entirely.',
+    ],
+  })
+  assert.deepEqual((await doc.itemsOn(MON))[0]?.notes, ['Left a message.'])
+})
+
+test('THE POINT: notes travel with the item on the carry', async t => {
+  const { doc, fileOn } = await list(t, {
+    [MON]: [
+      '- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->',
+      '  Left a message Tuesday.',
+    ],
+  })
+  await doc.carry(TUE)
+  assert.deepEqual((await doc.itemsOn(TUE))[0]?.notes, ['Left a message Tuesday.'])
+  assert.match(await fileOn(TUE), /^ {2}Left a message Tuesday\.$/m, 'indented, as markdown wants')
+})
+
+test('and each past day keeps the notes as they stood THAT day', async t => {
+  // Which is what makes scrubbing back show what you knew then (T7's flow 7).
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->', '  Left a message.'],
+  })
+  await doc.carry(TUE)
+  await doc.setNotes('aaaa1111', ['Left a message.', 'Called back — Thursday.'])
+
+  assert.deepEqual((await doc.itemsOn(TUE))[0]?.notes, ['Left a message.', 'Called back — Thursday.'])
+  assert.deepEqual((await doc.itemsOn(MON))[0]?.notes, ['Left a message.'], 'Monday is untouched')
+})
+
+test('rewriting notes replaces them rather than doubling them', async t => {
+  const { doc, fileOn } = await list(t, {
+    [MON]: ['- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->', '  The first one.'],
+  })
+  await doc.setNotes('aaaa1111', ['A second one.'])
+  assert.deepEqual((await doc.itemsOn(MON))[0]?.notes, ['A second one.'])
+  assert.ok(!(await fileOn(MON)).includes('The first one.'))
+})
+
+test('and emptying them removes them', async t => {
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->', '  Something.'],
+  })
+  await doc.setNotes('aaaa1111', [])
+  assert.deepEqual((await doc.itemsOn(MON))[0]?.notes, [])
+})
+
+test('EVERY OTHER VERB leaves them exactly where they are', async t => {
+  // Every verb rewrites the LINE and nothing else, which is the whole reason
+  // notes survive a status change, a re-tag or a re-dating.
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->', '  Left a message.'],
+  })
+  await doc.setStatus('aaaa1111', 'doing')
+  await doc.edit('aaaa1111', 'call the surveyor again #house')
+  const item = (await doc.itemsOn(MON))[0]
+  assert.equal(item?.status, 'doing')
+  assert.deepEqual(item?.tags, ['house'])
+  assert.deepEqual(item?.notes, ['Left a message.'])
+})
+
+test('and deleting the item takes its notes with it', async t => {
+  const { doc, fileOn } = await list(t, {
+    [MON]: [
+      '- [ ] call the surveyor <!--tephra:item aaaa1111 100 100-->',
+      '  Left a message.',
+      '- [ ] renew the permit <!--tephra:item aaaa2222 100 100-->',
+    ],
+  })
+  await doc.remove('aaaa1111')
+  const file = await fileOn(MON)
+  assert.ok(!file.includes('Left a message.'), 'no orphan')
+  assert.match(file, /renew the permit/, 'and the next item is intact')
 })

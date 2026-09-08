@@ -1415,6 +1415,58 @@ console.log('\n— a link in a task —')
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
 }
 
+// ── notes under an item ─────────────────────
+//
+// **Prose about the task, not more task.** Indented continuation lines, which
+// is markdown's own way of attaching a paragraph to a list item — so the file is
+// what it appears to be (R26, D20) and hand-editing is adding a line and
+// indenting it. The item's own line stays one line, which is what keeps the
+// list scannable.
+console.log('\n— notes under an item —')
+{
+  const root = await week(['Today.\n'])
+  const [ny2, nm2] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', ny2, nm2), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', ny2, nm2, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      '- [ ] call the surveyor #house <!--tephra:item aaaa1111 100 100-->\n' +
+      '  Left a message Tuesday.\n' +
+      '- [ ] renew the permit <!--tephra:item aaaa2222 100 100-->\n',
+  )
+
+  const N = report(await launch('notes', root))
+  const file = await readFile(join(root, 'tasks.todo', ny2, nm2, `${DAY}.md`), 'utf8')
+  check(
+    'an indented line under an item is a NOTE, not an item',
+    N.rows === 2 && JSON.stringify(N.shown) === JSON.stringify(['Left a message Tuesday.']),
+    `${N.rows} rows \u00b7 ${JSON.stringify(N.shown)}`,
+  )
+  check(
+    'one can be added where you are looking',
+    N.opened === true && Array.isArray(N.afterAdding) && N.afterAdding.length === 2,
+    JSON.stringify(N.afterAdding),
+  )
+  check(
+    // **THE POINT.** A note is prose about the task, so the item grammar does
+    // not apply inside it: the hash is a hash, the date is a date, and neither
+    // is a second task.
+    'NOTHING in a note is parsed \u2014 not a tag, not a due date, not a status',
+    N.rowsAfter === 2 &&
+      JSON.stringify(N.tagsAfter) === JSON.stringify(['house']) &&
+      JSON.stringify(N.dueAfter) === JSON.stringify([]),
+    `${N.rowsAfter} rows \u00b7 tags ${JSON.stringify(N.tagsAfter)} \u00b7 due ${JSON.stringify(N.dueAfter)}`,
+  )
+  check(
+    // The file is what it appears to be: any renderer shows this as part of the
+    // item above it, and hand-editing is adding a line and indenting it.
+    'and the file holds it as markdown\'s own continuation line',
+    /^ {2}Called back/m.test(file) && /^- \[ \] call the surveyor/m.test(file),
+    JSON.stringify(file.split('\n').slice(4, 8)),
+  )
+  check('nothing errored on the way', N.appError === 'none', String(N.appError))
+}
+
 // ── print prints what you are looking at ──────────
 //
 // **Reported from use.** ⌘P asked the stream for its extent whatever was on

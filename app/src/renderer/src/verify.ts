@@ -1033,6 +1033,41 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'notes') {
+      // **Prose about the item, not more task.** Indented continuation lines,
+      // which is markdown's own way of attaching a paragraph to a list item —
+      // and nothing in them is parsed.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      say('rows', document.querySelectorAll('.todo-row').length)
+      say('shown', [...document.querySelectorAll('.todo-note')].map(n => (n.textContent ?? '').trim()))
+
+      // Add one, the way a person does.
+      ;(document.querySelector('.todo-note-add') as HTMLElement | null)?.click()
+      await settle(400)
+      const field = document.querySelector('.todo-note-field') as HTMLInputElement | null
+      say('opened', field !== null)
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        field,
+        'Called back — Thursday. #house DUE 2026-09-30',
+      )
+      field?.dispatchEvent(new Event('input', { bubbles: true }))
+      field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      await settle(1400)
+      say('afterAdding', [...document.querySelectorAll('.todo-note')].map(n => (n.textContent ?? '').trim()))
+      // **Nothing in a note is parsed**: the hash is a hash and the date is a date.
+      say('rowsAfter', document.querySelectorAll('.todo-row').length)
+      say('tagsAfter', [...document.querySelectorAll('.todo-tag')].map(t => (t.textContent ?? '').trim()))
+      say('dueAfter', [...document.querySelectorAll('.todo-due')].map(d => (d.textContent ?? '').trim()))
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'printhere') {
       // **Print prints what the WINDOW is showing.** It asked the stream for
       // its extent whatever was on screen, so printing from a note printed the

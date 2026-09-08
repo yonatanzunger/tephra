@@ -845,7 +845,39 @@ body {
 
 .todo-text { flex: 1; min-width: 0; text-align: left; color: inherit; }
 .todo-unwritten { color: rgb(var(--text-muted)); font-style: italic; }
-.todo-note { margin-left: .5rem; font-size: .85em; font-style: italic; color: rgb(var(--text-muted)); }
+/* Why it is blocked — a clause on the item's own line (T4). */
+.todo-reason { margin-left: .5rem; font-size: .85em; font-style: italic; color: rgb(var(--text-muted)); }
+
+/* ── the lines written under an item ────────────────────
+   **Inset, and plainly not tasks.** They are prose about the item, and nothing
+   in them is parsed — so they are drawn as text rather than as rows with marks,
+   and they sit under the words rather than under the whole row, which is where
+   a continuation belongs. The item's line stays one line: the running record
+   lives underneath and does not push the next task down a paragraph. */
+.todo-notes { list-style: none; margin: 0; padding: 0 0 .35em 1.9em; }
+.todo-note {
+  font-size: .8em; line-height: 1.5; color: rgb(var(--text-muted));
+  padding: .1em 0; cursor: text;
+}
+.todo-note:hover { color: rgb(var(--text)); }
+.todo-note-field {
+  display: block; width: 100%; box-sizing: border-box;
+  font: inherit; font-size: .8em; line-height: 1.5; color: rgb(var(--text));
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--accent) / .5); border-radius: 3px;
+  padding: .1em .3em; margin: .1em 0;
+}
+.todo-note-field:focus { outline: none; }
+/* Present only when there is room to notice it, and quiet when there is not. */
+.todo-note-add {
+  font-family: var(--font-ui); font-size: .58em; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none; border: 0; padding: .1em 0;
+  opacity: 0;
+}
+.todo-row:hover + .todo-notes .todo-note-add,
+.todo-notes:hover .todo-note-add,
+.todo-note-add:focus-visible { opacity: 1; }
+.todo-note-add:hover { color: rgb(var(--accent)); }
 
 /* **Centred on the first line, by the same arithmetic the mark uses.** The row
    is `flex-start` so that everything stays on line one when an item wraps to

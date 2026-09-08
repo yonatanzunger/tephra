@@ -178,6 +178,9 @@ const tephra = {
     /** The committed row edit: text, tags and date together, one edit (D56). */
     edit: (list: DocumentId, item: string, text: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'edit', list, item, text }),
+    /** The lines written under an item. Nothing in them is parsed (T16 does not apply). */
+    setNotes: (list: DocumentId, item: string, notes: readonly string[]): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'notes', list, item, notes }),
     /** Off the list, for a line that was never a task. Earlier days keep theirs. */
     remove: (list: DocumentId, item: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'remove', list, item }),

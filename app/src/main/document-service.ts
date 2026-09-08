@@ -1245,6 +1245,12 @@ export class DocumentService {
     return made
   }
 
+  /** Rewrite what is written under an item. Nothing in a note is parsed. */
+  async todoSetNotes(id: DocumentId, item: string, notes: readonly string[]): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).setNotes(item, notes)))
+    this.#touched()
+  }
+
   async todoSetStatus(id: DocumentId, item: string, status: TodoStatus, note?: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as TodoDocument).setStatus(item, status, note)),

@@ -28,7 +28,7 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  isLive, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId, type WalkState,
+  isLive, itemBlock, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId, type WalkState,
   type ScannedItem, type TodoItem, type TodoStatus,
 } from '../../../../shared/kinds/todo.ts'
 import type {
@@ -173,7 +173,10 @@ export class TodoDocument extends SegmentedDocument {
     // **Verbatim.** A carried item keeps its identity, its ctime and its mtime;
     // the only thing that changed is which day it is in, and that is the file
     // it is written to. Copying is not modifying.
-    const body = carried.map(item => itemLine(item)).join('\n')
+    // **Blocks, not lines** — a carried item brings what was written about it,
+    // so today's list holds the running record and each past day keeps the
+    // notes as they stood that day.
+    const body = carried.map(item => itemBlock(item)).join('\n')
     await this.setBodyOf(date, (body === '' ? '' : `${body}\n`) as DocumentText)
     // **Where it came from, so the walk can say which of these is yesterday's**
     // (T11). Recorded rather than derived: an item's ctime says which day it
@@ -184,6 +187,37 @@ export class TodoDocument extends SegmentedDocument {
     if (source !== undefined) (await this.segment(date)).setExtra(CARRIED_FROM, source)
     await this.adopt(date, elsewhere)
     return carried.length
+  }
+
+  /**
+   * Rewrite what is written UNDER an item.
+   *
+   * **The whole block, because the notes are part of it** — every other verb
+   * replaces the line and leaves them alone, which is what makes them survive
+   * a status change or a re-tag. Changing the notes themselves is the one
+   * operation that has to reach past the line's end.
+   *
+   * Nothing in a note is parsed: no `#tag`, no `DUE`, no status. A note is
+   * prose about the task and not more task.
+   */
+  async setNotes(id: string, notes: readonly string[]): Promise<boolean> {
+    for (const key of [...(await this.keys())].reverse()) {
+      const date = key as DateKey
+      const found = (await this.#scan(date)).find(s => s.item.id === id)
+      if (found === undefined) continue
+      const kept = notes.map(n => n.trim()).filter(n => n !== '')
+      await this.replace(
+        [{
+          // **The block, not the line** — `to` would leave the old notes
+          // sitting after the new ones.
+          span: { begin: this.at(date, found.from), end: this.at(date, found.blockTo) },
+          payload: itemBlock({ ...found.item, notes: kept, mtime: nowSeconds() }) as DocumentText,
+        }],
+        'operation',
+      )
+      return true
+    }
+    return false
   }
 
   // ── the walk (T11) ─────────────────────────────────────────
@@ -326,13 +360,13 @@ export class TodoDocument extends SegmentedDocument {
   }
 
   /** Check it off, start it, block it, put it down. One line, one edit. */
-  async setStatus(id: string, status: TodoStatus, note?: string): Promise<boolean> {
+  async setStatus(id: string, status: TodoStatus, reason?: string): Promise<boolean> {
     return this.#rewrite(id, item => ({
       ...item,
       status,
       // A reason is kept only where it means something, which is the same rule
       // the grammar reads by (T4).
-      note: status === 'blocked' ? (note ?? item.note) : null,
+      reason: status === 'blocked' ? (reason ?? item.reason) : null,
     }))
   }
 
@@ -500,7 +534,7 @@ export class TodoDocument extends SegmentedDocument {
 
 const EMPTY_ITEM: TodoItem = {
   id: null, status: 'todo', ctime: null, mtime: null,
-  text: '', tags: [], due: null, note: null, tagSpans: [], dueSpan: null,
+  text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
 }
 
 /** How a tag is written down. The inverse of the grammar's two spellings. */

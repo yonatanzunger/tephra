@@ -92,13 +92,32 @@ export interface TodoItem {
   /**
    * Why it is blocked, and **only when it is blocked** (T4).
    *
-   * A trailing `— …` clause is a note on a blocked item and ordinary prose on
+   * A trailing `— …` clause is a reason on a blocked item and ordinary prose on
    * every other kind, which is what stops "call the surveyor — the one from
-   * Tuesday" from acquiring a reason it does not have. The cost is an edge:
-   * blocking an item whose text already ends in a dash clause takes that clause
-   * as the reason. Hand-editing is rare enough to wear that (flow 9).
+   * Tuesday" from acquiring one it does not have. The cost is an edge: blocking
+   * an item whose text already ends in a dash clause takes that clause as the
+   * reason. Hand-editing is rare enough to wear that (flow 9).
+   *
+   * **Called `reason` and not `note`**, which it was: `notes` below is a
+   * different thing entirely, and two fields on one type differing by a letter
+   * is a bug with a date on it.
    */
-  readonly note: string | null
+  readonly reason: string | null
+  /**
+   * The lines written under it — progress, who was called, what they said.
+   *
+   * **Indented continuation lines, which is markdown's own way of attaching a
+   * paragraph to a list item.** So the file is what it appears to be (R26,
+   * D20): any renderer shows them as part of the item, and hand-editing is
+   * adding a line and indenting it. Nothing in them is parsed — no `#tag`, no
+   * `DUE`, no status — because a note is prose about the task and not more
+   * task.
+   *
+   * They travel with the item on every carry, so today's list carries the
+   * running record; each past day keeps the notes as they stood that day, which
+   * is what makes scrubbing back show what you knew then.
+   */
+  readonly notes: readonly string[]
   /**
    * Where each tag sits **within `text`**, in the same order as `tags`.
    *
@@ -119,9 +138,17 @@ export interface ScannedItem {
   readonly from: number
   /** Where the item's TEXT starts in the body — the base for its spans. */
   readonly textFrom: number
-  /** The end of the line, excluding its newline. */
+  /** The end of the LINE, excluding its newline. What a verb rewrites. */
   readonly to: number
-  /** And including it — what removing the line means. */
+  /**
+   * The end of the line AND its notes, excluding the last newline.
+   *
+   * The block's `to`, and the one span that changing the notes may replace —
+   * `to` would leave the old ones sitting after the new. Equal to `to` when
+   * there are none.
+   */
+  readonly blockTo: number
+  /** The whole block including its final newline — what removing it means. */
   readonly end: number
 }
 
@@ -239,11 +266,11 @@ export function parseItem(line: string): TodoItem | null {
   }
 
   let text = rest.replace(/\s+$/, '')
-  let note: string | null = null
+  let reason: string | null = null
   if (status === 'blocked') {
     const n = NOTE.exec(text)
     if (n !== null) {
-      note = (n[1] as string).trim()
+      reason = (n[1] as string).trim()
       text = text.slice(0, n.index)
     }
   }
@@ -266,7 +293,10 @@ export function parseItem(line: string): TodoItem | null {
     text,
     tags,
     due: d === null ? null : ((d[1] as string) as DateKey),
-    note,
+    reason,
+    // **The line is a line.** Notes live under it and are gathered by
+    // `scanItems`, which is the only caller that can see them.
+    notes: [],
     tagSpans,
     dueSpan: d === null ? null : { from: d.index, to: d.index + d[0].length },
   }
@@ -283,8 +313,8 @@ export function itemLine(item: TodoItem, bullet = '- '): string {
   const parts = [`${bullet}[${GLYPHS[item.status]}]`]
   const body = item.text.replace(/\s+$/, '')
   if (body !== '') parts.push(body)
-  if (item.status === 'blocked' && item.note !== null && item.note.trim() !== '') {
-    parts.push(`— ${item.note.trim()}`)
+  if (item.status === 'blocked' && item.reason !== null && item.reason.trim() !== '') {
+    parts.push(`— ${item.reason.trim()}`)
   }
   if (item.id !== null) {
     const stamps = [item.ctime, item.mtime].filter(n => n !== null).map(String)
@@ -294,21 +324,73 @@ export function itemLine(item: TodoItem, bullet = '- '): string {
 }
 
 /** Every item in a body, with the lines they sit on. Anything else is skipped. */
+/**
+ * How far a note is indented under its item.
+ *
+ * Two spaces, which is the content column of a `- ` list — so a continuation
+ * line is markdown's own continuation and every renderer shows it as part of
+ * the item above.
+ */
+export const NOTE_INDENT = '  '
+
+/**
+ * An item and everything written under it, as it goes into the file.
+ *
+ * `itemLine` is still the LINE, because every verb rewrites exactly that and
+ * nothing else — which is what leaves the notes below it untouched.
+ */
+export function itemBlock(item: TodoItem, bullet = '- '): string {
+  const lines = [itemLine(item, bullet)]
+  for (const note of item.notes) {
+    // A note that has been emptied is a note that was deleted.
+    if (note.trim() !== '') lines.push(`${NOTE_INDENT}${note.trim()}`)
+  }
+  return lines.join('\n')
+}
+
+/** An indented line under an item, and not itself an item. */
+const isNote = (line: string): boolean => /^\s+\S/.test(line) && parseItem(line.trim()) === null
+
 export function scanItems(body: string): readonly ScannedItem[] {
   const out: ScannedItem[] = []
+  const lines = body.split('\n')
   let at = 0
-  for (const line of body.split('\n')) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] as string
     const from = at
     at += line.length + 1 // the split ate the newline; the next line starts past it
     const item = parseItem(line)
     if (item === null) continue
+
+    // **The notes are the indented lines that follow, contiguously.** A blank
+    // line ends them, which keeps "what belongs to this item" answerable by
+    // looking rather than by counting — and keeps a paragraph further down the
+    // file from being adopted by an item it has nothing to do with.
+    const notes: string[] = []
+    let blockTo = from + line.length
+    let end = Math.min(from + line.length + 1, body.length)
+    let j = i + 1
+    while (j < lines.length && isNote(lines[j] as string)) {
+      notes.push((lines[j] as string).trim())
+      blockTo = end + (lines[j] as string).length
+      end = Math.min(blockTo + 1, body.length)
+      j++
+    }
+
     out.push({
-      item,
+      item: notes.length === 0 ? item : { ...item, notes },
       from,
       textFrom: from + line.indexOf(item.text, line.indexOf(']') + 1),
+      // **The LINE**, so a verb rewriting it leaves the notes below alone.
       to: from + line.length,
-      end: Math.min(from + line.length + 1, body.length),
+      blockTo,
+      // **The line AND its notes**, because removing an item removes what was
+      // written about it.
+      end,
     })
+    // Skip them: an indented line is not an item and must not be scanned as one.
+    at = end
+    i = j - 1
   }
   return out
 }
