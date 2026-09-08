@@ -650,6 +650,15 @@ can see.
   already is, rather than into a second place soft state lives". It was wrong:
   the window stays open all day, so the reset is rare, and a rare surprise is
   worse than a frequent one because you have stopped expecting it.
+- **And then the notes cost every row its height.** An element holding an
+  invisible control still holds its height, so an item with no note paid for one
+  anyway — on a list of twenty that is a page of space between the words, and it
+  was reported the same day it shipped. An item with no notes renders **no
+  element at all** now, and the affordance on the ones that do is out of the
+  flow: a control that appears by growing the block would push the next task
+  down as the pointer crossed it, which is the reflow D42 rules out. The way in
+  moved to the row's menu, where the acts outside the daily rhythm already live
+  (MT3) — and which is the one place that costs the list nothing.
 - **A fourth went to the backlog**: snippets, daily and weekly summaries of what
   got done. It needs design before it needs code, and the design turns on where
   a generated summary is allowed to live.

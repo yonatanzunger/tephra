@@ -123,6 +123,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   const [menu, setMenu] = useState<RowMenuRequest | null>(null)
   /** The item whose reason is being typed, after `Blocked…` is chosen. */
   const [blocking, setBlocking] = useState<string | null>(null)
+  /** Which item has a note being typed under it, if any. Beside `blocking`. */
+  const [noting, setNoting] = useState<string | null>(null)
   /**
    * Which way the list is laid out (T8's cheap half).
    *
@@ -505,7 +507,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
             // waiting on is the one status that says nothing (T4).
             if (status === 'blocked') setBlocking(id)
             else act(window.tephra.todo.setStatus(list, id, status))
-          }, () => act(window.tephra.todo.remove(list, id))),
+          }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id)),
         })
       }}
     />
@@ -513,6 +515,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       <Notes
         item={item}
         readOnly={past}
+        adding={noting === item.id}
+        onAdding={open => setNoting(open ? item.id : null)}
         onNotes={notes => act(window.tephra.todo.setNotes(list, item.id as string, notes))}
       />
     )}
@@ -755,6 +759,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
 function statusItems(
   onStatus: (status: TodoStatus) => void,
   onRemove: () => void,
+  onNote: () => void,
 ): readonly MenuEntry[] {
   const statuses: readonly TodoStatus[] = ['todo', 'doing', 'blocked', 'done', 'backlog', 'dropped']
   return [
@@ -763,6 +768,16 @@ function statusItems(
       destructive: status === 'dropped',
       onChoose: () => onStatus(status),
     })),
+    'rule' as const,
+    {
+      // **Where adding a note lives, and why it is not on the row.** A control
+      // sitting under every item cost every item its height even when there was
+      // nothing under it — which on a list of twenty tasks is a page of empty
+      // space between the words. Most items never get a note; the ones that do
+      // grow the affordance underneath them once they have one.
+      label: 'Add Note\u2026',
+      onChoose: onNote,
+    },
     'rule' as const,
     {
       // **Not *nevermind*.** That is the status for a task you decided against,
@@ -959,23 +974,24 @@ function Row({
 function Notes({
   item,
   readOnly,
+  adding,
+  onAdding,
   onNotes,
 }: {
   item: TodoItem
   readOnly: boolean
+  /** Whether a note is being typed here. The surface owns it, as it owns `blocking`. */
+  adding: boolean
+  onAdding: (open: boolean) => void
   onNotes: (notes: readonly string[]) => void
 }): React.JSX.Element | null {
-  const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<number | null>(null)
-  if (item.notes.length === 0 && (readOnly || !adding)) {
-    return readOnly ? null : (
-      <li className="todo-notes">
-        <button type="button" className="todo-note-add" onClick={() => setAdding(true)}>
-          + note
-        </button>
-      </li>
-    )
-  }
+  // **Nothing at all when there is nothing to show.** An empty element holding
+  // an invisible control still holds its height, and on a list of twenty tasks
+  // that is a page of space between the words — which is what was reported.
+  // Most items never get a note; the way in is on the row's menu, and the
+  // affordance grows underneath the ones that have one.
+  if (item.notes.length === 0 && !adding) return null
   return (
     <li className="todo-notes">
       {item.notes.map((note, at) =>
@@ -1009,13 +1025,13 @@ function Notes({
         <NoteField
           initial=""
           onDone={text => {
-            setAdding(false)
+            onAdding(false)
             if (text !== null && text.trim() !== '') onNotes([...item.notes, text])
           }}
         />
       )}
       {!readOnly && !adding && editing === null && (
-        <button type="button" className="todo-note-add" onClick={() => setAdding(true)}>
+        <button type="button" className="todo-note-add" onClick={() => onAdding(true)}>
           + note
         </button>
       )}

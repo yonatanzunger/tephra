@@ -854,7 +854,7 @@ body {
    and they sit under the words rather than under the whole row, which is where
    a continuation belongs. The item's line stays one line: the running record
    lives underneath and does not push the next task down a paragraph. */
-.todo-notes { list-style: none; margin: 0; padding: 0 0 .35em 1.9em; }
+.todo-notes { position: relative; list-style: none; margin: 0; padding: 0 0 .35em 1.9em; }
 .todo-note {
   font-size: .8em; line-height: 1.5; color: rgb(var(--text-muted));
   padding: .1em 0; cursor: text;
@@ -869,12 +869,20 @@ body {
 }
 .todo-note-field:focus { outline: none; }
 /* Present only when there is room to notice it, and quiet when there is not. */
+/* Only ever drawn where notes already are — an item with none renders no
+   element at all, so there is nothing to hide and nothing to pay for.
+
+   **And out of the flow even there.** In it, a hidden control still holds a
+   line under every noted item; taken out, it costs nothing and appears in the
+   margin the notes already leave. Absolute rather than shown-on-hover, because
+   a control that appears by growing the block pushes the next task down as the
+   pointer crosses it — which is the reflow this project rules out (D42). */
 .todo-note-add {
+  position: absolute; right: 0; bottom: .1em;
   font-family: var(--font-ui); font-size: .58em; cursor: pointer;
   color: rgb(var(--text-muted)); background: none; border: 0; padding: .1em 0;
   opacity: 0;
 }
-.todo-row:hover + .todo-notes .todo-note-add,
 .todo-notes:hover .todo-note-add,
 .todo-note-add:focus-visible { opacity: 1; }
 .todo-note-add:hover { color: rgb(var(--accent)); }

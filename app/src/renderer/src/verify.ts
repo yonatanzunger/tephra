@@ -1045,9 +1045,32 @@ export async function runVerify(request: string): Promise<void> {
       }
       say('rows', document.querySelectorAll('.todo-row').length)
       say('shown', [...document.querySelectorAll('.todo-note')].map(n => (n.textContent ?? '').trim()))
+      // **An item with no notes costs no space.** The element is not there at
+      // all: one holding an invisible control still holds its height, and on a
+      // list of twenty tasks that is a page of space between the words.
+      say('noteBlocks', document.querySelectorAll('.todo-notes').length)
+      {
+        const rows = [...document.querySelectorAll('.todo-row')] as HTMLElement[]
+        const gap = (a: number, b: number) =>
+          Math.round(rows[b]!.getBoundingClientRect().top - rows[a]!.getBoundingClientRect().bottom)
+        say('gapAfterNoted', gap(0, 1))
+        say('gapAfterBare', rows.length > 2 ? gap(1, 2) : null)
+      }
 
-      // Add one, the way a person does.
-      ;(document.querySelector('.todo-note-add') as HTMLElement | null)?.click()
+      // Add one, the way a person does: from the row's menu, which is where the
+      // acts outside the daily rhythm live.
+      const bare = document.querySelectorAll('.todo-row')[1] as HTMLElement | undefined
+      const box = bare?.getBoundingClientRect()
+      bare?.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: Math.round((box?.left ?? 0) + 90),
+        clientY: Math.round((box?.top ?? 0) + 10),
+      }))
+      await settle(500)
+      say('menuHasNote', [...document.querySelectorAll('.row-menu button')].map(b => b.textContent ?? ''))
+      ;([...document.querySelectorAll('.row-menu button')].find(
+        b => (b.textContent ?? '').startsWith('Add Note'),
+      ) as HTMLElement | null)?.click()
       await settle(400)
       const field = document.querySelector('.todo-note-field') as HTMLInputElement | null
       say('opened', field !== null)

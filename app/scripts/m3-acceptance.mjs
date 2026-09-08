@@ -1145,9 +1145,15 @@ console.log('\n\u2014 the task list \u2014')
     `${JSON.stringify(r.afterCheck?.[0])} \u00b7 ${JSON.stringify(r.finished)}`,
   )
   check(
+    // **The six statuses**, three of which the click cycle cannot reach — and
+    // the acts that are not statuses at all, which is where the menu earns its
+    // keep: it is where everything outside the daily rhythm lives, which is now
+    // Delete and Add Note as well.
     'and the three that are not part of the daily rhythm are a right-click away',
-    Array.isArray(r.statusMenu) && r.statusMenu.length === 7 &&
-      r.statusMenu.includes('Blocked\u2026') && r.afterBacklog === 'backlog',
+    Array.isArray(r.statusMenu) &&
+      ['Not started', 'In progress', 'Blocked\u2026', 'Done', 'Backlogged', 'Nevermind'].every(l =>
+        r.statusMenu.includes(l),
+      ) && r.afterBacklog === 'backlog',
     `${JSON.stringify(r.statusMenu)} \u00b7 ${r.afterBacklog}`,
   )
   check(
@@ -1432,27 +1438,42 @@ console.log('\n— notes under an item —')
     `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
       '- [ ] call the surveyor #house <!--tephra:item aaaa1111 100 100-->\n' +
       '  Left a message Tuesday.\n' +
-      '- [ ] renew the permit <!--tephra:item aaaa2222 100 100-->\n',
+      '- [ ] renew the permit <!--tephra:item aaaa2222 100 100-->\n' +
+      '- [ ] check the air vents <!--tephra:item aaaa3333 100 100-->\n',
   )
 
   const N = report(await launch('notes', root))
   const file = await readFile(join(root, 'tasks.todo', ny2, nm2, `${DAY}.md`), 'utf8')
   check(
     'an indented line under an item is a NOTE, not an item',
-    N.rows === 2 && JSON.stringify(N.shown) === JSON.stringify(['Left a message Tuesday.']),
+    N.rows === 3 && JSON.stringify(N.shown) === JSON.stringify(['Left a message Tuesday.']),
     `${N.rows} rows \u00b7 ${JSON.stringify(N.shown)}`,
   )
   check(
-    'one can be added where you are looking',
-    N.opened === true && Array.isArray(N.afterAdding) && N.afterAdding.length === 2,
-    JSON.stringify(N.afterAdding),
+    // **Reported from use**: an element holding an invisible control still
+    // holds its height, so every item paid for a note it did not have — which
+    // on a list of twenty is a page of space between the words. An item with no
+    // notes now renders no element at all, and the affordance on the ones that
+    // do is out of the flow, because a control that appears by growing the
+    // block pushes the next task down as the pointer crosses it (D42).
+    'AN ITEM WITH NO NOTES COSTS NOTHING: no element, and no space',
+    N.noteBlocks === 1 && N.gapAfterBare === 0,
+    `${N.noteBlocks} note blocks for 3 items \u00b7 ${N.gapAfterBare}px between bare rows`,
+  )
+  check(
+    // The way in is on the row's menu, where the acts outside the daily rhythm
+    // live (MT3) — and it is the one place that costs the list nothing.
+    'and adding one is on the row\'s menu, where the occasional acts are',
+    Array.isArray(N.menuHasNote) && N.menuHasNote.some(l => String(l).startsWith('Add Note')) &&
+      N.opened === true && Array.isArray(N.afterAdding) && N.afterAdding.length === 2,
+    `${JSON.stringify(N.menuHasNote)} \u00b7 ${JSON.stringify(N.afterAdding)}`,
   )
   check(
     // **THE POINT.** A note is prose about the task, so the item grammar does
     // not apply inside it: the hash is a hash, the date is a date, and neither
     // is a second task.
     'NOTHING in a note is parsed \u2014 not a tag, not a due date, not a status',
-    N.rowsAfter === 2 &&
+    N.rowsAfter === 3 &&
       JSON.stringify(N.tagsAfter) === JSON.stringify(['house']) &&
       JSON.stringify(N.dueAfter) === JSON.stringify([]),
     `${N.rowsAfter} rows \u00b7 tags ${JSON.stringify(N.tagsAfter)} \u00b7 due ${JSON.stringify(N.dueAfter)}`,
