@@ -233,6 +233,8 @@ export interface WindowInfo {
   readonly state: WindowState
   readonly vim: boolean
   readonly theme: string
+  /** How the task list is arranged (MT4a). Soft state, beside the theme. */
+  readonly listView: 'time' | 'tag'
 }
 
 /**
@@ -264,6 +266,8 @@ export interface WindowReport {
   readonly renamable: DocumentId | null
   readonly vim: boolean
   readonly theme: string
+  /** How the task list is arranged (MT4a). Soft state, beside the theme. */
+  readonly listView: 'time' | 'tag'
 }
 
 /** Everything the renderer needs to serve the synchronous half of the API. */
@@ -408,7 +412,18 @@ export interface PrintJob {
   readonly html: string
   readonly css: string
   readonly title: string
-  readonly segment: DateKey
+  /**
+   * Where relative links and images resolve FROM.
+   *
+   * **Not a date, which is what this used to be.** It was `segment: DateKey`,
+   * and main turned it into a day directory — which is the right answer for the
+   * stream and has none at all for a note, whose images sit relative to its own
+   * file. A field that means "which directory" should say which directory, and
+   * only the two kinds of thing that can answer it should be able to.
+   */
+  readonly base:
+    | { readonly kind: 'day'; readonly date: DateKey }
+    | { readonly kind: 'document'; readonly id: DocumentId }
 }
 
 /** What the clipboard is offering. Read in main, which is the only side with one. */

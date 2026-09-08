@@ -126,14 +126,16 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   /**
    * Which way the list is laid out (T8's cheap half).
    *
-   * **Not persisted, on purpose.** The theme's selection lives in `UiState`
-   * because it is soft state worth keeping; this is soft state that is not yet
-   * known to be worth a mechanism, and the list window tends to stay open all
-   * day, so what a reset actually costs is one click on the rare morning. If
-   * that turns out to be wrong it goes where the theme's selection already is,
-   * rather than into a second place soft state lives.
+   * **Persisted now, beside the theme** — which is exactly where MT4a said it
+   * would go if leaving it out turned out wrong. It did: the list window stays
+   * open all day, so the reset is rare, and a rare surprise is worse than a
+   * frequent one because you have stopped expecting it.
+   *
+   * The surface owns the control and the app owns the setting, so this reads
+   * what it is told and says when it changes.
    */
-  const [by, setBy] = useState<'time' | 'tag'>('time')
+  const by = settings.listView ?? 'time'
+  const setBy = (view: 'time' | 'tag'): void => settings.onListView?.(view)
 
   /**
    * The walk (T11), and it is two pieces of state because they are two things.

@@ -54,6 +54,17 @@ export interface UiState {
    * authored and durable while selection is soft state.
    */
   readonly theme: string
+  /**
+   * How the task list is arranged: by time, or by tag (T8, MT4a).
+   *
+   * **Machine-local soft state, beside the theme, and for the same reason** —
+   * which arrangement suits depends on what you are doing rather than on
+   * anything the corpus knows. MT4a left it unpersisted on purpose and said
+   * where it would go if that turned out wrong: "where the theme's selection
+   * already is, rather than into a second place soft state lives." It did turn
+   * out wrong, and this is that place.
+   */
+  readonly listView: 'time' | 'tag'
 }
 
 export const defaultWindowState: WindowState = { location: { kind: 'today' }, cursor: null }
@@ -63,6 +74,7 @@ export const defaultUiState: UiState = {
   windows: [defaultWindowState],
   vim: false,
   theme: DEFAULT_THEME_NAME,
+  listView: 'time',
 }
 
 /** Lenient: a corrupt or older file means "start fresh", never a crash. */
@@ -90,6 +102,7 @@ export function parseUiState(text: string | null): UiState {
       windows,
       vim: candidate.vim === true,
       theme: typeof candidate.theme === 'string' && candidate.theme !== '' ? candidate.theme : DEFAULT_THEME_NAME,
+      listView: candidate.listView === 'tag' ? 'tag' : 'time',
     }
   } catch {
     return defaultUiState

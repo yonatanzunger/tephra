@@ -42,6 +42,7 @@ export class Windows {
   /** Settings are the machine's, not a window's; whoever changed one last wins. */
   #vim = defaultUiState.vim
   #theme = defaultUiState.theme
+  #listView = defaultUiState.listView
 
   #saving: ReturnType<typeof setTimeout> | null = null
 
@@ -60,6 +61,7 @@ export class Windows {
     const saved = await this.#service.loadUiState()
     this.#vim = saved.vim
     this.#theme = saved.theme
+    this.#listView = saved.listView
     const windows = saved.windows.length > 0 ? saved.windows : [defaultWindowState]
     for (const state of windows) this.#open(state)
   }
@@ -121,6 +123,7 @@ export class Windows {
       state: found?.state ?? defaultWindowState,
       vim: this.#vim,
       theme: this.#theme,
+      listView: this.#listView,
     }
   }
 
@@ -133,6 +136,7 @@ export class Windows {
     found.renamable = report.renamable
     this.#vim = report.vim
     this.#theme = report.theme
+    this.#listView = report.listView
     this.#syncMenu()
     if (!found.window.isDestroyed() && found.window.getTitle() !== report.name) {
       found.window.setTitle(report.name)
@@ -189,7 +193,7 @@ export class Windows {
       if (entry.window.isDestroyed()) continue
       windows.push({ ...entry.state, bounds: entry.window.getBounds() })
     }
-    return { version: 1, windows, vim: this.#vim, theme: this.#theme }
+    return { version: 1, windows, vim: this.#vim, theme: this.#theme, listView: this.#listView }
   }
 
   /** Write the set, before the app goes away rather than because it is going. */

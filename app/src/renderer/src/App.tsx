@@ -140,6 +140,15 @@ export function App(): React.JSX.Element {
   /** Whether this window has learned what it is and gone there (MC6). */
   const [ready, setReady] = useState(false)
   const [vim, setVim] = useState(false)
+  /**
+   * How the task list is arranged (MT4a, made sticky).
+   *
+   * **Here rather than in the surface**, because it is machine-local soft state
+   * that outlives the window — the same category as the theme, and it rides
+   * home the same way. The surface owns the *control*; what it is set to is a
+   * setting, and a setting a window forgets is not one.
+   */
+  const [listView, setListView] = useState<'time' | 'tag'>('time')
   const [themeName, setThemeName] = useState<string>(defaultUiState.theme)
   const [panelOpen, setPanelOpen] = useState(false)
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
@@ -216,6 +225,7 @@ export function App(): React.JSX.Element {
         const info = await window.tephra.win.info()
         tephra.id = info.id
         setVim(info.vim)
+        setListView(info.listView)
         setThemeName(info.theme)
         // **The stored cursor no longer decides where the app opens.** Tephra
         // opens at the append position with yesterday above it, because that is
@@ -349,6 +359,31 @@ export function App(): React.JSX.Element {
         askDelete(showing.id, showing.title ?? nameOf(showing.id))
 
       } else if (command === 'printDocument') {
+        // **A window showing a document prints THAT document.** This asked the
+        // stream for its extent whatever was on screen, so printing from a note
+        // printed the notebook — a command that reads as "print this" and does
+        // not. Only the stream has days to choose between, which is why only
+        // the stream is asked.
+        // **Asked of the live pane, not of a render's value.** This effect's
+        // dependencies are `[doc, pane]`, and a pane's document changes without
+        // the pane object doing — so a closure over the derived value would be
+        // printing whatever was open when the menu was last rebuilt.
+        const showing = pane?.document ?? null
+        const held = pane?.window ?? null
+        if (showing !== null && showing.id !== STREAM_ID && held !== null) {
+          const named = showing.title ?? nameOf(showing.id)
+          void window.tephra.doc
+            .print({
+              ...printPage(held.text, named),
+              css: printCss(theme.draft.justify, theme.draft.codeFace),
+              base: { kind: 'document', id: showing.id },
+            })
+            .then(ok => {
+              if (!ok) setError(`${named} could not be prepared for printing.`)
+            })
+            .catch(fail)
+          return
+        }
         // The extent is asked for HERE rather than held in state: it grows as
         // the day goes on, and a dialog offering "everything" that stops at
         // whatever was true when the app opened would quietly omit today.
@@ -375,7 +410,7 @@ export function App(): React.JSX.Element {
                       // Relative links resolve from a day directory, and every
                       // day in the stream sits at the same depth — so the first
                       // day of the range is as good a base as any (Spike B).
-                      segment: days[0]!.date,
+                      base: { kind: 'day', date: days[0]!.date },
                     })
                     if (!ok) setError('Those days could not be prepared for printing.')
                   })
@@ -526,7 +561,13 @@ export function App(): React.JSX.Element {
           .print({
             ...printPage(selection.lines, day),
             css: printCss(theme.draft.justify, theme.draft.codeFace),
-            segment: day,
+            // **Where the selection came from**, which for a document is that
+            // document — a passage printed out of a note carries the note's
+            // images, not a day's.
+            base:
+              pane?.document != null && pane.document.id !== STREAM_ID
+                ? { kind: 'document', id: pane.document.id }
+                : { kind: 'day', date: day },
           })
           .then(ok => {
             if (!ok) setError('That passage could not be prepared for printing.')
@@ -968,11 +1009,12 @@ export function App(): React.JSX.Element {
         renamable:
           showing !== undefined && showing !== STREAM_ID && !isOutside(showing) ? showing : null,
         vim,
+        listView,
         theme: themeName,
       })
     }
     reportRef.current()
-  }, [ready, pane, location, title, vim, themeName])
+  }, [ready, pane, location, title, vim, listView, themeName])
 
   // The position must also survive a quit that beats the debounce.
   useEffect(() => {
@@ -1225,7 +1267,7 @@ export function App(): React.JSX.Element {
         ) : (
           <Surface
             window={docWindow}
-            settings={{ vim, typography }}
+            settings={{ vim, typography, listView, onListView: setListView }}
             onViewport={onViewport}
             onCursor={onCursor}
             onError={(err: Error) => setError(err.message)}

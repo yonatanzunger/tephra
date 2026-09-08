@@ -56,7 +56,13 @@ export async function printPassage(root: string, job: PrintJob): Promise<boolean
   // is written as `../../../attachments/…` relative to its day file. Without
   // this every image in a printed passage silently fails to load, which is
   // Spike B's fourth trap and belongs to the document rather than to the shell.
-  const base = pathToFileURL(join(root, dayDir(job.segment)) + '/').href
+  const from =
+    job.base.kind === 'day'
+      ? dayDir(job.base.date)
+      : // A document's own directory: a note's images sit beside it, not beside
+        // a day it has nothing to do with.
+        (job.base.id as string).split('/').slice(0, -1).join('/')
+  const base = pathToFileURL(join(root, from) + '/').href
 
   // Pagination is only asked for when something needs it — a footnote has to
   // know which page its anchor fell on, and nothing else here does.

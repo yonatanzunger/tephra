@@ -762,6 +762,38 @@ live item *seen* daily — solely because a cap degrades visibility. With no cap
 there is no promise to keep, so nothing about the list is unsafe in the
 meantime; it is simply longer than it might be.
 
+### Snippets — daily and weekly summaries of what got done
+
+**Asked for from use (2026-09-08), and it needs design before it needs code.**
+The idea: read the task list and the notebook over a day or a week and produce a
+summary of what was accomplished, written somewhere durable.
+
+**What is already here that it would stand on.** MT6 built the one query this
+wants — `itemsNow()` knows what every item became and on which day, so *what was
+finished between Monday and Friday* is a filter over it. The stream's prose for
+a range is `proseIn`, which printing already uses.
+
+**What has to be decided, and none of it is obvious:**
+
+- **Where it is written.** The notebook is the tempting answer and is the one to
+  be careful about: a generated summary in the stream is text nobody wrote,
+  filed under a date, in a corpus whose whole premise is that it holds what you
+  actually put there (R26, D9). A `snippets/` document, or a fileset, keeps the
+  stream honest. This is the decision the feature turns on.
+- **What "accomplished" means.** Items that reached *done* is the cheap answer
+  and probably the wrong one on its own — the notebook is where the work is
+  described, and a list of task titles is a poor account of a week.
+- **Whether it is generated or written.** A summary you edit is a document; one
+  regenerated on a schedule is a view. If it is a document, the second run has
+  to reconcile with what you changed, which is a real problem and the reason
+  this is not small.
+- **What triggers it.** The day boundary already announces itself (D62) and
+  would serve — but a thing that writes to the corpus on a timer is a different
+  kind of thing from one you ask for.
+
+**Recorded rather than scheduled**, per this section's rule: it is wanted, it is
+not yet designed, and nothing waits on it.
+
 ### M6 — the shreddable notebook
 
 **Design: `shreddable-notebook.md`. Decision: D46.** A second notebook, opened by

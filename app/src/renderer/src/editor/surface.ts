@@ -19,6 +19,16 @@ import type { CommentAnchor, MarkInfo } from './annotations.ts'
 export interface EditingSettings {
   readonly vim: boolean
   readonly typography: Typography
+  /**
+   * How the task list is arranged (T8), and how to say it changed.
+   *
+   * **The surface owns the control; the app owns the setting.** Which is which
+   * is decided by what outlives the window: a way of looking that a window
+   * forgets is not a setting, and MT4a shipped it as one on the grounds that
+   * nobody knew whether it was worth keeping. It is.
+   */
+  readonly listView?: 'time' | 'tag'
+  readonly onListView?: (view: 'time' | 'tag') => void
 }
 
 /**

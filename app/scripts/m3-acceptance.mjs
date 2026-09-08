@@ -1415,6 +1415,77 @@ console.log('\n— a link in a task —')
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
 }
 
+// ── print prints what you are looking at ──────────
+//
+// **Reported from use.** ⌘P asked the stream for its extent whatever was on
+// screen, so printing from a note printed the notebook — a command that reads
+// as "print this" and did not. Only the stream has days to choose between,
+// which is why only the stream is asked which ones.
+console.log('\n— print prints what you are looking at —')
+{
+  const root = await week(['Today, with a note beside it.\n'])
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'covenants.md'),
+    '---\ntephra: 1\nkind: markdown\ntitle: The covenants\n---\n# What they say\n\nA paragraph.\n',
+  )
+
+  const P2 = report(await launch('printhere', root))
+  const made = await stat(join(root, '.tephra', 'print.pdf')).catch(() => null)
+  check('the window is showing the note', P2.showing === 'The covenants', String(P2.showing))
+  check(
+    // THE BUG: it asked which DAYS, which is a question about the notebook and
+    // has no answer for a note.
+    'THE POINT: printing a note does not ask which days',
+    P2.clicked === true && P2.askedWhichDays === false,
+    `reached ${P2.clicked} \u00b7 asked about days ${P2.askedWhichDays}`,
+  )
+  check('and something reached paper', (made?.size ?? 0) > 0, `${made?.size ?? 0} bytes`)
+  check('nothing errored on the way', P2.appError === 'none', String(P2.appError))
+}
+
+// ── the list's arrangement is a setting ───────────
+//
+// **MT4a left it unpersisted on purpose and named where it would go if that
+// was wrong**: "where the theme's selection already is, rather than into a
+// second place soft state lives." It was wrong — the list window stays open all
+// day, so the reset is rare, and a rare surprise is worse than a frequent one
+// because you have stopped expecting it.
+console.log('\n— the list remembers how it was arranged —')
+{
+  const root = await week(['Today.\n'])
+  const [sy, sm] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', sy, sm), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', sy, sm, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      '- [ ] fix the gate #house <!--tephra:item aaaa1111 100 100-->\n',
+  )
+
+  const S1 = report(await launch('sticky', root))
+  check('the list opens by time, and changing that reaches main',
+    JSON.stringify(S1.atFirst) === JSON.stringify(['by time']) &&
+      JSON.stringify(S1.afterClick) === JSON.stringify(['by tag']) && S1.reported === 'tag',
+    `${JSON.stringify(S1.atFirst)} \u2192 ${JSON.stringify(S1.afterClick)} \u00b7 main holds ${JSON.stringify(S1.reported)}`)
+
+  // **The claim is that it OUTLIVES the window**, which only a second launch
+  // over the same notebook can show. The session is pointed back at the stream
+  // first: a restored window on the task list is the window a scene runs in,
+  // and this scene navigates there itself.
+  const saved = join(root, '.tephra', 'ui-state.json')
+  const state = JSON.parse(await readFile(saved, 'utf8'))
+  await writeFile(saved, JSON.stringify({ ...state, windows: [{ location: { kind: 'today' }, cursor: null }] }))
+
+  const S2 = report(await launch('sticky', root))
+  check(
+    'THE POINT: and it is still that way after a restart',
+    JSON.stringify(S2.atFirst) === JSON.stringify(['by tag']) && S2.reported === 'tag',
+    `${JSON.stringify(S2.atFirst)} \u00b7 main holds ${JSON.stringify(S2.reported)}`,
+  )
+  check('nothing errored on the way', S1.appError === 'none' && S2.appError === 'none',
+    `${S1.appError} \u00b7 ${S2.appError}`)
+}
+
 // ── the pivots and the drawer (MT6) ──────────────
 //
 // **Three views over one question the corpus can answer and today's list

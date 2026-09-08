@@ -1033,6 +1033,53 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'printhere') {
+      // **Print prints what the WINDOW is showing.** It asked the stream for
+      // its extent whatever was on screen, so printing from a note printed the
+      // notebook — a command that reads as "print this" and did not. Only the
+      // stream has days to choose between, which is why only the stream is
+      // asked which ones.
+      const note = (await window.tephra.nav.documents()).find(d =>
+        (d.id as unknown as string).includes('covenants'),
+      )
+      await pane.goTo({ kind: 'document', id: note?.id as never })
+      await settle(900)
+      say('showing', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('clicked', await window.tephra.clickMenu('Print\u2026'))
+      await settle(1200)
+      // No dialog: there are no days to choose between in a note.
+      say('askedWhichDays', document.querySelector('.prompt.range') !== null)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(1200)
+    }
+
+    if (scene === 'sticky') {
+      // **The list's arrangement outlives the window** (MT4a, made sticky).
+      // Reported home the way vim and the theme are, because it is the same
+      // kind of thing: machine-local soft state that a window forgetting makes
+      // into a rare surprise, which is worse than a frequent one.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelector('.todo-views') === null) {
+        await settle(200)
+        waited += 200
+      }
+      const pressed = () =>
+        [...document.querySelectorAll('.todo-views button')]
+          .filter(b => b.getAttribute('aria-pressed') === 'true')
+          .map(b => (b.textContent ?? '').trim())
+      say('atFirst', pressed())
+      ;([...document.querySelectorAll('.todo-views button')].find(
+        b => (b.textContent ?? '').trim() === 'by tag',
+      ) as HTMLElement | null)?.click()
+      await settle(700)
+      say('afterClick', pressed())
+      // It has to reach main to survive anything, so ask main what it holds.
+      say('reported', (await window.tephra.win.info()).listView)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(700)
+    }
+
     if (scene === 'mt6') {
       await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
       let waited = 0
