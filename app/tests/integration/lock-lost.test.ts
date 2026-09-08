@@ -118,3 +118,45 @@ async function waitUntil(done: () => boolean): Promise<void> {
   }
   throw new Error('the notebook never noticed it had lost the lock')
 }
+
+// ── running without the guard at all (2026-09-08) ──────
+//
+// **Reported from use, and it is D64's sharp edge.** Verification could not ask
+// — a scene that stops on a modal reads as a hang — so it *took* the lock
+// instead. That is right for a scratch fixture and exactly wrong for the real
+// notebook: running any scene against `~/Tephra` killed the copy of Tephra
+// being used. A foot-gun pointed at the one notebook that matters.
+//
+// The justification was orphaned verify runs holding locks, and it does not
+// hold up: every acceptance scene gets its own fresh temporary notebook, so an
+// orphan holds a *different* lock and was never in the way.
+
+test('a notebook opened without the lock leaves whoever has it alone', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'tephra-lost-'))
+  const holder = await Notebook.open({ root, watch: false, lockCheckMs: 20 })
+  t.after(() => holder.close())
+
+  const guest = await Notebook.open({ root, watch: false, lock: false })
+  t.after(() => guest.close())
+  await guest.write(NOTE, 'a second look\n')
+  assert.equal(await guest.read(NOTE), 'a second look\n')
+
+  // The point: the one that was open is still the one that holds it.
+  assert.equal(holder.lost, false)
+  await holder.write(NOTE, 'and the first still writes\n')
+  assert.equal(JSON.parse(await readFile(join(root, LOCAL.lock), 'utf8')).pid, process.pid)
+})
+
+test('and it does not remove a lock it never took', async t => {
+  // `release` only removes a lock that is ours, and one we never acquired is
+  // not — otherwise closing the guest would strip the holder of its guard.
+  const root = await mkdtemp(join(tmpdir(), 'tephra-lost-'))
+  const holder = await Notebook.open({ root, watch: false, lockCheckMs: 20 })
+  t.after(() => holder.close())
+
+  const guest = await Notebook.open({ root, watch: false, lock: false })
+  await guest.close()
+
+  assert.equal(JSON.parse(await readFile(join(root, LOCAL.lock), 'utf8')).pid, process.pid)
+  await holder.write(NOTE, 'still ours\n')
+})

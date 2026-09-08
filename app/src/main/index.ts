@@ -379,18 +379,55 @@ let windows: Windows | null = null
  * asks, in a native dialog, because there is no window yet and this has to work
  * when nothing else can start.
  */
+/**
+ * Run without taking the lock at all — `TEPHRA_NO_LOCK=1`, or `--no-lock`.
+ *
+ * **Development only**, because the lock is not optional (format-spec): two
+ * processes over one directory fight over the WAL and the fold, and the failure
+ * mode is corruption rather than an error. A packaged build must never be
+ * startable without one, which is the same gate `verifyMode` uses and for the
+ * same reason.
+ *
+ * What it is FOR: looking at your real notebook with a second copy while the
+ * first is running it. That is a thing a person does while building this, and
+ * the honest trade is theirs to make — so it is a switch you throw rather than
+ * something inferred.
+ */
+function noLock(): boolean {
+  return !app.isPackaged && process.env['TEPHRA_NO_LOCK'] === '1'
+}
+
 async function openTheNotebook(options: OpenOptions): Promise<Notebook | null> {
+  if (noLock()) {
+    console.log('TEPHRA: --no-lock \u2014 running without the single-instance guard.')
+    return Notebook.open({ ...options, lock: false })
+  }
   try {
     return await Notebook.open(options)
   } catch (err) {
     if (!(err instanceof LockHeldError)) throw err
 
-    // **Never a dialog in verification.** A scene that stops on a modal reads
-    // as a hang, and an orphaned run holding the lock would take the suite with
-    // it — which has happened here more than once.
+    /**
+     * **Never a dialog in verification, and never a seizure either.**
+     *
+     * A scene that stops on a modal reads as a hang, so verification cannot
+     * ask — that part of D64 stands. What it used to do instead was *take* the
+     * lock, and that was wrong: it meant running any scene against the real
+     * notebook killed the copy of Tephra you were using, which is a foot-gun
+     * pointed at the one notebook that matters.
+     *
+     * The justification was orphaned verify runs holding locks. It does not
+     * hold up — every acceptance scene gets its own fresh temporary notebook,
+     * so an orphan holds a *different* lock and was never in the way. Running
+     * without one is both safer and sufficient: the suite proceeds, and
+     * whatever is already open keeps the notebook.
+     */
     if (verifyMode()) {
-      console.log(`TEPHRA: verification mode \u2014 taking over a lock held by pid ${err.holder.pid}`)
-      return Notebook.open({ ...options, seize: true })
+      console.log(
+        `TEPHRA: verification mode \u2014 pid ${err.holder.pid} holds this notebook; ` +
+          'running without the guard rather than taking it.',
+      )
+      return Notebook.open({ ...options, lock: false })
     }
 
     const { response } = await dialog.showMessageBox({

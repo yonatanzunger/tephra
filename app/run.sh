@@ -10,6 +10,7 @@
 #   ./run.sh --scratch       a fresh throwaway notebook, for testing
 #   ./run.sh --root PATH     a specific notebook
 #   ./run.sh --no-build      skip the build, even if sources look newer
+#   ./run.sh --no-lock       do not take the single-instance lock
 #   ./run.sh --dev           electron-vite dev, with renderer HMR
 #
 # Note that --dev serves the renderer over HTTP so hot reload works, which is a
@@ -22,12 +23,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 ROOT="${TEPHRA_ROOT:-$HOME/Tephra}"
 BUILD=1
 DEV=0
+NOLOCK=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --scratch)  ROOT="$(mktemp -d /tmp/tephra-scratch-XXXXXX)"; shift ;;
     --root)     ROOT="${2:?--root needs a path}"; shift 2 ;;
     --no-build) BUILD=0; shift ;;
+    # **Look at the real notebook while it is already open.** The lock is not
+    # optional in a shipped app; this is a development switch, and the main
+    # process refuses to honour it in a packaged build.
+    --no-lock)  NOLOCK=1; shift ;;
     --dev)      DEV=1; shift ;;
     -h|--help)  awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)          echo "unknown option: $1" >&2; exit 2 ;;
@@ -64,8 +70,9 @@ if [[ -f "$DEV_PLIST" ]] && command -v /usr/libexec/PlistBuddy >/dev/null; then
 fi
 
 if [[ $DEV -eq 1 ]]; then
-  echo "Tephra (dev, HMR)  notebook: $ROOT"
-  TEPHRA_ROOT="$ROOT" exec ./node_modules/.bin/electron-vite dev
+  echo "Tephra (dev, HMR)  notebook: $ROOT$([[ $NOLOCK -eq 1 ]] && echo '  (no lock)')"
+  TEPHRA_ROOT="$ROOT" TEPHRA_NO_LOCK="$([[ $NOLOCK -eq 1 ]] && echo 1 || echo 0)" \
+    exec ./node_modules/.bin/electron-vite dev
 fi
 
 # Rebuild when anything under src/ is newer than the built main process, so
@@ -78,5 +85,10 @@ if [[ $BUILD -eq 1 ]]; then
 fi
 
 mkdir -p "$ROOT"
-echo "Tephra  notebook: $ROOT"
-TEPHRA_ROOT="$ROOT" exec ./node_modules/.bin/electron .
+if [[ $NOLOCK -eq 1 ]]; then
+  echo "Tephra  notebook: $ROOT  (no lock)"
+else
+  echo "Tephra  notebook: $ROOT"
+fi
+TEPHRA_ROOT="$ROOT" TEPHRA_NO_LOCK="$([[ $NOLOCK -eq 1 ]] && echo 1 || echo 0)" \
+  exec ./node_modules/.bin/electron .

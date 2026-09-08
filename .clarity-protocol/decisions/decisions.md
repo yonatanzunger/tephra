@@ -2559,6 +2559,25 @@ lock every three seconds, and on finding somebody else's name:
   than only by accident.
 
 **Never a dialog under verification.** A scene that stops on a modal reads as a
-hang, and an orphaned run holding the lock would take the whole suite with it —
-which has happened. In verify mode the lock is taken over, loudly, on the log.
+hang, so verification cannot ask. ~~In verify mode the lock is taken over,
+loudly, on the log.~~ *(Amended 2026-09-08; see below.)*
+
+**Amended 2026-09-08, from use: verification does not SEIZE either — it runs
+without the guard.** Taking the lock is right for a scratch fixture and exactly
+wrong for the real notebook: running any scene against `~/Tephra` killed the
+copy of Tephra being used, which is a foot-gun pointed at the one notebook that
+matters. And the justification does not hold up — it was orphaned verify runs
+holding locks, but every acceptance scene gets its own fresh temporary notebook,
+so an orphan holds a *different* lock and was never in the way. Running without
+one is both safer and sufficient: the suite proceeds, and whatever is already
+open keeps the notebook.
+
+**And there is a switch for the same thing on purpose**: `TEPHRA_NO_LOCK=1`, or
+`./run.sh --no-lock`, for looking at your real notebook with a second copy while
+the first is running it. **Development only** — the lock is not optional in a
+shipped app (format-spec), so a packaged build refuses to honour it, which is
+the gate `verifyMode` already uses and for the same reason. It is a switch you
+throw rather than something inferred, because the trade is the person's to make:
+two processes writing one corpus is what the lock exists to prevent, and this
+says *I know, and I am only looking*.
 
