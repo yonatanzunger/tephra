@@ -20,6 +20,7 @@ import { Frame, useStream } from './frame/Frame'
 import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
+import { Find, type FindControl } from './frame/Find'
 import { Confirm, type ConfirmRequest } from './frame/Confirm'
 import { tephra } from './handle'
 import type { Located, Reference } from '../../shared/nav-api.ts'
@@ -154,6 +155,8 @@ export function App(): React.JSX.Element {
   const [anomalies, setAnomalies] = useState<readonly Anomaly[]>([])
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
+  const [finding, setFinding] = useState(false)
+  const findControl = useRef<FindControl | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
@@ -314,7 +317,23 @@ export function App(): React.JSX.Element {
     }
 
     return window.tephra.doc.onMenuCommand(command => {
-      if (command === 'import') {
+      // **Asked of the ref, never of `finding`.** This effect's dependencies are
+      // `[doc, pane]`, so a closure over that state would be whatever it was
+      // when the pane last changed — the same staleness the print command has a
+      // note about a few lines below.
+      if (command === 'find') {
+        // **A second ⌘F focuses rather than reopens**, which is what it does
+        // everywhere else: the bar is up with the last thing you looked for in
+        // it, and pressing again means *let me type over that*.
+        setFinding(true)
+        findControl.current?.focus()
+      } else if (command === 'findEarlier' || command === 'findLater') {
+        const direction = command === 'findEarlier' ? 'past' : 'future'
+        // **⌘G with no bar opens one** rather than doing nothing: it is the same
+        // request, made by somebody who has not typed yet.
+        if (findControl.current === null) setFinding(true)
+        else findControl.current.step(direction)
+      } else if (command === 'import') {
         const stored = cursorRef.current
         if (stored === null) return
         const at: DocumentPosition = {
@@ -785,7 +804,7 @@ export function App(): React.JSX.Element {
    * whose one segment is the constant every one-segment kind uses (D27).
    */
   const goToLocated = useCallback(
-    async (at: Located): Promise<void> => {
+    async (at: Located, select = false): Promise<void> => {
       if (pane === null || doc === null) return
       const inStream = at.date !== null
       const id = inStream ? doc.id : (at.file as unknown as DocumentId)
@@ -807,7 +826,14 @@ export function App(): React.JSX.Element {
       }
       const now = pane.window
       const buffer = now === null ? null : now.toWindow(where(now.generation))
-      if (buffer !== null) editorRef.current?.revealAt(buffer as number)
+      if (buffer === null) return
+      // **A search match is SELECTED and a jump is not.** A bookmark or a tag
+      // sends you to a place; a find tells you which words were the answer, and
+      // showing that as a caret leaves the reader to work it out.
+      const ends = select && at.to !== at.from
+        ? now?.toWindow({ segment, offset: at.to as never, generation: now.generation })
+        : null
+      editorRef.current?.revealAt(buffer as number, ends === null ? undefined : (ends as number))
     },
     [doc, pane],
   )
@@ -1204,6 +1230,20 @@ export function App(): React.JSX.Element {
             notice={zoneNotice}
             onAdopt={() => void window.tephra.doc.setZone(zoneNotice.system).catch(fail)}
             onDismiss={() => void window.tephra.doc.dismissZone().catch(fail)}
+          />
+        )}
+
+        {/* **In the flow rather than over the text**, and below any notice. An
+            overlay in the top corner sat on top of the zone bar, and a find bar
+            that covers the words you are looking for is the wrong shape for a
+            surface whose whole job is reading. */}
+        {finding && (
+          <Find
+            control={findControl}
+            document={(pane?.document?.id ?? null) as string | null}
+            origin={() => cursorRef.current}
+            onGo={hit => goToLocated(hit.at, true)}
+            onClose={() => setFinding(false)}
           />
         )}
 

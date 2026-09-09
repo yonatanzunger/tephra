@@ -177,7 +177,7 @@ export interface EditorHandle extends SurfaceHandle {
    * also what `scrollIntoView` can do across regions that have not been
    * rendered, which a jump across a month always is.
    */
-  revealAt(at: number): void
+  revealAt(at: number, to?: number): void
   /**
    * Mark a set of places down the scroll track.
    *

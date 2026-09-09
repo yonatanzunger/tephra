@@ -294,6 +294,26 @@ export function installMenu(next?: MenuActions): void {
         },
         { role: 'selectAll' },
         { type: 'separator' },
+        // **Find is the walk, not the list** (D66): it takes you to successive
+        // places in the document you are reading, and ⌘⇧F's pane is the other
+        // rendering of the same query.
+        //
+        // **Earlier and Later, rather than Previous and Next.** The stream's
+        // axis is time and its newest end is where you always are, so the
+        // useful default is backwards — and *previous* would have to mean
+        // "further into the past", which is the opposite of what it says.
+        { label: 'Find…', accelerator: 'CmdOrCtrl+F', click: () => send(CHANNEL.menuCommand, 'find') },
+        {
+          label: 'Find Earlier',
+          accelerator: 'CmdOrCtrl+G',
+          click: () => send(CHANNEL.menuCommand, 'findEarlier'),
+        },
+        {
+          label: 'Find Later',
+          accelerator: 'Shift+CmdOrCtrl+G',
+          click: () => send(CHANNEL.menuCommand, 'findLater'),
+        },
+        { type: 'separator' },
         // **Emphasis is editing**, so it lives here: the same kind of act as
         // cut and paste, and the only commands in the set that work from a bare
         // caret. Built from `RANGE_COMMANDS` like every other command, so the

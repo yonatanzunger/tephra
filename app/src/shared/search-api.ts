@@ -22,6 +22,9 @@
 import type { DateKey, DocumentId } from './document-api.ts'
 import type { Located } from './nav-api.ts'
 
+/** Where a hit is. Re-exported because a `Hit` carries one and callers need it. */
+export type { Located }
+
 // ── what to look for ───────────────────────────────────────
 
 /**

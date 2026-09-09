@@ -42,6 +42,8 @@ import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { compareDateKeys, dateKeyAt } from '../shared/dates.ts'
 import { StreamDocument } from './x/documents/kinds/stream.ts'
 import { CorpusIndex } from './x/documents/corpus-index.ts'
+import { Scanner } from './x/documents/search.ts'
+import type { Search } from '../shared/search-api.ts'
 import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
 import { Filesets } from './x/fileset.ts'
 import { applyEdits } from './x/text-edits.ts'
@@ -147,6 +149,7 @@ export class DocumentService {
    */
   readonly #stream: Promise<StreamDocument>
   readonly #index: CorpusIndex
+  readonly #search: Scanner
   readonly #filesets: Filesets
   /**
    * The windows, and what keeps each one's document open.
@@ -242,6 +245,7 @@ export class DocumentService {
     // itself: opening is asynchronous in general, and a constructor cannot wait.
     // In MC3 this becomes the Corpus, and the closure goes away.
     this.#index = new CorpusIndex(notebook, () => this.#stream)
+    this.#search = new Scanner(notebook, this.#index)
     this.#filesets = new Filesets(this.#corpus)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
@@ -925,6 +929,11 @@ export class DocumentService {
   /** The corpus index (D52) — what the sidebar asks, and what repairs it. */
   get index(): CorpusIndex {
     return this.#index
+  }
+
+  /** v1's answer to a query, and not the only possible one (D65, D23). */
+  get search(): Search {
+    return this.#search
   }
 
   /** Every written day in a range, as prose — what printing and export read. */

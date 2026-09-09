@@ -5,7 +5,9 @@ import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type S
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
-import type { Clipboard, DayProse, PrintJob } from '../shared/ipc.ts'
+import { Searches } from './searches.ts'
+import type { Clipboard, DayProse, PrintJob, SearchRequest } from '../shared/ipc.ts'
+import type { QueryId } from '../shared/search-api.ts'
 import type { Followed, Reference } from '../shared/nav-api.ts'
 import type { CommentId } from '../shared/comments.ts'
 import type { DocumentId } from '../shared/document-api.ts'
@@ -48,6 +50,26 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
   ipcMain.handle(CHANNEL.proseIn, (_e, from: DateKey, to: DateKey) => service.proseIn(from, to))
+
+  // Search. **Three messages rather than one**, because the answer to a query
+  // over twenty years is not a value (D65): `open` narrows and returns a handle,
+  // `next` pulls as far as it must, `close` stops. The cursor lives in
+  // `Searches`, keyed to the window that asked, so a window closing takes its
+  // searches with it.
+  const searches = new Searches(service.search)
+  ipcMain.handle(CHANNEL.searchOpen, (e, request: SearchRequest) =>
+    searches.open(e.sender.id, request),
+  )
+  ipcMain.handle(CHANNEL.searchNext, (_e, id: QueryId, count: number) => searches.next(id, count))
+  ipcMain.handle(CHANNEL.searchClose, (_e, id: QueryId) => searches.close(id))
+  // **The id is taken while the window is alive.** Reading `webContents.id`
+  // inside `closed` reaches a destroyed object and throws — and the window that
+  // found this was the hidden one printing makes, so the failure was a PDF that
+  // came out fine and a main process that fell over on the way back.
+  app.on('browser-window-created', (_event, created) => {
+    const owner = created.webContents.id
+    created.on('closed', () => searches.closeFor(owner))
+  })
 
   // The sidebar. Every one of these is a question about the whole corpus, which
   // is why they go through the index rather than through the document (D52).

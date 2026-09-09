@@ -13,11 +13,49 @@ import type {
 import type { Annotation, Marker, Prose } from './prose.ts'
 import type { StoredCursor, WindowState } from './ui-state.ts'
 import type { NavTarget } from './pane-api.ts'
+import type { Hit, Progress, QueryId } from './search-api.ts'
+import type { Problem as QueryProblem } from './query-text.ts'
 import type { TodoStatus } from './kinds/todo.ts'
 import type { WindowPosition, ProseOffset, ProseText } from './document-api.ts'
 
 /** Windows are addressed by handle; the objects themselves never cross. */
 export type WindowId = number
+
+export type { QueryProblem }
+
+/**
+ * What the renderer asks for when it opens a search.
+ *
+ * **Not a `Query`, and the difference is the origin.** A query's origin is a
+ * `Located` — a file and an offset into its body — and the renderer has no
+ * business knowing which file a day lives in (D54). It says where the caret is
+ * in the words it already speaks, a segment and an offset, and main resolves
+ * that to a place on disk before opening the cursor.
+ *
+ * The rest is `QueryParams` in wire form: the scope's document, the direction to
+ * walk, and whether case matters. The text is parsed in main, from the same
+ * `parseQuery` the field parses with, so the two cannot disagree.
+ */
+export interface SearchRequest {
+  readonly text: string
+  /** The scope's document. Null is the whole corpus (D66). */
+  readonly document: DocumentId | null
+  readonly direction: 'past' | 'future'
+  readonly fold: 'auto' | 'sensitive' | 'insensitive'
+  /** Where to walk from. Null means the newest thing there is. */
+  readonly origin: { readonly segment: SegmentKey; readonly offset: number } | null
+}
+
+export interface SearchOpened {
+  readonly id: QueryId
+  /** Text that could not become part of the query, for the field to say so. */
+  readonly problems: readonly QueryProblem[]
+}
+
+export interface SearchBatch {
+  readonly hits: readonly Hit[]
+  readonly progress: Progress
+}
 
 export const CHANNEL = {
   open: 'tephra:doc:open',
@@ -37,6 +75,19 @@ export const CHANNEL = {
   removeAnchor: 'tephra:doc:removeAnchor',
   print: 'tephra:doc:print',
   proseIn: 'tephra:doc:proseIn',
+
+  /**
+   * Search (MS3, D65, D66).
+   *
+   * **The first pull-shaped channel in the app**, and the shape is the point: a
+   * query over twenty years cannot be answered in one reply, and a stream pushed
+   * at a renderer that is only walking one match at a time would read the corpus
+   * to fill a buffer nobody asked for. So the renderer asks for `n` and gets
+   * `n`, and the cursor in main stays exactly where it stopped.
+   */
+  searchOpen: 'tephra:search:open',
+  searchNext: 'tephra:search:next',
+  searchClose: 'tephra:search:close',
 
   /** The sidebar's questions, answered by the corpus index (D51, D52). */
   navSubjects: 'tephra:nav:subjects',

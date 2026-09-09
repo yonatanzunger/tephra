@@ -77,8 +77,13 @@ export interface Binding {
    * yet.
    */
   toggleEmphasis(marker: string): void
-  /** Put the caret at a buffer position and centre it. */
-  revealAt(at: number): void
+  /**
+   * Put the view on a buffer position and show it.
+   *
+   * With `to`, the range between them is selected — which is what a find match
+   * is, and what tells a reader which words answered.
+   */
+  revealAt(at: number, to?: number): void
   /** Mark the active row's places down the scroll track (D51). */
   showTrackMarks(marks: TrackMarks): void
   setVim(on: boolean): void
@@ -288,10 +293,16 @@ export function bindEditor(options: BindOptions): Binding {
     showTrackMarks(next: TrackMarks): void {
       view.dispatch({ effects: setTrackMarks.of(next) })
     },
-    revealAt(at: number): void {
-      const where = Math.max(0, Math.min(at, view.state.doc.length))
+    revealAt(at: number, to?: number): void {
+      const clamp = (n: number): number => Math.max(0, Math.min(n, view.state.doc.length))
+      const where = clamp(at)
       view.dispatch({
-        selection: { anchor: where },
+        // **A range is SELECTED, and that is what a find does.** A caret at the
+        // start of a match leaves the reader to work out which words were the
+        // answer; a selection says so, and is the same gesture every editor
+        // makes. With no end it is a bare caret, which is what a jump to a place
+        // has always been.
+        selection: to === undefined ? { anchor: where } : { anchor: where, head: clamp(to) },
         // **At the TOP, with what follows below it.** Centring reads well in the
         // middle of a long document and fails at both ends: near the end of the
         // stream — which is where a recent comment or subject always is — there

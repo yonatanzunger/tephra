@@ -232,7 +232,7 @@ console.log('\n— printing —')
 
   check('the selection began after the concealed hashes', r.selectionStartsAt === 'The Sh')
   check('a PDF was produced', pdf !== null && pdf.size > 1000, pdf ? `${pdf.size} bytes` : 'no file')
-  check('and nothing errored on the way', r.appError === 'none')
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
 // ── 6. removing a mark ──────────────────────────────────────────────────────

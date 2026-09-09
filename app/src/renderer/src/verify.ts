@@ -2301,6 +2301,68 @@ export async function runVerify(request: string): Promise<void> {
       await settle(2500)
     }
 
+    if (scene === 'find') {
+      // ⌘F, and the walk (MS3, D66). **Driven through the real menu item**, so
+      // the accelerator wiring is what is being tested and not a function the
+      // harness happened to call.
+      say('menuItemFound', await window.tephra.clickMenu('Find\u2026'))
+      await settle(400)
+      const field = document.querySelector('.find-field') as HTMLInputElement | null
+      say('barShown', field !== null)
+      if (field !== null) {
+        // React owns the value, so setting `.value` and firing `input` is how a
+        // controlled field is typed into from outside.
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(field, 'surveyor')
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(200)
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1200)
+      }
+      // **The claim is the selection**, not the scroll: a find that lands with a
+      // bare caret has not said which words were the answer.
+      const first = view.state.selection.main
+      say('firstFound', view.state.doc.toString().slice(first.from, first.to))
+      say('firstAt', first.from)
+
+      // Again, backwards in time: the second-newest mention, not the same one.
+      say('steppedEarlier', await window.tephra.clickMenu('Find Earlier'))
+      await settle(1200)
+      const second = view.state.selection.main
+      say('secondFound', view.state.doc.toString().slice(second.from, second.to))
+      say('movedBack', second.from < first.from)
+
+      // And forward again, which must return to where it started.
+      say('steppedLater', await window.tephra.clickMenu('Find Later'))
+      await settle(1200)
+      const third = view.state.selection.main
+      say('thirdAt', third.from)
+      say('cameBack', third.from === first.from)
+
+      // Nothing to find says so, rather than moving the caret anywhere.
+      const again = document.querySelector('.find-field') as HTMLInputElement | null
+      if (again !== null) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(again, 'quagga')
+        again.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(150)
+        again.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1500)
+      }
+      say('saidWhenNothing', document.querySelector('.find-said')?.textContent ?? '')
+      say('caretUnmoved', view.state.selection.main.from === third.from)
+
+      // A beat with the bar up and a match selected, for the screenshot.
+      await settle(2500)
+      // Escape closes it, which is the only way out that does not need a mouse.
+      again?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await settle(400)
+      say('closed', document.querySelector('.find-field') === null)
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'print') {
       const all = view.state.doc.toString()
       // From the first VISIBLE character of the heading, which is where a

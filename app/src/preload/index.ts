@@ -6,7 +6,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
-import type { Clipboard, DayProse, PrintJob, ZoneNotice } from '../shared/ipc.ts'
+import type { Clipboard, DayProse, PrintJob, SearchBatch, SearchOpened, SearchRequest, ZoneNotice } from '../shared/ipc.ts'
+import type { QueryId } from '../shared/search-api.ts'
 import type {
   Followed, IndexStatus, LinkRow, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
 } from '../shared/nav-api.ts'
@@ -78,6 +79,23 @@ const tephra = {
    * about the CORPUS — a bookmark in a note is a legitimate answer, and no
    * document is holding that note open.
    */
+  /**
+   * A running query (MS3, D65).
+   *
+   * **Pull, not push**, which is why there is no `onHit`. The walk asks for one
+   * and gets one; a pane asks for a screenful and gets a screenful; and the scan
+   * in main never reads further than it was asked to. Whoever opens one closes
+   * it — though a window closing does it too, so a renderer that goes away
+   * without tidying leaks nothing.
+   */
+  search: {
+    open: (request: SearchRequest): Promise<SearchOpened> =>
+      ipcRenderer.invoke(CHANNEL.searchOpen, request),
+    next: (id: QueryId, count: number): Promise<SearchBatch> =>
+      ipcRenderer.invoke(CHANNEL.searchNext, id, count),
+    close: (id: QueryId): Promise<void> => ipcRenderer.invoke(CHANNEL.searchClose, id),
+  },
+
   nav: {
     subjects: (): Promise<readonly Subject[]> => ipcRenderer.invoke(CHANNEL.navSubjects),
     bookmarks: (): Promise<readonly { name: string; at: Located }[]> =>

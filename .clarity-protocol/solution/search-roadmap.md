@@ -370,11 +370,54 @@ as somebody types and an incomplete `#wo` has to read as incomplete rather than
 as a tag. Where a parse stopped is a UI concern, which is a second reason it does
 not belong to the engine.
 
-## MS3 — find in this document
+## MS3 — find in this document *(done)*
 
-⌘F, the walk, direction, and the highlight. Extends the occurrence stepper in
-`Nav.tsx` from a finished array to a pulled stream, which is the one piece of
-existing machinery this changes rather than reuses.
+⌘F, the walk, direction, and the highlight — and the IPC that neither MS1 nor
+MS2 needed. **Done.** `shared/ipc.ts` (three channels), `main/searches.ts`,
+`renderer/src/frame/Find.tsx`, plus the `find` scene and `npm run m4`.
+
+**Three messages, because the answer is not a value**: `open` narrows and
+returns a handle, `next` pulls as far as it must, `close` stops. The first
+pull-shaped channel in the app — everything else is invoke/handle or a push.
+
+**Cursors belong to windows and die with them.** A search is somebody looking at
+something, and a window closing is them stopping. The alternative is a cursor
+outliving its renderer, which leaks only after a long session.
+
+**`Searches` does the one translation on the path**: a query's origin is a
+`Located` — a file and an offset into its body — and the renderer says where the
+caret is in the words it speaks, a segment and an offset. Which file a day lives
+in is the floor's business (D54).
+
+**Earlier and Later, not Previous and Next.** The stream's axis is time and its
+newest end is where you always are, so ⌘F's Enter walks *backwards*. *Previous*
+would have had to mean "further into the past", which is the opposite of what it
+says.
+
+**No count, and that is honest rather than lazy.** *3 of 47* means the corpus has
+been read to the end; over twenty years it would mean waiting for that before the
+first answer. What can be said truthfully is whether it found anything and
+whether it has run out — *nothing* and *no more* are different words for a reason.
+
+**A match is selected, not merely scrolled to**, which is why `revealAt` gained an
+end: a caret at the start of a match leaves the reader to work out which words
+were the answer.
+
+**Two bugs worth keeping:**
+
+- **The print window.** `app.on('browser-window-created')` read
+  `webContents.id` inside the `closed` handler, which reaches a destroyed object
+  and throws — and the window that found it was the hidden one printing makes. A
+  PDF came out fine and main fell over on the way back, so m2's print scene lost
+  its last three reports. The id is taken while the window is alive.
+- **`npx tsc --noEmit -p .` is not this project's typecheck.** It silently
+  skipped the main process; `npm run typecheck` (`tsc --build`) is the one that
+  checks it, and it found a bad import the moment it was run.
+
+**And a screenshot found what the scene could not**: the bar was an overlay in
+the top corner and sat on top of the zone notice. It is in the flow now, below
+any notice — a bar that covers the words you are looking for is the wrong shape
+for a surface whose job is reading.
 
 ## MS4 — search Tephra
 

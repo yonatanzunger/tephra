@@ -59,8 +59,8 @@ export interface AnnotationSink {
  * scroll track — is the TEXT surface's, and lives with it.
  */
 export interface SurfaceHandle {
-  /** Put the view on a place in the window, and show it. */
-  revealAt(at: number): void
+  /** Put the view on a place in the window, and show it. Selects `at..to`. */
+  revealAt(at: number, to?: number): void
 }
 
 /**
