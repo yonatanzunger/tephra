@@ -578,8 +578,9 @@ Three milestones are open at once — the task list, the link directory and the
 day boundary — and only three dependencies between them are real. The rest is a
 judgement about what is worth having soonest.
 
-**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → M4 → M5.**
-*(MT complete; M4 next.)*
+**MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → MS1 → MS2 →
+MS3 → MS4 → M5.**
+*(MT and ML complete; M4's phases are MS1–MS4, and MS1 is next.)*
 
 **MT5c and M6 are not in that line**; they are in the backlog below, which is a
 different kind of thing from a deferral — see there.
@@ -724,12 +725,26 @@ first, and this lands while MT4–MT6 are still ahead.
 
 ## M4 — retrieval
 
+**Roadmap: `solution/search-roadmap.md`. Requirement: R10. Decisions: D9 (as
+amended), D65, D66.**
+
 Marked ◆ in `features.md` as arguable, and settled as **the last things built in
 v1**: in scope, after the core works.
 
-- Literal substring search over the corpus
-- Filtered views by tag and by date range — one mechanism, three query shapes
-- Image paste writing a file and inserting a link (R7)
+*"I know I wrote that down"* — era 1's recorded failure, and the half ML does not
+serve. **One query engine in four phases** (MS1–MS4): predicates that either
+narrow from the index or filter by reading text, streaming pull-based out of a
+cancellable cursor, rendered two ways — a walk for ⌘F within one document, a
+results pane for ⌘⇧F across the corpus.
+
+**D9's three query shapes turned out to be one query and two renderings**, and
+the third thing that had been sharing the name — the composite document — is
+descoped from v1, which is what leaves D9's editability question closed rather
+than forcing it.
+
+- The query engine, the grammar, and the two surfaces (MS1–MS4)
+- Image paste writing a file and inserting a link (R7) — here by schedule, not
+  by kinship; it shares nothing with search
 
 ## M5 — the editing surface finished
 

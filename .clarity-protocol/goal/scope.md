@@ -26,7 +26,7 @@ Three native types, each with its own UX. Everything else in the directory is ei
 
 **Pinning is membership in a distinguished fileset** (D10). The nav is a list of sections, each one a fileset; the default section always exists and holds the pinned items. This keeps R18's two jobs distinct without inventing a mechanism: a *curated collection of references* is a section, and a *document you keep returning to* — the events calendar, an ideas list — is a file **entry within** one. Filesets therefore carry the navigation role from v1, well before the document-collection experience (R20–R23) is built.
 
-**The subject view is not a fourth type.** Subject views, date-range views and search results are the same thing: a filtered assembly of ranges (`solution/components.md`). Whether that assembly is editable is still open, and it is the most demanding question in the design — read-only it folds into the markdown UX; editable it is a composite surface writing back into source ranges.
+**The subject view is not a fourth type.** Subject views, date-range views and search results are the same thing — and as of D9's 2026-09-08 amendment, what they have in common is the *query* rather than the view: one conjunction of predicates producing one stream of locations, rendered either as a results pane or as a walk through successive places. Both are read-only, so the count stays at three and **v1 never decides whether a filtered view is editable.** The composite document — matching passages concatenated and read as running prose — is the only thing that question was ever about, and it is out of v1 for want of a demand rather than for want of a design.
 
 ## What gets in, and when
 

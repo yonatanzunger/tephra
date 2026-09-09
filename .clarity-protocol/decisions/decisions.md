@@ -128,6 +128,16 @@
 
 **Where the unification does pay, it is taken fully.** One filtered-view UX instead of three is a deletion at the layer where the scope number lives (`goal/scope.md`), and at the index level a date is simply an attribute with an ordered comparator, so the mechanism is shared even though the model is not.
 
+**Amended 2026-09-08: the open question is descoped rather than answered, and "filtered view" turned out to name three things.** D9 left open whether a filtered view is *editable* — read-only it folds into the markdown UX, editable it is a composite surface writing back into source ranges. Designing M4 found that the term had been covering three different objects:
+
+- **A results pane** — a list of hits, each with enough context to recognise, click to go there. `Links.tsx` already is one.
+- **A composite document** — the matching passages concatenated and read as running prose. This, and only this, is what the editability question was ever about.
+- **A walk** — successive jumps through the live document. `Nav.tsx` already does this for tag occurrences.
+
+**The unification claim survives, and is in fact stronger than it was written.** It is now a claim about the *query* (D65), not about the view: subject views, date-range views and search results are one predicate conjunction producing one stream of locations, and the pane and the walk are two renderings of that stream. Three views collapsing to one mechanism was the deletion D9 claimed; two renderings over one query is that deletion, made concrete.
+
+**The composite document is out of v1.** Not deferred for want of a design — descoped for want of a demand, and the demand may not arrive, because the pane and the walk between them answer the question the composite was invented for. Both are read-only, so **v1 never has to decide whether a filtered view is editable.** If the composite is ever built, the editability fork is still there, unchanged, and it will be decided with evidence about what the read-only versions failed to do.
+
 ## D10: Navigation is a list of sections; the default section is the pins
 
 **Date:** 2026-08-12
@@ -2590,3 +2600,112 @@ throw rather than something inferred, because the trade is the person's to make:
 two processes writing one corpus is what the lock exists to prevent, and this
 says *I know, and I am only looking*.
 
+
+## D65: A query is a pull-based stream of locations, and its predicates are either narrowing or filtering
+
+**Date:** 2026-09-08
+**Status:** decided
+
+**Decision.** Retrieval is one operation: **a query in, a cancellable stream of
+`Located` out.** A query is a conjunction of predicates of exactly two kinds.
+**Narrowing** predicates are answerable from the corpus index without reading
+prose — a tag, a date range, a document, a kind — and produce the candidate set.
+**Filtering** predicates must read the text — literal substring in v1, regex and
+fuzzy later. The engine narrows first and reads only the survivors, so *"foo in
+#wombats"* never opens a file that is not tagged.
+
+**The query also carries an origin and a direction**, and the result order falls
+out of those rather than being fixed by the engine. Reverse-chronological from
+today is *origin = now, direction = past*.
+
+**Why the split is the load-bearing part.** The forward requirement was that v1
+scan and v2 index without a restructure. Under this split, **adding a full-text
+index moves substring from the filtering side to the narrowing side** — one new
+predicate implementation and nothing else moves. And it says the honest thing
+about regex, which stays on the filtering side permanently: regex over raw text
+is inherently unindexable, and a design that pretended otherwise would have to
+be undone. Two kinds of predicate is therefore not a v1 convenience; it is the
+shape the problem actually has.
+
+**Pull, not push, and that follows from direction.** The renderer asks for the
+next hit and the engine reads exactly as far as it must to produce one. The walk
+pulls one at a time and never scans past where somebody stopped walking; a pane
+pulls eagerly and stops when full. Cancellation is closing the iterator and
+backpressure is free — where a pushed stream of batches would have to invent
+both. Over IPC: `start` → id, `next(id, n)`, `cancel(id)`.
+
+**One location type, not two.** `nav-api.ts`'s `Located` is already document plus
+segment plus range in the file vocabulary the scanner works in, it is what the
+link directory emits and what `onGo` consumes, and `whenOf` already orders dated
+against undated files. A parallel document-shaped location would be converted at
+every boundary and buy nothing.
+
+**Amended the same day: there is a third concern, and it is ORDERING.** A query
+has narrowing predicates, filtering predicates, and an **ordering** — and the
+ordering is part of the engine, not part of the query language. Two eventual
+values: **chronological**, which is what origin and direction parameterise and
+the only one v1 has, and **ranked**, which says *do whatever you must and give
+me the results in rank order*. Which one a search uses is chosen by the command
+that issues it, not typed by the person; a pane may later offer to re-sort, but
+that is a control on a view and not a token in the grammar.
+
+**The two orderings have genuinely different streaming behaviour, and that is
+why this is worth writing down before anything is built.** Chronological order
+streams because the candidate set is *enumerable in that order* — the engine
+emits as it walks, and the first result is as cheap as the last. Rank order is
+not free that way: ranking in general has to see every candidate before it can
+know which is first, and a scan therefore **cannot** rank-stream at all. What
+makes ranked streaming possible is an index traversable in impact order, which
+is to say **ranking implies the index**, and lands with it or after it.
+
+**Two consequences for the v1 interface, both cheap now:**
+
+- **A ranked query has a latency to first result that a chronological one does
+  not.** A results pane must therefore distinguish *nothing yet* from *nothing
+  found* — which chronological-from-now never forces it to, because its first
+  hit arrives almost immediately or there are none.
+- **The walk requires chronological ordering and always will.** Stepping through
+  a document in relevance order is not a coherent gesture, so ⌘F pins the
+  ordering and ⌘⇧F is where the choice eventually lives.
+
+**And the stream's element is a `Hit`, not a bare `Located`.** Ranking attaches a
+score, and the results pane already wants a lead of surrounding text, so the
+element is richer than a location either way. Wrapping it from the start makes
+both additive; streaming raw `Located` would make the first of them a change to
+every signature that touches a result.
+
+## D66: Search has two commands over one query; scope is a document, never a window
+
+**Date:** 2026-09-08
+**Status:** decided
+
+**Decision.** Two commands, differing in exactly two things — a scope predicate
+and a rendering. **Find in this document** (⌘F) adds `document:<this one>` and
+renders by **walking**: jump to the nearest hit in the chosen direction, again
+for the next. **Search Tephra** (⌘⇧F) adds no scope and renders into a **results
+pane**. The query, the grammar and the result type are the same.
+
+**Scope is the document, never the window.** In the stream that means the whole
+twenty years; what it excludes is notes, task lists and filesets. The
+alternative considered was scoping to the open date window, on the grounds that
+the word-processor gesture means *find inside what is on screen* — rejected,
+because the useful cut is by kind of material and not by how much of it happens
+to be loaded, and because scoping to the window would put a special case for the
+stream in a place where nothing else needs one.
+
+**Which makes direction load-bearing rather than a nicety.** A twenty-year
+document cannot be searched from its beginning, and a walk that had to wait for
+a complete result set would not answer at all. *Backwards from where the cursor
+is standing* is the gesture, and it is what the pull-based stream of D65 exists
+to serve.
+
+**`@codemirror/search` is deliberately unused**, though it is already a
+dependency and already in the keymap and would have supplied incremental
+highlighting, match counts and replace for nothing. It cannot express a tag
+predicate, and the cost of the free version is two ⌘F behaviours with two
+grammars — which is worse than writing the decoration layer over our own query.
+
+**One text field, parsed, not a form** (T16): bare words are substrings,
+`#wombats` is a tag, `2026-03` and `2026-03-01..2026-03-15` are ranges, and
+`/re/` is reserved for regex. Dates are the only new notation, since tags
+already had a spelling.
