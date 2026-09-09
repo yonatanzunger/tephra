@@ -2674,6 +2674,136 @@ element is richer than a location either way. Wrapping it from the start makes
 both additive; streaming raw `Located` would make the first of them a change to
 every signature that touches a result.
 
+**Amended again the same day, while writing the API: a query is a TREE, and that
+moves where narrowing lives.** Terms do not line up in an array — they line up in
+a tree whose leaves are terms and whose branches are boolean operators. This does
+not break the narrowing/filtering split; it relocates it, and the relocation is
+the interesting part:
+
+- With a flat conjunction, "narrow then filter" is trivially valid.
+- With a tree it is not. **`#wombats or foo` cannot be narrowed at all**, because
+  a file carrying no such tag can still match through the other branch, and
+  **`not #wombats` anti-narrows** — its candidate set is everything the tag does
+  not cover.
+
+**So narrowing is not a property of a leaf. It is a capability of a node, folded
+bottom-up.** `and` intersects what its children can bound and treats *unbounded*
+as the identity, so one narrowable child makes the whole conjunction cheap. `or`
+unions, and is unbounded if **any** child is. `not` is always unbounded. A term
+that cannot narrow simply bounds nothing.
+
+**Unbounded and empty are different, and the type says so** (`Bound = Candidate[]
+| null`). Empty means nothing can match and the scan is over before it begins;
+unbounded means everything in scope is a candidate. One reads no files and the
+other reads all of them, which is too large a difference to leave to a convention.
+
+**And it makes the index story more local rather than less.** "Substring moves
+from the filtering side to the narrowing side" becomes **"a substring leaf gains
+a bound"**, and the same bottom-up fold exploits it with nothing else changed.
+Regex is likewise **one more leaf** — one that never gains a bound, for ever,
+which is the honest statement about regex over raw text. Fuzzy matching arrives
+the same way and does gain a bound once there is an index to give it one.
+
+**Leaf order is preserved and never normalised.** `foo bar` and `bar foo` match
+the same lines, so v1 could sort or dedupe an `and`'s children and lose nothing
+it can observe. It must not, because a **ranker** can observe it: term order and
+adjacency are most of what proximity scoring is made of, and a phrase is an
+ordered leaf outright. This is `goal/scope.md`'s backfill rule — mechanisms may be
+deferred, discarded information cannot be recovered — applied to a data structure
+rather than to a file format. `formatQuery` round-trips, which is what makes the
+rule testable rather than merely written down.
+
+**Which also forced a spelling that had no home before.** Once `foo bar` is a
+conjunction, a literal phrase cannot be written at all — so `"quoted"` is a leaf
+of its own, and it is the ordered one.
+
+**v1's grammar produces a flat `and` and nothing else.** The type is a tree
+because a query is a tree and the engine folds one generally; notation for `or`
+and `not` is a later addition that changes nothing beneath it. Tree now, notation
+later is the cheap order; the reverse is a restructure.
+
+**Amended once more, and this one deletes rather than adds: SCOPE COMES OUT OF
+THE TREE.** A query has two parts that are not alike — `scope`, which says where
+to look and is answerable from the index, and `where`, which says what to look
+for and can only be answered by reading text. **Scope is a struct whose fields
+conjoin** (a document, tags, a date range), not a node in the boolean tree.
+
+**This is a deliberate limit, and it is what the previous amendment was paying
+for without saying so.** In principle a tag is just another predicate and belongs
+in the tree with everything else. In practice putting it there buys `#a or #b`
+at the price of a query planner: a narrowing term under an `or` narrows nothing,
+so the engine has to *compute* whether a tree can be narrowed at all, folding
+bounds upward and distinguishing "nothing can match" from "everything is a
+candidate". **That machinery existed solely because scope was in the tree**, and
+it evaporates when scope comes out. This is a notebook, not a database.
+
+**And what remains is three steps with nothing to decide between them**: narrow
+the scope into candidate ranges from the index, order them, scan them. A text
+index later makes a phrase answerable in step one, which is the same claim as
+before in simpler words. Regex still never moves.
+
+**`where` is phrase-only in v1** (a union of one, so `and`, `or`, `not` and
+`regex` are later arms rather than a restructure), and **`phrase` and a future
+`and` are two node kinds rather than one node with a flag.** They are
+structurally identical and mean opposite things about how much licence the engine
+has: an `and` asks that these words be present and may be as approximate as it
+likes about it — stemming, synonyms, any order — while a `phrase` says *take this
+literally*. That distinction gets more important as search gets cleverer, not
+less, which is exactly why it is a kind and not a modifier.
+
+**Which is also why v1 is phrase-only rather than and-only.** A scan is exact, so
+the one node a scan can honour completely is the literal one — and *"I know I
+wrote that down"* is a half-remembered phrase, not a bag of words.
+
+**Quoting survives with a smaller job.** With everything unquoted already a
+phrase, `"…"` exists to escape a selector back into text — `"#wombats"` finds the
+characters. The same syntax means the same thing when `and` arrives, at which
+point it resumes distinguishing the phrase from the conjunction.
+
+**The notation is an inverse PAIR, and that is the discipline it is held to.**
+`parseQuery: (text, params) → Query` and `formatQuery: Query → (text, params)`.
+The reverse direction has to return both halves, because a query holds things the
+notation cannot spell — the document comes from a command, the ordering from a
+keystroke — and returning only a string would be a lossy inverse wearing the
+shape of a total one. `format` then `parse` is the identity on queries and is the
+property worth testing; `parse` then `format` is identity only up to
+normalisation, since a person may type one query many ways and there is one way
+to write it down.
+
+**Which settles what may come back alongside a query: `params`, or a `Problem`,
+and there is no third category.** An earlier draft also returned *spans* saying
+which stretch of text became a tag — decoration for a field that wants to render
+a tag as a tag. It is genuinely only decoration, nothing in v1 needs it, and the
+surface that would use it does not exist yet, so it is gone until MS3 or MS4 asks
+for it. A `Problem` earns its place by a different test: it is text that could not
+become part of the query, it is reported *and* still searched for as ordinary
+words, because losing characters somebody typed is the one thing a search box
+must never do.
+
+**Case folding belongs to the query, not to a node.** Nobody wants one word of a
+search folded and another not; it is a property of the asking, like the ordering,
+and it resolves from `params` — `auto` being the convention every search box has,
+lower case folding and a capital not.
+
+**Date ranges are half-open in the struct and inclusive in the notation.** Ranges
+compose — union, intersection, adjacency — only when one end is open, and a whole
+month is then `2026-03-01` to `2026-04-01` with no month-length arithmetic
+anywhere. `2026-03-01..2026-03-15` still reads as *through the fifteenth* to a
+person, and `parseQuery` is the one place that becomes the sixteenth.
+
+**Tags are the subject key, not the string as typed and not a `SegmentKey`.**
+Subjects compare case-insensitively and whitespace-normalised (format-spec), so a
+scope stores `subjectKey(name)` and `#House Deal` and `#house deal` are one scope
+rather than two. A `SegmentKey` is a *segment address* within a document — a
+`DateKey`, or `content` — and a subject is not one.
+
+**And the types live in `shared/search-api.ts`**, alongside `document-api`,
+`nav-api` and `pane-api`, because the engine is in main while the field and the
+pane are in the renderer and these are the words they have in common. `Search`
+and `Cursor` are interfaces there and `Scanner` implements them in main —
+an interface rather than a class because v2's index-backed engine answers the
+same shape (D23), which is the whole claim this design has been making.
+
 ## D66: Search has two commands over one query; scope is a document, never a window
 
 **Date:** 2026-09-08

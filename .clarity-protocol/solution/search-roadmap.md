@@ -5,6 +5,17 @@
 Phases, under MC's rule: **`npm test`, `m0`, `m1`, `m2` and `m3` are green at
 the end of each one.**
 
+**Built in a different order from the one they are numbered in.** The API for
+MS1 and MS2 is written first, together, so the two interlock by construction
+rather than by hope; then **MS2 is implemented with its tests**, then **MS1 with
+its tests**. The reason is legibility of the engine's tests: a predicate array
+built by hand is an ugly object, and MS1's tests are the ones that most need to
+be readable. With the parser already standing and independently tested, MS1's
+tests may use it — a red engine test is diagnosable because the parser's own
+table-driven tests are green beside it. **The few tests that are specifically
+about predicate handling are still built by hand**, and `Query` never carries
+the raw text, so the type stays independent even where the tests do not.
+
 **What this is, in one sentence.** *"I know I wrote that down."* — era 1's
 recorded failure, and the half R10a's link directory does not serve: search
 finds text you remember writing, the directory finds documents you remember
@@ -29,30 +40,73 @@ It is not deferred for want of a design; it is descoped for want of a demand,
 and the demand may never arrive, because a results pane and a walk between them
 answer the question the composite was invented for.
 
-## The engine: narrowing, filtering, ordering
+## The engine: narrow, order, scan
 
-**A query is a conjunction of predicates in two kinds, plus an ordering** —
-which is the whole of the architecture, because it is what lets an index arrive
-later without anything being restructured (D65).
+**Three concerns, and they are not alike** (D65) — which is the whole of the
+architecture, because it is what lets an index arrive later without anything
+being restructured.
 
-- **Narrowing** predicates are answerable from the corpus index without reading
-  a byte of prose: a tag, a date range, a document, a kind. They produce the
-  candidate set.
-- **Filtering** predicates must read the text: literal substring now, regex
-  later, fuzzy later.
+- **Scope** is answerable from the corpus index without reading a byte of prose:
+  a document, tags, a date range. It produces the candidate ranges.
+- **The phrase** has to read text. Literal now; regex and fuzzy are later arms of
+  the same union.
 - **Ordering** is chronological in v1 — origin and direction, below — and
   **ranked** later. It belongs to the engine and **not to the query language**:
   the command chooses it, nobody types it.
 
-The engine narrows first and reads only the survivors. *"foo in #wombats"* does
-not scan the corpus and discard non-wombat hits; it never opens the other files.
+**What a text index changes later is one step, and it is less than it sounds.**
+A phrase becomes answerable while narrowing, so it moves out of the scan and the
+scan has nothing left to do for it. Regex never moves — regex over raw text is
+what it is — and lands as one more thing the scan knows how to test.
 
-**And that is what the forward constraint reduces to.** Adding a full-text
-index later **moves substring from the filtering side to the narrowing side** —
-one new predicate implementation, same engine, same result stream. Regex stays
-on the filtering side permanently, which is correct rather than a limitation:
-regex over raw text is what it is, and the design should say so rather than
-pretend an index could serve it.
+### Scope and phrase: two parts that are not alike
+
+**A query has two parts.** `scope` says *where to look* and is answerable from
+the index without reading a byte. `where` says *what to look for* and can only be
+answered by reading text. Narrow by the first, scan what survives with the
+second.
+
+**Scope is a struct whose fields conjoin — a document, tags, a date range — and
+not a node in a boolean tree.** That is a deliberate limit. In principle a tag is
+just another predicate and belongs in the tree; in practice putting it there buys
+`#a or #b` at the price of a query planner, because a narrowing term under an
+`or` narrows nothing and the engine would have to compute whether a tree can be
+narrowed at all. **This is a notebook, not a database.**
+
+**Narrowing yields ranges, not files, and a whole file is the coarsest one.** A
+tag delimits a range (D11), so *"foo in #wombats"* means foo **inside**
+wombats-tagged text — not foo anywhere in a file that mentions wombats, which is
+a worse answer to the same question. Dates narrow to day files, tags to spans
+within them, a future text index to lines: one mechanism, three granularities.
+
+**A scope on its own is a complete query**: `#wombats` alone is the subject view,
+its candidate ranges being the results with nothing to filter them by. D9's
+unification arrives as a consequence rather than as a feature.
+
+### `phrase` and `and` are two node kinds, and v1 has only the first
+
+**Structurally identical, opposite in meaning.** An `and` asks that these words
+be present and lets the engine be as approximate as it likes about it — stemming,
+synonyms, any order. A `phrase` says **take this literally**: these terms, this
+order, adjacent. That distinction gets *more* important as search gets cleverer,
+which is why it is a node kind and not a flag on one node.
+
+**v1 is phrase-only** — `Where` is a union of one, with `and`, `or`, `not` and
+`regex` as later arms rather than a restructure. A scan is exact, so the one node
+a scan can honour completely is the literal one; and *"I know I wrote that
+down"* is a half-remembered phrase, not a bag of words.
+
+**Term order is never normalised** — it is the whole meaning of a phrase, and it
+stays meaningful in a future `and` because proximity scoring is made of order and
+adjacency. `formatQuery` round-trips, which makes the rule testable.
+
+### A hit is a line
+
+*Where* the terms must appear needs an answer once there is more than one: the
+file is far too coarse at twenty pages a day, and the line is what a markdown
+paragraph already is. **A hit is a line the phrase is in**, positioned at the
+match — and for a scope-only query, the candidate range's first line with nothing
+marked.
 
 ### Ranking is the third concern, and it arrives with the index
 
@@ -121,28 +175,46 @@ applied to queries, and the notations are the ones already in the corpus:
 
 | Written | Means | Kind |
 |---|---|---|
-| `foo bar` | both substrings present | filtering |
-| `#wombats` | tagged | narrowing |
-| `2026-03`, `2026-03-01..2026-03-15` | in that range | narrowing |
-| `/re/` *(later)* | regex | filtering |
+| `foo bar` | that phrase, literally | scan |
+| `#wombats` | inside text tagged so | scope |
+| `2026-03`, `2026-03-01..2026-03-15` | in that range, both days included | scope |
+| `"#wombats"` | the text, not a tag | scan |
+
+**Quoting has a smaller job than it did.** With everything unquoted already a
+phrase, `"…"` escapes a selector back into text. The same syntax means the same
+thing when `and` arrives, at which point it resumes distinguishing the phrase
+from the conjunction.
+
+**Case folding is decided by the query rather than by a switch** — a query in
+lower case folds, one with a capital in it does not.
 
 **Dates are the one genuinely new notation**, since tags have a spelling and
 ranges do not. `2026-03` and `2026-03-01..2026-03-15` are unambiguous against
 prose, which is the only property required of them.
 
+**Inclusive in the notation, half-open in the struct.** Ranges compose only when
+one end is open, and a month is then `2026-03-01` to `2026-04-01` with no
+month-length arithmetic anywhere; *through the fifteenth* is still what a person
+means, and `parseQuery` is the one place that becomes the sixteenth.
+
+**A tag in a scope is the subject key**, normalised case-insensitively and
+whitespace-collapsed as subjects are everywhere else, so `#House Deal` and
+`#house deal` are one scope.
+
 ## Two commands, one query
 
-They differ in exactly two things: a scope predicate, and how results are shown.
+They differ in exactly two things: the scope's `document`, and how results are
+shown.
 
-**Find in this document** (⌘F) issues the query with `document:<the one in this
-window>` and renders by **walking** — jump to the nearest hit in the chosen
+**Find in this document** (⌘F) sets the scope's document to the one in this
+window and renders by **walking** — jump to the nearest hit in the chosen
 direction, again for the next. **Scope is the document, never the window**: in
 the stream that means the whole twenty years, and what it excludes is notes,
 task lists and filesets. That is the useful cut, and it is uniform — no special
 case anywhere for the stream being large.
 
-**Search Tephra** (⌘⇧F) issues the same query with no scope predicate and
-renders into a **results pane**, the shape `Links.tsx` already has.
+**Search Tephra** (⌘⇧F) leaves the document unset and renders into a **results
+pane**, the shape `Links.tsx` already has.
 
 **`@codemirror/search` is deliberately not used**, though it is already a
 dependency and already in the keymap. It cannot express `#wombats`, and two ⌘F
@@ -153,23 +225,77 @@ have saved.
 
 ## MS1 — the query engine
 
-Predicates, the narrow-then-filter plan, the pull-based cursor, cancellation,
-and the `Hit`. Main-side and headless: **it is testable without any UI at all**,
-which is the reason it is its own phase. Substring is the only filtering
-predicate; tag, date range and document are the narrowing ones; chronological is
-the only ordering, and it is a parameter rather than an assumption baked into
-the traversal.
+**The type is the phase boundary**, and it is written. `shared/search-api.ts`
+holds the vocabulary and the `Search` and `Cursor` interfaces — alongside
+`document-api`, `nav-api` and `pane-api`, because the engine is in main while the
+field and the pane are in the renderer. `shared/query-text.ts` is the notation.
+`main/x/documents/search.ts` is `Scanner`, v1's implementation — inside the floor
+because it reads files, which the layering test insisted on before a line of it
+ran, and named for how it works because an index-backed engine answers the same
+interface in v2.
 
-The tests that matter: a query that is cancelled stops reading files; a
-narrowing predicate provably prevents reads; direction reverses the sequence and
-nothing else; a hit at a file boundary is not split or duplicated.
+```ts
+interface Query {
+  readonly scope: Scope      // document, tags, half-open dates — all conjoined
+  readonly find: QueryNode   // v1: { op: 'phrase'; of: Term[] }
+  readonly order: Ordering   // chronological, from an origin, in a direction
+  readonly fold: boolean     // of the asking, not of a node
+}
+```
+
+**Three steps, and nothing to decide between them.** Narrow the scope into
+candidate ranges from the index; order them; scan them. `candidatesFor` is steps
+one and two and is exported on its own, because *narrowing prevents reads* is
+provable by inspecting what it returns, with no filesystem in the picture.
+
+The pull-based cursor, the scan, and the `Hit`. Main-side and headless: **it is
+testable with no UI at all**, which is the reason it is its own phase.
+Chronological is the only ordering, and it is a parameter rather than an
+assumption baked into the traversal.
+
+The tests that matter: a cancelled query stops reading files; a scope provably
+prevents reads; direction reverses the sequence and nothing else; a hit at a
+range boundary is neither split nor duplicated.
 
 ## MS2 — the grammar
 
-Parsing one text field into a predicate conjunction, with the date notation.
+Parsing one text field into a whole `Query` — the command's document scope and
+ordering handed in, the tags and dates found in the text conjoined onto that,
+everything left over becoming the phrase. Returning a fragment and leaving each
+caller to assemble the rest is how two callers come to assemble it differently.
+
+**An inverse pair, and held to it**: `parseQuery: (text, params) → Query` and
+`formatQuery: Query → (text, params)`. The reverse returns both halves because a
+query holds what the notation cannot spell. `format` then `parse` is the identity
+on queries — the property worth testing; `parse` then `format` is identity only
+up to normalisation, since one query can be typed many ways.
+
+**What may come back alongside the query is `params` or a `Problem`, and there is
+no third thing.** A problem is text that could not become part of the query — an
+impossible date, a `/regex/` v1 cannot run. It is reported *and* still searched
+for as ordinary words, because losing characters somebody typed is the one thing
+a search box must never do.
+
 Pure and shared, so it is unit-testable and the renderer and main agree by
 construction rather than by convention — the mistake `shared/links.ts` exists to
 have already fixed once.
+
+**What separates it from MS1 is the query type.** MS2 turns text into a `Query`
+and stops; MS1 takes a `Query` and reads files. Nothing in the engine parses, and
+nothing in the parser touches a disk — which is why one is testable with a string
+table and the other with a fixture notebook.
+
+**MS2 is small** — a parser and a table-driven test — and is built *first*, for
+the reason at the top of this page: MS1's tests then get to say
+`parse('foo #wombats')` instead of assembling a struct by hand, and a struct
+assembled by hand is exactly the kind of test nobody rereads. The risk that
+buys — a parse bug and a scan bug arriving as the same red test — is retired by
+MS2 already standing with its own tests green beside them.
+
+**Its return type is richer than `Predicate[]`**, because the query field parses
+as somebody types and an incomplete `#wo` has to read as incomplete rather than
+as a tag. Where a parse stopped is a UI concern, which is a second reason it does
+not belong to the engine.
 
 ## MS3 — find in this document
 
