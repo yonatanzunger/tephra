@@ -19,6 +19,7 @@
 
 import type { DateKey } from '../document-api.ts'
 import { addDays, weekdayOf } from '../dates.ts'
+import { tagMark } from '../tags.ts'
 
 /**
  * What an item is, in the order era 1 wrote them on paper (T4).
@@ -162,17 +163,8 @@ const ITEM = /^(\s*[-*]\s+)\[([^\]])\]\s?(.*)$/
 /** `<!--tephra:item <id> <ctime> <mtime>-->`, at the end of the line (D56). */
 const MARK = /\s*<!--tephra:item\s+([0-9a-z]+)(?:\s+(\d+))?(?:\s+(\d+))?\s*-->\s*$/
 
-/**
- * A tag, in both spellings.
- *
- * `#house`, and `#'house deal'` when it has spaces — the same two-form idea as
- * a markdown link destination, and for the same reason: the plain form is what
- * anybody types and the quoted form is what survives a space.
- *
- * **Not preceded by a word character**, so a URL fragment and a C preprocessor
- * line in a code fence are not tags.
- */
-const TAG = /(?<![\w#])#(?:'([^'\n]+)'|([A-Za-z0-9][\w-]*))/g
+/** A tag, in both spellings. One notation, shared with the query field (T16). */
+const TAG = tagMark()
 
 /** `DUE <date>`, uppercase, because era 1 drew it in large letters (T9). */
 const DUE = /\bDUE\s+(\d{4}-\d{2}-\d{2})\b/

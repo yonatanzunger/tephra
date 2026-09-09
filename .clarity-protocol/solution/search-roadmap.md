@@ -257,7 +257,7 @@ The tests that matter: a cancelled query stops reading files; a scope provably
 prevents reads; direction reverses the sequence and nothing else; a hit at a
 range boundary is neither split nor duplicated.
 
-## MS2 — the grammar
+## MS2 — the grammar *(done)*
 
 Parsing one text field into a whole `Query` — the command's document scope and
 ordering handed in, the tags and dates found in the text conjoined onto that,
@@ -291,6 +291,31 @@ the reason at the top of this page: MS1's tests then get to say
 assembled by hand is exactly the kind of test nobody rereads. The risk that
 buys — a parse bug and a scan bug arriving as the same red test — is retired by
 MS2 already standing with its own tests green beside them.
+
+**Done.** `shared/query-text.ts`, 33 tests. What came out of building it:
+
+- **The tokenizer is one left-to-right pass**, not a whitespace split with
+  classification afterwards, because `#'house deal'` has a space in it and so
+  does a quoted run: whitespace is not a boundary until you know what you are
+  inside of.
+- **The tag notation moved to `shared/tags.ts`** and `todo.ts` now imports it.
+  A second reader arrived, and T16 means it has to get the same answer as the
+  first — two copies of one grammar is exactly how `links.ts`'s halves came to
+  disagree (D61). It is exported as a source string and a factory rather than a
+  shared `RegExp`, since a `/g` regex carries `lastIndex` and one instance shared
+  between two scanners is a bug that only shows up when both run.
+- **Half-open ranges paid for themselves immediately.** Two ranges in one query
+  conjoin, and conjoining is intersection — the later start and the earlier end,
+  which inclusive ends would have made off-by-one-prone. A pair that does not
+  overlap yields `from === until`, an ordinary half-open range admitting nothing,
+  with no special case anywhere downstream.
+- **An empty range has no spelling**, which the round-trip test found. The
+  notation cannot write a range admitting nothing, so `formatQuery` writes what
+  *produced* one: two days that do not overlap, which intersect back to exactly
+  it. A backwards `a..b` would have been shorter and does not parse — it is a
+  problem, by design, since a silent swap is worse than a complaint.
+- **An unclosed quote is not a problem** — it is a field halfway through being
+  typed in, and what has been typed so far is what to search for.
 
 **Its return type is richer than `Predicate[]`**, because the query field parses
 as somebody types and an incomplete `#wo` has to read as incomplete rather than

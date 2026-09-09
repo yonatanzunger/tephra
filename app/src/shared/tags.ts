@@ -14,6 +14,28 @@ export function subjectKey(name: string): string {
 }
 
 /**
+ * How a subject is written inline: `#house`, and `#'house deal'` when it has
+ * spaces — the same two-form idea as a markdown link destination, and for the
+ * same reason: the plain form is what anybody types and the quoted form is what
+ * survives a space.
+ *
+ * **Not preceded by a word character**, so a URL fragment and a C preprocessor
+ * line in a code fence are not tags.
+ *
+ * **Here rather than in `todo.ts`, because a second reader arrived** — the query
+ * notation asks the same question of a search box that a task line asks of
+ * itself, and T16 means it must get the same answer. Two copies of one grammar
+ * is precisely how `links.ts`'s halves came to disagree (D61).
+ *
+ * **A source string and a factory, not a shared `RegExp`.** A `/g` regex carries
+ * `lastIndex`, so one instance shared between two scanners is a bug that only
+ * appears when both run.
+ */
+export const TAG_MARK = "(?<![\\w#])#(?:'([^'\\n]+)'|([A-Za-z0-9][\\w-]*))"
+
+export const tagMark = (flags = 'g'): RegExp => new RegExp(TAG_MARK, flags)
+
+/**
  * The hues a tag may take, in order.
  *
  * **A slot, not a raw hash-to-hue.** Hashing straight to a hue gives colours
