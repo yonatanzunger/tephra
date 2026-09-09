@@ -24,6 +24,7 @@ import { compareDateKeys, daysBetween } from '../../../shared/dates.ts'
 import { scanLinks, type ScannedLink } from '../../../shared/links.ts'
 import { canonicalizeLink, indexable, type CanonicalLink } from '../../../shared/link-index.ts'
 import { scanMarkers, scanSpans, type ScannedSpan } from '../markers.ts'
+import { subjectKey } from '../../../shared/tags.ts'
 import { parseFile } from '../frontmatter.ts'
 import type { StreamDocument } from './kinds/stream.ts'
 import type { DateKey } from '../../../shared/document-api.ts'
@@ -127,6 +128,20 @@ const isPayload = (value: unknown): value is Payload =>
   // this does not recognise, and is therefore a cache it throws away.
   (value as Payload).items.every(item => typeof item.status === 'string')
 
+/**
+ * One file, as a search scope sees it (MS1).
+ *
+ * The narrowing half of D65 in a single type: everything answerable about a file
+ * without opening it.
+ */
+export interface IndexedFile {
+  readonly file: RelPath
+  readonly date: DateKey | null
+  readonly when: number
+  /** Tagged ranges, by subject key, into the file's body. */
+  readonly tags: readonly { readonly subject: string; readonly from: number; readonly to: number }[]
+}
+
 export class CorpusIndex {
   readonly #notebook: Notebook
   readonly #stream: () => Promise<StreamDocument>
@@ -145,6 +160,30 @@ export class CorpusIndex {
 
   status(): IndexStatus {
     return this.#status
+  }
+
+  /**
+   * Every file, with what a scope needs to decide about it — and nothing else.
+   *
+   * **This is the whole of what search narrows on** (MS1, D65): where the file
+   * is, when it counts as, and which subjects cover which of its ranges. No
+   * body, no spans of other kinds, no links — a projection rather than the
+   * cache itself, so that `Scanned` stays this file's business.
+   *
+   * **`when` comes from here rather than being computed by the caller**,
+   * because deciding that a day file counts as noon on its date and a note
+   * counts as its mtime is a fact about the index's contents (`whenOf`), and
+   * the second copy of that rule is where the two would drift.
+   */
+  async files(): Promise<readonly IndexedFile[]> {
+    return (await this.#all()).map(scanned => ({
+      file: scanned.file,
+      date: scanned.date,
+      when: whenOf(scanned),
+      tags: scanned.spans
+        .filter(span => span.kind === 'tag')
+        .map(span => ({ subject: subjectKey(span.name), from: span.from, to: span.to })),
+    }))
   }
 
   // ── the questions the sidebar asks ─────────────────────────

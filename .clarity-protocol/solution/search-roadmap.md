@@ -223,7 +223,7 @@ have saved.
 
 ---
 
-## MS1 — the query engine
+## MS1 — the query engine *(done)*
 
 **The type is the phase boundary**, and it is written. `shared/search-api.ts`
 holds the vocabulary and the `Search` and `Cursor` interfaces — alongside
@@ -253,9 +253,59 @@ testable with no UI at all**, which is the reason it is its own phase.
 Chronological is the only ordering, and it is a parameter rather than an
 assumption baked into the traversal.
 
-The tests that matter: a cancelled query stops reading files; a scope provably
-prevents reads; direction reverses the sequence and nothing else; a hit at a
-range boundary is neither split nor duplicated.
+**Done.** `main/x/documents/search.ts` — `candidatesFor` and `Scanner`, 29
+tests in `tests/integration/search.test.ts`. What came out of building it:
+
+- **A tagged range covers part of a LINE, and that distinction is the whole
+  meaning of a tag scope.** The scan widens a candidate to line edges so a hit
+  can be shown whole — and the first draft then matched anywhere in the widened
+  line, so `outside #house` found the word outside the tag. The line is widened
+  and the *match* is not.
+- **`at` and `within` are found twice, in two texts.** `at` points into the file,
+  where the markers still are; `within` points into the line as a reader sees it,
+  which is shorter by however much machinery was in it. One number cannot be
+  both, and the first draft used `at` for the highlight.
+- **The origin has to carry `when`.** Compared as a bare offset, a candidate
+  starting at 0 in a *newer* file counted as before an origin halfway down an
+  older one — so walking backwards returned the future. Position here is a day
+  first and an offset second.
+- **The two ends of a range are not interchangeable at the origin**: walking back,
+  a range starting before the cursor may still hold hits before it, so its start
+  decides; walking forward, its end does.
+- **A match inside a marker is not a match**, for the same reason `plain.ts`
+  exists: `tag-start` would otherwise report the filing system as prose.
+
+**And it found a defect in `CorpusIndex` that is not search's to fix** — see
+below.
+
+## Found on the way: the index re-reads the corpus on every sweep
+
+**`CorpusIndex.#all()` reads every day file, every time it is called**, and the
+stamp cache never spares one. Measured: three consecutive sweeps over a two-day
+fixture each read both days plus a probe for a part that does not exist.
+
+**Why.** The sweep's first branch is *a loaded day answers for itself*, which is
+right — a day the editor is holding may carry edits the file has not seen. But
+`SegmentedDocument.scan` loads the segment it is asked about, so the first sweep
+makes every day it scans "held", and every later sweep takes that branch instead
+of the cache. The rule is about days the *editor* holds and it fires for days the
+*index* touched.
+
+**Why it matters more than it looks.** This is precisely the thing the index's
+own header says it exists to avoid — *"answering 'every subject in twenty years'
+by opening twenty years of documents"*. Every sidebar question re-reads the
+stream. At today's corpus it is invisible; at R6's 0.4–0.9 GB it is not.
+
+**What it cost MS1.** The claim *narrowing prevents reads* cannot be tested end
+to end by counting file reads, because the index's own reads drown the scan's. It
+is asserted on `candidatesFor`'s output instead — which is the claim itself, and
+the reason that function is exported — and the cursor's incrementality is
+asserted on `progress().read`, its own account of how far it has gone. Both are
+honest seams; neither is the one that would also have caught this.
+
+**Not fixed here**, because segment eviction is delicate and this is the index's
+bug rather than search's. Recorded so that it is a decision rather than an
+oversight.
 
 ## MS2 — the grammar *(done)*
 

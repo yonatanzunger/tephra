@@ -35,14 +35,23 @@
 // full. Cancellation is closing the cursor and backpressure is free — where a
 // pushed stream of batches would have had to invent both.
 
+import { documentRoot, type RelPath } from '../../w/layout.ts'
+import { parseFile } from '../frontmatter.ts'
+import { compareDateKeys } from '../../../shared/dates.ts'
+import { plainLine } from '../../../shared/plain.ts'
+import { isEmpty } from '../../../shared/search-api.ts'
 import type { Notebook } from '../../w/notebook.ts'
-import type { RelPath } from '../../w/layout.ts'
-import type { CorpusIndex } from './corpus-index.ts'
+import type { CorpusIndex, IndexedFile } from './corpus-index.ts'
 import type { DateKey } from '../../../shared/document-api.ts'
-import type { Cursor, Ordering, Query, Scope, Search } from '../../../shared/search-api.ts'
+import type { Cursor, Hit, Ordering, Progress, Query, QueryNode, Scope, Search } from '../../../shared/search-api.ts'
+import type { Located } from '../../../shared/nav-api.ts'
 
 /**
  * One stretch of one file that the scope admits, named before anything is read.
+ *
+ * **A candidate *range*, because what it is a candidate of is the point.** It is
+ * not a candidate file and not a candidate hit: it is the piece of a file the
+ * scope lets a hit come from.
  *
  * **Why it is a range and not a file.** A tag delimits a range (D11), so a scope
  * of `#wombats` admits the tagged spans of a day and not the whole day — and
@@ -84,11 +93,104 @@ export interface Candidate {
  * nothing in it.
  */
 export async function candidatesFor(
-  _index: CorpusIndex,
-  _scope: Scope,
-  _order: Ordering,
+  index: CorpusIndex,
+  scope: Scope,
+  order: Ordering,
 ): Promise<readonly Candidate[]> {
-  throw new Error('MS1')
+  const files = await index.files()
+  const out: Candidate[] = []
+  for (const file of files) {
+    if (!admits(scope, file)) continue
+    for (const range of rangesIn(scope, file)) {
+      out.push({ file: file.file, date: file.date, when: file.when, ...range })
+    }
+  }
+  const back = order.direction === 'past'
+  out.sort((a, b) => (back ? cmp(b, a) : cmp(a, b)))
+  if (order.origin === 'now') return out
+  // **The origin drops candidates lying wholly the wrong way**, and no more than
+  // that: the range the cursor is standing in still holds hits on both sides of
+  // it, and telling those apart is a question about lines rather than ranges. The
+  // scan finishes the job.
+  const from = place(order.origin, files)
+  if (from === null) return out
+  return out.filter(c => !beyond(c, from, back))
+}
+
+/**
+ * Is this candidate wholly the wrong side of the origin?
+ *
+ * **Different files compare by day, the same file by offset**, and the two ends
+ * of a range are not interchangeable here: walking back, a range starting before
+ * the origin may still hold hits before it, so its *start* is what decides;
+ * walking forward, a range ending after the origin may still hold hits after it,
+ * so its *end* does. Using one end for both was the first draft, and it dropped
+ * the very range the cursor was standing in.
+ */
+function beyond(c: Candidate, origin: Candidate, back: boolean): boolean {
+  const byFile = c.when - origin.when || (c.file < origin.file ? -1 : c.file > origin.file ? 1 : 0)
+  if (byFile !== 0) return back ? byFile > 0 : byFile < 0
+  return back ? start(c) > start(origin) : end(c) < start(origin)
+}
+
+/** Does the scope's document and date range admit this file at all? */
+function admits(scope: Scope, file: IndexedFile): boolean {
+  if (scope.document !== null && (documentRoot(file.file) ?? file.file) !== scope.document) return false
+  if (scope.dates === null) return true
+  // **An undated file is not in any date range.** A note has no day, and putting
+  // it in every range would make "what did I write in March" mean something else.
+  if (file.date === null) return false
+  return compareDateKeys(file.date, scope.dates.from) >= 0 &&
+    compareDateKeys(file.date, scope.dates.until) < 0
+}
+
+/**
+ * The ranges of one file the scope's tags admit.
+ *
+ * **Tags conjoin, so this intersects**: a range must lie inside a span of *every*
+ * tag asked for. No tags means the whole file, which is the same answer written
+ * as one unbounded range.
+ */
+function rangesIn(scope: Scope, file: IndexedFile): readonly { from: number | null; to: number | null }[] {
+  if (scope.tags.length === 0) return [{ from: null, to: null }]
+  let ranges: { from: number; to: number }[] | null = null
+  for (const subject of scope.tags) {
+    const spans = file.tags.filter(tag => tag.subject === subject)
+    if (spans.length === 0) return []
+    ranges = ranges === null
+      ? spans.map(span => ({ from: span.from, to: span.to }))
+      : ranges.flatMap(range => spans
+          .map(span => ({ from: Math.max(range.from, span.from), to: Math.min(range.to, span.to) }))
+          .filter(overlap => overlap.from < overlap.to))
+    if (ranges.length === 0) return []
+  }
+  return ranges ?? []
+}
+
+const start = (c: Candidate): number => c.from ?? 0
+const end = (c: Candidate): number => c.to ?? Number.MAX_SAFE_INTEGER
+
+/** Oldest first, and within one file the earliest range first. */
+const cmp = (a: Candidate, b: Candidate): number =>
+  a.when - b.when || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || start(a) - start(b)
+
+/**
+ * The origin as something a candidate can be compared to.
+ *
+ * **It has to carry `when`, and the first draft did not** — it compared bare
+ * offsets, so a candidate starting at 0 in a *newer* file counted as being before
+ * an origin halfway down an older one, and walking backwards returned the future.
+ * Position in this corpus is a day first and an offset second, which is the same
+ * ordering `cmp` uses and the reason it is reused here rather than restated.
+ *
+ * Null when the origin's file is not in the index at all: there is then nothing
+ * to be on either side of, and the ordering alone has already said everything.
+ */
+function place(origin: Located, files: readonly IndexedFile[]): Candidate | null {
+  const file = files.find(f => f.file === origin.file)
+  return file === undefined
+    ? null
+    : { file: file.file, date: file.date, when: file.when, from: origin.from, to: origin.to }
 }
 
 export class Scanner implements Search {
@@ -101,9 +203,189 @@ export class Scanner implements Search {
   }
 
   /** Begin a query. Reads nothing; see `Cursor`. */
-  open(_query: Query): Cursor {
-    void this.#notebook
-    void this.#index
-    throw new Error('MS1')
+  open(query: Query): Cursor {
+    return new ScanCursor(this.#notebook, this.#index, query)
   }
 }
+
+/**
+ * Step 3: the scan.
+ *
+ * **The candidates are found once, on the first pull, and then walked.** A
+ * cursor that re-narrowed on every `next` would re-answer a question whose
+ * answer cannot change while it is being read — and would make pulling one hit
+ * at a time cost what pulling all of them does.
+ */
+class ScanCursor implements Cursor {
+  readonly #notebook: Notebook
+  readonly #index: CorpusIndex
+  readonly #query: Query
+  readonly #match: RegExp | null
+  #candidates: readonly Candidate[] | null = null
+  #at = 0
+  #closed = false
+  /** Hits found in the candidate being read, not yet handed over. */
+  #held: Hit[] = []
+
+  constructor(notebook: Notebook, index: CorpusIndex, query: Query) {
+    this.#notebook = notebook
+    this.#index = index
+    this.#query = query
+    this.#match = matcher(query.find, query.fold)
+  }
+
+  async next(count: number): Promise<readonly Hit[]> {
+    if (this.#closed || isEmpty(this.#query)) return []
+    if (this.#candidates === null) {
+      this.#candidates = await candidatesFor(this.#index, this.#query.scope, this.#query.order)
+    }
+    const out: Hit[] = []
+    while (out.length < count) {
+      if (this.#held.length > 0) {
+        out.push(this.#held.shift() as Hit)
+        continue
+      }
+      if (this.#closed || this.#at >= this.#candidates.length) break
+      const candidate = this.#candidates[this.#at++] as Candidate
+      this.#held = await this.#read(candidate)
+    }
+    return out
+  }
+
+  close(): void {
+    this.#closed = true
+    this.#held = []
+  }
+
+  progress(): Progress {
+    const total = this.#candidates?.length ?? 0
+    return {
+      read: this.#at,
+      total,
+      done: this.#closed || (this.#candidates !== null && this.#at >= total && this.#held.length === 0),
+    }
+  }
+
+  /** Every hit in one candidate range, already in the query's order. */
+  async #read(candidate: Candidate): Promise<Hit[]> {
+    const text = await this.#notebook.read(candidate.file)
+    // **A file that has gone is not an error.** The index is a cache of the
+    // corpus as it stands (D52), and a scan started a moment ago may reach a
+    // file somebody has since deleted or renamed.
+    if (text === null) return []
+    const body = parseFile(text).body
+    const from = candidate.from ?? 0
+    const to = Math.min(candidate.to ?? body.length, body.length)
+    const out: Hit[] = []
+    for (const line of linesIn(body, from, to)) {
+      if (this.#match === null) {
+        // **A scope with no phrase**: the range itself is the answer, so the
+        // first line of it is the hit and no part of that line is a match.
+        out.push(hit(candidate, body, line, null))
+        break
+      }
+      for (const at of matchesIn(body.slice(line.from, line.to), this.#match)) {
+        // **The line is widened to its edges and the MATCH is not**, which is
+        // the difference between *inside the tagged text* and *in a line the
+        // tag touches*. A tag covering half a line makes the other half not a
+        // result — but the half that is a result still gets shown whole, since
+        // a hit reads as a line or it reads as nothing.
+        const where = line.from + at.from
+        if (where < from || where >= to) continue
+        out.push(hit(candidate, body, line, at))
+      }
+    }
+    const back = this.#query.order.direction === 'past'
+    if (back) out.reverse()
+    const origin = this.#query.order.origin
+    if (origin === 'now' || origin.file !== candidate.file) return out
+    // **Only in the origin's own file**, and this is the half `candidatesFor`
+    // deliberately left undone: a range holds hits on both sides of a cursor
+    // standing inside it, and which side a hit is on is a fact about the hit.
+    return out.filter(h => (back ? h.at.from < origin.from : h.at.from > origin.from))
+  }
+}
+
+/** The lines of `body` that lie in `[from, to)`, in file order. */
+function* linesIn(body: string, from: number, to: number): Generator<{ from: number; to: number }> {
+  let at = body.lastIndexOf('\n', from) + 1
+  while (at < to) {
+    const nl = body.indexOf('\n', at)
+    const end = nl === -1 ? body.length : nl
+    if (end > from) yield { from: at, to: end }
+    if (nl === -1) return
+    at = nl + 1
+  }
+}
+
+/** Everything the app wrote into a line, which nobody searched for. */
+const MARKERS = /<!--tephra:[^>]*-->/g
+
+/**
+ * Where the phrase sits in one line.
+ *
+ * **A match inside a marker is not a match.** `<!--tephra:tag-start house
+ * deal-->` is machinery, and finding *house deal* inside it would report the
+ * filing system as though somebody had written it (`plain.ts` makes the same
+ * point for display).
+ */
+function matchesIn(line: string, match: RegExp): readonly { from: number; to: number }[] {
+  const machinery: { from: number; to: number }[] = []
+  MARKERS.lastIndex = 0
+  for (let m = MARKERS.exec(line); m !== null; m = MARKERS.exec(line)) {
+    machinery.push({ from: m.index, to: m.index + m[0].length })
+  }
+  const out: { from: number; to: number }[] = []
+  match.lastIndex = 0
+  for (let m = match.exec(line); m !== null; m = match.exec(line)) {
+    const at = { from: m.index, to: m.index + m[0].length }
+    if (!machinery.some(span => at.from < span.to && span.from < at.to)) out.push(at)
+    // A zero-width match cannot happen with a non-empty phrase, but a regex that
+    // never advances hangs the scan, and the guard costs one comparison.
+    if (match.lastIndex <= m.index) match.lastIndex = m.index + 1
+  }
+  return out
+}
+
+function hit(
+  candidate: Candidate,
+  body: string,
+  line: { from: number; to: number },
+  at: { from: number; to: number } | null,
+): Hit {
+  const raw = body.slice(line.from, line.to)
+  const plain = plainLine(raw)
+  const located: Located = {
+    file: candidate.file,
+    date: candidate.date,
+    from: line.from + (at?.from ?? 0),
+    to: line.from + (at?.to ?? 0),
+  }
+  if (at === null) return { at: { ...located, to: line.to }, line: plain, within: null, when: candidate.when }
+  // **The offsets are found twice, in two texts, on purpose.** `at` points into
+  // the file, where the markers still are; `within` points into the line as a
+  // reader sees it, which is shorter by however much machinery was in it. One
+  // number cannot be both.
+  const found = plain.indexOf(raw.slice(at.from, at.to))
+  return {
+    at: located,
+    line: plain,
+    within: found === -1 ? null : { from: found, to: found + (at.to - at.from) },
+    when: candidate.when,
+  }
+}
+
+/**
+ * The phrase as something to run over a line.
+ *
+ * **Terms separated by whitespace, not by a literal space**, because a line may
+ * wrap its words differently from the query — and this is the one place the
+ * meaning of *adjacent* is decided.
+ */
+function matcher(find: QueryNode, fold: boolean): RegExp | null {
+  if (find.of.length === 0) return null
+  const source = find.of.map(term => escape(term.text)).join('\\s+')
+  return new RegExp(source, fold ? 'giu' : 'gu')
+}
+
+const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
