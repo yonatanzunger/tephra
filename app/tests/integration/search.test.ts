@@ -55,8 +55,9 @@ async function corpus(
   const index = new CorpusIndex(notebook, async () => stream)
   // **The index is warmed before anything is counted.** Its first sweep reads
   // every file once, ever, which is the cache doing its job and not the search
-  // doing its; counting those reads would make "narrowing prevents reads" look
-  // false when it is exactly true.
+  // doing its. Later sweeps read only the cache — which was not true until MS1
+  // found `#loadedDate` comparing an `undefined` to `null`, and is the reason
+  // this test can count reads at all.
   await index.files()
 
   const opened: RelPath[] = []
@@ -78,6 +79,7 @@ async function corpus(
     query,
     params,
     async search(text: string, over: Partial<QueryParams> = {}, take = 100): Promise<readonly Hit[]> {
+      opened.length = 0
       const cursor = new Scanner(notebook, index).open(query(text, over))
       const out = await cursor.next(take)
       cursor.close()
@@ -159,22 +161,22 @@ test('a phrase with regex characters in it is still a phrase', async t => {
 
 // ── narrowing ──────────────────────────────────────────────
 
-test('THE POINT: a tag scope never makes the other files candidates at all', async t => {
-  // **Asserted on the candidates rather than on file reads**, which is why
-  // `candidatesFor` is exported: it is the claim itself, with no filesystem in
-  // the picture. Counting reads would be the more direct test and cannot be
-  // written today — `CorpusIndex`'s sweep re-reads every day file on every call,
-  // so the index's own reads drown the scan's. See the note in the roadmap.
-  const { index, query } = await corpus(t, CORPUS)
-  const scope = query('survey #\'house deal\'').scope
-  const candidates = await candidatesFor(index, scope, NEWEST)
-  assert.deepEqual(candidates.map(c => c.file), [dayFile(d('2026-04-01')), dayFile(d('2026-03-02'))])
-})
-
-test('and the hits it yields are the ones inside those ranges', async t => {
-  const { search } = await corpus(t, CORPUS)
+test('THE POINT: a tag scope stops the other files from being read', async t => {
+  const { search, opened } = await corpus(t, CORPUS)
   const hits = await search('survey #\'house deal\'')
   assert.deepEqual(hits.map(h => h.at.date), ['2026-04-01', '2026-03-02'])
+  assert.deepEqual(opened.filter(rel => rel.startsWith('notebook.stream')).sort(),
+    [dayFile(d('2026-03-02')), dayFile(d('2026-04-01'))],
+    'the other two days were never opened, not opened and discarded')
+})
+
+test('and the same claim without a filesystem: they are not candidates at all', async t => {
+  // Why `candidatesFor` is exported. The test above is the honest end-to-end
+  // one; this is the one that still says something when a scan is slow or a
+  // cache is cold, because it never touches either.
+  const { index, query } = await corpus(t, CORPUS)
+  const candidates = await candidatesFor(index, query('survey #\'house deal\'').scope, NEWEST)
+  assert.deepEqual(candidates.map(c => c.file), [dayFile(d('2026-04-01')), dayFile(d('2026-03-02'))])
 })
 
 test('and a tag scope means INSIDE the tagged text, not in a file that mentions it', async t => {
@@ -222,10 +224,12 @@ test('a scope with no phrase is a whole query — that is the subject view', asy
   assert.deepEqual(hits.map(h => h.within), [null, null], 'nothing in the line is the match')
 })
 
-test('an empty query matches nothing, and never even narrows', async t => {
-  const { notebook, index, query } = await corpus(t, CORPUS)
+test('an empty query matches nothing, and reads nothing to find that out', async t => {
+  const { notebook, index, query, opened } = await corpus(t, CORPUS)
   const cursor = new Scanner(notebook, index).open(query(''))
+  opened.length = 0
   assert.deepEqual(await cursor.next(10), [])
+  assert.deepEqual(opened, [], 'not even the index')
   assert.deepEqual(cursor.progress(), { read: 0, total: 0, done: false })
 })
 
@@ -274,19 +278,19 @@ test('an origin inside a file splits that file, which candidates alone cannot', 
 
 // ── the cursor ─────────────────────────────────────────────
 
-test('THE PULL: one hit at a time advances one candidate at a time', async t => {
-  // `progress().read` is the cursor's own account of how far it has gone, and is
-  // the seam that says this cleanly — see the note above about read counting.
-  const { notebook, index, query } = await corpus(t, CORPUS)
+test('THE PULL: one hit at a time reads only as far as it must', async t => {
+  const { notebook, index, query, opened } = await corpus(t, CORPUS)
   const cursor = new Scanner(notebook, index).open(query('survey'))
+  opened.length = 0
 
   const first = await cursor.next(1)
   assert.equal(first[0]?.at.date, '2026-04-01', 'the newest')
-  assert.equal(cursor.progress().read, 1, 'and one candidate consumed, not four')
+  assert.deepEqual(opened.filter(rel => rel.startsWith('notebook.stream')), [dayFile(d('2026-04-01'))],
+    'one day opened, not four')
 
   await cursor.next(1)
-  // Three, not two: the day between them holds no match, and the cursor had to
-  // look to find that out. **As far as it must, which is not the same as one.**
+  // Two more, not one: the day between them holds no match, and the cursor had
+  // to look to find that out. **As far as it must, which is not the same as one.**
   assert.equal(cursor.progress().read, 3)
   assert.equal(cursor.progress().done, false, 'with the oldest day still unread')
   cursor.close()
@@ -310,14 +314,14 @@ test('and two pulls of one give exactly what one pull of two gives', async t => 
   assert.equal(readAfterSplit, readAfterOnce, 'and cost the same')
 })
 
-test('a closed cursor stops', async t => {
-  const { notebook, index, query } = await corpus(t, CORPUS)
+test('a closed cursor stops reading', async t => {
+  const { notebook, index, query, opened } = await corpus(t, CORPUS)
   const cursor = new Scanner(notebook, index).open(query('survey'))
   await cursor.next(1)
-  const read = cursor.progress().read
+  opened.length = 0
   cursor.close()
   assert.deepEqual(await cursor.next(10), [])
-  assert.equal(cursor.progress().read, read, 'and went no further on the way out')
+  assert.deepEqual(opened, [], 'and opened nothing on the way out')
   cursor.close()
   assert.equal(cursor.progress().done, true, 'closing twice costs nothing')
 })

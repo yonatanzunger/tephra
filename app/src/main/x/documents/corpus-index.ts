@@ -608,11 +608,20 @@ export class CorpusIndex {
     }
   }
 
-  /** The day a file belongs to, if the editor is holding it. */
+  /**
+   * The day a file belongs to, if the editor is holding it.
+   *
+   * **`heldSegment` answers `undefined`, and this compared it to `null`** — so
+   * every day file reported as held, every sweep took the branch below meant for
+   * days the editor is actually working in, and the cache was never written for
+   * a single one of them. The index re-read the whole stream on every question
+   * the sidebar asked, which is the one thing its own header says it exists to
+   * avoid. Found by MS1, whose central claim is that narrowing prevents reads.
+   */
   async #loadedDate(file: RelPath): Promise<DateKey | null> {
     const date = dateOf(file)
     if (date === null) return null
-    return (await this.#stream()).heldSegment(date) === null ? null : date
+    return (await this.#stream()).heldSegment(date) === undefined ? null : date
   }
 
   async #stampOf(file: RelPath): Promise<{ size: number; mtime: number } | null> {

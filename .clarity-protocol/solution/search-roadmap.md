@@ -275,37 +275,35 @@ tests in `tests/integration/search.test.ts`. What came out of building it:
 - **A match inside a marker is not a match**, for the same reason `plain.ts`
   exists: `tag-start` would otherwise report the filing system as prose.
 
-**And it found a defect in `CorpusIndex` that is not search's to fix** — see
-below.
+**And it found a defect in `CorpusIndex`** — see below.
 
-## Found on the way: the index re-reads the corpus on every sweep
+## Found on the way: the index never used its own cache for day files
 
-**`CorpusIndex.#all()` reads every day file, every time it is called**, and the
-stamp cache never spares one. Measured: three consecutive sweeps over a two-day
-fixture each read both days plus a probe for a part that does not exist.
+**`CorpusIndex` re-read every day file on every sweep, and the stamp cache spared
+none of them.** Measured before the fix: three consecutive sweeps over a two-day
+fixture each read both days plus a probe for a part that does not exist. After:
+the first sweep reads them, the second and third read one small JSON.
 
-**Why.** The sweep's first branch is *a loaded day answers for itself*, which is
-right — a day the editor is holding may carry edits the file has not seen. But
-`SegmentedDocument.scan` loads the segment it is asked about, so the first sweep
-makes every day it scans "held", and every later sweep takes that branch instead
-of the cache. The rule is about days the *editor* holds and it fires for days the
-*index* touched.
+**The cause was one comparison.** `SegmentedDocument.heldSegment` answers
+`undefined`, and `#loadedDate` tested it against `null` — so every day file
+reported as *held by the editor*, every sweep took the branch meant for a day
+with unsaved edits in it, and **a cache entry was never written for a single day
+file.** The store held `notes.json` and nothing for the stream, which is what
+made it visible: the half of the corpus that matters was the half being cached.
 
-**Why it matters more than it looks.** This is precisely the thing the index's
-own header says it exists to avoid — *"answering 'every subject in twenty years'
-by opening twenty years of documents"*. Every sidebar question re-reads the
-stream. At today's corpus it is invisible; at R6's 0.4–0.9 GB it is not.
+**Why it mattered more than it looked.** This is exactly what the index's own
+header says it exists to avoid — *"answering 'every subject in twenty years' by
+opening twenty years of documents"*. Every sidebar question re-read the whole
+stream. Invisible at today's corpus; not at R6's 0.4–0.9 GB.
 
-**What it cost MS1.** The claim *narrowing prevents reads* cannot be tested end
-to end by counting file reads, because the index's own reads drown the scan's. It
-is asserted on `candidatesFor`'s output instead — which is the claim itself, and
-the reason that function is exported — and the cursor's incrementality is
-asserted on `progress().read`, its own account of how far it has gone. Both are
-honest seams; neither is the one that would also have caught this.
+**Found because MS1's central claim is that narrowing prevents reads**, and the
+first attempt to test it end to end could not be written: the index's own reads
+drowned the scan's. The claim was the diagnostic. The test now counts reads, as
+it should, and `candidatesFor` keeps a second test of the same claim that touches
+no filesystem at all.
 
-**Not fixed here**, because segment eviction is delicate and this is the index's
-bug rather than search's. Recorded so that it is a decision rather than an
-oversight.
+**Fixed**, and a day the editor really is holding still answers for itself — which
+is the behaviour the branch was written for and now the only case that reaches it.
 
 ## MS2 — the grammar *(done)*
 
