@@ -131,6 +131,16 @@ export interface MenuActions {
   import: (pick: boolean) => void
   /** A new document, in a window of its own. */
   newFile: () => void
+  /**
+   * A new OVERALL task list — a single `.todo.md` (MT7).
+   *
+   * Beside New File because it is the same act with a different kind: a list
+   * that does not turn over daily is a document like any other, and this is the
+   * only thing about reaching one that had to be built. A DAILY list is not
+   * made here and could not be — a directory document has no single file to
+   * create, and its first carry is what brings it into being (D59).
+   */
+  newTaskList: () => void
 }
 
 /**
@@ -146,6 +156,7 @@ let actions: MenuActions = {
   open: () => undefined,
   import: () => undefined,
   newFile: () => undefined,
+  newTaskList: () => undefined,
 }
 
 export function installMenu(next?: MenuActions): void {
@@ -194,6 +205,10 @@ export function installMenu(next?: MenuActions): void {
           label: 'New File',
           accelerator: 'CmdOrCtrl+N',
           click: () => actions.newFile(),
+        },
+        {
+          label: 'New Task List\u2026',
+          click: () => actions.newTaskList(),
         },
         {
           label: 'Open…',

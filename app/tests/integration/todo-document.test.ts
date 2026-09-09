@@ -14,6 +14,7 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { Corpus } from '../../src/main/x/documents/corpus.ts'
 import { TodoDocument } from '../../src/main/x/documents/kinds/todo.ts'
 import { parseItem } from '../../src/shared/kinds/todo.ts'
+import { ONLY_SEGMENT } from '../../src/shared/document-api.ts'
 import type { DateKey, DocumentId } from '../../src/shared/document-api.ts'
 
 const LIST = 'main.todo' as DocumentId
@@ -556,4 +557,108 @@ test('and deleting the item takes its notes with it', async t => {
   const file = await fileOn(MON)
   assert.ok(!file.includes('Left a message.'), 'no orphan')
   assert.match(file, /renew the permit/, 'and the next item is intact')
+})
+
+// ── two shapes of one kind (MT7, D55 as amended) ───────
+//
+// **A `.todo` DIRECTORY is a daily list and a single `.todo.md` is an overall
+// one** — the blog posts you mean to write, which does not turn over daily. So
+// the carry has nothing to carry, and *today's working set* is a meaningful
+// idea for the first and a meaningless one for the second.
+//
+// Everything else is shared: the item grammar, every verb, the surface. What
+// differs is `keys()`, which is what `SegmentedDocument` was built to allow.
+
+const OVERALL = 'notes/blog.todo.md' as DocumentId
+
+async function overall(t: TestContext, lines: readonly string[] = []) {
+  const root = await mkdtemp(join(tmpdir(), 'tephra-todo-'))
+  await mkdir(join(root, 'notes'), { recursive: true })
+  await writeFile(
+    join(root, 'notes', 'blog.todo.md'),
+    `---\ntephra: 1\nkind: todo\ntitle: Blog posts\n---\n${lines.join('\n')}${lines.length > 0 ? '\n' : ''}`,
+  )
+  const notebook = await Notebook.open({ root, lock: false, watch: false })
+  t.after(() => notebook.close())
+  const corpus = new Corpus(notebook)
+  const doc = (await corpus.use(OVERALL, async d => d)) as unknown as TodoDocument
+  return {
+    root,
+    doc,
+    async file(): Promise<string> {
+      await corpus.flushAll()
+      return readFile(join(root, 'notes', 'blog.todo.md'), 'utf8')
+    },
+  }
+}
+
+test('a .todo.md opens as a todo document, with ONE segment', async t => {
+  const { doc } = await overall(t, ['- [ ] the one about tephra <!--tephra:item aaaa1111 100 100-->'])
+  assert.equal(doc.meta.kind, 'todo')
+  assert.deepEqual(await doc.keys(), [ONLY_SEGMENT])
+})
+
+test('THE POINT: it does not turn over, so nothing is carried', async t => {
+  // A daily list materialises today from the last day that has one (D55). An
+  // overall list has no days to carry between — its items are simply there
+  // until they are not, which is the whole difference between the two shapes.
+  const { doc, file } = await overall(t, ['- [ ] the one about tephra <!--tephra:item aaaa1111 100 100-->'])
+  assert.equal(await doc.carry(MON), -1, 'nothing to do, and it says so')
+  assert.deepEqual(await doc.keys(), [ONLY_SEGMENT], 'and no day was made')
+  assert.ok(!(await file()).includes('date:'), 'nor a date claimed in its frontmatter')
+})
+
+test('and no walk is offered, because there is nothing that arrived', async t => {
+  // The walk reviews what the carry brought (T11), so a list with no carry has
+  // no walk — and the surface asks this rather than asking the shape.
+  const { doc } = await overall(t, ['- [ ] the one about tephra <!--tephra:item aaaa1111 100 100-->'])
+  const walk = await doc.walkOf(MON)
+  assert.deepEqual(walk, { walked: false, carried: [], carriedFrom: null })
+})
+
+test('EVERY VERB works on it, because the grammar is the same one', async t => {
+  // **Called with a DAY, which is how the service calls it.** `DocumentService`
+  // asks every list to work in the writing day and does not know the shape —
+  // which is right, and is exactly what the first cut of this test failed to
+  // exercise: passing `ONLY_SEGMENT` here tested a call the app never makes,
+  // and the app's call wrote to the right file under the wrong segment name.
+  const { doc, file } = await overall(t, [])
+  const id = await doc.add('the one about tephra #writing', MON)
+  await doc.setStatus(id, 'doing')
+  await doc.setNotes(id, ['Drafted the opening.'])
+
+  // Read back by the one segment it actually has, which is the other half of
+  // the same mistake: written under a day, read under `content`, and empty.
+  const items = await doc.itemsOn(ONLY_SEGMENT as unknown as DateKey)
+  assert.equal(items.length, 1)
+  assert.equal(items[0]?.status, 'doing')
+  assert.deepEqual(items[0]?.tags, ['writing'])
+  assert.deepEqual(items[0]?.notes, ['Drafted the opening.'])
+  assert.match(await file(), /^ {2}Drafted the opening\.$/m)
+})
+
+test('a hand-written line gets its identity here too (flow 9)', async t => {
+  const { doc } = await overall(t, ['- [ ] typed in by hand'])
+  await doc.carry(MON)
+  assert.ok((await doc.itemsOn(ONLY_SEGMENT as unknown as DateKey))[0]?.id !== null)
+})
+
+test('and its ids are minted against the whole corpus, as everything else is', async t => {
+  const { doc } = await overall(t, [])
+  const taken = new Set<string>()
+  for (let i = 0; i < 200; i++) taken.add(`z${i.toString(36).padStart(7, '0')}`)
+  const id = await doc.add('one', MON, async () => taken)
+  assert.ok(!taken.has(id))
+})
+
+test('THE TRAP: a day and the one segment name the SAME segment here', async t => {
+  // Written by a caller that thinks in days, read by one that thinks in
+  // segments — and an overall list's `load` ignores the key, so both reach the
+  // right file. Without normalising, the two were different segments over one
+  // file: the item was on disk and not on screen.
+  const { doc } = await overall(t, [])
+  await doc.add('the one about tephra', TUE)
+  assert.equal((await doc.itemsOn(ONLY_SEGMENT as unknown as DateKey)).length, 1)
+  assert.equal((await doc.itemsOn(MON)).length, 1, 'and any day answers the same')
+  assert.equal((await doc.itemsOn(THU)).length, 1)
 })

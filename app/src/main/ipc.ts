@@ -81,8 +81,8 @@ export function registerDocumentIpc(service: DocumentService): void {
    * not opening.
    */
   ipcMain.handle(CHANNEL.navDocuments, () => service.documents())
-  ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string) =>
-    service.newDocument(label, section),
+  ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string, kind?: 'markdown' | 'todo') =>
+    service.newDocument(label, section, kind),
   )
 
   /**

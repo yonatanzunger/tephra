@@ -298,9 +298,9 @@ async function showTasks(): Promise<void> {
   windows?.reveal({ kind: 'document', id: await service.todoList() })
 }
 
-async function newDocument(): Promise<void> {
+async function newDocument(kind: 'markdown' | 'todo' = 'markdown'): Promise<void> {
   if (service === null) return
-  windows?.open({ kind: 'document', id: await service.newDocument() })
+  windows?.open({ kind: 'document', id: await service.newDocument(undefined, undefined, kind) })
 }
 
 /**
@@ -529,6 +529,7 @@ app.whenReady().then(async () => {
     open: inNewWindow => void openDocument(inNewWindow),
     import: pick => void importDocument(pick),
     newFile: () => void newDocument(),
+    newTaskList: () => void newDocument('todo'),
     notebook: () => windows?.reveal({ kind: 'today' }),
     tasks: () => void showTasks(),
     links: () => windows?.reveal({ kind: 'links' }),

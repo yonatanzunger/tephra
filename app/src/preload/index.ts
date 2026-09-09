@@ -18,7 +18,7 @@ import type {
   SpansRequest, WindowChangedMessage, WindowId, WindowInfo, WindowReport, WindowSnapshot,
 } from '../shared/ipc.ts'
 import type { NavTarget } from '../shared/pane-api.ts'
-import type { DateKey, Divergence, DocumentId, DocumentPosition, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
+import type { DateKey, Divergence, DocumentId, DocumentPosition, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import type { UiState } from '../shared/ui-state.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
@@ -167,9 +167,15 @@ const tephra = {
     /** The notebook's list — the `.todo` directory at the root, made if new. */
     which: (): Promise<DocumentId> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'list' }),
     /** Today, materialised from the last day that had a file if need be (D55). */
-    today: (list: DocumentId): Promise<DateKey> =>
+    /**
+     * Which segment of this list to show — a day, or the one segment.
+     *
+     * Named `SegmentKey` rather than `DateKey` (MT7) — the two are one type,
+     * so this is for the reader: an overall list has no days.
+     */
+    today: (list: DocumentId): Promise<SegmentKey> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'today', list }),
-    items: (list: DocumentId, date: DateKey): Promise<readonly TodoItem[]> =>
+    items: (list: DocumentId, date: SegmentKey): Promise<readonly TodoItem[]> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'items', list, date }),
     add: (list: DocumentId, text: string): Promise<string> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'add', list, text }),
@@ -314,8 +320,9 @@ const tephra = {
      * where that section's files live, and named in it when it has a line to
      * write. Both absent is the File menu's version: `untitled`, in `notes/`.
      */
-    newDocument: (label?: string, section?: string): Promise<DocumentId> =>
-      ipcRenderer.invoke(CHANNEL.newDocument, label, section),
+    /** A note, or an overall task list — the same gesture with a different kind (MT7). */
+    newDocument: (label?: string, section?: string, kind?: 'markdown' | 'todo'): Promise<DocumentId> =>
+      ipcRenderer.invoke(CHANNEL.newDocument, label, section, kind),
     /** Returns the NEW id — a document's identity is its path, so the old one is gone. */
     renameDocument: (id: DocumentId, label: string): Promise<DocumentId> =>
       ipcRenderer.invoke(CHANNEL.renameDocument, id, label),

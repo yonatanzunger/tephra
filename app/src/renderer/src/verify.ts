@@ -1033,6 +1033,56 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'twoshapes') {
+      // **Two shapes of one kind** (MT7). A `.todo` directory is a daily list —
+      // carried, walked, with a working set that turns over. A single
+      // `.todo.md` is an overall one, which does not turn over, so the controls
+      // that only mean something for a list that does have nothing to attach to.
+      say('made', await window.tephra.clickMenu('New Task List\u2026'))
+      await settle(1600)
+      const lists = (await window.tephra.nav.documents()).filter(d =>
+        (d.id as unknown as string).endsWith('.todo.md'),
+      )
+      say('itsName', (lists[0]?.id as unknown as string) ?? '')
+      await pane.goTo({ kind: 'document', id: lists[0]?.id as never })
+      await settle(1200)
+      // The todo surface, not the markdown editor: `surfaceFor` routes by kind
+      // and a `.todo.md` is a todo.
+      say('drawnAsAList', document.querySelector('.todo') !== null)
+      say('notAnEditor', document.querySelector('.cm-content') === null)
+      // No walk and no scrub: both are about a list that turns over.
+      say('noWalk', document.querySelector('.todo-walk-start') === null)
+      say('noScrub', document.querySelector('.todo-scrub') === null)
+      // But every verb, because the grammar is the same one.
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
+      await settle(400)
+      const f = document.querySelector('.todo-field') as HTMLInputElement | null
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        f,
+        'the one about tephra #writing',
+      )
+      f?.dispatchEvent(new Event('input', { bubbles: true }))
+      f?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      await settle(1400)
+      say('rows', [...document.querySelectorAll('.todo-row .todo-text')].map(t => (t.textContent ?? '').trim()))
+      say('tags', [...document.querySelectorAll('.todo-tag')].map(t => (t.textContent ?? '').trim()))
+      // **On screen AND on disk**, which is the pair that came apart: the item
+      // reached the right file under a segment named for a day, and the read
+      // under the one segment found nothing.
+      say('keyShown', await window.tephra.todo.today(lists[0]?.id as never))
+      say(
+        'itemsFromMain',
+        (await window.tephra.todo.items(lists[0]?.id as never, await window.tephra.todo.today(lists[0]?.id as never)))
+          .length,
+      )
+
+      // And the distinguished list is still the distinguished list.
+      say('tasksIs', await window.tephra.todo.which())
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'notes') {
       // **Prose about the item, not more task.** Indented continuation lines,
       // which is markdown's own way of attaching a paragraph to a list item —

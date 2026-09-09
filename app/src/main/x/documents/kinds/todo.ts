@@ -31,6 +31,7 @@ import {
   isLive, itemBlock, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId, type WalkState,
   type ScannedItem, type TodoItem, type TodoStatus,
 } from '../../../../shared/kinds/todo.ts'
+import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import type {
   DateKey, DocumentId, DocumentMeta, DocumentText, SegmentKey, Span,
 } from '../../../../shared/document-api.ts'
@@ -72,23 +73,62 @@ export class TodoDocument extends SegmentedDocument {
 
   /** The `.todo` directory this list lives in — its id, and its files' root. */
   readonly #root: RelPath
+  /**
+   * Whether this list is paged by day (D55 as amended, MT7).
+   *
+   * **Two shapes of one kind, and the filename says which.** A `.todo`
+   * directory is a DAILY list: carried, walked, with a working set that turns
+   * over. A single `.todo.md` is an OVERALL one — the blog posts you mean to
+   * write — which does not turn over, so the carry has nothing to carry and
+   * *today's working set* is a meaningful idea for the first and a meaningless
+   * one for the second.
+   *
+   * Everything else is shared: the item grammar, every verb, the surface. What
+   * differs is `keys()`, which is what `SegmentedDocument` was built to allow.
+   */
+  readonly #daily: boolean
 
   constructor(notebook: Notebook, id: DocumentId) {
     super(notebook)
     this.id = id
     this.#root = id as string as RelPath
+    this.#daily = !(id as string).endsWith('.md')
   }
 
-  protected async load(date: SegmentKey): Promise<Segment> {
-    const rel = dayFile(date, 1, this.#root)
+  /**
+   * The segment a caller means, whichever shape this list is (MT7).
+   *
+   * **An overall list has ONE segment and callers pass a date anyway**, because
+   * `DocumentService` asks every list to work in the writing day and does not
+   * know the difference — which is right, and is why normalising belongs here.
+   *
+   * Getting this wrong is silent and expensive: `load` ignores the key for an
+   * overall list, so a verb given a date wrote to the correct FILE under a
+   * segment named for a day, and the next read under `content` loaded a second
+   * segment from the same file and found it empty. The item was on disk and not
+   * on screen.
+   */
+  #key(key: SegmentKey): SegmentKey {
+    return this.#daily ? key : ONLY_SEGMENT
+  }
+
+  protected async load(key: SegmentKey): Promise<Segment> {
+    const rel = this.#daily ? dayFile(key, 1, this.#root) : (this.id as string as RelPath)
     const text = await this.notebook.read(rel)
-    return text === null
-      ? Segment.empty(date, rel, renderFrontmatter(frontmatterFor(date, 'todo')))
-      : Segment.load(date, rel, text)
+    if (text !== null) return Segment.load(key, rel, text)
+    // An overall list has no date, and its frontmatter says so by omission.
+    return Segment.empty(
+      key,
+      rel,
+      renderFrontmatter(frontmatterFor(this.#daily ? (key as unknown as DateKey) : null, 'todo')),
+    )
   }
 
   /** Every day this list has a file for, ascending. A scan; never on the hot path. */
   async keys(): Promise<readonly SegmentKey[]> {
+    // **One segment, which is what every single-file kind answers** (D27). No
+    // scan, because there is nothing to scan: the list is the file.
+    if (!this.#daily) return [ONLY_SEGMENT]
     const found: DateKey[] = []
     for (const rel of await this.notebook.list(this.#root)) {
       const ref = parseDayFile(rel)
@@ -106,7 +146,7 @@ export class TodoDocument extends SegmentedDocument {
 
   /** What one day held. The working view is this, for today. */
   async itemsOn(date: DateKey): Promise<readonly TodoItem[]> {
-    return (await this.#scan(date)).map(found => found.item)
+    return (await this.#scan(this.#key(date))).map(found => found.item)
   }
 
   /**
@@ -143,6 +183,14 @@ export class TodoDocument extends SegmentedDocument {
    * Returns the number of items carried, or -1 when the day already existed.
    */
   async carry(date: DateKey, elsewhere?: TakenIds): Promise<number> {
+    // **An overall list does not turn over, so there is nothing to carry.** Its
+    // items are simply there until they are not, which is the whole difference
+    // between the two shapes — and `adopt` still runs, because a hand-written
+    // line wants its identity whichever shape it was written into (flow 9).
+    if (!this.#daily) {
+      await this.adopt(ONLY_SEGMENT as unknown as DateKey, elsewhere)
+      return -1
+    }
     const already = await this.#exists(date)
     if (already) {
       await this.adopt(date, elsewhere)
@@ -231,6 +279,11 @@ export class TodoDocument extends SegmentedDocument {
    * sentence about pixels and these are sentences about the list.
    */
   async walkOf(date: DateKey): Promise<WalkState> {
+    // **Nothing arrived from an earlier day, because there are no earlier
+    // days.** The walk reviews what the carry brought (T11), so a list with no
+    // carry has no walk — and the surface asks this rather than asking the
+    // shape, so it needs to know nothing about the difference.
+    if (!this.#daily) return { walked: false, carried: [], carriedFrom: null }
     const segment = await this.segment(date)
     const extra = (key: string): string | undefined =>
       segment.extra.find(([k]) => k.toLowerCase() === key.toLowerCase())?.[1]?.trim()
@@ -263,7 +316,8 @@ export class TodoDocument extends SegmentedDocument {
    * brings the lines back and leaves the day marked reviewed, which is true:
    * you did review it. The pass can always be entered again.
    */
-  async finishWalk(date: DateKey, drop: readonly string[]): Promise<number> {
+  async finishWalk(key: SegmentKey, drop: readonly string[]): Promise<number> {
+    const date = this.#key(key)
     const wanted = new Set(drop)
     const found = (await this.#scan(date)).filter(s => s.item.id !== null && wanted.has(s.item.id))
     if (found.length > 0) {
@@ -292,7 +346,8 @@ export class TodoDocument extends SegmentedDocument {
    * moment: `DUE FRIDAY` sitting in a file would mean something different every
    * week (T16).
    */
-  async adopt(date: DateKey, elsewhere?: TakenIds): Promise<number> {
+  async adopt(key: SegmentKey, elsewhere?: TakenIds): Promise<number> {
+    const date = this.#key(key)
     const found = await this.#scan(date)
     const taken = this.#taken(found, elsewhere)
     const now = nowSeconds()
@@ -335,8 +390,9 @@ export class TodoDocument extends SegmentedDocument {
    * moment of noticing: status is *not started*, ctime is now, and the tags and
    * the due date are whatever the string already said (T13, T16).
    */
-  async add(text: string, date: DateKey, elsewhere?: TakenIds): Promise<string> {
-    await this.carry(date, elsewhere)
+  async add(text: string, key: SegmentKey, elsewhere?: TakenIds): Promise<string> {
+    const date = this.#key(key)
+    await this.carry(key, elsewhere)
     const now = nowSeconds()
     const found = await this.#scan(date)
     const id = unusedItemId(await this.#taken(found, elsewhere)())

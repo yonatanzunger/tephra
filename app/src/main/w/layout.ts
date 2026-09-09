@@ -254,10 +254,16 @@ export function kindOf(rel: RelPath): DocumentKind | null {
   const root = documentRoot(rel)
   if (root !== null) return directoryKind(root.slice(root.lastIndexOf('/') + 1))
   if (rel.endsWith('.fileset.md')) return 'fileset'
-  // **No `.todo.md`.** A todo list is a `.todo` DIRECTORY of day files (D59),
-  // and there is no lightweight single-file form of one: every list wants the
-  // carry and the history as much as the main one does. A lone `.todo.md` is
-  // therefore an ordinary markdown note whose name happens to say `todo`.
+  // **Two shapes of one kind** (D55 as amended, MT7). A `.todo` DIRECTORY is a
+  // daily list — carried, walked, with a working set that turns over. A single
+  // `.todo.md` is an OVERALL list: the blog posts you mean to write, which does
+  // not turn over daily, so the carry has nothing to carry and *today's working
+  // set* is a meaningful idea for one and meaningless for the other.
+  //
+  // `.todo` names the kind and `.md` says this particular thing is a markdown
+  // file — which is already how `tasks.todo/2026/09/2026-09-08.md` reads, so
+  // this is one convention applied twice rather than two.
+  if (rel.endsWith('.todo.md')) return 'todo'
   if (rel.endsWith('.md')) return 'markdown'
   return null // not a document at all: an attachment, a theme, machinery
 }

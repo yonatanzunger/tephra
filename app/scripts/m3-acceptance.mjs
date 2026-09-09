@@ -1421,6 +1421,60 @@ console.log('\n— a link in a task —')
   check('nothing errored on the way', k.appError === 'none', String(k.appError))
 }
 
+// ── two shapes of one kind (MT7) ───────────────
+//
+// A `.todo` DIRECTORY is a daily list — carried, walked, with a working set that
+// turns over. A single `.todo.md` is an OVERALL one, the blog posts you mean to
+// write, which does not turn over: the carry has nothing to carry, and *today's
+// working set* is a meaningful idea for the first and a meaningless one for the
+// second. Everything else is shared, which is why almost none of this had to be
+// built — an overall list is an ordinary document, and `surfaceFor` already
+// routes by kind.
+console.log('\n— two shapes of one kind —')
+{
+  const root = await week(['Today.\n'])
+  const W = report(await launch('twoshapes', root))
+  check(
+    'the same gesture makes one, and it is a .todo.md',
+    W.made === true && String(W.itsName).endsWith('.todo.md'),
+    `${W.made} \u00b7 ${JSON.stringify(W.itsName)}`,
+  )
+  check(
+    // `surfaceFor` routes by kind and a `.todo.md` is a todo, so there was
+    // nothing to build here at all.
+    'it opens as a LIST, not as a markdown editor',
+    W.drawnAsAList === true && W.notAnEditor === true,
+    `list ${W.drawnAsAList} \u00b7 editor gone ${W.notAnEditor}`,
+  )
+  check(
+    // Both are about a list that turns over, and this one does not.
+    'with no walk and no scrub, because neither means anything here',
+    W.noWalk === true && W.noScrub === true,
+    `walk ${W.noWalk} \u00b7 scrub ${W.noScrub}`,
+  )
+  check(
+    // **THE TRAP.** `DocumentService` asks every list to work in the writing
+    // DAY and does not know the shape \u2014 which is right. An overall list's
+    // `load` ignores the key, so a verb given a date wrote to the correct FILE
+    // under a segment named for a day, and the next read under the one segment
+    // loaded a second segment from that file and found it empty. The item was
+    // on disk and not on screen.
+    'and every verb works: the item is on screen AND main agrees it is there',
+    JSON.stringify(W.rows) === JSON.stringify(['the one about tephra']) &&
+      JSON.stringify(W.tags) === JSON.stringify(['writing']) &&
+      W.itemsFromMain === 1 && W.keyShown === 'content',
+    `${JSON.stringify(W.rows)} \u00b7 main holds ${W.itemsFromMain} under ${JSON.stringify(W.keyShown)}`,
+  )
+  check(
+    // Named, not searched for: this used to return whichever root-level `.todo`
+    // came first, which with two lists means one silently wins.
+    'the distinguished list is still the distinguished list',
+    W.tasksIs === 'tasks.todo',
+    String(W.tasksIs),
+  )
+  check('nothing errored on the way', W.appError === 'none', String(W.appError))
+}
+
 // ── notes under an item ─────────────────────
 //
 // **Prose about the task, not more task.** Indented continuation lines, which

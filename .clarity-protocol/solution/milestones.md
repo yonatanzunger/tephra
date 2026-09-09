@@ -579,7 +579,7 @@ day boundary — and only three dependencies between them are real. The rest is 
 judgement about what is worth having soonest.
 
 **MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → M4 → M5.**
-*(MT6 done; MT7 next.)*
+*(MT complete; M4 next.)*
 
 **MT5c and M6 are not in that line**; they are in the backlog below, which is a
 different kind of thing from a deferral — see there.
@@ -684,7 +684,7 @@ from waiting on a wide refactor.
 feature rather than the correctness fix, and it is wide-but-shallow work that
 would otherwise hold up MT4.
 
-## MT — the TODO list *(MT1–MT6 done; MT7 next. MT5c is in the backlog.)*
+## MT — the TODO list *(done. MT5c is in the backlog.)*
 
 **Roadmap: `solution/todo-roadmap.md`. Design: `goal/todo.md`,
 `solution/todo.md`. Decisions: D55–D59.**

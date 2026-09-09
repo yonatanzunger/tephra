@@ -388,6 +388,17 @@ export type DocumentKind = 'stream' | 'markdown' | 'todo' | 'fileset'
 export const STREAM_ID = 'notebook.stream' as DocumentId
 
 /**
+ * *The* task list, named the way the stream is (D55 as amended, MT7).
+ *
+ * ⌘1 and ⌘⇧T always go here, as ⌘0 goes to the notebook. Every OTHER list is an
+ * ordinary document — found in the sidebar, clicked, opened in the main window
+ * — which is why almost nothing about reaching a second one had to be built.
+ * Distinguished by name rather than by position, because position could not
+ * survive a second list: whichever came first would silently win.
+ */
+export const TASKS_ID = 'tasks.todo' as DocumentId
+
+/**
  * A document from OUTSIDE the notebook, named by its absolute path.
  *
  * Every other id is a path inside the corpus, so absoluteness is what tells the

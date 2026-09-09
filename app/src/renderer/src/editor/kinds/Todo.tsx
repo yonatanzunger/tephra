@@ -26,6 +26,7 @@ import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { Prose } from '../../frame/Prose'
 import { flattenLinks } from '../../../../shared/links.ts'
+import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import {
   groupByTag, isLive, resolveDue,
   type ResolvedItem, type TodoItem, type TodoStatus, type WalkState,
@@ -189,6 +190,16 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   const [showing, setShowing] = useState<DateKey | null>(null)
   const [days, setDays] = useState<readonly DateKey[]>([])
   const past = showing !== null && today !== null && showing !== today
+  /**
+   * Whether this list is paged by day (MT7).
+   *
+   * **Asked of the days it HAS**, not of its name: an overall list answers with
+   * the one segment every single-file kind uses (D27), and a daily one answers
+   * with dates. So the surface needs to know nothing about `.todo` versus
+   * `.todo.md` — the controls that only mean something for a list that turns
+   * over simply have nothing to attach to.
+   */
+  const daily = !days.includes(ONLY_SEGMENT)
   /**
    * One step through the days that EXIST, which is not the same as one day.
    *
@@ -546,7 +557,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               step at a time through the days that EXIST rather than a date
               picker over days that mostly do not — and there is one way back to
               today, because that is where you always want to end up. */}
-          {days.length > 1 && (
+          {daily && days.length > 1 && (
             <span className="todo-scrub">
               <button
                 type="button"
@@ -579,7 +590,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               finish is at the BOTTOM, which is both the direction you read a
               list in and a guarantee that finishing is never the same target
               you just clicked to start. */}
-          {!walking && !past && walk !== null && (
+          {daily && !walking && !past && walk !== null && (
             <button
               type="button"
               className="todo-walk-start"

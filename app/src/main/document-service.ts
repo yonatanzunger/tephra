@@ -13,9 +13,9 @@
 
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { LinkRow } from '../shared/nav-api.ts'
-import { isOutside, isStream, ONLY_SEGMENT, type Unsubscribe } from '../shared/document-api.ts'
+import { isOutside, isStream, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
-import type { DateKey, DocumentId, DocumentPosition, DocumentText, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
+import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
 import { Wal, type WalRecord } from './w/wal.ts'
@@ -1087,9 +1087,23 @@ export class DocumentService {
    * about it is real from the first keystroke — versioned, journalled,
    * recoverable — which an unsaved buffer would not be.
    */
-  async newDocument(label?: string, section?: string): Promise<DocumentId> {
+  /**
+   * A new document, of whichever kind was asked for (MT7).
+   *
+   * **The same gesture makes both**, which is the whole of what "just like we
+   * create new md files" asks for: a `.todo.md` is an overall task list, a
+   * `.md` is a note, and the only difference between making them is the suffix.
+   * A DAILY list is not made this way and could not be — a directory document
+   * has no single file to create, and the day its first carry materialises is
+   * what brings it into being (D59).
+   */
+  async newDocument(label?: string, section?: string, kind: 'markdown' | 'todo' = 'markdown'): Promise<DocumentId> {
     const wanted = label?.trim() ?? ''
-    const id = await this.#freeNoteName(wanted === '' ? 'untitled' : slug(wanted), directoryFor(section))
+    const id = await this.#freeNoteName(
+      wanted === '' ? 'untitled' : slug(wanted),
+      directoryFor(section),
+      kind === 'todo' ? '.todo.md' : '.md',
+    )
     await this.#corpus.create(id, wanted === '' ? undefined : wanted)
 
     // **Made where you asked for it, which for a list means IN the list.** A
@@ -1191,10 +1205,11 @@ export class DocumentService {
    * is a perfectly good moment to decide you have one.
    */
   async todoList(): Promise<DocumentId> {
-    for (const id of await this.#corpus.list('todo')) {
-      if (!(id as string).includes('/')) return id
-    }
-    const made = 'tasks.todo' as DocumentId
+    // **Named, not searched for** (D55 as amended, MT7). This used to return
+    // whichever root-level `.todo` came first, which with two lists means one
+    // silently wins — and `tasks.todo` is *the* task list the way
+    // `notebook.stream` is *the* notebook, so it answers the way that does.
+    const made = TASKS_ID
     // No `create`: a directory document has no single file to be created, and
     // the day the carry materialises IS what brings it into being.
     await this.#corpus.use(made, doc => (doc as TodoDocument).carry(this.today, this.#takenIds))
@@ -1210,15 +1225,29 @@ export class DocumentService {
    * depended on it would come apart the first week away from the desk. Opening
    * the list is enough, and opening it twice does nothing the second time.
    */
-  async todoToday(id: DocumentId): Promise<DateKey> {
-    // **The writing day, not the calendar's** (D62). A list fetched at 00:30
-    // while somebody is still going shows the evening they are still in, and
-    // carries when they have stopped — the same boundary the notebook uses,
-    // asked at the moment the list is looked at.
+  /**
+   * Which segment of this list to show, and the carry that materialises it.
+   *
+   * **The writing day, not the calendar's** (D62). A list fetched at 00:30
+   * while somebody is still going shows the evening they are still in, and
+   * carries when they have stopped — the same boundary the notebook uses,
+   * asked at the moment the list is looked at.
+   *
+   * **Named `SegmentKey` rather than `DateKey`** (MT7), which the compiler does
+   * not care about — `DateKey` is an alias for `SegmentKey`, not a brand of its
+   * own — and a reader does: an overall list has one segment and no days, so a
+   * signature promising a date would be promising something this cannot always
+   * give. The carry answers for both shapes: for a daily list it materialises
+   * today, and for an overall one there is nothing to carry, so it adopts and
+   * stops.
+   */
+  async todoToday(id: DocumentId): Promise<SegmentKey> {
     const today = this.today
     await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds))
     this.#touched()
-    return today
+    const keys = await this.#corpus.use(id, doc => doc.keys(), { mode: 'read' })
+    // The day for a daily list; the one segment for an overall one.
+    return keys.includes(ONLY_SEGMENT) ? ONLY_SEGMENT : (today as unknown as SegmentKey)
   }
 
   /**
@@ -1400,10 +1429,14 @@ export class DocumentService {
   }
 
   /** A name nobody is using. Importing twice makes two notes, not one overwrite. */
-  async #freeNoteName(name: string, directory = NOTES_DIR): Promise<DocumentId> {
+  async #freeNoteName(name: string, directory = NOTES_DIR, suffix = '.md'): Promise<DocumentId> {
     for (let n = 1; ; n++) {
       const wanted = n === 1 ? name : `${name} ${n}`
-      const rel = (directory === NOTES_DIR ? noteFile(wanted) : `${directory}/${slug(wanted)}.md`) as DocumentId
+      const rel = (
+        directory === NOTES_DIR && suffix === '.md'
+          ? noteFile(wanted)
+          : `${directory}/${slug(wanted)}${suffix}`
+      ) as DocumentId
       if (!(await this.#corpus.exists(rel))) return rel
     }
   }
