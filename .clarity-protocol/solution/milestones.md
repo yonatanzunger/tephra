@@ -758,11 +758,15 @@ than forcing it.
 **Reduced to one item, on evidence, 2026-09-09.** All three were reconsidered
 after months of use rather than built as listed.
 
+**Inventory: `solution/keymap.md`, kept true by `tests/unit/keymap.test.ts`.**
+
 - **The keymap, deliberately designed.** *(D67, R1.4 as superseded.)* Vim is
   removed rather than switched off — it stayed off for months, the native surface
   became better than the vim one, and nothing was missed. So this is no longer
   "a non-vim keymap" beside another; it is **the** keymap, and it is the whole of
-  what M5 owes. The deletion is done; the design is not.
+  what M5 owes. The deletion is done. **The inventory is done** — fifty-nine
+  inherited bindings, five sources, three shadowed by menu accelerators, and a
+  list of the ones still undecided. The design is not.
 - ~~Typography and the visual system, tunable (R1.3)~~ — **deferred to the
   backlog until there is something specific to tune.** Most of it exists: four
   themes, the panel, authored theme files with machine-local selection (D41),
