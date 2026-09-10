@@ -65,7 +65,22 @@ export interface UiState {
    * out wrong, and this is that place.
    */
   readonly listView: 'time' | 'tag'
+  /**
+   * How wide the search panel is, in pixels (MS4).
+   *
+   * **Machine-local soft state, beside the theme and the list's arrangement, for
+   * the same reason**: how much of the window a list of results may take depends
+   * on the screen and on what you are doing with it. Persisted because dragging
+   * it back to the width you like every time you search is exactly the kind of
+   * small tax that makes a tool feel unfinished.
+   */
+  readonly searchWidth: number
 }
+
+/** The search panel: wide enough for a sentence, and the range it may be dragged to. */
+export const SEARCH_WIDTH = 380
+export const SEARCH_MIN = 260
+export const SEARCH_MAX = 900
 
 export const defaultWindowState: WindowState = { location: { kind: 'today' }, cursor: null }
 
@@ -75,6 +90,7 @@ export const defaultUiState: UiState = {
   vim: false,
   theme: DEFAULT_THEME_NAME,
   listView: 'time',
+  searchWidth: SEARCH_WIDTH,
 }
 
 /** Lenient: a corrupt or older file means "start fresh", never a crash. */
@@ -103,6 +119,12 @@ export function parseUiState(text: string | null): UiState {
       vim: candidate.vim === true,
       theme: typeof candidate.theme === 'string' && candidate.theme !== '' ? candidate.theme : DEFAULT_THEME_NAME,
       listView: candidate.listView === 'tag' ? 'tag' : 'time',
+      // Clamped rather than trusted: a width from a file is soft state, and a
+      // panel two pixels wide or wider than any screen is not a preference.
+      searchWidth:
+        typeof candidate.searchWidth === 'number' && Number.isFinite(candidate.searchWidth)
+          ? Math.min(Math.max(candidate.searchWidth, SEARCH_MIN), SEARCH_MAX)
+          : SEARCH_WIDTH,
     }
   } catch {
     return defaultUiState

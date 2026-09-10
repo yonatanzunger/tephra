@@ -1681,46 +1681,140 @@ body {
   box-shadow: 0 0 0 1.5px rgb(161 98 7 / .85);
 }
 
-/* Search results (MS4).
+/* The search panel (MS4).
  *
- * **The link directory's shape, because it is the same kind of thing**: a list
- * of places, each recognisable without opening it. What differs is what makes a
- * row recognisable — a link is known by its destination, a hit by the sentence
- * it sits in, so the lead carries the weight here and wraps rather than
- * truncating. */
-.results-query { max-width: 30rem; font-size: .95em; }
+ * **Beside the reading, not instead of it.** A result set is something you keep
+ * open while you read the rows — so it floats over the right of the window like
+ * the theme panel, stays put when a row is followed, and can be dragged wider
+ * when a sentence needs the room. The first version was a full pane reached by
+ * navigation, and following the first row took away the one thing worth
+ * keeping. */
+.results-panel {
+  position: absolute; z-index: 5;
+  top: .75rem; right: .75rem; bottom: .75rem;
+  display: flex; flex-direction: column;
+  font-family: var(--font-ui); font-size: 12px;
+  color: rgb(var(--panel-text));
+  /* The panel tiers, so text mixed for one surface is not floated over another. */
+  background: rgb(var(--surface-panel));
+  border: 1px solid rgb(var(--border-strong));
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / .16);
+}
+
+/* **The whole left edge is the grip**, because width is the only thing this
+   resizes: a corner handle would be a smaller target for the same gesture. */
+.results-grip {
+  position: absolute; left: -3px; top: 0; bottom: 0; width: 9px;
+  cursor: ew-resize;
+}
+.results-grip:hover { background: rgb(var(--accent) / .18); border-radius: 6px; }
+
+.results-head {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .6rem .7rem .55rem;
+  border-bottom: 1px solid rgb(var(--border-strong));
+}
+/* **`--panel-field`, not `--surface`.** The ground of a control on a panel is
+   the panel's, and the theme panel already carries the note this repeats: an
+   input whose ground came from the page put light text on cream. */
+.results-query {
+  flex: 1; min-width: 0;
+  font: inherit; font-size: 13px;
+  color: rgb(var(--panel-text)); background: rgb(var(--panel-field));
+  border: 1px solid rgb(var(--border-strong)); border-radius: 5px; padding: .25rem .45rem;
+}
+.results-query:focus { outline: none; border-color: rgb(var(--accent) / .6); }
+.results-count {
+  font-variant-numeric: tabular-nums; font-size: 11px;
+  color: rgb(var(--panel-text-muted));
+}
+.results-close {
+  font: inherit; font-size: 15px; line-height: 1; cursor: pointer;
+  color: rgb(var(--panel-text-muted)); background: none; border: 0; padding: 0 .1rem;
+}
+.results-close:hover { color: rgb(var(--panel-text-heading)); }
+
+/* Its own scroller: the list is long and the header is not going anywhere. */
+.results-body { min-height: 0; overflow-y: auto; padding: .3rem .7rem .7rem; }
+.results-empty { font-size: 11.5px; color: rgb(var(--panel-text-muted)); padding: .5rem 0; line-height: 1.5; }
+.results-empty code {
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: .95em;
+  background: rgb(var(--panel-text) / .07); border-radius: 3px; padding: 0 .2em;
+}
+.results-problem {
+  font-size: 11.5px; color: rgb(var(--panel-text-muted));
+  padding: .4rem .7rem 0;
+}
+
+.results-list { list-style: none; margin: 0; padding: 0; }
+.results-list li { padding: .45rem 0; border-bottom: 1px solid rgb(var(--border-strong) / .5); }
+.results-list li:last-child { border-bottom: 0; }
 
 .results-go {
   display: block; width: 100%; text-align: left; cursor: pointer;
-  color: rgb(var(--text)); background: none; border: 0; padding: 0;
+  color: rgb(var(--panel-text)); background: none; border: 0; padding: 0;
 }
+/* **The reading face, at the panel's size.** The lead is a sentence from the
+   notebook and should look like one — but it is being scanned in a narrow
+   column, so it takes the panel's measure rather than the page's. */
 .results-lead {
-  display: block;
-  font-family: var(--reading-face, inherit); font-size: 1em; line-height: 1.45;
-  /* Two lines, then stop: a paragraph is not a preview, and a list of them is
-     not a list any more. */
-  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-family: var(--reading-face, inherit); font-size: 13px; line-height: 1.45;
+  /* Said here rather than inherited from the button: a duplicate of this block
+     survived a rewrite once and won on order alone, and what it set was the
+     page's ink on the panel's ground. */
+  color: rgb(var(--panel-text));
 }
-.results-go:hover .results-lead { color: rgb(var(--text-heading)); }
+.results-go:hover .results-lead { color: rgb(var(--panel-text-heading)); }
 /* The words that answered, in the same amber the editor marks them with — one
    colour for one idea, wherever it is drawn. */
 .results-lead mark {
   background: rgb(234 179 8 / .38); color: inherit; border-radius: 2px;
 }
 .results-where {
-  display: flex; align-items: baseline; gap: .5rem; margin-top: .25rem;
-  font-family: var(--font-ui);
+  display: flex; align-items: baseline; gap: .45rem; margin-top: .2rem;
 }
-.results-when { font-size: .72em; color: rgb(var(--text-muted)); }
-.results-problem {
-  font-family: var(--font-ui); font-size: .8em;
-  color: rgb(var(--warn, var(--text-muted)));
-  padding-bottom: .4rem;
+/* **The pill language, re-inked for this surface.** `.pill.label` mixes its ink
+   from `--text`, which is the ink of the PAGE — correct everywhere a pill sits
+   on the page, and wrong on a floating panel with a ground of its own. A theme
+   whose panel is dark and whose page is not drew dark text on dark, which is
+   the same mistake `.theme-panel` has a note about a hundred lines up. */
+.results-where .pill.label {
+  --pill-ink: rgb(var(--panel-text) / .78);
+  --pill-ground: rgb(var(--panel-text) / .09);
 }
+.results-when { font-size: 10.5px; color: rgb(var(--panel-text-muted)); }
 .results-more {
-  font-family: var(--font-ui); font-size: .8em; cursor: pointer;
-  margin-top: .8rem; padding: .3rem .8rem;
-  color: rgb(var(--text)); background: rgb(var(--surface));
-  border: 1px solid rgb(var(--border)); border-radius: 6px;
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  margin-top: .6rem; padding: .25rem .7rem;
+  color: rgb(var(--panel-text)); background: rgb(var(--panel-field));
+  border: 1px solid rgb(var(--border-strong)); border-radius: 5px;
 }
-.results-more:hover { background: rgb(var(--text) / .05); }
+.results-more:hover { background: rgb(var(--panel-text) / .10); }
+
+/* A find's matches, in the text (MS3).
+ *
+ * **Decorated rather than selected.** The caret goes back to the field after a
+ * landing so the next keystroke is another search, which leaves CodeMirror's
+ * selection unfocused and — on cream — very nearly invisible. These stay put.
+ *
+ * **Amber, not the accent**, and the first version learned this the hard way: a
+ * theme's accent is whatever that theme chose, it is brown in this one, and
+ * brown at sixteen percent over cream is indistinguishable from the paper. A
+ * found word wants to read as a highlighter, which is a colour of its own —
+ * warm, outside the palette's working range, and the same in every theme so that
+ * "this is the one you are on" never depends on which theme is loaded. */
+.cm-find {
+  border-radius: 2px;
+  background: rgb(234 179 8 / .30);
+}
+/* The one being stood on, which has to be tellable from the rest at a glance —
+ * so it differs in weight AND in edge, not in opacity alone. */
+.cm-find-now {
+  background: rgb(234 179 8 / .68);
+  box-shadow: 0 0 0 1.5px rgb(161 98 7 / .85);
+}
+
+

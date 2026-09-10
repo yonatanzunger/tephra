@@ -5,6 +5,20 @@
 // one notation and one stream of locations (D65). What differs is that a walk
 // wants the next hit and a page wants a screenful.
 //
+// **A PANEL, not a location, and the first version got that wrong.** Results
+// were a `NavTarget` at first, on the reasoning that the link directory is one
+// and this is its sibling. But a link directory is somewhere you *go* — you
+// browse it, and following a row is leaving it — whereas a set of search
+// results is a thing you keep beside you *while* reading, and every row you
+// follow is a question you asked of the same list. Made a location, choosing a
+// row navigated away from the one thing you wanted to keep: the results from
+// every document at once, which is exactly what a walk through one document
+// cannot give you back.
+//
+// So it floats over the reading surface like the theme panel, it stays where it
+// is when a row is followed, and it can be dragged wider when a sentence needs
+// the room.
+//
 // **A row per hit, newest first**, which is the order the engine already returns
 // and the reason no ranking is needed in v1 (D23). Each row is the line as a
 // reader would read it, with the match marked inside it, plus where and when —
@@ -22,40 +36,59 @@ import type { DateKey } from '../../../shared/document-api.ts'
 import type { Hit, QueryId } from '../../../shared/search-api.ts'
 import type { SearchRequest } from '../../../shared/ipc.ts'
 import type { Problem } from '../../../shared/query-text.ts'
-import type { Typography } from '../editor/typography.ts'
+import { SEARCH_MAX, SEARCH_MIN } from '../../../shared/ui-state.ts'
 
 /** A screenful, and then some: enough that the first pull fills the page. */
 const PAGE = 40
 
+/**
+ * **Nothing is remembered, because nothing is lost.** The first version kept
+ * the last result set in a module-level cache so that the back button could
+ * restore it — which was a cache existing to paper over the panel being a
+ * location. A panel that stays open while you read the rows needs no such
+ * thing.
+ */
+
 export function Results({
-  text,
-  typography,
+  width,
+  onWidth,
+  face,
   today,
-  onSearch,
   onGoTo,
+  onClose,
   onError,
 }: {
-  /** What the location says to look for. Empty is a field waiting to be typed in. */
-  text: string
-  typography: Typography
+  /** How wide it has been dragged to. Persisted per device (D30). */
+  width: number
+  onWidth: (px: number) => void
+  /**
+   * The notebook's reading face, for the leads.
+   *
+   * **The notebook's own type, not a second set of numbers** (D41) — a lead is a
+   * sentence from the notebook and should look like one. Only the face: the
+   * *size* is the panel's, because this is a narrow column being scanned rather
+   * than a page being read.
+   */
+  face: string
   today: DateKey | null
-  /** The query settled, so the location can hold it and back/forward can work. */
-  onSearch: (text: string) => void
-  /** Where it was written. `elsewhere` is a ⌘-click, as everywhere else. */
-  onGoTo: (hit: Hit, elsewhere: boolean) => void
+  /**
+   * Where it was written, and what was being looked for.
+   *
+   * **The query goes with it**, so the walk it hands off to searches the same
+   * thing — over the whole corpus, not narrowed to whichever document the row
+   * happened to land in. That narrowing was the gap in the first handoff: ⌘G
+   * after choosing a result silently dropped every other document.
+   */
+  onGoTo: (hit: Hit, query: string, elsewhere: boolean) => void
+  onClose: () => void
   onError: (message: string) => void
 }): React.JSX.Element {
-  const [typed, setTyped] = useState(text)
+  const [text, setText] = useState('')
   const [hits, setHits] = useState<readonly Hit[]>([])
   const [problems, setProblems] = useState<readonly Problem[]>([])
   const [state, setState] = useState<'idle' | 'running' | 'more' | 'done'>('idle')
   const cursor = useRef<QueryId | null>(null)
   const pulling = useRef(false)
-
-  // **The field is local and the location is the record.** Typing is not
-  // navigation — a query is pushed when it settles, not per keystroke, or the
-  // back button would walk you through every prefix you typed.
-  useEffect(() => setTyped(text), [text])
 
   const close = useCallback((): void => {
     if (cursor.current !== null) {
@@ -66,45 +99,63 @@ export function Results({
 
   useEffect(() => close, [close])
 
+  /**
+   * Run the query and take the first page.
+   *
+   * **Debounced by the caller, run by Enter.** Typing every prefix into a
+   * corpus scan would be a scan per keystroke; a query is asked when somebody
+   * has finished asking it.
+   */
+  const run = useCallback(
+    (query: string): (() => void) => {
+      close()
+      setHits([])
+      setProblems([])
+      setState('running')
+      const request: SearchRequest = {
+        // **No document, which is the whole difference from ⌘F** (D66): the
+        // scope is the corpus, and a tag or a date in the text narrows it from
+        // there.
+        text: query,
+        document: null,
+        direction: 'past',
+        fold: 'auto',
+        origin: null,
+      }
+      let live = true
+      void window.tephra.search
+        .open(request)
+        .then(async opened => {
+          if (!live) {
+            void window.tephra.search.close(opened.id)
+            return
+          }
+          cursor.current = opened.id
+          setProblems(opened.problems)
+          const { hits: first, progress } = await window.tephra.search.next(opened.id, PAGE)
+          if (!live) return
+          setHits(first)
+          setState(!progress.done && first.length >= PAGE ? 'more' : 'done')
+        })
+        .catch((err: Error) => onError(err.message))
+      return () => {
+        live = false
+      }
+    },
+    [close, onError],
+  )
+
   useEffect(() => {
-    close()
-    setHits([])
-    setProblems([])
     const query = text.trim()
     if (query === '') {
+      close()
+      setHits([])
+      setProblems([])
       setState('idle')
       return
     }
-    setState('running')
-    const request: SearchRequest = {
-      // **No document, which is the whole difference from ⌘F** (D66): the scope
-      // is the corpus, and a tag or a date in the text narrows it from there.
-      text: query,
-      document: null,
-      direction: 'past',
-      fold: 'auto',
-      origin: null,
-    }
-    let live = true
-    void window.tephra.search
-      .open(request)
-      .then(async opened => {
-        if (!live) {
-          void window.tephra.search.close(opened.id)
-          return
-        }
-        cursor.current = opened.id
-        setProblems(opened.problems)
-        const { hits: first, progress } = await window.tephra.search.next(opened.id, PAGE)
-        if (!live) return
-        setHits(first)
-        setState(progress.done || first.length < PAGE ? 'done' : 'more')
-      })
-      .catch((err: Error) => onError(err.message))
-    return () => {
-      live = false
-    }
-  }, [text, close, onError])
+    return run(query)
+  }, [text, close, run])
 
   /** The next page, when the bottom comes into view or the button is pressed. */
   const more = useCallback(async (): Promise<void> => {
@@ -114,82 +165,126 @@ export function Results({
     try {
       const { hits: next, progress } = await window.tephra.search.next(id, PAGE)
       setHits(was => [...was, ...next])
-      setState(progress.done || next.length < PAGE ? 'done' : 'more')
+      setState(!progress.done && next.length >= PAGE ? 'more' : 'done')
     } catch (err) {
       onError((err as Error).message)
     } finally {
       pulling.current = false
     }
-  }, [state, onError])
+  }, [state, text, onError])
 
-  const type = {
-    '--reading-face': typography.font,
-    '--reading-size': `${typography.size}px`,
-    '--measure': `${typography.measure}ch`,
-  } as React.CSSProperties
+  /**
+   * Dragged wider.
+   *
+   * **Reported on release rather than per pixel**, because the width is soft
+   * state that gets written to a file: saving on every mousemove would be a
+   * hundred writes to record one decision.
+   */
+  const drag = useCallback(
+    (down: React.PointerEvent): void => {
+      down.preventDefault()
+      const from = down.clientX
+      const began = width
+      const move = (at: PointerEvent): void => {
+        // Leftwards is wider: the panel is pinned to the right edge.
+        onWidth(Math.min(Math.max(began + (from - at.clientX), SEARCH_MIN), SEARCH_MAX))
+      }
+      const up = (): void => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', up)
+      }
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', up)
+    },
+    [width, onWidth],
+  )
+
+  const rows = byLine(hits)
 
   return (
-    <main className="links results" aria-label="Search" style={type}>
-      <div className="links-head">
+    <aside
+      className="results-panel"
+      aria-label="Search"
+      style={{ width: `${width}px`, '--reading-face': face } as React.CSSProperties}
+      onKeyDown={e => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          onClose()
+        }
+      }}
+    >
+      {/* **The grip is the whole left edge**, not a corner: the only thing this
+          panel resizes is its width, so the target should be as tall as it is. */}
+      <div
+        className="results-grip"
+        onPointerDown={drag}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Drag to resize"
+      />
+      <header className="results-head">
         <input
-          className="links-query results-query"
+          className="results-query"
           type="search"
-          value={typed}
+          value={text}
           placeholder="Search the notebook"
           aria-label="Search the notebook"
           spellCheck={false}
           autoFocus
-          onChange={e => setTyped(e.currentTarget.value)}
+          onChange={e => setText(e.currentTarget.value)}
           onKeyDown={e => {
             if (e.key === 'Enter') {
               e.preventDefault()
-              onSearch(typed.trim())
+              run(text.trim())
             }
           }}
         />
-        <span className="links-count">
+        <span className="results-count">
           {/* **Rows, not hits**, because that is what is on the screen: a line
               with two matches in it is one place you might go. */}
-          {state === 'idle' ? '' : `${byLine(hits).length}${state === 'more' ? '+' : ''} found`}
+          {state === 'idle' ? '' : `${rows.length}${state === 'more' ? '+' : ''}`}
         </span>
-      </div>
+        <button className="results-close" onClick={onClose} title="Close (Esc)">
+          {'\u00d7'}
+        </button>
+      </header>
 
       {problems.length > 0 && (
         // **Said, and searched for anyway.** An impossible date is still words
         // somebody typed, so the query ran with them in it (MS2).
-        <p className="results-problem">
-          {problems.map(problem => problem.why).join('; ')}
-        </p>
+        <p className="results-problem">{problems.map(problem => problem.why).join('; ')}</p>
       )}
 
-      {state === 'idle' ? (
-        <p className="links-empty">
-          Anything you have written. A word or a phrase; <code>#subject</code> to look inside a
-          subject, <code>2026-03</code> for a month.
-        </p>
-      ) : hits.length === 0 && state === 'done' ? (
-        <p className="links-empty">Nothing matches “{text.trim()}”.</p>
-      ) : (
-        <>
-          <ol className="links-list">
-            {byLine(hits).map(group => (
-              <Row
-                key={`${group.first.at.file}:${group.first.lineFrom}`}
-                group={group}
-                today={today}
-                onGoTo={onGoTo}
-              />
-            ))}
-          </ol>
-          {state === 'more' && (
-            <button className="results-more" onClick={() => void more()}>
-              More
-            </button>
-          )}
-          {state === 'running' && <p className="sub">Reading the corpus…</p>}
-        </>
-      )}
-    </main>
+      <div className="results-body">
+        {state === 'idle' ? (
+          <p className="results-empty">
+            Anything you have written. A word or a phrase; <code>#subject</code> to look inside a
+            subject, <code>2026-03</code> for a month.
+          </p>
+        ) : rows.length === 0 && state === 'done' ? (
+          <p className="results-empty">Nothing matches “{text.trim()}”.</p>
+        ) : (
+          <>
+            <ol className="results-list">
+              {rows.map(group => (
+                <Row
+                  key={`${group.first.at.file}:${group.first.lineFrom}`}
+                  group={group}
+                  today={today}
+                  onGoTo={(hit, elsewhere) => onGoTo(hit, text.trim(), elsewhere)}
+                />
+              ))}
+            </ol>
+            {state === 'more' && (
+              <button className="results-more" onClick={() => void more()}>
+                More
+              </button>
+            )}
+            {state === 'running' && <p className="results-empty">Reading the corpus…</p>}
+          </>
+        )}
+      </div>
+    </aside>
   )
 }
 

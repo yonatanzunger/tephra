@@ -43,6 +43,7 @@ export class Windows {
   #vim = defaultUiState.vim
   #theme = defaultUiState.theme
   #listView = defaultUiState.listView
+  #searchWidth = defaultUiState.searchWidth
 
   #saving: ReturnType<typeof setTimeout> | null = null
 
@@ -62,6 +63,7 @@ export class Windows {
     this.#vim = saved.vim
     this.#theme = saved.theme
     this.#listView = saved.listView
+    this.#searchWidth = saved.searchWidth
     const windows = saved.windows.length > 0 ? saved.windows : [defaultWindowState]
     for (const state of windows) this.#open(state)
   }
@@ -124,6 +126,7 @@ export class Windows {
       vim: this.#vim,
       theme: this.#theme,
       listView: this.#listView,
+      searchWidth: this.#searchWidth,
     }
   }
 
@@ -137,6 +140,7 @@ export class Windows {
     this.#vim = report.vim
     this.#theme = report.theme
     this.#listView = report.listView
+    this.#searchWidth = report.searchWidth
     this.#syncMenu()
     if (!found.window.isDestroyed() && found.window.getTitle() !== report.name) {
       found.window.setTitle(report.name)
@@ -193,7 +197,10 @@ export class Windows {
       if (entry.window.isDestroyed()) continue
       windows.push({ ...entry.state, bounds: entry.window.getBounds() })
     }
-    return { version: 1, windows, vim: this.#vim, theme: this.#theme, listView: this.#listView }
+    return {
+      version: 1, windows, vim: this.#vim, theme: this.#theme,
+      listView: this.#listView, searchWidth: this.#searchWidth,
+    }
   }
 
   /** Write the set, before the app goes away rather than because it is going. */

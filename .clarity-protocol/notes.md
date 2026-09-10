@@ -539,3 +539,28 @@ of work had been "typechecking clean" against a command that was not looking.
 **A verification command that cannot fail is not verifying.** Worth a suspicion
 whenever a check has never once complained: try breaking something on purpose and
 confirm it notices.
+
+## A floating surface's ink comes from that surface, not from the page
+
+Twice now. `.theme-panel` already carries the note — *"an input whose ground came
+from the page put light text on cream"* — and the search panel repeated it in
+three places at once: the lead took `--text`, the date pills took `.pill.label`'s
+`--text`-derived ink, and the field took `--surface` for its ground. In every
+built-in theme the page and the panel happen to be on the same side of light, so
+all three looked fine; in a theme with a dark panel over a light page they were
+dark on dark.
+
+**The rule: a token pair must come from one surface.** If the background is
+`--surface-panel` then the ink is `--panel-text` and a control's ground is
+`--panel-field` — never a mixture, and never `--text` on a panel.
+
+**And this is worth a check rather than a memory**, because reading it back is
+cheap: `getComputedStyle` on the panel's own elements, asserting the ink equals
+the panel token and *differs* from the page token. m4 does that now. A rule that
+has been broken twice will be broken a third time.
+
+**The second bug underneath it is worth its own line: a CSS block that was
+rewritten in place left its predecessor further down the file**, and the stale
+copy won on order alone. The symptom was a colour that ignored the rule the
+visible source obeyed. When a style refuses to apply and the rule looks right,
+grep for a second copy of the selector before doubting the cascade.

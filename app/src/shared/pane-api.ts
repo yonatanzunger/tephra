@@ -33,30 +33,23 @@ export type NavTarget =
    * The link directory (R10a, ML3) — **a window's location that is not a
    * document at all.**
    *
-   * The first of these, and the shape every filtered view after it inherits: a
-   * window shows a document *or* a query, and back/forward, restore and the
-   * title bar all follow from that one change rather than from a special case
-   * per view. Deliberately concrete rather than a general `{kind:'query'}`:
-   * there is one query, and what a shared shape should look like is a thing the
-   * second one will say.
+   * The first of these: a window shows a document *or* a query, and
+   * back/forward, restore and the title bar all follow from that one change
+   * rather than from a special case per view. Deliberately concrete rather than
+   * a general `{kind:'query'}`: there is one query, and what a shared shape
+   * should look like is a thing the second one will say.
+   *
+   * **The second one said: not this.** MS4 asked whether search results should
+   * be a location too, on the grounds that they are this one's sibling, and
+   * answered no —
+   * a directory is somewhere you *go*, and following a row is leaving it,
+   * whereas a result set is something you keep beside you *while* reading, and
+   * every row you follow is another question asked of the same list. So search
+   * is a panel (`Results.tsx`) and this is a place. **The line is not one view
+   * against another; it is whether following an entry means you are done with
+   * the list.**
    */
   | { readonly kind: 'links' }
-  /**
-   * Search results (R10, MS4) — the second location that is not a document, and
-   * therefore the one that got to say whether these want a shared shape.
-   *
-   * **They do not.** The commonality is already expressed by this union: a
-   * window shows a document *or* a query, and back, forward, restore and the
-   * title bar all follow from that. Folding the two into `{kind:'query', …}`
-   * would put a discriminated payload inside a discriminated payload and buy
-   * nothing — `links` takes no parameters and this takes a query string, so
-   * there is no shared field to hoist.
-   *
-   * **The text is here so that back and forward work**, which is the whole
-   * reason a query is a location rather than a panel: a search you navigated
-   * away from is a search you can navigate back to.
-   */
-  | { readonly kind: 'search'; readonly text: string }
   | { readonly kind: 'url'; readonly href: string } // browser
   | { readonly kind: 'external'; readonly path: string } // OS intent
 

@@ -476,23 +476,59 @@ surrounding text, a source, a date, click to go there. Streaming in, so the
 first hits are usable before the scan finishes. **Done** —
 `renderer/src/frame/Results.tsx`, plus a `search` scene and ten more m4 checks.
 
-**A location, not a panel**, which is the shape ML3 built and said the second
-one would inherit: `{kind:'search', text}`. Back and forward work, the title bar
-names it (*Search: surveyor*), and a search you navigated away from is one you
-can navigate back to.
+**A PANEL, not a location — and that is a correction MS4 made to itself.** It
+was built first as `{kind:'search', text}`, on the reasoning that the link
+directory is a location and this is its sibling. Wrong, and use found it in
+minutes: **choosing a row navigated away from the one thing worth keeping.** The
+back button worked, and a cache was added so Back would not re-run the scan, and
+both were machinery paid to paper over the wrong shape.
 
-**And the second one settled the question ML3 left open: these do NOT want a
-shared shape.** The commonality is already expressed by `NavTarget` — a window
-shows a document *or* a query — and folding `links` and `search` into
-`{kind:'query', …}` would put a discriminated payload inside a discriminated
-payload. `links` takes no parameters and this takes a string; there is no shared
-field to hoist.
+**The distinction is not one view against another; it is whether following an
+entry means you are done with the list.** A directory is somewhere you *go* —
+you browse it, and following a row is leaving it. A result set is something you
+keep beside you *while* reading, and every row you follow is another question
+asked of the same list. So `links` stays a location and search is a floating
+panel, like the theme panel: it stays put when a row is followed, it can be
+dragged wider when a sentence needs the room, and the width is machine-local soft
+state beside the theme (D30).
+
+**Which also settled the question ML3 left open — do these want a shared shape?
+No, and for a better reason than the one first given.** It is not that there is
+no field to hoist; it is that they are not the same kind of thing.
+
+**The floating cost is paid, not ignored.** The reading column narrows while the
+panel is open, because without that the prose ran underneath it and the passage
+you had just chosen was the one whose end you could not read.
+
+**And a floating surface inks itself from its own tokens.** The panel took
+`--text` for its leads, `.pill.label`'s page-derived ink for its dates, and
+`--surface` for its field — all invisible in the built-in themes, where page and
+panel are on the same side of light, and all dark-on-dark in a theme whose panel
+is dark over a light page. `--panel-text` and `--panel-field` throughout now,
+pinned by an m4 check that reads the computed colours back and asserts they match
+the panel's token and *differ* from the page's. `notes.md` has the general rule;
+`.theme-panel` had already learned it once.
 
 **A hit is a match; a row is a line.** The pane groups by `lineFrom` and marks
 every match in the line, saying *2 here* when there is more than one. Ungrouped,
 a paragraph mentioning the surveyor twice drew the same sentence twice — the list
 showing its own arithmetic rather than the notebook. The walk still steps through
 every match, which is what ⌘G means.
+
+**The list hands off to the walk.** Choosing a row leaves you *inside* the query
+— the match marked, `1 / 4` in the corner, ⌘G stepping the same set — rather than
+merely somewhere a query once pointed. **And the handoff keeps the corpus scope**,
+which the first version did not: it took the landed document as the walk's scope,
+so stepping after choosing a result silently dropped every other document.
+
+**Two bugs worth keeping.** `within` was computed with `plain.indexOf(matched
+text)` — the *first* occurrence — so every match after the first in a line
+reported the earlier one's position; it takes the ordinal occurrence now. And the
+landed position was remembered as a **buffer** offset, which does not survive the
+navigation that produced it: choosing a result loads more days behind the one it
+lands in, every offset shifts, and the remembered 34 no longer matched the real
+40 — so the match drew as an ordinary one. It is kept as a document position and
+mapped through whichever window is loaded now.
 
 **Which found a real bug on the way.** `within` was computed with
 `plain.indexOf(matched text)` — the *first* occurrence — so every match after the

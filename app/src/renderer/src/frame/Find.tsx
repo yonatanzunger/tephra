@@ -46,8 +46,20 @@ export interface FindProps {
   readonly origin: () => FindOrigin | null
   readonly onGo: (hit: Hit) => void | Promise<void>
   readonly onClose: () => void
+  /** Pixels to keep clear on the right, for whatever else is floating there. */
+  readonly inset?: number
   /** The query text as it changes, so the surface can mark what it can see. */
   readonly onQuery: (text: string) => void
+  /**
+   * A query and a place already arrived at, from the results pane (MS4).
+   *
+   * **The list hands off to the walk.** Choosing a row from ⌘⇧F's pane puts you
+   * in the document *inside* that query — marked, counted, and steppable with
+   * ⌘G — rather than merely somewhere a query once pointed at. The list is then
+   * how you choose where to enter the set, not something you have to keep going
+   * back to.
+   */
+  readonly seed?: { readonly text: string; readonly hit: Hit; readonly corpus: boolean } | null
   /** Filled while the bar is up, so ⌘G reaches the walk it already started. */
   readonly control?: React.RefObject<FindControl | null>
 }
@@ -58,7 +70,9 @@ type Status =
   | { kind: 'none' }
   | { kind: 'wrapped'; direction: FindDirection }
 
-export function Find({ document, origin, onGo, onClose, onQuery, control }: FindProps): React.JSX.Element {
+export function Find({
+  document, origin, onGo, onClose, onQuery, control, seed = null, inset = 0,
+}: FindProps): React.JSX.Element {
   const [text, setText] = useState('')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const input = useRef<HTMLInputElement>(null)
@@ -75,9 +89,29 @@ export function Find({ document, origin, onGo, onClose, onQuery, control }: Find
   const [count, setCount] = useState<Tally>({ total: 0, counting: false, capped: false })
   const [landed, setLanded] = useState<string | null>(null)
 
+  /**
+   * Arrived from a result: the query is already run and the place already
+   * reached, so this fills in and does **not** search again.
+   */
   useEffect(() => {
-    input.current?.focus()
-    input.current?.select()
+    if (seed === null) return
+    setText(seed.text)
+    setLanded(keyOf(seed.hit))
+    setStatus({ kind: 'idle' })
+    onQuery(seed.text)
+    // A walk from here starts fresh, from where the row put the caret.
+    void walk.current?.close()
+    walk.current = null
+  }, [seed, onQuery])
+
+  useEffect(() => {
+    // **The caret stays in the document when a row sent us here.** Stealing it
+    // into the field would mean the first thing you do after choosing a result
+    // is click back into the words you were sent to.
+    if (seed === null) {
+      input.current?.focus()
+      input.current?.select()
+    }
     return () => {
       void walk.current?.close()
       walk.current = null
@@ -108,7 +142,7 @@ export function Find({ document, origin, onGo, onClose, onQuery, control }: Find
     setCount({ total: 0, counting: query !== '', capped: false })
     if (query === '') return
     const timer = setTimeout(() => {
-      const run = new Counting(query, document)
+      const run = new Counting(query, corpusOf(seed, query, document))
       counter.current = run
       void run.all((keys, done, capped) => {
         found.current = keys
@@ -119,7 +153,7 @@ export function Find({ document, origin, onGo, onClose, onQuery, control }: Find
       clearTimeout(timer)
       counter.current?.stop()
     }
-  }, [text, document])
+  }, [text, document, seed])
 
   const step = useCallback(
     async (direction: FindDirection): Promise<void> => {
@@ -130,9 +164,13 @@ export function Find({ document, origin, onGo, onClose, onQuery, control }: Find
       // text, turn round, or move the caret by landing on a hit, and the next
       // step is a new question — asked from where you now are, which is the
       // whole point of an origin.
+      // **A walk seeded from a corpus search stays a corpus search.** Narrowing
+      // it to whichever document the row landed in would silently drop every
+      // other document from the set you were stepping through.
+      const scope = seed !== null && seed.corpus && seed.text === query ? null : document
       const held = walk.current
-      const same = held !== null && held.matches(query, direction, document)
-      const from = same ? held : await Walk.open(query, direction, document, origin())
+      const same = held !== null && held.matches(query, direction, scope)
+      const from = same ? held : await Walk.open(query, direction, scope, origin())
       if (!same) {
         void held?.close()
         walk.current = from
@@ -164,7 +202,7 @@ export function Find({ document, origin, onGo, onClose, onQuery, control }: Find
       // right one to continue from — it is already past where we now are.
       input.current?.focus()
     },
-    [text, document, origin, onGo],
+    [text, document, origin, onGo, seed],
   )
 
   useEffect(() => {
@@ -182,7 +220,7 @@ export function Find({ document, origin, onGo, onClose, onQuery, control }: Find
   }, [control, step])
 
   return (
-    <div className="find" role="search">
+    <div className="find" role="search" style={{ marginRight: `${inset}px` }}>
       <input
         ref={input}
         className="find-field"
@@ -249,6 +287,13 @@ const said = (status: Status, tally: string | null): string => {
   if (status.kind === 'wrapped') return tally === null ? 'from newest' : `↻ ${tally}`
   return tally ?? ''
 }
+
+/** The scope a query settled on: the corpus when a result set handed it over. */
+const corpusOf = (
+  seed: { text: string; corpus: boolean } | null,
+  query: string,
+  document: string | null,
+): string | null => (seed !== null && seed.corpus && seed.text === query ? null : document)
 
 /** One hit's identity, for finding it again in the counter's list. */
 const keyOf = (hit: Hit): string => `${hit.at.file}:${hit.at.from}`

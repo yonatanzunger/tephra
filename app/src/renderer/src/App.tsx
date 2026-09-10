@@ -22,6 +22,7 @@ import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { Find, type FindControl } from './frame/Find'
 import { Results } from './frame/Results'
+import type { Hit } from '../../shared/search-api'
 import { NO_FIND_MARKS } from './editor/kinds/markdown/find-marks'
 import { matchesIn, phraseRegex } from '../../shared/phrase'
 import { parseQuery } from '../../shared/query-text'
@@ -164,9 +165,21 @@ export function App(): React.JSX.Element {
   const [findQuery, setFindQuery] = useState('')
   /** Bumped on every landing, so the marks recompute which one is current. */
   const [findLanded, setFindLanded] = useState(0)
+  /** A query and a place, handed to the bar by a results row (MS4). */
+  const [findSeed, setFindSeed] = useState<{ text: string; hit: Hit; corpus: boolean } | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [searchWidth, setSearchWidth] = useState(defaultUiState.searchWidth)
   const findControl = useRef<FindControl | null>(null)
-  /** Where the walk last landed, in buffer coordinates, so it can be marked. */
-  const findHere = useRef<{ from: number; to: number } | null>(null)
+  /**
+   * Where the walk last landed — as a DOCUMENT position, not a buffer one.
+   *
+   * **A buffer offset does not survive the navigation that produced it.** The
+   * first version stored one, and choosing a result loaded more days behind the
+   * one it landed in: every offset shifted, the remembered 34 no longer matched
+   * the real 40, and the landed match drew as an ordinary one. Buffer
+   * coordinates are a fact about a window; this has to outlive the window.
+   */
+  const findHere = useRef<{ segment: SegmentKey; from: number } | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
@@ -239,6 +252,7 @@ export function App(): React.JSX.Element {
         tephra.id = info.id
         setVim(info.vim)
         setListView(info.listView)
+        setSearchWidth(info.searchWidth)
         setThemeName(info.theme)
         // **The stored cursor no longer decides where the app opens.** Tephra
         // opens at the append position with yesterday above it, because that is
@@ -336,12 +350,14 @@ export function App(): React.JSX.Element {
         // everywhere else: the bar is up with the last thing you looked for in
         // it, and pressing again means *let me type over that*.
         setFinding(true)
+        setFindSeed(null)
         findControl.current?.focus()
       } else if (command === 'searchAll') {
-        // **A location, not a panel** (ML3's shape): back and forward work, the
-        // title bar names it, and a search you navigated away from is one you
-        // can navigate back to.
-        void pane?.goTo({ kind: 'search', text: '' }).catch(fail)
+        // **A panel, not a location**, which is the correction MS4 made to its
+        // own first design: a result set is something you keep beside you while
+        // reading, and a location would have been navigated away from by the
+        // first row you followed.
+        setSearching(true)
       } else if (command === 'findEarlier' || command === 'findLater') {
         const direction = command === 'findEarlier' ? 'past' : 'future'
         // **⌘G with no bar opens one** rather than doing nothing: it is the same
@@ -840,13 +856,21 @@ export function App(): React.JSX.Element {
     const regex = query.scope.tags.length > 0 || query.scope.dates !== null
       ? null
       : phraseRegex(query.find, query.fold)
-    const here = findHere.current
+    // Mapped through the window that is loaded NOW, which is the whole reason
+    // this is kept as a document position.
+    const landed = findHere.current
+    const here =
+      landed === null
+        ? null
+        : w.toWindow({ segment: landed.segment, offset: landed.from as never, generation: w.generation })
     if (regex === null) {
-      editor.showFindMarks(here === null ? NO_FIND_MARKS : { places: [here], current: 0 })
+      editor.showFindMarks(
+        here === null ? NO_FIND_MARKS : { places: [{ from: here as number, to: here as number }], current: 0 },
+      )
       return
     }
     const places = matchesIn(w.text, regex)
-    const current = here === null ? -1 : places.findIndex(place => place.from === here.from)
+    const current = here === null ? -1 : places.findIndex(place => place.from === (here as number))
     editor.showFindMarks({ places, current })
     // **And down the track, which is the same set seen from further away.** The
     // marks in the text say what is on this screen; the track says how the
@@ -903,12 +927,7 @@ export function App(): React.JSX.Element {
       // search field so the next keystroke is another search, which leaves an
       // unfocused selection painting flat grey over the mark underneath it —
       // so the range is remembered here and drawn by `find-marks.ts` instead.
-      if (select) {
-        const ends = at.to !== at.from
-          ? now?.toWindow({ segment, offset: at.to as never, generation: now.generation })
-          : null
-        findHere.current = { from: buffer as number, to: (ends ?? buffer) as number }
-      }
+      if (select) findHere.current = { segment, from: at.from }
       editorRef.current?.revealAt(buffer as number)
     },
     [doc, pane],
@@ -1066,10 +1085,6 @@ export function App(): React.JSX.Element {
     // named after and is called what it is.
     location?.kind === 'links'
       ? 'Links'
-      : // A query is called what it is looking for, which is the only name it
-        // has — and an empty one is the field waiting for you.
-        location?.kind === 'search'
-      ? (location.text.trim() === '' ? 'Search' : `Search: ${location.text.trim()}`)
       : // **Asked of the DOCUMENT, not of how we arrived at it.** This tested
         // the location's kind, so a window reached by a span — which is how the
         // sidebar opens a note and how every link-directory row opens anything
@@ -1116,11 +1131,12 @@ export function App(): React.JSX.Element {
           showing !== undefined && showing !== STREAM_ID && !isOutside(showing) ? showing : null,
         vim,
         listView,
+        searchWidth,
         theme: themeName,
       })
     }
     reportRef.current()
-  }, [ready, pane, location, title, vim, listView, themeName])
+  }, [ready, pane, location, title, vim, listView, searchWidth, themeName])
 
   // The position must also survive a quit that beats the debounce.
   useEffect(() => {
@@ -1216,6 +1232,7 @@ export function App(): React.JSX.Element {
       )}
 
       <Frame
+        insetRight={searching ? searchWidth + 22 : 0}
         metrics={metrics}
         navVisible={navVisible}
         streamOpen={stream.open}
@@ -1319,7 +1336,11 @@ export function App(): React.JSX.Element {
             surface whose whole job is reading. */}
         {finding && (
           <Find
+            // The reading column already stops short of the panel, so the bar
+            // needs no inset of its own.
+            inset={0}
             control={findControl}
+            seed={findSeed}
             document={(pane?.document?.id ?? null) as string | null}
             origin={() => cursorRef.current}
             onGo={async hit => {
@@ -1333,6 +1354,7 @@ export function App(): React.JSX.Element {
             onQuery={setFindQuery}
             onClose={() => {
               setFinding(false)
+              setFindSeed(null)
               findHere.current = null
             }}
           />
@@ -1345,28 +1367,7 @@ export function App(): React.JSX.Element {
         )}
         {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
 
-        {location?.kind === 'search' ? (
-          <Results
-            text={location.text}
-            typography={typography}
-            today={doc?.clockDay ?? null}
-            onError={setError}
-            // **Replaced, not pushed**, so the history holds the searches you
-            // ran and not every prefix you typed on the way to them.
-            onSearch={text => void pane?.goTo({ kind: 'search', text }, { push: false }).catch(fail)}
-            onGoTo={(hit, elsewhere) => {
-              if (elsewhere) {
-                void window.tephra.win.create(
-                  hit.at.date !== null
-                    ? { kind: 'date', date: hit.at.date }
-                    : { kind: 'document', id: hit.at.file as unknown as DocumentId },
-                )
-                return
-              }
-              void goToLocated(hit.at, true).catch(fail)
-            }}
-          />
-        ) : location?.kind === 'links' ? (
+        {location?.kind === 'links' ? (
           // **A location that is not a document draws something that is not a
           // surface** (ML3). Everything around it — the frame, the sidebar, the
           // title bar, back and forward — is unchanged, which is the point:
@@ -1501,6 +1502,38 @@ export function App(): React.JSX.Element {
                   onSubmit: next => void window.tephra.doc.renameTag(span, name, next).catch(fail),
                 })
               },
+            }}
+          />
+        )}
+
+        {searching && (
+          <Results
+            width={searchWidth}
+            onWidth={setSearchWidth}
+            face={typography.font}
+            today={doc?.clockDay ?? null}
+            onError={setError}
+            onClose={() => setSearching(false)}
+            onGoTo={(hit, query, elsewhere) => {
+              if (elsewhere) {
+                void window.tephra.win.create(
+                  hit.at.date !== null
+                    ? { kind: 'date', date: hit.at.date }
+                    : { kind: 'document', id: hit.at.file as unknown as DocumentId },
+                )
+                return
+              }
+              // **The panel stays.** Following a row is a question asked of
+              // the list, not a departure from it — which is the whole reason
+              // this is a panel and not a place.
+              void goToLocated(hit.at, true)
+                .then(() => {
+                  setFindQuery(query)
+                  setFindSeed({ text: query, hit, corpus: true })
+                  setFinding(true)
+                  setFindLanded(n => n + 1)
+                })
+                .catch(fail)
             }}
           />
         )}

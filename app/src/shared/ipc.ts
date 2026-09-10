@@ -286,6 +286,7 @@ export interface WindowInfo {
   readonly theme: string
   /** How the task list is arranged (MT4a). Soft state, beside the theme. */
   readonly listView: 'time' | 'tag'
+  readonly searchWidth: number
 }
 
 /**
@@ -319,6 +320,8 @@ export interface WindowReport {
   readonly theme: string
   /** How the task list is arranged (MT4a). Soft state, beside the theme. */
   readonly listView: 'time' | 'tag'
+  /** How wide the search panel was dragged to (MS4). Soft state, like the rest. */
+  readonly searchWidth: number
 }
 
 /** Everything the renderer needs to serve the synchronous half of the API. */

@@ -36,6 +36,16 @@ export interface FrameProps {
   readonly stream: React.ReactNode
   readonly children: React.ReactNode
   readonly frameRef: (element: HTMLDivElement | null) => void
+  /**
+   * Pixels of the reading column something else is standing on (MS4).
+   *
+   * **The search panel floats, and floating is not free.** Without this the
+   * prose ran underneath it, so the passage you had just chosen from the list
+   * was the one you could not read the end of. The column narrows instead, and
+   * the text reflows — which costs a reflow when the panel opens and is worth
+   * it.
+   */
+  readonly insetRight?: number
 }
 
 export function Frame({
@@ -46,6 +56,7 @@ export function Frame({
   stream,
   children,
   frameRef,
+  insetRight = 0,
 }: FrameProps): React.JSX.Element {
   const showStream = streamOpen
 
@@ -71,7 +82,9 @@ export function Frame({
         {nav}
       </div>
 
-      <div className="frame-reading">{children}</div>
+      <div className="frame-reading" style={{ paddingRight: `calc(0.3in + ${insetRight}px)` }}>
+        {children}
+      </div>
 
       {showStream && (
         <aside className="frame-stream" data-covering={metrics.streamOcclusion > 0}>

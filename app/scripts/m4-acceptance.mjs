@@ -15,7 +15,9 @@
 //   1. ⌘F opens a bar, Enter lands on the newest match, and the match is selected
 //   2. Find Earlier walks back through the days, and Find Later comes back
 //   3. a phrase nobody wrote says so, and moves nothing
-//   4. ⌘⇧F shows every place at once, and a row goes there
+//   4. ⌘⇧F shows every place at once, in a panel that STAYS while you read the
+//      rows — and hands the set off to the walk, so choosing one leaves you
+//      inside the query rather than merely somewhere it pointed
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
@@ -150,11 +152,12 @@ console.log('\n— searching —')
     'The surveyor came back with a number.\n',
     'Booked the surveyor for Thursday.\n',
   ])
-  const r = report(await launch('search', root, { shotDelay: 24_000, timeoutMs: 75_000 }))
+  const r = report(await launch('search', root, { shotDelay: 26_000, timeoutMs: 80_000 }))
 
   check('the menu item exists and fired', r.menuItemFound === true)
-  check('and the pane came up, named', r.paneShown === true && r.titleWhenEmpty === 'Search',
-    String(r.titleWhenEmpty))
+  check('a panel came up, and the document is still there behind it',
+    r.panelShown === true && r.stillReading === true,
+    `panel=${r.panelShown} reading=${r.stillReading}`)
   check('a row per line, across days', r.rows === 3, `rows=${r.rows}`)
   check(
     'each showing the words that answered',
@@ -163,12 +166,34 @@ console.log('\n— searching —')
   )
   check('two matches in one line are one row, and say so', r.grouped === 1, `grouped=${r.grouped}`)
   check('and where it came from', r.sources === 3, `sources=${r.sources}`)
-  check('the count says how many', /^3( found)?$/.test(String(r.counted)), String(r.counted))
-  check('the title says what is being looked for', r.titleWhenSearching === 'Search: surveyor',
-    String(r.titleWhenSearching))
-  check('clicking a row goes to the passage', r.wentThere === true, String(r.titleAfterGoing))
-  check('and back returns to the results', r.back === true && r.resultsAgain === 3,
-    `back=${r.back} rows=${r.resultsAgain}`)
+  check('the count says how many', String(r.counted) === '3', String(r.counted))
+  check('the panel can be dragged wider', Number(r.widened) >= 90, `+${r.widened}px`)
+  check('THE POINT: a row goes there and the list stays',
+    r.wentThere === true && r.listStayed === 3,
+    `reading=${r.wentThere} rows=${r.listStayed}`)
+  check('and it lands inside the query, marked',
+    r.handedOff === 'surveyor' && r.markedOnArrival === 1,
+    `field=${JSON.stringify(r.handedOff)} marked=${r.markedOnArrival}`)
+  check('with the tally saying which of them this is',
+    /^\d+ \/ \d+…?$/.test(String(r.tallyOnArrival)), String(r.tallyOnArrival))
+  check('and the same set is steppable from there',
+    r.steppable === true && /^\d+ \/ \d+…?$/.test(String(r.steppedTo)) &&
+      r.steppedTo !== r.tallyOnArrival,
+    `${r.tallyOnArrival} → ${r.steppedTo}`)
+  // **The panel's ink comes from the panel's own set.** This has been the same
+  // bug twice in this codebase — `.theme-panel` carries a note about an input
+  // whose ground came from the page — so it is pinned rather than remembered.
+  {
+    const c = r.colours ?? {}
+    const rgb = tokens => `rgb(${String(tokens).split(/\s+/).join(', ')})`
+    check('the panel is inked from the panel, not from the page',
+      c.leadInk === rgb(c.panelText) && c.leadInk !== rgb(c.text),
+      `lead=${c.leadInk} panel=${rgb(c.panelText)} page=${rgb(c.text)}`)
+    check('and so are its pills and its field',
+      String(c.pillInk).includes(String(c.panelText).split(/\s+/).join(', ')) &&
+        c.fieldInk === rgb(c.panelText) && c.fieldBg !== c.panelBg,
+      `pill=${c.pillInk} field=${c.fieldInk} on ${c.fieldBg}`)
+  }
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 

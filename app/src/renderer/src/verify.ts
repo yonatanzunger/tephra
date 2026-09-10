@@ -2394,13 +2394,16 @@ export async function runVerify(request: string): Promise<void> {
     }
 
     if (scene === 'search') {
-      // ⌘⇧F and the results pane (MS4, D66). **The other rendering of the same
-      // query**: the walk goes to one place at a time, this shows every place.
+      // ⌘⇧F and the search panel (MS4, D66). **The other rendering of the same
+      // query**: the walk goes to one place at a time, this shows every place —
+      // and it stays open while you read them, which is the whole reason it is
+      // a panel rather than a location.
       say('menuItemFound', await window.tephra.clickMenu('Search Tephra\u2026'))
       await settle(600)
       const field = document.querySelector('.results-query') as HTMLInputElement | null
-      say('paneShown', field !== null)
-      say('titleWhenEmpty', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('panelShown', field !== null)
+      // The document is still there behind it, which a location could not manage.
+      say('stillReading', document.querySelector('.cm-content') !== null)
       if (field !== null) {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
         setter?.call(field, 'surveyor')
@@ -2409,31 +2412,59 @@ export async function runVerify(request: string): Promise<void> {
         field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         await settle(2500)
       }
-      say('rows', document.querySelectorAll('.links-row').length)
+      say('rows', document.querySelectorAll('.results-list li').length)
       say('marked', document.querySelectorAll('.results-lead mark').length)
       say('firstMark', document.querySelector('.results-lead mark')?.textContent ?? '')
-      say('counted', document.querySelector('.links-count')?.textContent ?? '')
-      say('titleWhenSearching', document.querySelector('.titlebar .title')?.textContent ?? '')
-      // Every row says where it came from, or it is not recognisable.
-      say('sources', [...document.querySelectorAll('.results-where .pill')].length)
+      say('counted', document.querySelector('.results-count')?.textContent ?? '')
+      say('sources', document.querySelectorAll('.results-where .pill').length)
+      {
+        const lead = document.querySelector('.results-lead') as HTMLElement | null
+        const panel = document.querySelector('.results-panel') as HTMLElement | null
+        const pill = document.querySelector('.results-where .pill') as HTMLElement | null
+        const when = document.querySelector('.results-when') as HTMLElement | null
+        const root = getComputedStyle(document.documentElement)
+        say('colours', {
+          panelBg: panel === null ? null : getComputedStyle(panel).backgroundColor,
+          leadInk: lead === null ? null : getComputedStyle(lead).color,
+          pillInk: pill === null ? null : getComputedStyle(pill).color,
+          pillBg: pill === null ? null : getComputedStyle(pill).backgroundColor,
+          whenInk: when === null ? null : getComputedStyle(when).color,
+          fieldInk: getComputedStyle(document.querySelector('.results-query') as Element).color,
+          fieldBg: getComputedStyle(document.querySelector('.results-query') as Element).backgroundColor,
+          panelText: root.getPropertyValue('--panel-text').trim(),
+          text: root.getPropertyValue('--text').trim(),
+          surfacePanel: root.getPropertyValue('--surface-panel').trim(),
+        })
+      }
       // **A line with two matches is ONE row**, which is the difference between
       // a list of places and a list of the search's own arithmetic.
       say('grouped', [...document.querySelectorAll('.results-when')]
         .filter(n => (n.textContent ?? '').includes('here')).length)
 
-      // **A row goes there**, which is the only thing a result is for.
-      ;(document.querySelector('.results-go') as HTMLElement | null)?.click()
-      await settle(2000)
-      say('wentThere', document.querySelector('.cm-content') !== null)
-      say('titleAfterGoing', document.querySelector('.titlebar .title')?.textContent ?? '')
+      // **Dragged wider**, and the width is what the panel reports.
+      const grip = document.querySelector('.results-grip') as HTMLElement | null
+      const panel = document.querySelector('.results-panel') as HTMLElement | null
+      const wasWide = panel?.getBoundingClientRect().width ?? 0
+      grip?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 800 }))
+      window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 700 }))
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 700 }))
+      await settle(400)
+      say('widened', Math.round((panel?.getBoundingClientRect().width ?? 0) - wasWide))
 
-      // And back returns to the results, because a query is a location (ML3).
-      // Through the titlebar's own control, which is where back lives here.
-      const backer = document.querySelector('.titlebar .nav') as HTMLButtonElement | null
-      say('back', backer !== null && !backer.disabled)
-      backer?.click()
-      await settle(1800)
-      say('resultsAgain', document.querySelectorAll('.links-row').length)
+      // **A row goes there, and the list stays.** That is the whole claim.
+      ;(document.querySelector('.results-go') as HTMLElement | null)?.click()
+      await settle(2400)
+      say('wentThere', document.querySelector('.cm-content') !== null)
+      say('listStayed', document.querySelectorAll('.results-list li').length)
+      // **The list hands off to the walk**: the query is in the bar, the match
+      // is marked, and ⌘G steps the same set — over the whole corpus, not
+      // narrowed to whichever document the row landed in.
+      say('handedOff', (document.querySelector('.find-field') as HTMLInputElement | null)?.value ?? '')
+      say('markedOnArrival', document.querySelectorAll('.cm-find-now').length)
+      say('tallyOnArrival', document.querySelector('.find-said')?.textContent ?? '')
+      say('steppable', await window.tephra.clickMenu('Find Earlier'))
+      await settle(1400)
+      say('steppedTo', document.querySelector('.find-said')?.textContent ?? '')
 
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
