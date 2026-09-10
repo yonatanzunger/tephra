@@ -582,9 +582,10 @@ day boundary — and only three dependencies between them are real. The rest is 
 judgement about what is worth having soonest.
 
 **MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → MS1 → MS2 →
-MS3 → MS4 → R7 → M5.**
-*(All complete through R7. M5 is one item now — the keymap — and the other two
-are in the backlog below.)*
+MS3 → MS4 → R7.**
+*(All complete. M5 dissolved into the backlog on 2026-09-10, so **the ordered
+plan is finished** — everything left is wanted-on-demand and freely
+reorderable.)*
 
 **MT5c and M6 are not in that line**; they are in the backlog below, which is a
 different kind of thing from a deferral — see there.
@@ -753,32 +754,21 @@ than forcing it.
   written, had never once worked: there was no route from the renderer to the
   corpus, so every `<img>` in the app pointed at the bundle.
 
-## M5 — the editing surface finished
+## M5 — the editing surface finished *(dissolved into the backlog, 2026-09-10)*
 
-**Reduced to one item, on evidence, 2026-09-09.** All three were reconsidered
-after months of use rather than built as listed.
+**All three of its items were reconsidered after months of use, and none of them
+survived as scheduled work.** That is the promotion rule doing its job on a
+milestone rather than on a feature: M5 was written when the surface was new and
+the answers were guesses.
 
-**Inventory: `solution/keymap.md`, kept true by `tests/unit/keymap.test.ts`.**
+- **Vim: removed** rather than designed around (D67). It stayed off for months,
+  the native surface became better than the vim one, and nothing was missed.
+- **The keymap and the visual system: backlog**, grouped — see below. The
+  keymap's *inventory* is done (`solution/keymap.md`); its design is not.
+- **Rendered editing of inline constructs: backlog.** Already ◆ *v1 or v2*, and
+  raw-under-the-caret has been the daily experience for months without complaint.
 
-- **The keymap, deliberately designed.** *(D67, R1.4 as superseded.)* Vim is
-  removed rather than switched off — it stayed off for months, the native surface
-  became better than the vim one, and nothing was missed. So this is no longer
-  "a non-vim keymap" beside another; it is **the** keymap, and it is the whole of
-  what M5 owes. The deletion is done. **The inventory is done** — fifty-nine
-  inherited bindings, five sources, three shadowed by menu accelerators, and a
-  list of the ones still undecided. The design is not.
-- ~~Typography and the visual system, tunable (R1.3)~~ — **deferred to the
-  backlog until there is something specific to tune.** Most of it exists: four
-  themes, the panel, authored theme files with machine-local selection (D41),
-  font, size, measure, spacing and colour all live. R1.3 asks for *tunable and
-  excellent*, and the tunable half is built; what "excellent" wants next is a
-  judgement that needs road miles rather than a list written now.
-- ~~Rendered editing of inline constructs~~ — **moved to the backlog.** It was
-  already marked ◆ *v1 or v2* in `features.md`, and R1.4 always put it last in
-  its own ordering (*"inline constructs first, tables and equations last"*).
-  Rendered *reading* has been built since MV; raw-under-the-caret has been the
-  daily experience for months without complaint, which under the promotion rule
-  is exactly the evidence for leaving it alone.
+**Which means v1 is complete.** Everything the ordered plan held is built.
 
 ## The backlog — built when we decide we want them
 
@@ -809,19 +799,39 @@ addition to it and not a replacement.
 for months and has not once been complained about, which is the promotion rule's
 answer. It moves to the front the day the raw form is actually in the way.
 
-### Typography and the visual system (R1.3)
+### The editing surface's refinements — the keymap and the visual system
 
-**Deferred here from M5 on 2026-09-09, pending something specific to tune.** The
-*tunable* half of R1.3 is built and has been through several passes: four themes,
-the theme panel, authored theme files with machine-local selection (D41), and
-font, size, measure, spacing and colour all live and adjustable.
+**Grouped on 2026-09-10, because they are the same kind of work on the same
+surface** and would be judged together: what a key does and what a line looks
+like are both answers to *is this pleasant to write in*, and doing one without
+the other means looking at the surface twice.
 
-**What is undecided is what "excellent" wants next**, and the honest answer is
-that a list written today would be invented rather than observed. Candidates
-worth watching for, none of them chosen: the reading measure at very wide
+**The keymap.** *(D67, R1.4 as superseded, `solution/keymap.md`.)* The inventory
+is done and is kept true by `tests/unit/keymap.test.ts`: fifty-nine inherited
+bindings from five sources that do not know about each other, three of them dead
+under menu accelerators. What remains is deciding what they *should* do, and the
+inventory lists the open ones. R1.5 is the standard they answer to — *"a design
+that drifts toward someone else's conventions has failed on its own terms"* — and
+inheriting a code editor's defaults is exactly that drift.
+
+The ones most worth fixing first, from the inventory:
+
+- **⌘↑ / ⌘↓ / ⌘Home / ⌘End go to "the document" start and end**, which in a
+  windowed twenty-year stream is *the loaded window*. A key that says beginning
+  and means somewhere arbitrary is worse than one that is not bound.
+- **⌘⇧K deletes a line**, live and undocumented, next to ⌘K for Link.
+- **The emacs layer** (`Ctrl-k`, `Ctrl-o`, `Ctrl-t`, `Ctrl-v`) and **multiple
+  cursors** (`⌘⌥↑`/`⌘⌥↓`), both inherited from a code editor.
+- **Escape** belongs to `simplifySelection` and to the find bar at once.
+
+**The visual system.** *(R1.3.)* The *tunable* half is built and has had several
+passes: four themes, the panel, authored theme files with machine-local selection
+(D41), and font, size, measure, spacing and colour all live. What "excellent"
+wants next is a judgement that needs road miles rather than a list written now.
+Candidates worth watching for, none of them chosen: the measure at very wide
 windows; the vertical rhythm around block widgets, which is where the spacing
-work stopped; heading scale in a long day; how a printed page differs from the
-screen; and whether a light theme wants a different measure from a dark one.
+work stopped; heading scale in a long day; how the printed page differs from the
+screen; whether a light theme wants a different measure from a dark one.
 
 ### MT5c — the soft cap on the working view (T12)
 

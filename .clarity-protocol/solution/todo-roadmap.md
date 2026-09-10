@@ -601,8 +601,27 @@ can see.
   `tephra:todo/<id>` already resolves by — and the inverse of `tephra:mark`,
   which answers with the first. The day comes from the file's PATH, exactly, so
   it needs no zone and D63 has no opinion to have.
-- **The resolved tail (T8), within three days.** What was finished under a tag
-  on an earlier day.
+- **The resolved tail (T8), within three days — built, and SUPPRESSED from use
+  on 2026-09-10.** `SHOW_RESOLVED` in `Todo.tsx` is one word and it is `false`.
+  It read as more list rather than as context, and a list whose foot fills with
+  things needing no attention is a list you stop scanning. The three-day window
+  below narrowed it and did not fix it.
+
+  **Suppressed rather than removed, because the idea may be wanted again.**
+  Everything behind the flag stands: `CorpusIndex.resolvedByTag` (six integration
+  tests of its own), the `todo.resolved()` bridge, the fetch beside the list, the
+  `Resolved` component and its styling. m3 asserts the *absence* now, because a
+  flag nobody verifies is a flag that comes back on by accident — and the window
+  rule is still checked in the query behind it, so it cannot rot while the view
+  is off.
+
+  **A constant and not a setting, deliberately.** A setting promises that
+  somebody wants both answers on different days; this is one answer waiting to
+  see whether the other was better. If it turns out to be wanted sometimes, that
+  is when it becomes a control — `listView` (MT4a) is the precedent for how that
+  goes.
+
+  What it was: what was finished under a tag on an earlier day.
   Not what was finished *today* — that is carried, greyed and on screen (T7),
   and showing it underneath as well would be showing it twice. Not backlogged
   items either: put down is not finished with, and it has its own place.

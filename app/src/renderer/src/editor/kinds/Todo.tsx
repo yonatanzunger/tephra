@@ -94,6 +94,30 @@ const TITLE: Readonly<Record<TodoStatus, string>> = {
   backlog: 'Backlogged',
 }
 
+/**
+ * Whether a tag group ends with what was recently finished under it (MT6).
+ *
+ * **Off, from use, 2026-09-10 — and suppressed rather than removed, because the
+ * idea may be wanted again.** It was built to answer T8's other half: today's
+ * file cannot know that something was finished under this tag last Tuesday, so
+ * the tail said so. In practice it read as more list rather than as context, and
+ * a list whose foot is full of things needing no attention is a list you stop
+ * scanning. The three-day window (D-none; `RESOLVED_DAYS`) narrowed it and did
+ * not fix it.
+ *
+ * **What stays standing behind this flag**, so turning it back on is one word:
+ * `CorpusIndex.resolvedByTag`, the `todo.resolved()` bridge, the fetch beside
+ * the list, the `Resolved` component and its styling. All of it is still tested
+ * — the acceptance still drives it — and none of it is dead in the sense that
+ * matters, because the same query is what the history scrub reads.
+ *
+ * **Why a constant and not a setting.** A setting is a promise that somebody
+ * will want both answers on different days; this is one answer waiting to see
+ * whether the other was better. If it turns out to be wanted sometimes, that is
+ * when it becomes a control (T8, MT4a's `listView` is the precedent).
+ */
+const SHOW_RESOLVED = false
+
 export function TodoSurface({ window: docWindow, settings, onError, onTextTarget }: SurfaceProps): React.JSX.Element {
   const list = docWindow.document.id as DocumentId
   const [today, setToday] = useState<DateKey | null>(null)
@@ -169,6 +193,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * looked at.** `resolved` is T8's other half — the things finished under a
    * tag on some earlier day, which today's file cannot know about. `backlog` is
    * T14's drawer.
+   *
+   * **The resolved tail is suppressed, not removed** — see `SHOW_RESOLVED`.
    */
   const [resolved, setResolved] = useState<Record<string, readonly ResolvedItem[]>>({})
   const [backlog, setBacklog] = useState<readonly ResolvedItem[]>([])
@@ -626,7 +652,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                       about — the live half above is a regrouping of today and
                       needed nothing built (MT4a). Read-only, and quiet: it is
                       context for the live items, not more of them. */}
-                  {group.tag !== null && (resolved[group.tag]?.length ?? 0) > 0 && (
+                  {SHOW_RESOLVED && group.tag !== null && (resolved[group.tag]?.length ?? 0) > 0 && (
                     <Resolved items={resolved[group.tag] as readonly ResolvedItem[]} today={today} />
                   )}
                   {/* **Add INTO a group, which is where you are looking.** The

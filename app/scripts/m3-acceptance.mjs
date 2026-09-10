@@ -1657,18 +1657,22 @@ console.log('\n— the pivots and the drawer —')
 
   const V = report(await launch('mt6', root))
   check(
-    // T8's other half. The live half is a regrouping of today and needed
-    // nothing built (MT4a); this is the part only the corpus knows.
-    'THE RESOLVED TAIL: what was finished under a tag, newest first',
-    JSON.stringify(V.tailUnderHouse) === JSON.stringify(['reroof it #house', 'fix the gate #house']),
+    // **Suppressed from use, 2026-09-10** (`SHOW_RESOLVED` in `Todo.tsx`). It was
+    // T8's other half — what the corpus knows and today's file cannot — and in
+    // practice it read as more list rather than as context. The query behind it
+    // stands and is tested six ways in `tests/integration/index.test.ts`; what
+    // this now checks is that the suppression is real, because a flag nobody
+    // verifies is a flag that comes back on by accident.
+    'THE RESOLVED TAIL: suppressed, and actually absent from the list',
+    Array.isArray(V.tailUnderHouse) && V.tailUnderHouse.length === 0,
     JSON.stringify(V.tailUnderHouse),
   )
   check(
-    // **A reminder, not an archive.** The first cut had no window at all, so a
-    // tag buried its live items under every task ever finished under it. These
-    // are FULLY resolved, so nothing is picked up again — what is older than a
-    // few days is a question for the scrub, which answers it exactly.
-    'and THE WINDOW holds: nine days back is the scrub\'s business, not the tail\'s',
+    // The window is a property of the QUERY, which still holds it: these are
+    // fully resolved items, so nothing is picked up again, and anything older
+    // than a few days is a question for the scrub. Kept as a check so the rule
+    // does not rot while the view is off.
+    'and THE WINDOW still holds in the query behind it',
     Array.isArray(V.tailUnderHouse) && !V.tailUnderHouse.some(t => String(t).includes('long ago')),
     JSON.stringify(V.tailUnderHouse),
   )
