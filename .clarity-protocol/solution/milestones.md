@@ -771,6 +771,30 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
+## MH — the horizon and dockets *(designed, not started)*
+
+**Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
+Requirements: `goal/horizon.md`. Decisions: D68–D72.**
+
+The first design cycle after v1, driven by what daily use taught. **R19's gate
+was opened and returned a negative**: pinned lists shipped months ago, an events
+table could have been made on any day since, and it was not — so the events
+calendar becomes a feature. What it grew into is larger than R19 and smaller than
+the note that started it: a fourth document kind (the **docket**), a query over
+everything dated (the **horizon**), and a broader daily pass (**reorient**) that
+supersedes the walk.
+
+Six phases, usable at MH1 and directly useful for household management at MH3.
+**Dockets lead**, ahead of the horizon, because a docket's editing surface is
+what a real planning conversation needs and the horizon is not on that path —
+which also has the effect that the horizon gets built with both of its sources
+present rather than one. **It is not purely additive**: the due-soon band, MT7's
+overall-todo files and the `backlog` status are all superseded, so three
+migrations of shipped, in-daily-use behaviour are inside it.
+
+**It also answers Q3a**, which was deferred in September specifically to be
+answered from use, and was.
+
 ## The backlog — built when we decide we want them
 
 **Not deferred, and not scheduled: wanted-on-demand.** These are whole features

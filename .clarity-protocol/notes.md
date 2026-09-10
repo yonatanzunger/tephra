@@ -476,6 +476,44 @@ era 1's third failure ("no way to represent a project with its own milestones,
 so no way to see the list of projects or their status"). Expect the TODO design
 to teach it something, and check era 1's failure 3 against it first.
 
+**Evidence arrived 2026-09-10, and it names the hottest instance**
+(`notes/04 events.md`). Managing multiple physical households produces era 1's
+failure 3 exactly: routine maintenance that recurs, and *major projects with
+their own milestones* — a garden, a floor — where "the collection of all related
+items is itself an artifact I need to work on." It arrived inside the events
+feature and is not the events feature. The same conflation cost the TODO design
+once already, and splitting it is what let that design get sharp.
+
+**And it adds something the record has never had: a second person.** The
+household list is worked on *jointly with the user's wife*, and the era-3 events
+spreadsheet turns out to have been co-owned with an exec assistant — *"a
+communication channel with someone who helped me plan and manage things."* Two of
+the hottest wants in this project are shared surfaces, against a constraint that
+reads *"two devices, both trusted, single user. No multi-tenancy, no sharing
+model."* **Settled by D70, and cheaply**: the need is two people in one room
+reading one screen, not two people with accounts — a legibility requirement, not
+an architecture. Same shape as D46, where moving a boundary out to a coarser
+container deleted the propagation entirely.
+
+**Two corrections to the item above, from working the household case through
+(2026-09-10).** The household case turned out **not** to be the graveyard problem
+at all — managing the projects is adequately served by docs and TODO items today,
+and the gap was the *meta-problem* of regathering "not now" items, which is Q3a
+and is answered by D71. So the graveyard problem is narrower than it looked and
+still concerns solitary threads going quiet: the book, the research, the
+standards push.
+
+**And its deferral has just become legitimate, which it was not before.** By the
+standing rule, deferring a *mechanism* is safe only when its data is already
+being recorded — and nothing recorded what died, since an abandoned thread simply
+stops appearing in day files. *"Not enough information yet"* was therefore a
+permanent condition. **D71's graveyard docket is the instrument**, and the number
+to watch when this clarification is finally run is the **resurrection rate**.
+Expect to run it after living with dockets for a while, and check these against
+it first: whether the problem is threads dying or simply too many being started
+(the trap Q3 fell into once), and what the tools tried over the years actually
+failed at.
+
 ## A gate that was never opened has not returned a negative
 
 D4 held the TODO UX behind an evidence gate: run a plain checkbox file in v1, and

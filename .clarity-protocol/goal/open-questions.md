@@ -115,6 +115,39 @@ The last-touched timestamp this question asked for is kept (T3), and is still un
 
 ## Q3a: What makes a backlog useful rather than a graveyard?
 
+**Status: the evidence arrived from use, 2026-09-10, exactly as the deferral
+intended** — and it discriminates against all three candidates below. Design in
+`goal/horizon.md`; the question stays open only until that lands.
+
+> **The deferral worked, which is worth saying in a project with this many
+> unopened gates.** It was recorded with the line *"running without the mechanism
+> is running with a known graveyard, and the point of saying so here is that it
+> should be noticed in use rather than discovered later."* It was noticed in use,
+> in the terms the question asked for: *"these are 'not now' tasks which
+> shouldn't be taking up space on a TODO list meant to drive reorientation, but
+> OTOH shouldn't be dropped on the floor; we should be regularly regathering."*
+>
+> **All three candidates were the wrong shape.** Expiry, a rotating sample in the
+> walk, and resurfacing on tag activity all model a **drip**. What use describes
+> is a **session** — *"an organized way to regularly pull items to the fore,"*
+> a deliberate review of a whole set, sometimes performed with another person.
+> **The answer is the docket review** (`goal/horizon.md`), a ritual designed for
+> an unrelated reason that turns out to be this mechanism.
+>
+> **And one rule came with it.** The backlog is regathered *from*, never routed
+> *into*: backlogging must cost one keystroke and zero decisions, because
+> "which container does this go in?" is the friction this project was founded on
+> deleting. Backlog is the inbox; the review is where filing happens.
+>
+> **A consequence for T12/MT5c.** The same evidence reframes the soft cap: the
+> working view is bounded by a **membership criterion** — *is this a candidate
+> for the near term?* — rather than by a number. That serves both of the jobs Q3
+> identified, and serves entry cost *better* than a number does, because the
+> pressure is meaningful rather than arbitrary and the escape is one keystroke.
+> **MT5c may dissolve rather than ship.**
+
+*Original framing, kept for its reasoning:*
+
 **Status:** open, and **deliberately deferred to a later milestone** (2026-09-01) — to be answered from use, once the rest of the TODO system is running.
 
 **The deferral passes the rule, and unconditionally.** *Data cannot be backfilled; mechanisms can be deferred* — safe when what is deferred is a mechanism over data already being recorded. Every input any plausible resurfacing rule could want is recorded from day one by D55's copy-forward: backlog status exists from the start (T4); *when* an item was backlogged is the last day file it appears in; tag recency is which day a tag last appeared anywhere; and even a rule with memory — "offer this at most once a fortnight" — is covered, because declining is an edit and every edit is dated by construction. There is no version of this question whose answer needs data we are not already keeping.

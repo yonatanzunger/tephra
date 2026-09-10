@@ -2903,3 +2903,248 @@ caret arriving from the line above skips a block widget whatever keymap moved it
 **What would reopen this.** Wanting vim back, which is a thing use can say and
 argument cannot. The corpus is plain markdown and the surface is CodeMirror, so
 re-adding the extension is a day's work and no data decision depends on this.
+
+## D68: R19 is promoted, and the fourth view type is the docket
+
+**Date:** 2026-09-10
+**Status:** decided
+**Supersedes:** R19. **Amends:** `goal/scope.md`'s counting rule, T9, T11.
+**Design:** `goal/horizon.md`.
+
+**Decision.** The events calendar becomes a feature. The document kind is a
+**docket** — a complete, durable set of standing commitments in one domain,
+edited as a group. One thing on it is a **matter**. The **horizon** is the view
+over every docket, compact and full. **Reorient** is the flow that spans them.
+
+**Why the gate opened.** R19 held this to a pinned markdown file and demanded a
+recorded failure before anything more. R18 shipped months ago, a table could have
+been made on any day since, and it was not. This project's own rule is that *a
+gate that was never opened has not returned a negative* — this one was opened,
+and it did. What a plain file lacks is not storage: it does not order itself,
+does not retire what has passed, does not reach the task list, and nothing shows
+it to you, so it is not maintained. **The surfacing is the feature.** Identical
+in shape to what T9 found about due dates, where era 2 stored them and missed
+them anyway.
+
+**The counting rule goes to three-plus-one, and the increment is paid for.**
+Exactly one type is added. The horizon is *not* a second one — it is a view over
+every instance of the type, which is what the tag pivot and the link directory
+already are to TODO — and reorient is a flow, not a type. The rule survives
+because the number is still a constraint: **the next candidate must argue why it
+cannot be a mode of something existing.** `scope.md` is amended when this ships.
+
+**Names chosen against a specific failure**, not for taste. "Schedule" and
+"event" each burn a word needed one layer down — every matter *has* a recurrence
+schedule, and "event" must stay usable as an ordinary word. "Item" belongs to
+TODO and "entry" to filesets, which is why the inner noun is neither.
+
+**What would reopen this.** The docket proving to be a mode of the TODO surface
+after all, which would return the count to three.
+
+## D69: Tephra reads calendars from files and never writes to one
+
+**Date:** 2026-09-10
+**Status:** decided
+**Design:** `goal/horizon.md` H12.
+
+**Decision.** Dated rows may be read from an **ICS file kept in the notebook**.
+Tephra does not write to Google Calendar or any external service, and trips
+continue to be entered there by hand.
+
+**Why.** Both directions were implied by the source notes, and they cost
+radically different things. Reading an ICS file costs a parser; the file is a
+file, so R25 (full function offline), R26 (plain durable formats) and the
+"program over a directory" premise are untouched. Writing costs OAuth, tokens, a
+network dependency and the first service this app has ever talked to — and
+`notes.md` already distinguishes the kinds of dependency worth taking. The user's
+own judgement settled it: *"I'd rather manage trips separately and manually add
+them than do major feature bloat just to support that."*
+
+**What would reopen this.** Manual entry of trip calendar items proving frequent
+and irritating enough to outweigh a service dependency. Note that the read
+direction landing first makes this cheaper to revisit, not harder.
+
+## D70: Two people, one screen — the single-user constraint holds
+
+**Date:** 2026-09-10
+**Status:** decided
+**Confirms:** the "single user, no multi-tenancy, no sharing model" constraint in
+`goal/requirements.md`.
+
+**Decision.** The household docket is worked on jointly, and that requires
+**no sharing model.** The need is two people in one room reading one screen, not
+two people with accounts. *"Who owns what"* is a column, not an identity.
+
+**Why this needed deciding rather than assuming.** Two of this project's hottest
+wants turned out to be shared surfaces — the household docket, and era 3's
+events spreadsheet, which was co-owned with an exec assistant and functioned as
+*"a communication channel with someone who helped me plan and manage things."*
+Against a constraint reading "single user," that is the kind of thing that
+quietly grows into sync, identity and permissions. Asking the cheap question
+first — **access, or in the room?** — collapsed it to a legibility requirement:
+the docket view must be readable at conversational distance and navigable while
+talking. In this project legibility requirements are hard requirements, so this
+is a real obligation and a very small one.
+
+**Same shape as D46**, where moving a boundary out to a coarser container deleted
+the propagation entirely rather than resolving it.
+
+**What would reopen this.** Wanting the other person to edit when not in the
+room, which is a different product and should be recognised as one.
+
+---
+
+**Amendment to D68, 2026-09-10 (same day).** The clause reading *"Amends: T9"*
+was written on a merge that did not survive the same conversation. An earlier
+draft folded the due-soon band into the day's selection as one band with two
+kinds of member. **T9 is satisfied by the compact horizon, not superseded by the
+selection band.**
+
+The cut is **volition against imposition**: *"X is due in three days"* is a
+status to be aware of, *"I have decided I am doing X today"* is a gesture
+performed. A due date approaching has more in common with a talk approaching
+than with anything chosen, so it belongs on the horizon — which is therefore
+**everything bearing down, whatever its source**, and defined by distance rather
+than by kind.
+
+**Two things follow, and both are improvements rather than concessions.** T9's
+guarantee gets *better*: a band above the task list cannot help someone who is
+not looking at the task list, which is exactly how a deadline is missed, whereas
+the horizon strip is present while writing. And the merged band would have been
+a region meaning two things depending on what put something there — the shape
+MT5a rejected on its own surface, arriving here by another door.
+
+**Recorded rather than silently corrected** because the wrong version had a
+plausible argument behind it (two stacked bands are the "scan two ways at once"
+failure era 2 died of) and that argument will recur. It is answered by there
+being only ever *one* band on the list — the selection — with the other thing
+living somewhere else entirely.
+
+## D71: The backlog is a docket, and so is the overall-todo file
+
+**Date:** 2026-09-10
+**Status:** decided
+**Supersedes:** T4's `backlog` status, D55's overall-todo shape.
+**Answers:** Q3a. **Design:** `goal/horizon.md`.
+
+**Decision.** There are **two list kinds, not four**. A **daily todo** turns over,
+is carried and is walked. A **docket** is a standing set reviewed periodically
+and promoted from. D55's overall-todo file is a docket; the TODO backlog is the
+**distinguished miscellaneous docket** at the root; `backlog` stops being a
+status and becomes a **move**, with the item keeping its id so its history stays
+continuous and `tephra:todo/<id>` still resolves.
+
+**Why it is not a stretch.** *A kind with one distinguished instance at the root*
+is the pattern already used three times — one stream is *the* notebook, the
+`.todo` at the root is *the* list, `sections/_index.fileset.md` is *the*
+top-level list. This is the fourth. And it deletes concepts rather than adding a
+generalization for its own sake, which is the only justification `notes.md`
+accepts: a backlog of blog post ideas and a backlog of house repairs are the same
+object — a standing set requiring periodic review and a decision about what to
+surface.
+
+**Q3a is answered, and all three of its candidates were the wrong shape.** Expiry,
+a rotating sample, and tag-activity resurfacing all model a **drip**. Use
+describes a **session**: *"an organized way to regularly pull items to the fore,"*
+a deliberate review of a whole set, sometimes with another person. The docket
+review — designed for an unrelated reason — is that mechanism.
+
+**One rule is load-bearing and must not be traded.** *The backlog is regathered
+**from**, never routed **into**.* Backlogging costs one keystroke and zero
+decisions, because "which container does this go in?" is the friction this
+project was founded on deleting. Naming a docket at that moment stays available
+and is never required; filing happens at review, when routing is cheap.
+
+**The known weakness, recorded rather than hidden.** Topical dockets are bounded
+by their domain; the miscellaneous one is bounded by nothing, and migration *out*
+of it concentrates exactly the residue that never found a home. Q3a's warning
+applies directly — a docket is a *nicer* comfortable place for "someday, I
+suppose" to live — and the review is an improvement only if it happens. **The
+candidate is decline count**, whose data Q3a already established is recorded by
+construction, and which converts "yeah, sometime" into a decision. Untested.
+
+**What would reopen this.** The miscellaneous docket becoming unreviewable in
+practice, which is the failure mode above arriving; or the docket's group-editing
+surface proving wrong for a list of blog post ideas, which would mean one storage
+kind with two surfaces rather than one of each.
+
+---
+
+**Amendment to D71, 2026-09-10 (same day). The graveyard is a second root
+docket.** The weakness recorded above — the miscellaneous docket being bounded by
+nothing, and concentrating exactly the residue that never found a home — is
+handled by a tier below it. A matter declined enough times **moves to the
+graveyard**: not destroyed, still findable, still able to return, merely somewhere
+it is not expected to be.
+
+**This does not solve the graveyard problem and must not be described as doing
+so.** What it does is make the problem literal — and that is what makes deferring
+the real question *legitimate*. The standing rule is **data cannot be backfilled;
+mechanisms can be deferred**, safe only when the deferred thing is a mechanism
+over data already recorded. Nothing today records what dies; an abandoned thread
+merely stops appearing in day files. So "not enough information yet" was a
+**permanent** condition, because the information was not accruing. It now
+accrues.
+
+**Demotion is automatic and reported.** Silent demotion is death by neglect with
+better filing, against a problem whose success statement is *die by decision, not
+by neglect*; but requiring a decision means it will not happen and the
+miscellaneous docket clogs again. H10's split, one level down: automatic protects
+the record, the review says *"nine moved to the graveyard since June"*, and one
+gesture objects.
+
+**Three small rules.** The graveyard is **exempt from staleness reporting**, or
+the anti-neglect mechanism nags about the one place neglect is the point. **The
+name is deliberate** — naming it the graveyard is what removes the comfort that
+"someday, I suppose" otherwise enjoys. And **the tiering does not generalize**: a
+third tier must delete a concept before it may exist.
+
+**The measurement that matters is the resurrection rate.** If nothing ever comes
+back out, this tier is deletion with extra steps — a finding. If things come back
+often, the demotion rule is too aggressive. A move out is dated like a move in,
+so it is free.
+
+## D72: A docket is a structured file with a UI, not markdown read by hand
+
+**Date:** 2026-09-10
+**Status:** decided
+**Amends:** `goal/scope.md`'s "one syntax family" rule. **Answers:** Qc.
+**Design:** `solution/horizon.md`.
+
+**Decision.** A docket is stored in a **structured format** rather than as
+leniently-parsed markdown, and **its editing surface ships in the first
+milestone** rather than being deferred behind hand-editing the file.
+
+**Why the markdown option failed.** Everything a matter carries fits in a line —
+name, tags, owner, link, `when`, and the inline bookkeeping marker — *except*
+**triggers**, which are a small structured list of *offset → effect*. Forcing
+them flat means spelling one trip as five sibling matters that share a date and
+must be edited together, which trades a format problem for a data-integrity one.
+
+**And the constraint that made this look hard was misstated.** An earlier draft
+had the raw file being the artifact two people read together, and therefore
+needing to be legible *aloud*. They are looking at **one screen**. So legibility
+is a requirement on **the docket view**, not on the file — which both frees the
+format and is the reason the view cannot be deferred. The two halves of this
+decision are the same decision.
+
+**What this costs, stated plainly.** `scope.md` says all three existing types are
+markdown, leniently parsed, so that there is one parser and one merge story. That
+is now four types and two syntax families. The rule was always allowed to be
+bought out — it says a bespoke syntax "remains available at promotion time, when
+the UX's real requirements are known" — and this is that moment. **What does not
+change:** the file stays plain, durable and readable without Tephra (R26), and
+its type is declared by containing directory rather than inferred, which is what
+keeps merges safe.
+
+**One discriminator governs the remaining syntax choice, and it is not
+readability: whitespace-significance.** Merges are line-based and hand-editing
+must degrade gracefully, so a format in which one bad indent restructures the
+whole document is worse here than one whose records are flat independent blocks.
+That argues against nested YAML — the original proposal — and for a
+block-per-matter form. Deliberately left open; it is small, and better settled
+against real code.
+
+**What would reopen this.** Triggers turning out, in use, to be rare enough that
+almost every matter has one or none — in which case the flat markdown form wins
+and this type rejoins the syntax family.
