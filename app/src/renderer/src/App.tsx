@@ -149,7 +149,6 @@ export function App(): React.JSX.Element {
   const [pane, setPane] = useState<Pane | null>(null)
   /** Whether this window has learned what it is and gone there (MC6). */
   const [ready, setReady] = useState(false)
-  const [vim, setVim] = useState(false)
   /**
    * How the task list is arranged (MT4a, made sticky).
    *
@@ -253,7 +252,6 @@ export function App(): React.JSX.Element {
         // one this is is main's to say (MC6).
         const info = await window.tephra.win.info()
         tephra.id = info.id
-        setVim(info.vim)
         setListView(info.listView)
         setSearchWidth(info.searchWidth)
         setThemeName(info.theme)
@@ -288,15 +286,6 @@ export function App(): React.JSX.Element {
     return window.tephra.doc.onDiverged(d => setDiverged({ date: d.date }))
   }, [])
 
-  // Vim moved from a titlebar checkbox to View ▸ Vim mode. The setting still
-  // lives here and is still saved per device; the menu is a control on it and a
-  // view of it, which is why the state is pushed back after every change —
-  // including the one that comes from loading ui-state.json at startup.
-  useEffect(() => window.tephra.doc.onSetVim(setVim), [])
-  // Temporary, for the self-check: the menu drives vim from the main process,
-  // which a renderer scene cannot reach. Goes away with verify.ts.
-  ;(globalThis as unknown as { __setVim: (v: boolean) => void }).__setVim = setVim
-  useEffect(() => window.tephra.doc.vimChanged(vim), [vim])
 
   // What the notebook actually covers, so the nav offers days that exist rather
   // than a fixed span reaching into a past that has none.
@@ -1185,7 +1174,8 @@ export function App(): React.JSX.Element {
    * Tell main what this window is showing, and what to call it.
    *
    * **Its own entry, and nothing else's.** Main holds the set and decides what
-   * is the machine's — vim, the theme — from whatever changed last; a renderer
+   * is the machine's — the theme, the list's arrangement — from whatever
+   * changed last; a renderer
    * that wrote the whole file would erase every other window each time the
    * caret moved (MC6). The name is the title bar's, because a window is called
    * what it is showing.
@@ -1211,14 +1201,13 @@ export function App(): React.JSX.Element {
         // is not a file, and not one from outside, which is not ours to move.
         renamable:
           showing !== undefined && showing !== STREAM_ID && !isOutside(showing) ? showing : null,
-        vim,
         listView,
         searchWidth,
         theme: themeName,
       })
     }
     reportRef.current()
-  }, [ready, pane, location, title, vim, listView, searchWidth, themeName])
+  }, [ready, pane, location, title, listView, searchWidth, themeName])
 
   // The position must also survive a quit that beats the debounce.
   useEffect(() => {
@@ -1502,7 +1491,7 @@ export function App(): React.JSX.Element {
         ) : (
           <Surface
             window={docWindow}
-            settings={{ vim, typography, listView, onListView: setListView }}
+            settings={{ typography, listView, onListView: setListView }}
             onViewport={onViewport}
             onCursor={onCursor}
             onError={(err: Error) => setError(err.message)}

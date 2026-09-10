@@ -46,8 +46,6 @@ export interface UiState {
    * restore", and the app opens the one window it opens on a first run.
    */
   readonly windows: readonly WindowState[]
-  /** Vim on or off, which is a setting and not a position (D15). */
-  readonly vim: boolean
   /**
    * The active theme's name. Machine-local on purpose (D41): which rendering
    * suits depends on the screen and the light in the room, so definitions are
@@ -87,7 +85,6 @@ export const defaultWindowState: WindowState = { location: { kind: 'today' }, cu
 export const defaultUiState: UiState = {
   version: 1,
   windows: [defaultWindowState],
-  vim: false,
   theme: DEFAULT_THEME_NAME,
   listView: 'time',
   searchWidth: SEARCH_WIDTH,
@@ -116,7 +113,6 @@ export function parseUiState(text: string | null): UiState {
     return {
       version: 1,
       windows,
-      vim: candidate.vim === true,
       theme: typeof candidate.theme === 'string' && candidate.theme !== '' ? candidate.theme : DEFAULT_THEME_NAME,
       listView: candidate.listView === 'tag' ? 'tag' : 'time',
       // Clamped rather than trusted: a width from a file is soft state, and a

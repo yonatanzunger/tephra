@@ -4,7 +4,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection, setMenuVim } from './menu.ts'
+import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection } from './menu.ts'
 import { verifyMode, verifyEnv } from './verify-mode.ts'
 import { author } from './x/comments.ts'
 import { join } from 'node:path'
@@ -525,9 +525,6 @@ app.whenReady().then(async () => {
     notebook === null ? false : deleteTheme(notebook, name),
   )
 
-  // The renderer owns the vim setting — it is loaded from ui-state.json and
-  // saved per device (D30). The menu's checkmark is a view of that, kept honest
-  // by the renderer reporting it, never a second copy that could disagree.
   installMenu({
     newWindow: () => windows?.open(),
     open: inNewWindow => void openDocument(inNewWindow),
@@ -538,7 +535,6 @@ app.whenReady().then(async () => {
     tasks: () => void showTasks(),
     links: () => windows?.reveal({ kind: 'links' }),
   })
-  ipcMain.on(CHANNEL.vimChanged, (_e, vim: boolean) => setMenuVim(vim === true))
   // The renderer owns the caret; main owns the menus. Each tells the other the
   // one thing it knows, which is what keeps a greyed-out item honest.
   ipcMain.on(CHANNEL.selectionChanged, (_e, selection: SelectionState) =>

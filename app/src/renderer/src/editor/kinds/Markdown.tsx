@@ -29,19 +29,18 @@ export function MarkdownSurface({
   annotations,
   onImages,
 }: SurfaceProps): React.JSX.Element {
-  const { vim, typography } = settings
+  const { typography } = settings
   const { onMark, onCommentAnchors, onRailHost } = annotations ?? {}
   const host = useRef<HTMLDivElement | null>(null)
   const binding = useRef<Binding | null>(null)
 
-  // Rebind only when the WINDOW changes. Rebinding on a typography or vim
-  // change would throw away the buffer and the cursor with it.
+  // Rebind only when the WINDOW changes. Rebinding on a typography change would
+  // throw away the buffer and the cursor with it.
   useEffect(() => {
     if (host.current === null) return
     const bound = bindEditor({
       parent: host.current,
       window: docWindow,
-      vim,
       typography,
       ...(onViewport !== undefined ? { onViewport } : {}),
       ...(onCursor !== undefined ? { onCursor } : {}),
@@ -65,9 +64,6 @@ export function MarkdownSurface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docWindow])
 
-  useEffect(() => {
-    binding.current?.setVim(vim)
-  }, [vim])
 
   useEffect(() => {
     binding.current?.setTypography(typography)

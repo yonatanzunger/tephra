@@ -31,9 +31,12 @@ restart; external edits adopted, and divergence surfaced rather than resolved.
 **Out, and deliberately so:** everything below. `untag`, `removeAnchor`,
 `branch` and non-date navigation targets throw rather than pretend.
 
-**Known gaps inside M0's own scope:** the non-vim keymap is CodeMirror's
-defaults rather than a designed one (D15 asks for designed, since it is what
-mobile always runs), and typography is fixed rather than tunable (R1.3).
+**Known gaps inside M0's own scope:** the keymap is CodeMirror's defaults rather
+than a designed one, and typography is fixed rather than tunable (R1.3).
+
+*Read as history: M0 shipped vim as a setting, which is what D15 asked for at the
+time. D67 removed it in 2026-09, so the first gap is now about the only keymap
+there is; the second was closed by the theme work.*
 
 ## MV — the visual system ✅
 
@@ -579,8 +582,9 @@ day boundary — and only three dependencies between them are real. The rest is 
 judgement about what is worth having soonest.
 
 **MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → MS1 → MS2 →
-MS3 → MS4 → M5.**
-*(MT and ML complete; M4's phases are MS1–MS4, and MS1 is next.)*
+MS3 → MS4 → R7 → M5.**
+*(All complete through R7. M5 is one item now — the keymap — and the other two
+are in the backlog below.)*
 
 **MT5c and M6 are not in that line**; they are in the backlog below, which is a
 different kind of thing from a deferral — see there.
@@ -751,9 +755,26 @@ than forcing it.
 
 ## M5 — the editing surface finished
 
-- A non-vim keymap, deliberately designed rather than inherited (D15)
-- Typography and the visual system, tunable (R1.3)
-- Rendered editing of inline constructs (◆ in `features.md`)
+**Reduced to one item, on evidence, 2026-09-09.** All three were reconsidered
+after months of use rather than built as listed.
+
+- **The keymap, deliberately designed.** *(D67, R1.4 as superseded.)* Vim is
+  removed rather than switched off — it stayed off for months, the native surface
+  became better than the vim one, and nothing was missed. So this is no longer
+  "a non-vim keymap" beside another; it is **the** keymap, and it is the whole of
+  what M5 owes. The deletion is done; the design is not.
+- ~~Typography and the visual system, tunable (R1.3)~~ — **deferred to the
+  backlog until there is something specific to tune.** Most of it exists: four
+  themes, the panel, authored theme files with machine-local selection (D41),
+  font, size, measure, spacing and colour all live. R1.3 asks for *tunable and
+  excellent*, and the tunable half is built; what "excellent" wants next is a
+  judgement that needs road miles rather than a list written now.
+- ~~Rendered editing of inline constructs~~ — **moved to the backlog.** It was
+  already marked ◆ *v1 or v2* in `features.md`, and R1.4 always put it last in
+  its own ordering (*"inline constructs first, tables and equations last"*).
+  Rendered *reading* has been built since MV; raw-under-the-caret has been the
+  daily experience for months without complaint, which under the promotion rule
+  is exactly the evidence for leaving it alone.
 
 ## The backlog — built when we decide we want them
 
@@ -766,6 +787,37 @@ reordered freely against anything else on this page.
 That is a different thing from the deferrals recorded elsewhere. **Q3a's backlog
 resurfacing is deferred because the design has no answer yet** and says so;
 these have answers and no demand.
+
+### Rendered editing of inline constructs (R1.4, Q1)
+
+**Moved here from M5 on 2026-09-09**, having been marked ◆ *v1 or v2* since
+`features.md` was written. Q1 asked whether one surface could be vim-compatible
+*and* render figures, equations and tables inline; Spike 01 answered yes and D16
+built it — for *reading*. Editing **in** the rendered form is the other half, and
+R1.4's own ordering puts inline constructs first, tables and equations last.
+
+**What it would be:** emphasis, links and inline math edited as they are drawn,
+rather than the line under the caret showing its markdown. That reveal is D16's
+model and is *correct* — it is what the m4 image scene asserts — so this is an
+addition to it and not a replacement.
+
+**Why it is here rather than scheduled:** the plain version has been in daily use
+for months and has not once been complained about, which is the promotion rule's
+answer. It moves to the front the day the raw form is actually in the way.
+
+### Typography and the visual system (R1.3)
+
+**Deferred here from M5 on 2026-09-09, pending something specific to tune.** The
+*tunable* half of R1.3 is built and has been through several passes: four themes,
+the theme panel, authored theme files with machine-local selection (D41), and
+font, size, measure, spacing and colour all live and adjustable.
+
+**What is undecided is what "excellent" wants next**, and the honest answer is
+that a list written today would be invented rather than observed. Candidates
+worth watching for, none of them chosen: the reading measure at very wide
+windows; the vertical rhythm around block widgets, which is where the spacing
+work stopped; heading scale in a long day; how a printed page differs from the
+screen; and whether a light theme wants a different measure from a dark one.
 
 ### MT5c — the soft cap on the working view (T12)
 

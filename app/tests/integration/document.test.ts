@@ -604,7 +604,7 @@ test('deleting the handle removes the whole tag, in one undo step', async t => {
   const handle = w.text.indexOf('￼')
 
   // Backspace over the mark. Nothing here knows about a keymap: this is the
-  // edit any keymap produces, and vim's `x` produces the same one.
+  // edit any keymap produces — a delete of one character, from wherever it came.
   await w.edit([{ from: wp(handle), to: wp(handle + 1), insert: pt('') }], 'user')
   await doc.flush()
 

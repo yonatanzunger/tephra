@@ -17,13 +17,11 @@ test('a session is a set of windows, in the order they were opened', () => {
         { location: { kind: 'today' }, cursor: null },
         { location: { kind: 'document', id: 'notes/offer.md' }, cursor: { segment: 'content', offset: 4 } },
       ],
-      vim: true,
       theme: 'sage',
     }),
   )
   assert.equal(state.windows.length, 2)
   assert.deepEqual(state.windows[1]?.location, { kind: 'document', id: 'notes/offer.md' })
-  assert.equal(state.vim, true)
 })
 
 test('THE MIGRATION: a file from before windows were a set still opens its window', () => {

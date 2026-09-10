@@ -103,12 +103,12 @@ export const indentListItem = shift('in')
 export const outdentListItem = shift('out')
 
 /**
- * Ahead of vim's binding, and deliberately.
+ * **Tab indents a list item, and declines everywhere else.**
  *
- * With vim on, insert-mode Tab is otherwise vim's, and a list would stop
- * indenting the moment the mode was switched on — a feature that comes and goes
- * with an unrelated setting is worse than one that is not there. Outside a list
- * both commands decline, so vim keeps every Tab it has a use for.
+ * This used to be bound ahead of vim's insert-mode Tab so that indenting did not
+ * come and go with an unrelated setting (D67 removed vim). Declining outside a
+ * list is what remains of that care, and it is still the right shape: Tab in
+ * running prose is not this command's business.
  */
 /**
  * A wrapped bullet hangs under its own text, not under its marker.

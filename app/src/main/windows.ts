@@ -40,7 +40,6 @@ export class Windows {
   #nextId = 1
 
   /** Settings are the machine's, not a window's; whoever changed one last wins. */
-  #vim = defaultUiState.vim
   #theme = defaultUiState.theme
   #listView = defaultUiState.listView
   #searchWidth = defaultUiState.searchWidth
@@ -60,7 +59,6 @@ export class Windows {
    */
   async restore(): Promise<void> {
     const saved = await this.#service.loadUiState()
-    this.#vim = saved.vim
     this.#theme = saved.theme
     this.#listView = saved.listView
     this.#searchWidth = saved.searchWidth
@@ -123,7 +121,6 @@ export class Windows {
     return {
       id: found?.id ?? 0,
       state: found?.state ?? defaultWindowState,
-      vim: this.#vim,
       theme: this.#theme,
       listView: this.#listView,
       searchWidth: this.#searchWidth,
@@ -137,7 +134,6 @@ export class Windows {
     found.state = { location: report.location, cursor: report.cursor }
     found.importable = report.importable
     found.renamable = report.renamable
-    this.#vim = report.vim
     this.#theme = report.theme
     this.#listView = report.listView
     this.#searchWidth = report.searchWidth
@@ -198,7 +194,7 @@ export class Windows {
       windows.push({ ...entry.state, bounds: entry.window.getBounds() })
     }
     return {
-      version: 1, windows, vim: this.#vim, theme: this.#theme,
+      version: 1, windows, theme: this.#theme,
       listView: this.#listView, searchWidth: this.#searchWidth,
     }
   }

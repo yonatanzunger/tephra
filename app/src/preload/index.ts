@@ -53,11 +53,6 @@ ipcRenderer.on(CHANNEL.menuCommand, (_e, command: string) => {
   for (const handler of menuHandlers) handler(command)
 })
 
-const vimHandlers = new Set<Handler<boolean>>()
-ipcRenderer.on(CHANNEL.setVim, (_e, value: boolean) => {
-  for (const handler of vimHandlers) handler(value)
-})
-
 const tephra = {
   hello: (): Promise<{ version: string; origin: string; author: string }> =>
     ipcRenderer.invoke('tephra:hello'),
@@ -366,12 +361,6 @@ const tephra = {
     deleteDocument: (id: DocumentId): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.deleteDocument, id),
 
-    /** Tell the menu what vim is set to, so its checkmark is a view and not a copy. */
-    vimChanged: (vim: boolean): void => ipcRenderer.send(CHANNEL.vimChanged, vim),
-    onSetVim(handler: Handler<boolean>): () => void {
-      vimHandlers.add(handler)
-      return () => vimHandlers.delete(handler)
-    },
     onMenuCommand(handler: Handler<string>): () => void {
       menuHandlers.add(handler)
       return () => menuHandlers.delete(handler)

@@ -7,14 +7,17 @@
 //    a whole-document StateField that maps through each change and rescans only
 //    the block the edit touched. Never rescan the document per keystroke.
 //
-// 2. Rendered constructs must unrender under the cursor. @replit/codemirror-vim
-//    does its own offset arithmetic and never consults atomicRanges, so nothing
-//    can tell it a widget is one unit. Left rendered, six `l` presses leave the
-//    cursor frozen while vim walks the hidden source underneath.
+// 2. Rendered constructs must unrender under the cursor — which is D16's rule
+//    and the whole editing model: you edit the raw form where it is rendered.
+//    It was originally forced by something narrower, since
+//    @replit/codemirror-vim did its own offset arithmetic and never consulted
+//    atomicRanges, so six `l` presses left the cursor frozen while vim walked
+//    the hidden source underneath. Vim is gone (D67); the rule outlived it,
+//    because there is no other way to change what a widget stands for.
 //
 // 3. Block widgets must also unrender from a NEIGHBOURING line. Replacing whole
-//    lines removes them from the visual layout, so j/k skip them entirely — and
-//    unreachable means uneditable.
+//    lines removes them from the visual layout, so a caret arriving from above
+//    or below skips them entirely — and unreachable means uneditable.
 //
 // Measured in the spike: 2 ms initial scan, 0.2 ms incremental.
 
@@ -29,7 +32,7 @@ import { scanLinks } from '../../../../../shared/links.ts'
 export const rebuildWidgets = StateEffect.define<null>()
 
 export interface WidgetOptions {
-  /** Unrender the construct the cursor is inside. Mandatory for vim (see above). */
+  /** Unrender the construct the cursor is inside. D16's editing model (see above). */
   reveal: boolean
   /** Blocks also unrender from a neighbouring line, or j/k cannot enter them. */
   revealAdjacent: boolean

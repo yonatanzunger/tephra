@@ -27,9 +27,7 @@ import {
 import { verifyMode } from './verify-mode.ts'
 
 export interface MenuState {
-  /** Vim mode, mirrored from the renderer so the checkmark tells the truth. */
-  vim: boolean
-  /** What the caret is doing, mirrored for the same reason. */
+  /** What the caret is doing, mirrored from the renderer so the menu tells the truth. */
   selection: SelectionState
   /** Whether the focused window is showing a file that could be imported. */
   importable: boolean
@@ -49,7 +47,7 @@ export function setMenuTargets(targets: { importable: boolean; renamable: boolea
   installMenu()
 }
 
-const state: MenuState = { vim: false, selection: NO_SELECTION, importable: false, renamable: false }
+const state: MenuState = { selection: NO_SELECTION, importable: false, renamable: false }
 
 function send(channel: string, value: unknown): void {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -339,14 +337,6 @@ export function installMenu(next?: MenuActions): void {
     {
       label: 'View',
       submenu: [
-        {
-          label: 'Vim Mode',
-          type: 'checkbox',
-          checked: state.vim,
-          accelerator: 'CmdOrCtrl+Alt+V',
-          click: menuItem => send(CHANNEL.setVim, menuItem.checked),
-        },
-        { type: 'separator' },
         { role: 'reload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
@@ -439,14 +429,3 @@ export function clickMenuItem(label: string): boolean {
   return false
 }
 
-/**
- * Told by the renderer what vim is actually set to, and rebuilds so the
- * checkmark matches. The renderer owns the setting — it is loaded from
- * `ui-state.json` at startup and saved per device (D30) — so the menu is a
- * view of that, never a second copy of it.
- */
-export function setMenuVim(vim: boolean): void {
-  if (state.vim === vim) return
-  state.vim = vim
-  installMenu()
-}

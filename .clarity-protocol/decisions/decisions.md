@@ -2849,3 +2849,57 @@ decoration is not a command, and it is what makes a landed match legible.
 `#wombats` is a tag, `2026-03` and `2026-03-01..2026-03-15` are ranges, and
 `/re/` is reserved for regex. Dates are the only new notation, since tags
 already had a spelling.
+
+## D67: Vim is removed, not switched off
+
+**Date:** 2026-09-09
+**Status:** decided
+**Supersedes:** D15. **Amends:** R1.4.
+
+**Decision.** The vim keymap is gone — the dependency, the compartment, the
+setting, the menu item, the per-device state, and the drawn selection layer it
+required. The editing surface has one keymap, and designing it well is what
+remains of M5's first item.
+
+**Why: months of use, and it was never once wanted.** R1.4 opened with *"40
+years of vim; deviations are actively irritating"*, and it was the stated reason
+the editing surface was chosen at all. D15 then demoted it to a switch on three
+findings — unusable over a soft keyboard, subtly less fluid on the desktop for
+reasons no instrument found, and its only mature implementation carrying a
+correctness gap that forced two design constraints — and closed by saying
+*"whether it stays on in daily use is an open observation for v1, not an
+assumption."* The observation is in: it stayed off, the native surface got better
+than the vim one, and nothing was missed.
+
+**This is the demotion rule of `goal/scope.md` running in the direction nobody
+expected.** The rule is *run the plain version, promote on a recorded failure*.
+Vim was the promoted thing, running against a plain alternative that was supposed
+to be the fallback — and the fallback won on evidence. A switch that is never
+switched is not a preference; it is a second implementation of the same surface,
+paid for on every keystroke path and in every piece of state that has to carry
+it.
+
+**What removing it actually buys, beyond the deletion:**
+
+- **The native caret, permanently.** D15 left one lead on the table: CodeMirror's
+  drawn cursor costs about a millisecond against the browser's native caret, and
+  vim required the drawn one. The vim-off path already used the native caret, so
+  this was *conditionally* realised and could be lost by a toggle; now it cannot.
+- **Selection is styled once.** It existed twice, once for the drawn layer and
+  once for the native mechanism, because the two could not be told apart at
+  authoring time.
+- **Three fewer pieces of state.** `vim` came out of `UiState`, `WindowReport`,
+  `WindowInfo`, two IPC channels, the menu's mirrored state, and the renderer's.
+  Every one of those was a place two copies could disagree.
+
+**What it does NOT change.** D16's rule that a rendered construct unrenders under
+the cursor **outlives its original reason.** It was forced by something narrower
+— `@replit/codemirror-vim` did its own offset arithmetic and never consulted
+`atomicRanges`, so a widget left rendered froze the cursor while vim walked the
+hidden source underneath — but the rule is the editing model: there is no other
+way to change what a widget stands for. `revealAdjacent` likewise survives; a
+caret arriving from the line above skips a block widget whatever keymap moved it.
+
+**What would reopen this.** Wanting vim back, which is a thing use can say and
+argument cannot. The corpus is plain markdown and the surface is CodeMirror, so
+re-adding the extension is a day's work and no data decision depends on this.

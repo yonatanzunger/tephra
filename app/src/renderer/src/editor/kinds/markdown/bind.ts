@@ -13,7 +13,7 @@
 // may land outside the loaded region; two histories over one text diverge.
 
 import { ChangeSet, EditorSelection, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
-import { EditorView, crosshairCursor, drawSelection, keymap, placeholder, rectangularSelection } from '@codemirror/view'
+import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
 // **`searchKeymap` is deliberately NOT here** (D66). CodeMirror's own find
 // panel binds ⌘F too, so leaving it installed put two searches on one key —
@@ -26,7 +26,6 @@ import { highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
-import { vim } from '@replit/codemirror-vim'
 import { listIndent, listLayout } from './lists.ts'
 import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
 import { findMarks, setFindMarks, type FindMarks } from './find-marks.ts'
@@ -49,12 +48,10 @@ import { optionsFor } from './options.ts'
 /** Marks a transaction as coming FROM the document, so it is not sent back. */
 const fromDocument = StateEffect.define<null>()
 
-export const vimCompartment = new Compartment()
 
 export interface BindOptions {
   readonly parent: HTMLElement
   readonly window: DocumentWindow
-  readonly vim: boolean
   readonly typography?: Typography
   /** Reported upward so the Pane can own extent policy (D35). */
   readonly onViewport?: (visible: { from: WindowPosition; to: WindowPosition }) => void
@@ -123,7 +120,6 @@ export interface Binding {
   showTrackMarks(marks: TrackMarks): void
   /** Where the find's matches are, and which one it is standing on. */
   showFindMarks(marks: FindMarks): void
-  setVim(on: boolean): void
   setTypography(t: Typography): void
   destroy(): void
 }
@@ -164,7 +160,6 @@ export function bindEditor(options: BindOptions): Binding {
             return takeImages(event.dataTransfer, options.onImages)
           },
         }),
-        vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         // **`codeLanguages` is what makes a fence more than one token.** Without
         // it a fenced block parses as a single `CodeText` node whatever its info
@@ -371,10 +366,6 @@ export function bindEditor(options: BindOptions): Binding {
       })
       view.focus()
     },
-    setVim(on: boolean): void {
-      view.dispatch({ effects: vimCompartment.reconfigure(vimExtensions(on)) })
-      view.focus()
-    },
     setTypography(t: Typography): void {
       view.dispatch({ effects: typographyCompartment.reconfigure(tephraTheme(t)) })
     },
@@ -391,21 +382,19 @@ export function bindEditor(options: BindOptions): Binding {
 }
 
 /**
- * Vim, and the drawn selection layer it needs.
+ * **The native caret, and no drawn selection layer at all** (D67).
  *
- * These travel together on purpose. CodeMirror can render selection two ways:
- * the browser's native selection, or its own drawn layer. Vim needs the drawn
- * one, because a block cursor is not something a native caret can be. But Spike
- * A measured the drawn caret at about a millisecond more than the native one —
- * small, consistent, and on the typing path — so with vim off there is no
- * reason to pay it.
+ * CodeMirror can render selection two ways: the browser's native selection, or
+ * its own drawn layer. Vim needed the drawn one, because a block cursor is not
+ * something a native caret can be — and Spike A measured that drawn caret at
+ * about a millisecond more than the native one, small, consistent, and on the
+ * typing path. D15 left that on the table as the one lead worth chasing if the
+ * surface ever felt less fluid than it should.
  *
- * The cost of the split is that selection has to be styled twice, once for each
- * mechanism. That is in the theme, and it is the whole of the cost.
+ * With vim removed there is nothing to chase: the native caret is simply what
+ * this uses, and the selection styling that existed twice — once per mechanism
+ * — exists once.
  */
-function vimExtensions(on: boolean): Extension {
-  return on ? [vim({ status: true }), drawSelection(), rectangularSelection(), crosshairCursor()] : []
-}
 
 /** Every user transaction becomes a window edit. Fired, never awaited. */
 function editorToWindow(

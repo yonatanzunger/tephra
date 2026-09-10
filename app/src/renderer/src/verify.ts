@@ -207,27 +207,17 @@ export async function runVerify(request: string): Promise<void> {
       const later = view.state.selection.main
       say('oneAndAHalfSecondsLater', { from: later.from, to: later.to, empty: later.empty })
 
-      const visible = (): unknown => {
-        const drawn = document.querySelectorAll('.cm-selectionBackground')
-        if (drawn.length > 0) {
-          return { how: 'drawn layer', count: drawn.length, colour: getComputedStyle(drawn[0]!).backgroundColor }
-        }
-        const line = document.querySelector('.cm-line')
-        return {
-          how: 'native',
-          text: globalThis.getSelection?.()?.toString() ?? '',
-          colour: line === null ? null : getComputedStyle(line, '::selection').backgroundColor,
-        }
-      }
-      say('vimOff', visible())
-
-      // And again with vim on, which switches to the drawn layer.
-      const setVim = (globalThis as unknown as { __setVim?: (v: boolean) => void }).__setVim
-      setVim?.(true)
-      await settle(500)
-      view.dispatch({ selection: { anchor: 4, head: 15 } })
-      await settle(300)
-      say('vimOn', visible())
+      // **One mechanism now** (D67): CodeMirror's drawn selection layer came
+      // with vim and went with it, so what has to be visible is the browser's
+      // own selection — and "invisible" is the failure this scene exists for,
+      // since a selection that cannot be seen looks exactly like one that did
+      // not happen.
+      const line = document.querySelector('.cm-line')
+      say('selectionShown', {
+        drawnLayers: document.querySelectorAll('.cm-selectionBackground').length,
+        text: globalThis.getSelection?.()?.toString() ?? '',
+        colour: line === null ? null : getComputedStyle(line, '::selection').backgroundColor,
+      })
       view.dispatch({ selection: { anchor: 4, head: 32 } })
       await settle(400)
     }
@@ -1163,7 +1153,7 @@ export async function runVerify(request: string): Promise<void> {
 
     if (scene === 'sticky') {
       // **The list's arrangement outlives the window** (MT4a, made sticky).
-      // Reported home the way vim and the theme are, because it is the same
+      // Reported home the way the theme is, because it is the same
       // kind of thing: machine-local soft state that a window forgetting makes
       // into a rare surprise, which is worse than a frequent one.
       await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })

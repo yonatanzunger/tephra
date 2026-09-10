@@ -19,7 +19,6 @@ import type { DroppedImage } from './kinds/markdown/bind.ts'
 
 /** The app's editing settings. A surface uses whichever apply to it. */
 export interface EditingSettings {
-  readonly vim: boolean
   readonly typography: Typography
   /**
    * How the task list is arranged (T8), and how to say it changed.

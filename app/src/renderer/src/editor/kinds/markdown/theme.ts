@@ -133,14 +133,13 @@ export function tephraTheme(t: Typography): Extension {
       lineHeight: `${t.paragraphSpace.toFixed(3)}em`,
     },
     '.cm-cursor, .cm-dropCursor': { borderLeftWidth: '2px', borderLeftColor: 'rgb(var(--accent))' },
-    '.cm-fat-cursor': { background: 'rgb(var(--accent)) !important', color: 'rgb(var(--surface)) !important' },
-    // Styled twice because there are two mechanisms: the drawn layer, which
-    // vim requires, and the browser's native selection, used when vim is off.
+    // **The browser's own selection, and only that** (D67). This was styled
+    // twice, once for CodeMirror's drawn layer and once for the native one,
+    // because vim required the drawn layer and vim-off did not use it. With vim
+    // gone there is one mechanism.
+    //
     // The colour was previously --accent-surface, a pale mint on near-white,
     // which was so faint that selecting text looked like nothing had happened.
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: 'rgb(var(--accent) / 0.22)',
-    },
     '.cm-content ::selection, .cm-line::selection, .cm-line ::selection': {
       backgroundColor: 'rgb(var(--accent) / 0.22)',
     },

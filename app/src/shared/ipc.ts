@@ -204,9 +204,7 @@ export const CHANNEL = {
   /** Bring the outside file this window is showing into the notebook (MC6). */
   windowImport: 'tephra:win:import',
   /** renderer → main: the menu's checkmark follows the app, not the other way. */
-  vimChanged: 'tephra:ui:vimChanged',
   /** main → renderer */
-  setVim: 'tephra:ui:setVim',
   setZone: 'tephra:ui:setZone',
   /** main → renderer: an Edit-menu command, which owns these keystrokes. */
   menuCommand: 'tephra:ui:menuCommand',
@@ -287,7 +285,6 @@ export interface ZoneNotice {
 export interface WindowInfo {
   readonly id: number
   readonly state: WindowState
-  readonly vim: boolean
   readonly theme: string
   /** How the task list is arranged (MT4a). Soft state, beside the theme. */
   readonly listView: 'time' | 'tag'
@@ -298,7 +295,7 @@ export interface WindowInfo {
  * What a window says about itself, whenever it changes.
  *
  * The window reports its own entry; MAIN owns the set and decides what is
- * per-window (where you are, the caret) and what is the machine's (vim, the
+ * per-window (where you are, the caret) and what is the machine's (the
  * theme). Two windows disagreeing about the theme is not a state this can
  * represent, which is the point.
  */
@@ -321,7 +318,6 @@ export interface WindowReport {
    * outside the notebook, which is not ours.
    */
   readonly renamable: DocumentId | null
-  readonly vim: boolean
   readonly theme: string
   /** How the task list is arranged (MT4a). Soft state, beside the theme. */
   readonly listView: 'time' | 'tag'

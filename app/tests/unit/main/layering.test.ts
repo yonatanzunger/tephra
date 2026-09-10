@@ -218,7 +218,7 @@ test('nothing in main uses the ambient DOM Document', async () => {
  * What is fenced off is the editor, not the format.
  */
 test('only the markdown surface holds the editor', async () => {
-  const EDITOR = ['@codemirror/view', '@codemirror/state', '@codemirror/commands', '@replit/codemirror-vim']
+  const EDITOR = ['@codemirror/view', '@codemirror/state', '@codemirror/commands']
   const inside = 'renderer/src/editor/kinds/markdown/'
   const offenders: string[] = []
   for (const root of ['renderer', 'main', 'shared']) {

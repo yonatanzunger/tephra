@@ -29,10 +29,11 @@ Everything discussed so far, in one list, with a proposed stage. Stages are **v1
 |---|---|---|
 | Windowed editor over the document, per-region write-back | D8, D23 | v1 — **required**, not deferred: a month of writing is 2.4× the largest corpus the editor has been tested against |
 | Vim mode, as a switchable setting | R1.4, D15 | v1 |
-| Non-vim keymap, deliberately designed rather than inherited | D15 | v1 — it is what mobile always runs |
+| **The** keymap, deliberately designed rather than inherited | D67 | v1 — there is no other one now |
+| ~~Vim mode~~ | ~~R1.4~~ | **removed, D67** — never once wanted in months of use |
 | Raw markdown editing | R1.4 | v1 |
 | Rendered reading view | R1.4 | v1 |
-| Rendered editing — inline constructs | R1.4 | ◆ v1 or v2 |
+| Rendered editing — inline constructs | R1.4 | backlog (◆ settled 2026-09-09) |
 | Rendered editing — tables | R1.4 | v3+ |
 | Rendered editing — equations | R1.4 | v3+ |
 | Inline image rendering | R7 | v1 |

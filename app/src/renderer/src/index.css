@@ -1304,8 +1304,6 @@ body {
 .cm-line.tx-h3 { font-size: 1.2em;  font-weight: 600; color: rgb(var(--text-heading)); padding-top: .9em; padding-bottom: .2em; }
 .cm-line.tx-h4, .cm-line.tx-h5, .cm-line.tx-h6 { font-weight: 600; color: rgb(var(--text-heading)); padding-top: .7em; }
 
-.cm-vim-panel { font-family: var(--font-mono) !important; font-size: 12px !important; }
-
 .cm-placeholder { color: rgb(var(--text-muted)); font-style: italic; }
 
 /* Tephra's markers: present, named, out of the way. Zero-width in the text but
