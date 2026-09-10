@@ -64,8 +64,9 @@ thing gets used at all." The earlier ordering had it near-last.
 - ✅ Somewhere non-modal for **format anomalies** to surface — a quiet count in
   the titlebar opening a panel of what the degradation table did and why
 
-**Accepted risk:** the corpus is not yet safe — no split, no WAL, no git. Fine
-while testing against `./run.sh --scratch`, and not fine for real writing.
+**Accepted risk, at the time:** the corpus was not yet safe — no split, no WAL,
+no git. Fine while testing against `./run.sh --scratch`, and not fine for real
+writing. **Closed by M1**, immediately after.
 
 ## M1 — the corpus becomes safe ✅
 

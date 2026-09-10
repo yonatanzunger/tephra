@@ -35,7 +35,8 @@ before anything could be built.
 - **A walk** — successive jumps through the live document, the word-processor
   gesture. `Nav.tsx` already does this for tag occurrences.
 
-**The first and third are M4. The second is out of v1** — see D9 as amended.
+**The first and third were built as M4. The second is out of v1** — see D9 as
+amended.
 It is not deferred for want of a design; it is descoped for want of a demand,
 and the demand may never arrive, because a results pane and a walk between them
 answer the question the composite was invented for.

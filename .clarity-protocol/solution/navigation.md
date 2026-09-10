@@ -1,8 +1,14 @@
 # Navigation — the sidebar, and the index under it
 
-> **A design, not yet a decision.** For M3.2. Written against D10 (sections and
-> the default section), D11 (reference by identity), D7 (when an index arrives),
-> D50 (annotations are one union with one policy).
+> **Decided and built** (D51, D52, D53; MC4 and after). Written against D10
+> (sections and the default section), D11 (reference by identity), D7 (when an
+> index arrives), D50 (annotations are one union with one policy).
+>
+> **Two things it proposed came out differently, and both are marked in place
+> below:** the *default section* dissolved into the top-level list rather than
+> staying distinguished (D53), and the index it assumed would arrive later is
+> here as a **cache of a scan** (D52) rather than as the derived search index D7
+> was talking about. The sidebar was the feature that could not wait.
 
 ## Pills say what they are, and size themselves against what they sit beside
 
@@ -208,7 +214,7 @@ So it is keyed by file, and mirrors the corpus's own directory tree — **one
 index file per corpus directory**, machine-local:
 
 ```
-.tephra/index/stream/2026/08.json      ← the days of that month
+.tephra/index/notebook.stream/2026/08.json  ← the days of that month
 .tephra/index/notes.json               ← every note
 { "2026-08-24.md": { "size": 4127, "mtime": 1756000000000, "spans": [ … ] }, … }
 ```
@@ -523,7 +529,7 @@ panel names. The curated sections list what somebody chose to pin, and a file
 nobody has pinned yet is a file nobody can see.
 
 So every directory under the notebook root that holds documents is a section,
-named for the directory, listing what is in it. `stream/` is not one — that is
+named for the directory, listing what is in it. `notebook.stream/` is not one — that is
 the Timeline — and neither is `sections/`, because a section listing the
 sections is the list twice. A directory holding no documents (`attachments/`,
 `config/`) is not a section either: an empty row that opens nothing.

@@ -12,6 +12,8 @@ The concrete answer to "smaller than a high-powered notebook app." It is a count
 
 Three native types, each with its own UX. Everything else in the directory is either **external** (PDFs and other documents, opened by the OS) or **embedded** (PNGs and images, referenced from markdown and rendered inline).
 
+> **As built (2026-09-10):** the count held. The kinds in code are `stream`, `markdown`, `todo` and `fileset` — the first two being one type with two shapes, as this table intends — plus `external`, which is the one addition: a markdown file *outside* the notebook, which MC6 taught Tephra to open **read-only** rather than hand to the OS, with import as the gesture that brings it in. Images are embedded and, since R7, actually render: they are served to the renderer over `tephra://notebook/`, which had no route before.
+
 | Type | UX |
 |---|---|
 | **Markdown** (`.md`) | The reading and editing surface. The notebook stream, branched documents, and pinned lists are all this type. Possible later export to docx and similar. |
@@ -24,7 +26,7 @@ Three native types, each with its own UX. Everything else in the directory is ei
 
 **Type is declared by name, not inferred.** Portal found the failure this prevents: a mutable list mistyped as append-only notebook content merges with append-union semantics and *silently duplicates edited lines* — no error, the file quietly fills with near-duplicate paragraphs. Explicit typing is what makes merge safe.
 
-**Pinning is membership in a distinguished fileset** (D10). The nav is a list of sections, each one a fileset; the default section always exists and holds the pinned items. This keeps R18's two jobs distinct without inventing a mechanism: a *curated collection of references* is a section, and a *document you keep returning to* — the events calendar, an ideas list — is a file **entry within** one. Filesets therefore carry the navigation role from v1, well before the document-collection experience (R20–R23) is built.
+**Pinning is membership in a fileset** (D10, **as amended by D53**: there is no longer a distinguished *default* section — pins dissolved into the top-level list itself, `sections/_index.fileset.md`). The nav is a list of sections, each one a fileset. This keeps R18's two jobs distinct without inventing a mechanism: a *curated collection of references* is a section, and a *document you keep returning to* — the events calendar, an ideas list — is a file **entry within** one. Filesets therefore carry the navigation role from v1, well before the document-collection experience (R20–R23) is built.
 
 **The subject view is not a fourth type.** Subject views, date-range views and search results are the same thing — and as of D9's 2026-09-08 amendment, what they have in common is the *query* rather than the view: one conjunction of predicates producing one stream of locations, rendered either as a results pane or as a walk through successive places. Both are read-only, so the count stays at three and **v1 never decides whether a filtered view is editable.** The composite document — matching passages concatenated and read as running prose — is the only thing that question was ever about, and it is out of v1 for want of a demand rather than for want of a design.
 

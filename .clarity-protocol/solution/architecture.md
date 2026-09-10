@@ -1,6 +1,14 @@
 # Software architecture
 
-Preliminary. This records the layering and the core objects; it is not yet a full design, and failure analysis has not been run.
+This records the layering and the core objects — the *why* behind the structure.
+**Written as a preliminary and largely borne out**; the layering survived v1
+intact, and the one thing that changed shape is recorded in place (the Corpus and
+its kinds, D54).
+
+**Failure analysis has since been run** — 2026-08-23, 38 raw failures reduced to
+three modes plus a baseline group; see `failures/failures.md` and the threat
+table at the foot of this file. `observations.md` records which specialist lenses
+were recommended and *not* applied, which is the honest part of that pass.
 
 > **For the map of what is actually built** — which module holds which
 > responsibility, and where each contract between the layers is written down —
@@ -193,7 +201,7 @@ The performance worry that motivated the shortcut does not materialize before it
 ```mermaid
 flowchart TB
   subgraph Z["Z — features and UI"]
-    ED["Editor surface<br/>vim, raw/rendered"]
+    ED["Editor surface<br/>raw/rendered, one keymap"]
     NAV["Section nav"]
     RET["Search and filtered views"]
     ROP["Range operations<br/>tag, bookmark, print, branch"]
@@ -265,5 +273,5 @@ Not the output of failure analysis, which has not been run and is **deliberately
 | **T3** | Hub compromise exposes third-party information | Notes discuss people who did not consent to the hub | Open — bears on where the hub lives (Q2) |
 | **T4** | Credential leakage; Android TLS trust unresolved | Portal's one unclosed hole, inherited | Open — carried from Portal's T5 spike |
 | **T6** | A stale derived index is trusted | Hand-editing is a feature, so staleness is routine | Index is machine-local, disposable, never authoritative (D7); startup consistency check with full rebuild |
-| **T8** | A local HTTP server inside the app is reachable by any other process on the machine | The corpus holds other people's information, so a localhost origin is a real exposure, not a theoretical one | Avoided by design: the app serves itself from a custom scheme, which needs no port and no listener (D17). **Do not substitute a dev server for convenience.** |
-| **T9** | The vim keymap's only mature implementation ignores CodeMirror's atomic ranges | Two of D16's three constraints exist to work around it; if it is abandoned or fixed, behaviour shifts underneath | Low severity — the workaround (unrender under the cursor) is arguably correct behaviour independently |
+| **T8** | A local HTTP server inside the app is reachable by any other process on the machine | The corpus holds other people's information, so a localhost origin is a real exposure, not a theoretical one | Avoided by design: the app serves itself from a custom scheme, which needs no port and no listener (D17). **Do not substitute a dev server for convenience.** *Since R7 the same scheme also serves the corpus, under a second host (`tephra://notebook/`) — read-only, and rooted through `resolveWithinRoot`, which is what keeps a crafted `..%2f` a 404 rather than a way to read the disk.* |
+| ~~**T9**~~ | ~~The vim keymap's only mature implementation ignores CodeMirror's atomic ranges~~ | — | **Retired 2026-09-09 (D67): vim is removed, so there is no dependency to shift underneath.** The prediction in the mitigation column was right — the workaround was correct behaviour independently, and both constraints outlived their reason |

@@ -200,9 +200,10 @@ does, by suffix; the ID beneath is what code uses and never what a person sees.
 
 ```jsonc
 {
-  "theme": "…", "vim": false,            // the person's, not a window's
+  "theme": "…",                           // the machine's, not a window's
+  "listView": "time", "searchWidth": 380, // ditto (D30, D41)
   "windows": [                            // order is not meaningful; the SET is
-    { "id": "…", "document": "stream", "location": {…}, "cursor": {…} },
+    { "id": "…", "document": "notebook.stream", "location": {…}, "cursor": {…} },
     { "id": "…", "document": "notes/titration.md", "cursor": {…} }
   ]
 }
@@ -417,6 +418,15 @@ deals in the interface.
 | **stream, markdown, fileset, todo** | text with positions; extend the base |
 | **PDF, image** | positions are pages and rectangles; annotations are not character spans; nothing in the base applies |
 | **a saved query or filtered view** | zero files. Content is computed from other documents and writes are written THROUGH to them; there is no `load` and nothing to `writeDirty` |
+
+> **Correction (2026-09, ML3 and MS4): the query row was never reached, because a
+> query did not become a document.** It became a *location* (the link directory)
+> and a *panel* (search results), both drawing a stream of locations that the
+> engine produces and neither pretending to be a file. So the hard part predicted
+> here — writes written *through* to source documents — was never paid for, and
+> D9's amendment descoped the only thing that would have needed it. **A row in
+> this table can be avoided as well as met**, and this one was avoided by asking
+> what the view is *for* rather than what it would have to be.
 
 > **Correction (D55): todo was in the record-shaped row, and that was wrong.**
 > It was predicted here as "an edit is a field, and history is per item," and M3

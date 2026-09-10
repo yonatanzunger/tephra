@@ -17,6 +17,12 @@ Portal (`../portal`) has complete goal, solution and architecture documents plus
 
 ## Carries only if storage is git-shaped (Q2)
 
+> **The condition resolved for the local half (D32, 2026-09):** v1's versioning
+> *is* git, through `Repository` with a `GitRepository` implementation, so the
+> read/write/list semantics and autosave-on-quiescence below are in use. What is
+> still conditional is the **sync** half — the five sync states, the merge ladder,
+> and whether the hub is git-shaped at all — which is what Q2 still asks.
+
 The git filesystem (`solution/software-architecture.md` §2): read/write/list semantics, autosave on quiescence, the five sync states, rewind as a non-destructive new commit, D53's machine-local stores. **And T5's validated spike work** — authenticated clone/commit/push from Swift on macOS and Kotlin on Android through UniFFI, with cross-compilation proven. That was expensive and it is done. Its one unresolved hole is **TLS trust on Android** (a vendored OpenSSL has no trust anchors; Android's store uses legacy MD5 hashed filenames, so no `SSL_CERT_DIR` approach can ever work).
 
 ## Does not carry

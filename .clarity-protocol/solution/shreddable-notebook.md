@@ -46,7 +46,7 @@ notebook/
 ```
 
 **Filenames carry no information, deliberately.** Leaving
-`stream/2026/08/2026-08-21.md` in place would disclose which days have writing,
+`notebook.stream/2026/08/2026-08-21.md` in place would disclose which days have writing,
 roughly how much, and — through the gap left by a shred — that something was
 deleted and approximately when. Object names are random; the date lives inside
 the encrypted frontmatter and in the index.

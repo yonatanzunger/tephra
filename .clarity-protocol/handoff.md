@@ -1,28 +1,67 @@
-# Handoff — resuming this conversation
+# Orientation — resuming work on Tephra
 
-Written 2026-08-12, at the point where the Clarity session moved from `../portal` to this directory. **Audience: the next instance of me.** It deliberately contains *only* what is not already in the protocol documents — everything else is there and should be read rather than summarised here, because a duplicate will drift.
+**Rewritten 2026-09-10, when v1 completed**, replacing the 2026-08-12 handoff
+this file used to be. That file was scaffolding from the move out of `../portal`
+and said so; its reading order and its "where we are" were stale by weeks. What
+it declared non-recoverable — **how this user works**, and **the mistakes worth
+not repeating** — is kept below verbatim, because it is still the most useful
+thing here.
 
-Delete or rewrite this file once its contents have been absorbed into the normal documents. It is scaffolding, not a record.
+## Where the project is
 
-> **Stale as of 2026-08-12 (later), except for one section.** Alignment was confirmed, the project was named, seventeen decisions were recorded, and Spike 01 closed Q1 and Q4. "Where we are," "Live threads not yet in the documents," and the note about empty `decisions/` are all superseded — read `decisions/decisions.md`, `solution/`, and `goal/open-questions.md` instead. **"How this user works" and "Mistakes I made" have not been superseded, and are the reason this file still exists.**
+**v1 is complete.** The ordered plan in `solution/milestones.md` is finished:
+MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → MS1–MS4 → R7. The
+app is in daily use and has been for months, which is why several decisions were
+reversed by evidence rather than argument.
+
+Everything that remains is **wanted-on-demand and freely reorderable** — the
+backlog at the foot of `milestones.md`. After that, `components.md`'s sequence:
+v2a sync alone, v2b Android, v3 promotes what earned it.
+
+**A design cycle is starting** (2026-09-10), driven by what daily use has taught.
+Expect reprioritisation rather than continuation.
 
 ## Read in this order
 
 1. `summary.md` — what this is and why, in prose.
-2. `goal/precedent.md` — **the most load-bearing document.** Three prior systems, why each failed. Nearly every requirement traces back to it, and arguments about scope should be settled against it.
-3. `goal/problem.md`, `goal/requirements.md`, `goal/stakeholders.md`.
-4. `goal/open-questions.md` — five questions, Q1/Q4 gating everything.
-5. `notes.md` — carried design discipline and the open forks.
-6. `carried-over.md` — what to reuse from Portal, and what not to.
-7. `notes/01 general ideas.md` — the user's own writeup, in their words. The protocol documents are derived from it; when they disagree, this is the source.
+2. `goal/precedent.md` — **still the most load-bearing document.** Three prior
+   systems and why each failed; nearly every requirement traces back to it, and
+   arguments about scope should be settled against it.
+3. `goal/requirements.md` — and note which have been amended: R1.4 (vim, by
+   D67) and R15–R17 (superseded by `goal/todo.md`).
+4. `solution/milestones.md` — what was built, in what order, and what is in the
+   backlog. The narrative of the build.
+5. `solution/architecture-as-built.md` — the map: which module holds what, and
+   where each contract is written down. Read it before touching code.
+6. `decisions/decisions.md` — 67 decisions, append-only with amendments in
+   place. **Never rewrite one**; amend it and date the amendment.
+7. `notes.md` — the carried design discipline, and the general rules the
+   failures produced. Short, and repeatedly load-bearing.
+8. `goal/open-questions.md` — what is still genuinely open. The header says
+   which, as of the v1 audit.
 
-## Where we are
+## The distinction that governs these documents
 
-**Problem clarification is essentially complete.** Steps 1–10 and 12 of the process are done. **Step 11 (verify alignment) has not happened** — the goal documents and `summary.md` were written but never confirmed by the user. Ask early.
+**Records must not be rewritten; descriptions must match today.**
 
-**The agreed next step is a single prototype answering Q1 and Q4 together**: the smallest thing with a real vim mode, an inline-rendered equation, an inline image, and a table — then type into it at full speed and measure. Scope was explicitly extended to include **printing a range and pasting an image**, because that is where the user has *measured* pain (Tauri), not merely suspected it.
+- **Records**: `decisions/decisions.md`, `goal/discovery/`, `failures/`,
+  `observations.md`, `notes.md`, the transcripts. History. Amend, annotate, date
+  — never edit in place to make the past look consistent.
+- **Descriptions**: `architecture-as-built.md`, `features.md`, `milestones.md`,
+  `format-spec.md`, `scope.md`, `components.md`. These claim to say what *is*,
+  so a stale line in one of them is a bug.
 
-**Nothing has been built. There are no decisions recorded yet in this project** — `decisions/` is empty, and that is correct; nothing has been decided that needed to be.
+## What the acceptance suites are for
+
+`npm test` is the unit and integration suites; `npm run m0`–`m4` drive a real
+Electron window through scenes in `verify.ts`. **The suites exist because the
+unit tests could not have caught this project's worst bugs** — a segment cache
+race, a span mislabelled by a fallthrough, a search panel inked from the wrong
+surface. And **screenshots caught what the suites could not**, repeatedly. Look
+at the thing before reporting it done.
+
+`npm run typecheck` is the only command that typechecks the main process;
+`npx tsc -p .` silently skips it.
 
 ## How this user works
 
@@ -56,9 +95,16 @@ The genuinely non-recoverable part, and worth reading before the first substanti
 
 **The requirement set is short and the history supports being ruthless about it.** Available everywhere thinking happens; a joy to read and write in; findable months later. Anything not serving one of those three should be asked to justify itself, because features were never the binding constraint in twenty years of evidence.
 
-## Live threads not yet in the documents
+## Live threads
 
-- **The name.** "Notebook" is a placeholder and the directory name follows it. Renaming is trivial now and annoying later.
-- **Q4 option 4 (an extension to an existing editor) has not been discussed with the user.** I added it to `open-questions.md` for honest pricing; they have not reacted to it. It is close to their current working setup — VSCode plus vim plugins — and it fails R1.5 ("the UX is the user's own") while covering no mobile. Raise it explicitly rather than letting it sit in a document.
-- **The two tagging systems** — subjects on text ranges, and TODO groupings — are stated as unrelated (R17). The instinct to unify them should be resisted absent evidence they are the same thing *for the same reason*.
-- **Portal's `todo.md`** still holds real implementation work (Android TLS trust, a stray spike repo at `github.com/yonatanzunger/portal-t5-spike` that wants deleting). If Portal is ever resumed, start there.
+- **Q2 (storage and sync) is still open**, and v1 shipped without needing it —
+  which means it is now answerable on evidence from a real corpus.
+- **Q11 (what revealing markup should do)** is the sharpest remaining question,
+  because it is what the backlog's *rendered editing* item would answer.
+- **The two tagging systems** — subjects on text ranges, and task tags — are
+  still stated as unrelated. The instinct to unify them should be resisted
+  absent evidence they are the same thing *for the same reason*. (They now share
+  one *notation*, `shared/tags.ts`, which is not the same claim.)
+- **Portal's `todo.md`** still holds real implementation work (Android TLS
+  trust, a stray spike repo at `github.com/yonatanzunger/portal-t5-spike` that
+  wants deleting). If Portal is ever resumed, start there.

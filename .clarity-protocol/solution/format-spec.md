@@ -12,20 +12,29 @@ A storable state adequate to the Document API (D18). Everything here exists beca
 
 ```
 notebook/
-  stream/2026/03/2026-03-14.md          day file
-  stream/2026/03/2026-03-14.2.md        part 2, if that day was split
-  notes/titration-curves.md             branched documents, pinned lists
-  sections/_index.fileset.md            the nav's top level: a fileset of filesets (D53)
-  sections/house-deal.fileset.md        nav sections (D10)
+  notebook.stream/2026/03/2026-03-14.md     day file
+  notebook.stream/2026/03/2026-03-14.2.md   part 2, if that day was split
+  tasks.todo/2026/03/2026-03-14.md          the distinguished task list, a day at a time
+  blog-posts.todo.md                        an OVERALL list: no days, no walk (D55 as amended)
+  notes/titration-curves.md                 branched documents, pinned lists
+  sections/_index.fileset.md                the nav's top level: a fileset of filesets (D53)
+  sections/house-deal.fileset.md            nav sections (D10)
   attachments/2026/03/2026-03-14-plot-a1b2c3.png
-  .tephra/                              journal, index, caches — MACHINE-LOCAL, NEVER SYNCED
+  config/themes/aldine.json                 authored themes; selection is machine-local (D41)
+  .tephra/                                  journal, index, caches — MACHINE-LOCAL, NEVER SYNCED
 ```
+
+> **`stream/` became `notebook.stream/` in MT1** (D59): **a multi-file document
+> is a directory named by its kind**, so the same rule that reads
+> `tasks.todo/` reads the stream, and `kindOf` walks up a path until a name
+> declares a kind. The rename was a directory rename and nothing else — which
+> the `migrated` acceptance scene exists to keep true.
 
 Year/month nesting keeps any directory under ~31 entries; twenty years is roughly 5 000 day files. **`.tephra/` is excluded from sync by construction** — it holds the durability journal and any derived index, both machine-local and disposable (D7).
 
 > **This layout describes the *versioned* notebook (D46).** A shreddable notebook holds the same format — same markdown, same frontmatter, same markers, same degradation table — but with the bytes encrypted at rest, opaque object names, and an encrypted index in place of the dated directory tree, because filenames would otherwise disclose which days have writing and when something was deleted. **The format does not fork; only the storage does.** See `shreddable-notebook.md`.
 
-**Type is declared by filename suffix, mirrored in frontmatter** (D3). `.md`, `.todo.md`, `.fileset.md` — everything stays `.md` so external tools see markdown, the name declares the type so nothing is inferred from context, and the mirror in frontmatter survives a rename.
+**Type is declared by filename suffix, mirrored in frontmatter** (D3). `.md`, `.todo.md`, `.fileset.md` — everything stays `.md` so external tools see markdown, the name declares the type so nothing is inferred from context, and the mirror in frontmatter survives a rename. **A multi-file document declares its kind in its directory name instead** (D59): `notebook.stream/`, `tasks.todo/`.
 
 ## Frontmatter
 
@@ -100,7 +109,45 @@ attachments/2026/03/2026-03-14-plot-a1b2c3.png
 ![Titration curve](../../../attachments/2026/03/2026-03-14-plot-a1b2c3.png)
 ```
 
-Three levels up, because a day file sits at `stream/YYYY/MM/`. The short content hash prevents collisions and makes duplicate detection possible later. Ordinary links mean any renderer shows the image and the exit stays real.
+Three levels up, because a day file sits at `notebook.stream/YYYY/MM/`. The short content hash prevents collisions and makes duplicate detection possible later. Ordinary links mean any renderer shows the image and the exit stays real.
+
+**As built (R7).** The hash is the deduplication *and* the collision guard: the
+same screenshot pasted twice writes the same path with the same bytes, and two
+different pictures cannot share a name unless they are the same picture. The day
+in the name is **the day it arrived**, whatever it was pasted into — a picture in
+a note has no date of its own, and the day it turned up is the only honest one.
+Three doors reach it: paste, drop, and a file picker.
+
+**And the link is relative in the file while being absolute on screen.** The
+renderer is served from `tephra://app`, so a relative `src` resolves against the
+bundle, not the corpus — which is why every inline image in the app was broken
+until the corpus was given a host of its own (`tephra://notebook/`, read-only and
+rooted). Where a relative link resolves *from* is layout knowledge, so the
+renderer asks main for it once per document rather than guessing.
+
+## Task lists
+
+**A task list is a text kind, and a day is a segment** (D55) — the same shape as
+the stream, so it inherits the whole `SegmentedDocument` machinery rather than
+forking anything. **Two shapes of one format** (D55 as amended): a `.todo`
+*directory* is a daily list, carried and walked; a single `.todo.md` is an
+overall list, which does not turn over daily and so has nothing to carry.
+
+Everything an item is lives in its line (D56), which is what keeps the file
+sensible to a plain reader and to `grep`:
+
+```markdown
+- [ ] Call the surveyor #house DUE 2026-09-14 <!--tephra:item 7f3a1b2c 1756684800 1756771200-->
+  the number is in the email from Tuesday
+```
+
+**The marker carries identity and two timestamps** — created, and last touched —
+because those cannot be backfilled (`goal/scope.md`'s rule) and because an item
+is copied forward verbatim on every carry, so one id appears in many days with
+the status it had on each. **The newest instance is what the item IS.**
+
+**Notes are indented continuation lines** (D56 as amended), parsed as prose and
+nothing else: no tags, no dates, no nested items.
 
 ## Sections
 
@@ -164,11 +211,32 @@ Never synced, and — with one deliberate exception noted below — entirely dis
   version                     on-disk state version for this directory
   lock                        single-instance guard
   wal/<doc-id>.jsonl          changes since the last file write — SECONDS, not a history
-  index/                      derived search index (v2)
+  index/<dir>.json            the CORPUS index — a cache of a scan, per directory (D52)
   issues.json                 cached anomaly list from the degradation table
   attachments.manifest        what has been evicted versus what is actually gone
-  ui-state.json               open document, window extent, scroll, cursor, vim on/off
+  ui-state.json               every open window's location and cursor, plus the
+                              machine's theme, list arrangement and search width
 ```
+
+**`index/` is not the search index.** It is D52's cache of what a scan of each
+directory found — subjects, bookmarks, headings, links, task items — keyed by
+file and stamped with size and mtime, so verifying it is one `stat` per file. The
+*text* index that makes search stop scanning is v2 (D23) and has no home here
+yet. The distinction matters because the two have opposite properties: this one
+may be deleted at any time and costs only the time to look again.
+
+**And it does that now, which it did not until MS1.** The sweep compared
+`heldSegment`'s `undefined` against `null`, so every day file reported as *held
+by the editor*, every sweep took the branch meant for unsaved edits, and a cache
+entry was never written for a single day file — the store held `notes.json` and
+nothing for the stream. Found because search's central claim is that narrowing
+prevents reads.
+
+**`ui-state.json` holds a SET of windows** (MC6), not one: somebody who left a
+note open beside the stream left an arrangement, and reopening only the last
+window throws the arrangement away. Machine-local settings sit beside it —
+which theme, how the task list is arranged, how wide the search panel was
+dragged (D30, D41).
 
 **`lock` is not optional.** Two Tephra processes over one directory would fight over the journal and the fold, and the failure would be corruption rather than an error.
 

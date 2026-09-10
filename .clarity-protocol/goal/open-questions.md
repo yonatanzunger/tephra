@@ -2,11 +2,52 @@
 
 Genuine unknowns, ordered by how much they constrain everything else. **Q1 and Q4 are resolved by Spike 01** (`discovery/spike-01-findings.md`); **Q3 is resolved by `goal/todo.md`**, which split it into two mechanisms and left Q3a–Q3c behind; Q3b and Q3c are now resolved too, leaving only **Q3a** (the backlog). Q2 should be resolved before any substantial building.
 
+> **Audited 2026-09-10, when v1 completed.** What is still genuinely open, and
+> what v1 turned out not to need:
+>
+> - **Q2 (storage and sync)** — still open, and **it was never on the critical
+>   path after all.** v1 shipped on a local git repository (D32) with no sync at
+>   all, exactly as `components.md` predicted, so the fork this question names —
+>   plain files as truth versus a CRDT — is now answerable on evidence from a
+>   real corpus rather than in advance.
+> - **Q5 (mobile), Q10 (the mobile frame)** — open, and v2b's business.
+> - **Q7 (the shape of the stream view)** — the layout half is built and lived
+>   in; what is left is the study it schedules.
+> - **Q11 (revealing markup)** — still open, and now the sharpest of them,
+>   because it is what the backlog's *rendered editing* item would answer.
+> - **Q14 (presentation follows width, or is chosen)** — open, and folded into
+>   the backlog's visual-system entry.
+> - **Q1's answer outlived its premise.** It asked whether one surface could be
+>   vim-compatible *and* render inline; the answer was yes, and then **D67
+>   removed vim** — so two of the three constraints it discovered no longer have
+>   the reason they were discovered for. They survive anyway; see the note under
+>   Q1.
+
 ## Q1: Can one editing surface be vim-compatible *and* render figures, equations and tables inline?
 
 **Status: RESOLVED — yes, CodeMirror 6.** See D16 and `discovery/spike-01-findings.md`.
 
 Spike A confirmed it against a 1.05 MB corpus, on the desktop and on Android. The editor's own cost is 0.4 ms per keystroke at p99 and does not grow with document size, widget count or typing speed. Three constraints came with the answer and are now design inputs rather than open questions: block widgets must come from a state field rather than a view plugin; rendered constructs must unrender under the cursor, because the vim plugin ignores CodeMirror's atomic ranges; and block widgets must unrender from a neighbouring line, or vertical motion can never reach them.
+
+> **The premise was retired and the answer held (D67, 2026-09-09).** Vim is
+> removed, so *"vim-compatible"* is no longer a requirement on anything. Two of
+> the three constraints above were discovered *because* of the vim plugin's
+> offset arithmetic, and both survive on their own merits:
+>
+> - **Unrendering under the cursor is the editing model**, not a workaround.
+>   There is no other way to change what a widget stands for, which is why D16
+>   states it as a rule and the acceptance suite asserts it.
+> - **Unrendering from a neighbouring line** is needed by any keyboard: a caret
+>   arriving from the line above skips a block widget whatever moved it.
+>
+> The measurement also survives, and gained a consequence: the drawn cursor vim
+> required cost about a millisecond against the browser's native caret, so
+> removing vim made the native caret permanent rather than conditional.
+
+> **The staging below is superseded.** *"Ship raw+vim and rendered-read first"*
+> was right about the order and wrong about the ingredients: what shipped is raw
+> editing plus rendered reading, with no vim in it, and rendered *editing* of
+> inline constructs is in the backlog rather than next.
 
 Two things the spike changed that were not in the question. **Vim itself is now a setting** (D15) — it is unusable on a soft keyboard and subtly worse on the desktop. And the "p99 under 30 ms" bar turned out not to be scoreable: a plain `<textarea>` holding the same corpus measures 17.5 ms on the same machine, so most of that budget is the display pipeline.
 

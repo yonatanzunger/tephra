@@ -5,7 +5,7 @@ The decomposition of the build, and the order. Read with `goal/scope.md`, which 
 ## Components
 
 1. **Format** — markdown plus extensions; how dates, subjects, bookmarks and TODO fields are represented in plain text.
-2. **Editing surface** — vim mode, raw/rendered switching, inline widgets (Q1).
+2. **Editing surface** — raw/rendered switching, inline widgets (Q1), one keymap (D67 removed vim).
 3. **Visual system** — typography, colour, spacing (R1.3). Reference is the Clarity app's styling.
 4. **Storage and sync** — offline operation, two devices, reconciliation (Q2).
 5. **Retrieval** — search, subject views, bookmarks.
@@ -21,9 +21,28 @@ Two are expensive to change later and everything else is comparatively cheap to 
 
 **v1 — single-device Mac, the stream, excellent editing.** No sync layer, no mobile, no TODO or fileset UX. Synced by hand if at all. This is already the default place the writing happens, and it starts accumulating the corpus that makes everything downstream testable rather than theoretical.
 
+> **v1 completed 2026-09-10, and it grew in one direction this predicted it
+> would not: it has the TODO UX.** The list turned out to be the thing most
+> wanted from daily use — the whole of `goal/todo.md` and MT1–MT7 — which is the
+> v3-promotion mechanism arriving early rather than the plan being wrong. The
+> *fileset* UX did stay out, exactly as written; filesets carry only the
+> navigation role.
+>
+> **What else v1 holds that this list assigned later:** search over the corpus
+> (component 5), the link directory, comments in the margin, printing, image
+> paste, and history browsing. **What it does not:** sync, mobile, a text index,
+> and rendered editing of inline constructs.
+
 **v2 — sync, then Android.** The purpose is road miles on the problem the project exists for: doing this from many places.
 
-**v3 — promote what earned it.** TODO, filesets, and the rest, admitted against recorded failures of their plain-file stand-ins.
+**v3 — promote what earned it.** Filesets and the rest, admitted against recorded failures of their plain-file stand-ins.
+
+> **The mechanism worked, in both directions.** TODO was promoted into v1 by use
+> (and by D4's evidence gate turning out never to have been exercised — an
+> unexercised gate returns nothing, not a "no"). And **vim was demoted out of
+> v1** the same way: it was the promoted thing, the plain alternative was the
+> fallback, and the fallback won (D67). A promotion rule that can only add is
+> only half a rule.
 
 ## What each stage must prove, and the constraints that carry backwards
 
