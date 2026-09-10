@@ -1622,31 +1622,61 @@ body {
  * whose whole job is reading. */
 .find {
   align-self: flex-end;
-  margin: .45rem 0 .15rem;
-  display: flex; align-items: center; gap: .35rem;
-  padding: .3rem .35rem .3rem .5rem;
-  font-family: var(--font-ui); font-size: 12px; color: rgb(var(--text));
+  margin: .5rem 0 .2rem;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .5rem .45rem .7rem;
+  font-family: var(--font-ui); font-size: 14px; color: rgb(var(--text));
   background: rgb(var(--surface));
-  border: 1px solid rgb(var(--border)); border-radius: 8px;
+  border: 1px solid rgb(var(--border)); border-radius: 9px;
   box-shadow: 0 8px 26px rgb(0 0 0 / .18);
 }
+/* **Sized against the prose, not against the chrome.** What goes in here is a
+ * phrase you are reading back out of your own notebook, so it is set in the body
+ * face at something near the size it will be found at — a 12px field for text
+ * that lands as 17px prose is a control that disagrees with its own subject. */
 .find-field {
-  font: inherit; font-size: 13px; font-family: var(--font-body);
-  width: 15rem; padding: .2rem .35rem;
+  font: inherit; font-size: 17px; font-family: var(--font-body);
+  width: 18rem; padding: .25rem .4rem;
   color: rgb(var(--text)); background: transparent;
-  border: 1px solid transparent; border-radius: 5px;
+  border: 1px solid transparent; border-radius: 6px;
 }
 .find-field:focus { outline: none; border-color: rgb(var(--border)); }
 .find-step, .find-close {
-  font: inherit; line-height: 1; padding: .25rem .4rem;
+  font: inherit; font-size: 16px; line-height: 1; padding: .25rem .45rem;
   color: rgb(var(--text-muted)); background: transparent;
   border: 1px solid transparent; border-radius: 5px; cursor: pointer;
 }
 .find-step:hover, .find-close:hover {
   color: rgb(var(--text)); background: rgb(var(--text) / .06);
 }
-/* Reserves its own width so a step does not shuffle the buttons sideways. */
+/* Reserves its own width so a growing count does not shuffle the buttons
+ * sideways — the number changes while the counter runs, and a control that
+ * twitches as it counts is worse than one that waits. */
 .find-said {
-  min-width: 4.2rem; text-align: right;
-  font-size: 11px; color: rgb(var(--text-muted));
+  min-width: 5.6rem; text-align: right;
+  font-size: 12px; color: rgb(var(--text-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+/* A find's matches, in the text (MS3).
+ *
+ * **Decorated rather than selected.** The caret goes back to the field after a
+ * landing so the next keystroke is another search, which leaves CodeMirror's
+ * selection unfocused and — on cream — very nearly invisible. These stay put.
+ *
+ * **Amber, not the accent**, and the first version learned this the hard way: a
+ * theme's accent is whatever that theme chose, it is brown in this one, and
+ * brown at sixteen percent over cream is indistinguishable from the paper. A
+ * found word wants to read as a highlighter, which is a colour of its own —
+ * warm, outside the palette's working range, and the same in every theme so that
+ * "this is the one you are on" never depends on which theme is loaded. */
+.cm-find {
+  border-radius: 2px;
+  background: rgb(234 179 8 / .30);
+}
+/* The one being stood on, which has to be tellable from the rest at a glance —
+ * so it differs in weight AND in edge, not in opacity alone. */
+.cm-find-now {
+  background: rgb(234 179 8 / .68);
+  box-shadow: 0 0 0 1.5px rgb(161 98 7 / .85);
 }

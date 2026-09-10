@@ -2319,17 +2319,26 @@ export async function runVerify(request: string): Promise<void> {
         field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         await settle(1200)
       }
-      // **The claim is the selection**, not the scroll: a find that lands with a
-      // bare caret has not said which words were the answer.
+      // **The claim is what is DRAWN**, not the scroll and not the selection: a
+      // find that lands without marking the words has not said what it found,
+      // and reading the mark is reading what a person would see.
       const first = view.state.selection.main
-      say('firstFound', view.state.doc.toString().slice(first.from, first.to))
+      say('firstFound', document.querySelector('.cm-find-now')?.textContent ?? '')
       say('firstAt', first.from)
+      // **Decorated, not selected** (MS3): the caret is back in the field, so an
+      // unfocused selection is all a reader would have had to go on.
+      say('markedNow', document.querySelectorAll('.cm-find-now').length)
+      say('markedAll', document.querySelectorAll('.cm-find').length)
+      // The tally counts from the newest end, so the first landing is the first.
+      await settle(900)
+      say('tally', document.querySelector('.find-said')?.textContent ?? '')
+      say('trackMarks', document.querySelectorAll('.cm-track-mark, .cm-scroll-track *').length)
 
       // Again, backwards in time: the second-newest mention, not the same one.
       say('steppedEarlier', await window.tephra.clickMenu('Find Earlier'))
       await settle(1200)
       const second = view.state.selection.main
-      say('secondFound', view.state.doc.toString().slice(second.from, second.to))
+      say('secondFound', document.querySelector('.cm-find-now')?.textContent ?? '')
       say('movedBack', second.from < first.from)
 
       // And forward again, which must return to where it started.
@@ -2338,6 +2347,25 @@ export async function runVerify(request: string): Promise<void> {
       const third = view.state.selection.main
       say('thirdAt', third.from)
       say('cameBack', third.from === first.from)
+
+      // **Past the oldest, round to the newest.** Stepped until it says it came
+      // round rather than a fixed number of times: how many matches a fixture
+      // has depends on how many days the window loaded, and a count here would
+      // be a test that breaks when the extent policy changes.
+      let steps = 0
+      let wrapped = ''
+      while (steps < 10 && !wrapped.includes('\u21bb')) {
+        await window.tephra.clickMenu('Find Earlier')
+        await settle(900)
+        wrapped = document.querySelector('.find-said')?.textContent ?? ''
+        steps += 1
+      }
+      say('saidWhenWrapped', wrapped)
+      say('stepsToWrap', steps)
+      say('wrappedTo', view.state.selection.main.from)
+      // Coming round lands on the newest match, which is where the very first
+      // Enter landed — the loop is closed.
+      say('wrapIsFirst', view.state.selection.main.from === first.from)
 
       // Nothing to find says so, rather than moving the caret anywhere.
       const again = document.querySelector('.find-field') as HTMLInputElement | null
@@ -2350,7 +2378,9 @@ export async function runVerify(request: string): Promise<void> {
         await settle(1500)
       }
       say('saidWhenNothing', document.querySelector('.find-said')?.textContent ?? '')
-      say('caretUnmoved', view.state.selection.main.from === third.from)
+      // Unmoved from wherever the wrap left it, which is what "nothing" has to
+      // mean: a search that finds nothing must not take you anywhere.
+      say('caretUnmoved', view.state.selection.main.from === first.from)
 
       // A beat with the bar up and a match selected, for the screenshot.
       await settle(2500)

@@ -39,11 +39,12 @@ import { documentRoot, type RelPath } from '../../w/layout.ts'
 import { parseFile } from '../frontmatter.ts'
 import { compareDateKeys } from '../../../shared/dates.ts'
 import { plainLine } from '../../../shared/plain.ts'
+import { matchesIn, phraseRegex } from '../../../shared/phrase.ts'
 import { isEmpty } from '../../../shared/search-api.ts'
 import type { Notebook } from '../../w/notebook.ts'
 import type { CorpusIndex, IndexedFile } from './corpus-index.ts'
 import type { DateKey } from '../../../shared/document-api.ts'
-import type { Cursor, Hit, Ordering, Progress, Query, QueryNode, Scope, Search } from '../../../shared/search-api.ts'
+import type { Cursor, Hit, Ordering, Progress, Query, Scope, Search } from '../../../shared/search-api.ts'
 import type { Located } from '../../../shared/nav-api.ts'
 
 /**
@@ -231,7 +232,7 @@ class ScanCursor implements Cursor {
     this.#notebook = notebook
     this.#index = index
     this.#query = query
-    this.#match = matcher(query.find, query.fold)
+    this.#match = phraseRegex(query.find, query.fold)
   }
 
   async next(count: number): Promise<readonly Hit[]> {
@@ -318,35 +319,6 @@ function* linesIn(body: string, from: number, to: number): Generator<{ from: num
   }
 }
 
-/** Everything the app wrote into a line, which nobody searched for. */
-const MARKERS = /<!--tephra:[^>]*-->/g
-
-/**
- * Where the phrase sits in one line.
- *
- * **A match inside a marker is not a match.** `<!--tephra:tag-start house
- * deal-->` is machinery, and finding *house deal* inside it would report the
- * filing system as though somebody had written it (`plain.ts` makes the same
- * point for display).
- */
-function matchesIn(line: string, match: RegExp): readonly { from: number; to: number }[] {
-  const machinery: { from: number; to: number }[] = []
-  MARKERS.lastIndex = 0
-  for (let m = MARKERS.exec(line); m !== null; m = MARKERS.exec(line)) {
-    machinery.push({ from: m.index, to: m.index + m[0].length })
-  }
-  const out: { from: number; to: number }[] = []
-  match.lastIndex = 0
-  for (let m = match.exec(line); m !== null; m = match.exec(line)) {
-    const at = { from: m.index, to: m.index + m[0].length }
-    if (!machinery.some(span => at.from < span.to && span.from < at.to)) out.push(at)
-    // A zero-width match cannot happen with a non-empty phrase, but a regex that
-    // never advances hangs the scan, and the guard costs one comparison.
-    if (match.lastIndex <= m.index) match.lastIndex = m.index + 1
-  }
-  return out
-}
-
 function hit(
   candidate: Candidate,
   body: string,
@@ -374,18 +346,3 @@ function hit(
     when: candidate.when,
   }
 }
-
-/**
- * The phrase as something to run over a line.
- *
- * **Terms separated by whitespace, not by a literal space**, because a line may
- * wrap its words differently from the query — and this is the one place the
- * meaning of *adjacent* is decided.
- */
-function matcher(find: QueryNode, fold: boolean): RegExp | null {
-  if (find.of.length === 0) return null
-  const source = find.of.map(term => escape(term.text)).join('\\s+')
-  return new RegExp(source, fold ? 'giu' : 'gu')
-}
-
-const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

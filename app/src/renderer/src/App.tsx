@@ -21,6 +21,10 @@ import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { Find, type FindControl } from './frame/Find'
+import { NO_FIND_MARKS } from './editor/kinds/markdown/find-marks'
+import { matchesIn, phraseRegex } from '../../shared/phrase'
+import { parseQuery } from '../../shared/query-text'
+import { EVERYWHERE } from '../../shared/search-api'
 import { Confirm, type ConfirmRequest } from './frame/Confirm'
 import { tephra } from './handle'
 import type { Located, Reference } from '../../shared/nav-api.ts'
@@ -156,7 +160,12 @@ export function App(): React.JSX.Element {
   const [anomaliesOpen, setAnomaliesOpen] = useState(false)
   const [prompt, setPrompt] = useState<PromptRequest | null>(null)
   const [finding, setFinding] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  /** Bumped on every landing, so the marks recompute which one is current. */
+  const [findLanded, setFindLanded] = useState(0)
   const findControl = useRef<FindControl | null>(null)
+  /** Where the walk last landed, in buffer coordinates, so it can be marked. */
+  const findHere = useRef<{ from: number; to: number } | null>(null)
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const [range, setRange] = useState<DateRangeRequest | null>(null)
   /** Bumped when the document changes, so the sidebar re-asks the index. */
@@ -788,6 +797,63 @@ export function App(): React.JSX.Element {
   }, [track, pane, docWindow, navGeneration])
 
   /**
+   * The find's matches, drawn in the text and down the scroll track (MS3).
+   *
+   * **Scanned from the loaded buffer rather than pulled from the engine**, and
+   * the reason is the streaming: asking the engine where every match is would
+   * read the corpus to the end, which is exactly what the pull-shaped cursor
+   * exists to avoid. What the buffer holds is what the surface can draw, and the
+   * two questions have different answers on purpose — the walk goes to places
+   * this scan cannot see, and says so by landing there.
+   *
+   * **One matcher, shared with the engine** (`shared/phrase.ts`), so the marks
+   * cannot sit anywhere the walk would not go.
+   *
+   * **And nothing is marked for a scoped query.** `foo #wombats` means foo
+   * *inside* the tagged text, and a buffer scan cannot see the tags — so it
+   * would mark every foo on the page, most of them places the walk will not
+   * stop. Marking only what is certainly right is better than marking a page
+   * full of near-misses.
+   */
+  useEffect(() => {
+    const editor = editorRef.current
+    if (editor === null || editor === undefined) return
+    const w = pane?.window ?? null
+    if (!finding || findQuery.trim() === '' || w === null) {
+      editor.showFindMarks(NO_FIND_MARKS)
+      // Only ours: a sidebar row's marks are the other owner of this track, and
+      // clearing them here would take them away whenever a find ended.
+      if (finding) editor.showTrackMarks({ places: [], current: -1, beyond: { earlier: 0, later: 0 }, slot: null })
+      return
+    }
+    const { query } = parseQuery(findQuery, {
+      scope: EVERYWHERE,
+      order: { kind: 'chronological', origin: 'now', direction: 'past' },
+      fold: 'auto',
+    })
+    const regex = query.scope.tags.length > 0 || query.scope.dates !== null
+      ? null
+      : phraseRegex(query.find, query.fold)
+    const here = findHere.current
+    if (regex === null) {
+      editor.showFindMarks(here === null ? NO_FIND_MARKS : { places: [here], current: 0 })
+      return
+    }
+    const places = matchesIn(w.text, regex)
+    const current = here === null ? -1 : places.findIndex(place => place.from === here.from)
+    editor.showFindMarks({ places, current })
+    // **And down the track, which is the same set seen from further away.** The
+    // marks in the text say what is on this screen; the track says how the
+    // matches are spread through everything loaded, which is the question you
+    // ask before deciding whether to keep stepping.
+    //
+    // `beyond` stays at zero rather than guessing: how many matches lie outside
+    // the loaded region is exactly what this scan cannot know, and a number that
+    // is wrong in the direction of "there are none" is worse than no number.
+    editor.showTrackMarks({ places, current, beyond: { earlier: 0, later: 0 }, slot: null })
+  }, [finding, findQuery, findLanded, pane, docWindow, navGeneration])
+
+  /**
    * The sidebar's one verb, arriving here because it needs both halves: the
    * PANE to load the region the place is in, and the EDITOR to put the caret
    * there once it is loaded (D51).
@@ -827,13 +893,17 @@ export function App(): React.JSX.Element {
       const now = pane.window
       const buffer = now === null ? null : now.toWindow(where(now.generation))
       if (buffer === null) return
-      // **A search match is SELECTED and a jump is not.** A bookmark or a tag
-      // sends you to a place; a find tells you which words were the answer, and
-      // showing that as a caret leaves the reader to work it out.
-      const ends = select && at.to !== at.from
-        ? now?.toWindow({ segment, offset: at.to as never, generation: now.generation })
-        : null
-      editorRef.current?.revealAt(buffer as number, ends === null ? undefined : (ends as number))
+      // **A find match is MARKED, not selected.** The caret goes back to the
+      // search field so the next keystroke is another search, which leaves an
+      // unfocused selection painting flat grey over the mark underneath it —
+      // so the range is remembered here and drawn by `find-marks.ts` instead.
+      if (select) {
+        const ends = at.to !== at.from
+          ? now?.toWindow({ segment, offset: at.to as never, generation: now.generation })
+          : null
+        findHere.current = { from: buffer as number, to: (ends ?? buffer) as number }
+      }
+      editorRef.current?.revealAt(buffer as number)
     },
     [doc, pane],
   )
@@ -1242,8 +1312,19 @@ export function App(): React.JSX.Element {
             control={findControl}
             document={(pane?.document?.id ?? null) as string | null}
             origin={() => cursorRef.current}
-            onGo={hit => goToLocated(hit.at, true)}
-            onClose={() => setFinding(false)}
+            onGo={async hit => {
+              await goToLocated(hit.at, true)
+              // Landing is what decides which mark is the current one, and the
+              // query has not changed — so the effect is nudged rather than
+              // waited on.
+              setFindQuery(q => q)
+              setFindLanded(n => n + 1)
+            }}
+            onQuery={setFindQuery}
+            onClose={() => {
+              setFinding(false)
+              findHere.current = null
+            }}
           />
         )}
 

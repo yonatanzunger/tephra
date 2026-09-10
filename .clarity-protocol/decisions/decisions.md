@@ -2835,6 +2835,16 @@ highlighting, match counts and replace for nothing. It cannot express a tag
 predicate, and the cost of the free version is two ⌘F behaviours with two
 grammars — which is worse than writing the decoration layer over our own query.
 
+**And "unused" had to become *uninstalled*, which MS3 found from a screenshot.**
+Writing the decision was not enough: `searchKeymap` was still in the editor's
+keymap, so ⌘F opened CodeMirror's panel — with regexp, by-word and Replace on it,
+none of them ours, all of them operating on the days this window happens to have
+loaded, and Replace editing the buffer rather than going through the Document.
+Exactly the two-⌘F confusion this paragraph was written to prevent, shipped
+anyway because the extension was left where it was. **A decision not to use
+something is a decision to remove it.** `highlightSelectionMatches` stays — a
+decoration is not a command, and it is what makes a landed match legible.
+
 **One text field, parsed, not a form** (T16): bare words are substrings,
 `#wombats` is a tag, `2026-03` and `2026-03-01..2026-03-15` are ranges, and
 `/re/` is reserved for regex. Dates are the only new notation, since tags

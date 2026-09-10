@@ -508,3 +508,34 @@ looked like. So it is text, history is per day, and it inherits the whole
 text-shaped when you ask what the user does with it.** Enumerating fields is the
 easier exercise and the misleading one. The same test has not yet been applied to
 calendar, which is still sitting in that row.
+
+## An object's identity is taken while it is alive, not in its teardown
+
+`registerDocumentIpc` closed a window's running searches on `closed`, and read
+`created.webContents.id` *inside* that handler — where the WebContents is already
+destroyed and the property access throws. The window that found it was the hidden
+one **printing** makes, so the symptom was a PDF that came out perfectly and a
+main process that fell over on the way back: m2's print scene simply stopped
+reporting three lines from the end, with no error anywhere.
+
+The rule is small and general. **A teardown handler may use only what was
+captured before teardown began.** `const owner = created.webContents.id` at
+creation time, then close against `owner`. This applies to every Electron object
+with a destroyed state — WebContents, BrowserWindow, the view behind a handle —
+and to anything else whose accessors throw after disposal.
+
+**And the diagnostic lesson is worth as much as the fix**: three plausible
+theories about the cause were all wrong, and the bug was found in four minutes by
+`git stash`-ing the change and bisecting the diff by hand. When a suite that was
+green goes red after a change, bisect the change. Do not reason about it.
+
+## `npx tsc --noEmit -p .` does not typecheck this project
+
+It silently skips the main process. The real check is **`npm run typecheck`**
+(`tsc --build --force tsconfig.json`), which walks the project references — and
+it found a bad import in `main/` the moment it was finally run, after two phases
+of work had been "typechecking clean" against a command that was not looking.
+
+**A verification command that cannot fail is not verifying.** Worth a suspicion
+whenever a check has never once complained: try breaking something on purpose and
+confirm it notices.

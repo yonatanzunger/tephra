@@ -394,14 +394,64 @@ newest end is where you always are, so ⌘F's Enter walks *backwards*. *Previous
 would have had to mean "further into the past", which is the opposite of what it
 says.
 
-**No count, and that is honest rather than lazy.** *3 of 47* means the corpus has
-been read to the end; over twenty years it would mean waiting for that before the
-first answer. What can be said truthfully is whether it found anything and
-whether it has run out — *nothing* and *no more* are different words for a reason.
+**The count is progressive, which is the honest version of a number I first
+refused to show.** *3 of 47* does mean the corpus has been read to the end, and
+waiting for that before the first answer would be wrong — but that argues against
+a *blocking* total, not against a total. So there are two cursors: the **walk**,
+which reads one hit at a time and is what you steer, and a **counter**, which
+reads the same query from the newest end in batches and reports as it goes. The
+number grows and says so while it is growing: `3 / 47…` is true where `3 / 47`
+would have been a guess.
 
-**A match is selected, not merely scrolled to**, which is why `revealAt` gained an
-end: a caret at the start of a match leaves the reader to work out which words
-were the answer.
+**Newest-first whichever way the walk is going**, because *3 / 15* has to mean the
+third newest match or it means nothing — an ordinal counted from wherever the
+cursor happened to be would change under you when you turned round.
+
+**Debounced, cancelled on every keystroke, and capped at two thousand.** A tally
+is an orientation aid, not an inventory: past a few thousand the useful statement
+is *there are more of these than you want to step through*, so above the cap the
+total is shown as a floor (`12 / 2000+`). The walk is unaffected either way,
+because the walk never needed the count.
+
+**A match is MARKED, not selected**, and that was the second attempt. Selecting
+the range looked right until the caret went back to the field so the next
+keystroke could be another search — at which point CodeMirror draws an
+*unfocused* selection, a flat grey painted straight over the mark beneath it. So
+`find-marks.ts` decorates instead, which stays exactly as visible while the caret
+is elsewhere, which is the whole time. `revealAt` went back to placing a caret.
+
+**And the others on the page are marked too**, quietly. One mark says where you
+are; the rest say what else is on this screen, which is the difference between
+stepping blind and reading a page that has the answer on it twice. They also go
+down the scroll track, reusing D51's mechanism — the same set seen from further
+away, which is the question you ask before deciding whether to keep stepping.
+
+**Marks are scanned from the loaded buffer, not pulled from the engine.** Asking
+where every match is would read the corpus to the end, which is exactly what a
+pull-shaped cursor exists to avoid. What the buffer holds is what the surface can
+draw; the walk goes to places the scan cannot see, and says so by landing there.
+`shared/phrase.ts` holds the one matcher both use, so a mark cannot sit anywhere
+the walk would not go. **Nothing is marked for a scoped query** — a buffer scan
+cannot see tags, so `foo #wombats` would mark every foo on the page, most of them
+places the walk will not stop.
+
+**`beyond` stays at zero rather than guessing.** How many matches lie outside the
+loaded region is precisely what this scan cannot know, and a number wrong in the
+direction of *there are none* is worse than no number.
+
+**Running out wraps round**, which makes the two steppers a loop rather than a
+pair of dead ends. The wrap is a fresh cursor with no origin — for a walk into
+the past that is the newest thing there is, and for one into the future the
+oldest, which falls out of the ordering without a second rule. It says which end
+it came round to, because in a notebook those are different places: one is what
+you wrote this morning and the other is 2006.
+
+**Amber, not the accent.** The first version tinted matches with the theme
+accent, which is brown in the running theme and indistinguishable from cream at
+low alpha. A found word wants to read as a highlighter — a colour of its own,
+the same in every theme, so that *this is the one you are on* never depends on
+which theme is loaded. The current match differs in weight **and** in edge, not
+in opacity alone.
 
 **Two bugs worth keeping:**
 

@@ -10,6 +10,7 @@
 
 import { EditorView } from '@codemirror/view'
 import type { TrackMarks } from './scroll-track.ts'
+import type { FindMarks } from './find-marks.ts'
 import type { Extension } from '@codemirror/state'
 import { NO_SELECTION, type SelectionState } from '../../../../../shared/commands.ts'
 import type { WindowPosition, DocumentWindow, Span } from '../../../../../shared/document-api.ts'
@@ -177,7 +178,7 @@ export interface EditorHandle extends SurfaceHandle {
    * also what `scrollIntoView` can do across regions that have not been
    * rendered, which a jump across a month always is.
    */
-  revealAt(at: number, to?: number): void
+  revealAt(at: number): void
   /**
    * Mark a set of places down the scroll track.
    *
@@ -187,6 +188,7 @@ export interface EditorHandle extends SurfaceHandle {
    * buffer coordinates and the editor decides where that is (D51).
    */
   showTrackMarks(marks: TrackMarks): void
+  showFindMarks(marks: FindMarks): void
 }
 
 /**

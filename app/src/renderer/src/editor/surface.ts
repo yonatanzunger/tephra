@@ -14,6 +14,7 @@
 import type { DocumentPosition, DocumentWindow, WindowPosition } from '../../../shared/document-api.ts'
 import type { Typography } from './typography.ts'
 import type { CommentAnchor, MarkInfo } from './annotations.ts'
+import type { FindMarks } from './kinds/markdown/find-marks.ts'
 
 /** The app's editing settings. A surface uses whichever apply to it. */
 export interface EditingSettings {
@@ -59,8 +60,10 @@ export interface AnnotationSink {
  * scroll track — is the TEXT surface's, and lives with it.
  */
 export interface SurfaceHandle {
-  /** Put the view on a place in the window, and show it. Selects `at..to`. */
-  revealAt(at: number, to?: number): void
+  /** Put the caret on a place in the window, and show it. */
+  revealAt(at: number): void
+  /** Where the find's matches are, and which one it is standing on (MS3). */
+  showFindMarks(marks: FindMarks): void
 }
 
 /**

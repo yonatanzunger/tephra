@@ -100,7 +100,7 @@ console.log('— finding —')
 {
   // Newest first: today mentions the surveyor, and so do the two days before it.
   const root = await week([
-    'Rang the surveyor again about the boundary.\n',
+    'Rang the surveyor again about the boundary, and the surveyor said Thursday.\n',
     'Nothing much today.\n',
     'The surveyor came back with a number.\n',
     'Booked the surveyor for Thursday.\n',
@@ -119,6 +119,20 @@ console.log('— finding —')
   check('and found the word there too', r.secondFound === 'surveyor')
   check('Find Later came back to where it started', r.steppedLater === true && r.cameBack === true,
     `first=${r.firstAt} third=${r.thirdAt}`)
+  check(
+    'the match it landed on is marked in the text',
+    r.markedNow === 1 && r.markedAll >= 1,
+    `now=${r.markedNow} all=${r.markedAll}`,
+  )
+  check('and the others on the page are marked too', r.markedAll >= 2, `all=${r.markedAll}`)
+  check('the bar counts the matches, and says which one this is',
+    /^1 \/ \d+…?$/.test(String(r.tally)), String(r.tally))
+  check('stepping past the oldest wraps round to the newest',
+    String(r.saidWhenWrapped).startsWith('\u21bb'), `${r.saidWhenWrapped} after ${r.stepsToWrap} steps`)
+  check('and the tally says it is back at the first',
+    /^\u21bb 1 \/ \d+…?$/.test(String(r.saidWhenWrapped)), String(r.saidWhenWrapped))
+  check('and the loop closes on the newest match', r.wrapIsFirst === true,
+    `${r.wrappedTo} vs ${r.firstAt}`)
   check('a phrase nobody wrote says so', r.saidWhenNothing === 'nothing', String(r.saidWhenNothing))
   check('and moves nothing when it does', r.caretUnmoved === true)
   check('Escape closes the bar', r.closed === true)

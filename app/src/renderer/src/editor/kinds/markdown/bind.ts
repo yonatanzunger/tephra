@@ -15,13 +15,21 @@
 import { ChangeSet, EditorSelection, EditorState, StateEffect, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, crosshairCursor, drawSelection, keymap, placeholder, rectangularSelection } from '@codemirror/view'
 import { defaultKeymap } from '@codemirror/commands'
-import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+// **`searchKeymap` is deliberately NOT here** (D66). CodeMirror's own find
+// panel binds ⌘F too, so leaving it installed put two searches on one key —
+// with two grammars, two ideas of what a document is, and a Replace that edits
+// the buffer rather than going through the Document. Its panel cannot express a
+// tag or a date, and it only ever sees the days this window has loaded, which is
+// the whole reason MS1 exists. `highlightSelectionMatches` stays: it is a
+// decoration, not a command, and it is what makes a landed match legible.
+import { highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
 import { vim } from '@replit/codemirror-vim'
 import { listIndent, listLayout } from './lists.ts'
 import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
+import { findMarks, setFindMarks, type FindMarks } from './find-marks.ts'
 import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../../../shared/document-api.ts'
 import { fromBuffer } from '../../../../../shared/prose.ts'
 import { widgetExtensions } from './widgets.ts'
@@ -78,14 +86,19 @@ export interface Binding {
    */
   toggleEmphasis(marker: string): void
   /**
-   * Put the view on a buffer position and show it.
+   * Put the caret at a buffer position and show it.
    *
-   * With `to`, the range between them is selected — which is what a find match
-   * is, and what tells a reader which words answered.
+   * **A caret, not a selection**, and MS3 tried the other way first: selecting a
+   * find's match looks right until the caret goes back to the search field, at
+   * which point CodeMirror draws an *unfocused* selection — a flat grey that
+   * paints straight over the match decoration underneath it. Which words were
+   * found is `find-marks.ts`'s job, and it does it without needing the focus.
    */
-  revealAt(at: number, to?: number): void
+  revealAt(at: number): void
   /** Mark the active row's places down the scroll track (D51). */
   showTrackMarks(marks: TrackMarks): void
+  /** Where the find's matches are, and which one it is standing on. */
+  showFindMarks(marks: FindMarks): void
   setVim(on: boolean): void
   setTypography(t: Typography): void
   destroy(): void
@@ -115,6 +128,7 @@ export function bindEditor(options: BindOptions): Binding {
         placeholder('Nothing here yet. Start typing.'),
         listIndent(),
         scrollTrack(),
+        findMarks,
         vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         // **`codeLanguages` is what makes a fence more than one token.** Without
@@ -156,7 +170,7 @@ export function bindEditor(options: BindOptions): Binding {
         // for italic. Dropped by KEY rather than by identity, so a future
         // CodeMirror that rebinds the same key to something else is also
         // caught, and the menu accelerator is the only thing on it.
-        keymap.of([...defaultKeymap.filter(binding => binding.key !== 'Mod-i'), ...searchKeymap]),
+        keymap.of(defaultKeymap.filter(binding => binding.key !== 'Mod-i')),
         typographyCompartment.of(tephraTheme(typography)),
         editorToWindow(docWindow, options.onError),
         viewportReporter(options.onViewport),
@@ -293,16 +307,13 @@ export function bindEditor(options: BindOptions): Binding {
     showTrackMarks(next: TrackMarks): void {
       view.dispatch({ effects: setTrackMarks.of(next) })
     },
-    revealAt(at: number, to?: number): void {
-      const clamp = (n: number): number => Math.max(0, Math.min(n, view.state.doc.length))
-      const where = clamp(at)
+    showFindMarks(next: FindMarks): void {
+      view.dispatch({ effects: setFindMarks.of(next) })
+    },
+    revealAt(at: number): void {
+      const where = Math.max(0, Math.min(at, view.state.doc.length))
       view.dispatch({
-        // **A range is SELECTED, and that is what a find does.** A caret at the
-        // start of a match leaves the reader to work out which words were the
-        // answer; a selection says so, and is the same gesture every editor
-        // makes. With no end it is a bare caret, which is what a jump to a place
-        // has always been.
-        selection: to === undefined ? { anchor: where } : { anchor: where, head: clamp(to) },
+        selection: { anchor: where },
         // **At the TOP, with what follows below it.** Centring reads well in the
         // middle of a long document and fails at both ends: near the end of the
         // stream — which is where a recent comment or subject always is — there
