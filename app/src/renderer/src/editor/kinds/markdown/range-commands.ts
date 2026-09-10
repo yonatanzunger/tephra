@@ -189,6 +189,7 @@ export interface EditorHandle extends SurfaceHandle {
    */
   showTrackMarks(marks: TrackMarks): void
   showFindMarks(marks: FindMarks): void
+  rebuildWidgets(): void
 }
 
 /**

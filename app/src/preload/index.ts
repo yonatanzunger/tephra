@@ -6,7 +6,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
-import type { Clipboard, DayProse, PrintJob, SearchBatch, SearchOpened, SearchRequest, ZoneNotice } from '../shared/ipc.ts'
+import type {
+  Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchBatch, SearchOpened,
+  SearchRequest, ZoneNotice,
+} from '../shared/ipc.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type {
   Followed, IndexStatus, LinkRow, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
@@ -273,6 +276,20 @@ const tephra = {
     renameTag: (span: Span, from: string, to: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.renameTag, span, from, to),
     removeAnchor: (name: string): Promise<void> => ipcRenderer.invoke(CHANNEL.removeAnchor, name),
+    /**
+     * An image into `attachments/`, and a relative link back (R7).
+     *
+     * **Nothing is inserted by this.** The link comes back and the surface with
+     * the caret puts it there through the ordinary edit path, so undo and the
+     * journal need no special case for a picture.
+     */
+    /** Which directory this document's relative links resolve from (R7). */
+    linkBase: (base: Base): Promise<string> => ipcRenderer.invoke(CHANNEL.linkBase, base),
+    attachImage: (request: ImageAttachment): Promise<Attached> =>
+      ipcRenderer.invoke(CHANNEL.attachImage, request),
+    /** The same act, from a file dialog only main can open. Null if cancelled. */
+    chooseImage: (base: Base): Promise<Attached | null> =>
+      ipcRenderer.invoke(CHANNEL.chooseImage, base),
     print: (request: PrintJob): Promise<boolean> => ipcRenderer.invoke(CHANNEL.print, request),
     /** Every written day in a range, as prose: what the whole-document print reads. */
     proseIn: (from: DateKey, to: DateKey): Promise<readonly DayProse[]> =>

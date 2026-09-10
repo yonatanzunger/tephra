@@ -743,8 +743,11 @@ descoped from v1, which is what leaves D9's editability question closed rather
 than forcing it.
 
 - The query engine, the grammar, and the two surfaces (MS1–MS4) — **done**
-- Image paste writing a file and inserting a link (R7) — here by schedule, not
-  by kinship; it shares nothing with search
+- Image paste writing a file and inserting a link (R7) — **done**; here by
+  schedule, not by kinship, and written up in `solution/image-notes.md`. It
+  found that *inline image rendering*, listed as v1 since `features.md` was
+  written, had never once worked: there was no route from the renderer to the
+  corpus, so every `<img>` in the app pointed at the bundle.
 
 ## M5 — the editing surface finished
 

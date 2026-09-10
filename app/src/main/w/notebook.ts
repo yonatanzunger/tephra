@@ -177,7 +177,7 @@ export class Notebook {
    * event this write is about to cause is recognised as ours rather than
    * mistaken for a hand-edit.
    */
-  async write(rel: RelPath, content: string): Promise<void> {
+  async write(rel: RelPath, content: string | Uint8Array): Promise<void> {
     // **The gate is here, on the one path everything writes through.** Stopping
     // the tiers and closing the windows is the tidy half of losing the lock; a
     // write that slips past while that happens is the half that costs a corpus.

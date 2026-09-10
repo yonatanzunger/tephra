@@ -27,6 +27,7 @@ export function MarkdownSurface({
   onError,
   onHandle,
   annotations,
+  onImages,
 }: SurfaceProps): React.JSX.Element {
   const { vim, typography } = settings
   const { onMark, onCommentAnchors, onRailHost } = annotations ?? {}
@@ -48,6 +49,7 @@ export function MarkdownSurface({
       ...(onMark !== undefined ? { onMark } : {}),
       ...(onCommentAnchors !== undefined ? { onCommentAnchors } : {}),
       ...(onRailHost !== undefined ? { onRailHost } : {}),
+      ...(onImages !== undefined ? { onImages } : {}),
     })
     binding.current = bound
     onHandle?.(bound)

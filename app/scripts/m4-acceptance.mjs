@@ -15,12 +15,13 @@
 //   1. ⌘F opens a bar, Enter lands on the newest match, and the match is selected
 //   2. Find Earlier walks back through the days, and Find Later comes back
 //   3. a phrase nobody wrote says so, and moves nothing
+//   5. a pasted picture becomes a file in `attachments/` and a link to it
 //   4. ⌘⇧F shows every place at once, in a panel that STAYS while you read the
 //      rows — and hands the set off to the walk, so choosing one leaves you
 //      inside the query rather than merely somewhere it pointed
 
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -28,6 +29,8 @@ const electron = './node_modules/.bin/electron'
 
 /** Today in the reference zone (D38) — never a hard-coded date; see m2. */
 const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
+const [YEAR, MONTH] = DAY.split('-')
+const dayPath = root => join(root, 'notebook.stream', YEAR, MONTH, `${DAY}.md`)
 
 /**
  * Several days, each holding the word once, so that walking has somewhere to go.
@@ -194,6 +197,37 @@ console.log('\n— searching —')
         c.fieldInk === rgb(c.panelText) && c.fieldBg !== c.panelBg,
       `pill=${c.pillInk} field=${c.fieldInk} on ${c.fieldBg}`)
   }
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
+// ── 5. a pasted picture ─────────────────────────────────────────────────────
+console.log('\n— images —')
+{
+  const root = await week(['Before the picture.\n'])
+  const r = report(await launch('image', root, { shotDelay: 22_000 }))
+  const dir = join(root, 'attachments', YEAR, MONTH)
+  const files = await readdir(dir).catch(() => [])
+
+  check('the link landed in the day', /^!\[\]\(\.\.\/\.\.\/\.\.\/attachments\//.test(String(r.inserted)),
+    String(r.inserted))
+  check('a file was written beside it', files.length === 1, files.join(', '))
+  check('named for the day, the picture and its bytes',
+    new RegExp(`^${DAY}-kitchen-plan-[0-9a-f]{6}\\.png$`).test(files[0] ?? ''), files[0] ?? 'none')
+  check('and it is a PNG, byte for byte',
+    files.length === 1 && (await readFile(join(dir, files[0]))).subarray(0, 8).equals(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    ),
+  )
+  check('the day file on disk says so too',
+    (await readFile(dayPath(root), 'utf8')).includes('![]('),
+  )
+  check('the line being edited still shows its markup (D16)', r.rawWhileEditing === 0,
+    `imgs=${r.rawWhileEditing}`)
+  check('and it draws as a figure once the caret leaves', r.drawn >= 1, `imgs=${r.drawn}`)
+  check('pointing at the corpus, not at the bundle', /^tephra:\/\/notebook\/attachments\//.test(String(r.imgSrc)),
+    String(r.imgSrc))
+  check('THE POINT: and the picture actually loaded', r.imgLoaded === true && r.imgWidth === 1,
+    `loaded=${r.imgLoaded} w=${r.imgWidth}`)
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 

@@ -74,6 +74,11 @@ export const CHANNEL = {
   renameTag: 'tephra:doc:renameTag',
   removeAnchor: 'tephra:doc:removeAnchor',
   print: 'tephra:doc:print',
+  /** An image into `attachments/`, and a relative link back (R7). */
+  attachImage: 'tephra:doc:attachImage',
+  chooseImage: 'tephra:doc:chooseImage',
+  /** Which directory a document's relative links resolve from (R7). */
+  linkBase: 'tephra:doc:linkBase',
   proseIn: 'tephra:doc:proseIn',
 
   /**
@@ -475,9 +480,54 @@ export interface PrintJob {
    * file. A field that means "which directory" should say which directory, and
    * only the two kinds of thing that can answer it should be able to.
    */
-  readonly base:
-    | { readonly kind: 'day'; readonly date: DateKey }
-    | { readonly kind: 'document'; readonly id: DocumentId }
+  readonly base: Base
+}
+
+/**
+ * Where relative links resolve FROM: a day of the stream, or a document.
+ *
+ * **The two things that can answer "which directory"**, and named once because
+ * two callers now ask it — printing, and attaching an image (R7). It is not a
+ * date: a note's images sit relative to its own file and it has no day.
+ */
+export type Base =
+  | { readonly kind: 'day'; readonly date: DateKey }
+  | { readonly kind: 'document'; readonly id: DocumentId }
+
+/**
+ * An image on its way into the corpus (R7).
+ *
+ * **The bytes come from the renderer**, because that is where they arrive: a
+ * paste event and a drop both carry the file itself, so asking main to read the
+ * clipboard again would be a second answer to a question already answered — and
+ * a worse one, since a drop is not on the clipboard at all.
+ *
+ * `name` is what to call it, from a dropped file or a picked one. The clipboard
+ * rarely says, and `clipboard` is what it is called then.
+ */
+export interface ImageAttachment {
+  readonly base: Base
+  readonly name: string
+  readonly ext: string
+  readonly bytes: Uint8Array
+}
+
+/**
+ * What Tephra will take as an image.
+ *
+ * **A closed list, and deliberately short.** Markdown renders what the platform
+ * renders, so this is the intersection of *what a browser draws inline* and
+ * *what somebody actually pastes*. SVG is absent on purpose: it is a document
+ * with script in it, not a picture, and embedding one is a decision rather than
+ * a paste.
+ */
+export const IMAGE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'heic']
+
+/** Where it landed, and how to write a link to it from `base`. */
+export interface Attached {
+  readonly rel: string
+  /** Relative, because every other link in the format is (format-spec). */
+  readonly link: string
 }
 
 /** What the clipboard is offering. Read in main, which is the only side with one. */

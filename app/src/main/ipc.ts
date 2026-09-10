@@ -1,12 +1,15 @@
 // Wiring the document service to Electron IPC. Nothing here does work.
 
-import { app, BrowserWindow, clipboard, ipcMain, shell, type WebContents } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type WebContents } from 'electron'
+import { basename, extname } from 'node:path'
+import { IMAGE_EXTENSIONS } from '../shared/ipc.ts'
+import { readOutsideBytes } from './w/outside.ts'
 import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
 import { Searches } from './searches.ts'
-import type { Clipboard, DayProse, PrintJob, SearchRequest } from '../shared/ipc.ts'
+import type { Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchRequest } from '../shared/ipc.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type { Followed, Reference } from '../shared/nav-api.ts'
 import type { CommentId } from '../shared/comments.ts'
@@ -49,6 +52,28 @@ export function registerDocumentIpc(service: DocumentService): void {
   )
   ipcMain.handle(CHANNEL.removeAnchor, (_e, name: string) => service.removeAnchor(name))
   ipcMain.handle(CHANNEL.print, (_e, job: PrintJob) => printPassage(service.notebookRoot, job))
+  // An image into the corpus (R7). **Two doors, one act**: bytes that arrived
+  // in the renderer — a paste, a drop — and a file chosen from a dialog, which
+  // only main can open.
+  ipcMain.handle(CHANNEL.linkBase, (_e, base: Base) => service.linkBase(base))
+  ipcMain.handle(CHANNEL.attachImage, (_e, request: ImageAttachment) => service.attachImage(request))
+  ipcMain.handle(CHANNEL.chooseImage, async (_e, base: Base): Promise<Attached | null> => {
+    const picked = await dialog.showOpenDialog({
+      title: 'Insert an image',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: [...IMAGE_EXTENSIONS] }],
+    })
+    const path = picked.filePaths[0]
+    if (picked.canceled || path === undefined) return null
+    const ext = extname(path).replace(/^\./, '').toLowerCase()
+    if (!IMAGE_EXTENSIONS.includes(ext)) return null
+    // **Through `w/outside.ts`**, which is where reaching outside the notebook
+    // lives: a file the person picked is bytes on disk and not the notebook's,
+    // and the layering test is what insisted (MC6).
+    const bytes = await readOutsideBytes(path)
+    if (bytes === null) return null
+    return service.attachImage({ base, name: basename(path, extname(path)), ext, bytes })
+  })
   ipcMain.handle(CHANNEL.proseIn, (_e, from: DateKey, to: DateKey) => service.proseIn(from, to))
 
   // Search. **Three messages rather than one**, because the answer to a query

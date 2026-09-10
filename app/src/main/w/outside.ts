@@ -21,6 +21,21 @@ export async function readOutside(path: string): Promise<string | null> {
   }
 }
 
+/**
+ * The bytes of a file, or null if it is not there (R7).
+ *
+ * **A picture is not text**, and a PNG read as UTF-8 comes back as mojibake
+ * rather than as an error — which is a corrupt attachment that looks like a
+ * successful read. So the two readers are separate and each says which it is.
+ */
+export async function readOutsideBytes(path: string): Promise<Uint8Array | null> {
+  try {
+    return await readFile(path)
+  } catch {
+    return null
+  }
+}
+
 /** Whether there is a readable file there. */
 export async function outsideExists(path: string): Promise<boolean> {
   try {

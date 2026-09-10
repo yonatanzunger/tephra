@@ -19,6 +19,7 @@
 // Measured in the spike: 2 ms initial scan, 0.2 ms incremental.
 
 import type { Range } from '@codemirror/state'
+import { imageSrc } from '../../../../../shared/scheme.ts'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import katex from 'katex'
@@ -32,11 +33,22 @@ export interface WidgetOptions {
   reveal: boolean
   /** Blocks also unrender from a neighbouring line, or j/k cannot enter them. */
   revealAdjacent: boolean
+  /**
+   * The directory this document's relative image links resolve from (R7).
+   *
+   * **Notebook-relative, and supplied by main**, because how deep a day file
+   * sits is `w/layout.ts`'s to know (D59). Empty means the notebook root, which
+   * is also the safe answer while it is still being fetched: a picture that
+   * cannot be placed draws as a broken image rather than as a file somewhere
+   * else.
+   */
+  imageBase: string
 }
 
 export const defaultWidgetOptions: WidgetOptions = {
   reveal: true,
   revealAdjacent: true,
+  imageBase: '',
 }
 
 // Mutable module state, deliberately: these are toggled live from the settings
@@ -132,7 +144,7 @@ class ImageWidget extends WidgetType {
     const wrap = document.createElement(this.block ? 'div' : 'span')
     wrap.className = 'tx-img' + (this.block ? ' tx-img-block' : '')
     const img = document.createElement('img')
-    img.src = this.src
+    img.src = imageSrc(this.src, widgetOptions.imageBase)
     img.alt = this.alt
     img.loading = 'lazy'
     wrap.appendChild(img)

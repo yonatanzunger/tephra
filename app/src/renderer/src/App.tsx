@@ -21,6 +21,9 @@ import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { Find, type FindControl } from './frame/Find'
+import type { DroppedImage } from './editor/kinds/markdown/bind'
+import { widgetOptions } from './editor/kinds/markdown/widgets'
+import type { Base } from '../../shared/ipc'
 import { Results } from './frame/Results'
 import type { Hit } from '../../shared/search-api'
 import { NO_FIND_MARKS } from './editor/kinds/markdown/find-marks'
@@ -572,6 +575,19 @@ export function App(): React.JSX.Element {
         return
       }
 
+      if (id === 'image') {
+        const target: TextTarget | null = editorRef.current ?? textRef.current
+        const at = baseOf()
+        if (target === null || at === null) return
+        void window.tephra.doc
+          .chooseImage(at)
+          .then(got => {
+            if (got !== null) target.wrapSelection(`![](${got.link})`, '')
+          })
+          .catch(fail)
+        return
+      }
+
       if (id === 'link') {
         // Whichever target is present: `EditorHandle` satisfies `TextTarget`
         // structurally, so this branches on nothing.
@@ -899,6 +915,72 @@ export function App(): React.JSX.Element {
    * pane had one document to offer. Which document it is is the file itself,
    * whose one segment is the constant every one-segment kind uses (D27).
    */
+  /**
+   * Where a relative link written at the caret would resolve from (R7).
+   *
+   * **The day the caret is in, not today**, for the stream: a picture pasted
+   * while reading last Tuesday belongs to a link that works from Tuesday's file.
+   * Everything else resolves from its own path, which is what it is called.
+   */
+  const baseOf = useCallback((): Base | null => {
+    const showing = pane?.document ?? null
+    if (showing === null) return null
+    if (showing.id !== STREAM_ID) return { kind: 'document', id: showing.id }
+    const segment = cursorRef.current?.segment ?? doc?.today ?? null
+    return segment === null ? null : { kind: 'day', date: segment as DateKey }
+  }, [pane, doc])
+
+  /**
+   * Where this document's relative image links resolve from (R7).
+   *
+   * **Fetched once per document, not once per picture**, because a widget draws
+   * synchronously and cannot wait for a round trip. Set on `widgetOptions`,
+   * which is module state the decoration builders already read — mutable on
+   * purpose, and per window, since each window is its own renderer.
+   */
+  useEffect(() => {
+    const at = baseOf()
+    if (at === null) {
+      widgetOptions.imageBase = ''
+      return
+    }
+    let live = true
+    void window.tephra.doc
+      .linkBase(at)
+      .then(base => {
+        if (!live) return
+        widgetOptions.imageBase = base
+        // Redraw: the pictures already on screen were placed against the old
+        // base, which for the first document is no base at all.
+        editorRef.current?.rebuildWidgets()
+      })
+      .catch(fail)
+    return () => {
+      live = false
+    }
+  }, [baseOf, docWindow])
+
+  /**
+   * A picture arrived: write it, then insert a link to it at the caret (R7).
+   *
+   * **Two acts, deliberately separate.** Main writes the file and answers with a
+   * relative link; the surface puts that link in through the ordinary edit path,
+   * so undo undoes it, the journal records it, and nothing about a picture needs
+   * to know which kind of document it landed in.
+   */
+  const putImages = useCallback(
+    async (images: readonly DroppedImage[]): Promise<void> => {
+      const target: TextTarget | null = editorRef.current ?? textRef.current
+      const at = baseOf()
+      if (target === null || at === null) return
+      for (const image of images) {
+        const got = await window.tephra.doc.attachImage({ base: at, ...image })
+        target.wrapSelection(`![](${got.link})`, '')
+      }
+    },
+    [baseOf],
+  )
+
   const goToLocated = useCallback(
     async (at: Located, select = false): Promise<void> => {
       if (pane === null || doc === null) return
@@ -1435,6 +1517,7 @@ export function App(): React.JSX.Element {
             // present rather than knowing which surface it is talking to (ML).
             onTextTarget={(target: TextTarget | null) => (textRef.current = target)}
             annotations={{ onMark: setMark, onCommentAnchors: setAnchors, onRailHost: setRailHost }}
+            onImages={images => void putImages(images).catch(fail)}
           />
         )}
         {anomaliesOpen && (

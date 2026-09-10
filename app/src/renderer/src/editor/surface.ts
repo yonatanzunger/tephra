@@ -15,6 +15,7 @@ import type { DocumentPosition, DocumentWindow, WindowPosition } from '../../../
 import type { Typography } from './typography.ts'
 import type { CommentAnchor, MarkInfo } from './annotations.ts'
 import type { FindMarks } from './kinds/markdown/find-marks.ts'
+import type { DroppedImage } from './kinds/markdown/bind.ts'
 
 /** The app's editing settings. A surface uses whichever apply to it. */
 export interface EditingSettings {
@@ -64,6 +65,8 @@ export interface SurfaceHandle {
   revealAt(at: number): void
   /** Where the find's matches are, and which one it is standing on (MS3). */
   showFindMarks(marks: FindMarks): void
+  /** Redraw what module state decides, which the document cannot announce (R7). */
+  rebuildWidgets(): void
 }
 
 /**
@@ -118,4 +121,12 @@ export interface SurfaceProps {
   readonly onViewport?: (visible: { from: WindowPosition; to: WindowPosition }) => void
   readonly onHandle?: (handle: SurfaceHandle | null) => void
   readonly annotations?: AnnotationSink
+  /**
+   * A picture arrived — pasted, or dropped on the text (R7).
+   *
+   * **Not in `AnnotationSink`**, which is a group of three callbacks about
+   * *marks*: what one stands for, where its anchor sits, where its rail hangs.
+   * An image is an edit, not an annotation.
+   */
+  readonly onImages?: (images: readonly DroppedImage[]) => void
 }

@@ -14,7 +14,7 @@
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { LinkRow } from '../shared/nav-api.ts'
 import { isOutside, isStream, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../shared/document-api.ts'
-import { CHANNEL, type DayProse, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
+import { CHANNEL, type Attached, type Base, type DayProse, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
@@ -24,10 +24,11 @@ import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import {
-  dayFile, documentRoot, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath, resolveInsideNotebook,
-  SECTIONS_DIR, slug, STREAM_DIR,
+  dayFile, documentRoot, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath,
+  resolveInsideNotebook, SECTIONS_DIR, slug, STREAM_DIR,
   type RelPath,
 } from './w/layout.ts'
+import { attach } from './x/documents/attachments.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { DayClock } from './x/day-clock.ts'
 import { systemZone } from './system-zone.ts'
@@ -1547,6 +1548,56 @@ export class DocumentService {
     return rel
   }
 
+  /**
+   * An image into `attachments/`, and a relative link back to it (R7).
+   *
+   * **The bytes are written and nothing is inserted**, which is the whole of
+   * the split. Where the link goes is a caret in some document, and the surface
+   * that has the caret already knows how to put text at it — through the
+   * ordinary edit path, so undo works, the journal records it, and this needs no
+   * per-kind knowledge of what it is being pasted into. `importText` predates
+   * that idea and reaches into the stream to place a block; an image should not
+   * have to.
+   *
+   * **Filed under the day it ARRIVED**, whatever it is being pasted into. A
+   * picture pasted into a note has no date of its own, and the day it turned up
+   * is the only honest one — which is also what makes `attachments/YYYY/MM/`
+   * browsable in a file manager.
+   *
+   * **The hash is the deduplication.** The same screenshot pasted twice writes
+   * the same path with the same bytes, which is a no-op rather than a second
+   * copy — and two different images cannot collide into one name unless they
+   * are the same image.
+   */
+  async attachImage(request: ImageAttachment): Promise<Attached> {
+    await this.#seeded
+    // **Written by the floor**, because writing files is the floor's job and an
+    // attachment is the one kind of corpus content with no document to write it
+    // (`x/documents/attachments.ts`). The layering test is what said so.
+    const rel = await attach(this.#notebook, this.today, request.name, request.ext, request.bytes)
+    this.#touched()
+    return { rel, link: relativePath(fileOfBase(request.base), rel) }
+  }
+
+  /**
+   * Which directory a document's relative links resolve from (R7).
+   *
+   * **Asked of main because it is layout knowledge** (D59): which file a day
+   * lives in, and how deep that is, is exactly what `w/layout.ts` exists to be
+   * the only answer to. The renderer needs it to point an `<img>` at a file in
+   * `attachments/`, and it needs it synchronously per image — so it is fetched
+   * once per document rather than once per picture.
+   *
+   * **Any day of the stream will do**, which is not a coincidence: every day
+   * file sits at the same depth, which is the same fact printing relies on for
+   * its own relative links (Spike B).
+   */
+  async linkBase(base: Base): Promise<string> {
+    await this.#seeded
+    const file = fileOfBase(base.kind === 'day' ? base : base, this.today)
+    return file.split('/').slice(0, -1).join('/')
+  }
+
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
     return (await this.#stream).resolveAnchor(name)
   }
@@ -1628,4 +1679,15 @@ function whereWritten(file: RelPath): { doc: DocumentId; segment: string; source
     // The notebook is called the notebook; a list is called what it is named.
     source: root === STREAM_DIR ? 'notebook' : nameOf(root),
   }
+}
+
+/**
+ * Which file a relative link is written FROM.
+ *
+ * A day's links resolve from its own file in `notebook.stream/YYYY/MM/`; every
+ * other document's resolve from wherever that document is. The same two cases
+ * printing has, and the reason `Base` is one type (`ipc.ts`).
+ */
+function fileOfBase(base: Base, _today?: DateKey): RelPath {
+  return base.kind === 'day' ? dayFile(base.date) : (base.id as string as RelPath)
 }

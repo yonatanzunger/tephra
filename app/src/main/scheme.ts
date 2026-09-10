@@ -9,9 +9,9 @@ import { protocol, net } from 'electron'
 import { resolve } from 'node:path'
 import { resolveWithinRoot } from './paths.ts'
 import { pathToFileURL } from 'node:url'
+import { SCHEME } from '../shared/scheme.ts'
 
-export const SCHEME = 'tephra'
-export const APP_ORIGIN = `${SCHEME}://app`
+export { APP_ORIGIN, NOTEBOOK_ORIGIN, SCHEME } from '../shared/scheme.ts'
 
 /**
  * MUST be called before app.whenReady(). Electron requires the privilege
@@ -27,12 +27,22 @@ export function declareScheme(): void {
   ])
 }
 
-/** Serve the built renderer. Call after app.whenReady(). */
-export function serveRenderer(rendererDir: string): void {
+/**
+ * Serve the built renderer, and the notebook's own files beside it.
+ *
+ * **One handler, two hosts**, because a scheme gets one handler: `app` is the
+ * bundle and `notebook` is the corpus (R7). The notebook root arrives later than
+ * the renderer's — it is not known until a notebook is opened — so it is a thunk
+ * rather than a path.
+ */
+export function serveRenderer(rendererDir: string, notebookRoot: () => string | null): void {
   const root = resolve(rendererDir)
 
   protocol.handle(SCHEME, req => {
-    const target = resolveWithinRoot(root, new URL(req.url).pathname)
+    const url = new URL(req.url)
+    const base = url.host === 'notebook' ? notebookRoot() : root
+    if (base === null) return new Response('no notebook', { status: 404 })
+    const target = resolveWithinRoot(resolve(base), decodeURIComponent(url.pathname))
     if (target === null) return new Response('not found', { status: 404 })
     return net.fetch(pathToFileURL(target).toString())
   })

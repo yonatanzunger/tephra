@@ -18,8 +18,10 @@ export interface WriteResult {
 }
 
 /** Hash content the same way a write does, so the two are comparable. */
-export function hashContent(content: string): string {
-  return createHash('sha256').update(content, 'utf8').digest('hex')
+export function hashContent(content: string | Uint8Array): string {
+  return typeof content === 'string'
+    ? createHash('sha256').update(content, 'utf8').digest('hex')
+    : createHash('sha256').update(content).digest('hex')
 }
 
 /**
@@ -28,7 +30,10 @@ export function hashContent(content: string): string {
  * A reader either sees the whole previous file or the whole new one; there is
  * no moment at which it sees half. That is the property autosave depends on.
  */
-export async function writeAtomic(path: string, content: string): Promise<WriteResult> {
+export async function writeAtomic(
+  path: string,
+  content: string | Uint8Array,
+): Promise<WriteResult> {
   await mkdir(dirname(path), { recursive: true })
 
   // Same directory, so the rename stays within one filesystem. The leading dot
@@ -37,7 +42,10 @@ export async function writeAtomic(path: string, content: string): Promise<WriteR
   const tmp = join(dirname(path), `.${basename(path)}.tmp-${randomSuffix()}`)
 
   const mode = await existingMode(path)
-  const buffer = Buffer.from(content, 'utf8')
+  // **Bytes as well as text** (R7): an attachment is a PNG, and a PNG put
+  // through a UTF-8 encoder is a corrupt PNG. Everything else about the write —
+  // the temp name, the mode, the fsync, the rename — is the same act.
+  const buffer = typeof content === 'string' ? Buffer.from(content, 'utf8') : Buffer.from(content)
 
   let handle
   try {

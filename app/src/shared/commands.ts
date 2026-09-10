@@ -81,10 +81,11 @@ export const RANGE_COMMANDS: readonly RangeCommand[] = [
   // beside the other commands that make and unmake files.
   { id: 'branch', label: 'Branch Selection to Its Own File…', accelerator: '', needs: 'range', group: 'file', built: true },
   { id: 'print', label: 'Print Selection…', accelerator: 'CmdOrCtrl+Shift+P', needs: 'range', group: 'file', built: true },
-  // **Not built, and the menu says so rather than lying** — image paste is R7,
-  // scheduled with retrieval in M4. A disabled item is a promise; an item that
-  // does nothing is a bug report.
-  { id: 'image', label: 'Image…', accelerator: '', needs: 'point', group: 'insert', built: false },
+  // **The promise the disabled item was making, kept** (R7). It sat here as
+  // `built: false` from MC6 to M4 with a note saying so; a picture also arrives
+  // by paste and by drop, and this is the door for the one that arrives from a
+  // file you have to go and find.
+  { id: 'image', label: 'Image…', accelerator: '', needs: 'point', group: 'insert', built: true },
 ]
 
 /** What the renderer tells main about the caret, so menus can enable correctly. */

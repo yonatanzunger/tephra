@@ -449,7 +449,11 @@ async function openTheNotebook(options: OpenOptions): Promise<Notebook | null> {
 }
 
 app.whenReady().then(async () => {
-  if (!DEV_SERVER) serveRenderer(outDir('renderer'))
+  // **A thunk for the notebook's root**, because the handler is registered
+  // before a notebook exists and the corpus's own files are served through it
+  // (R7). In the dev server the renderer comes from Vite, so only the notebook
+  // host is ours to answer — which is why this is registered either way.
+  serveRenderer(outDir('renderer'), () => service?.notebookRoot ?? null)
 
   // X and W both live here (D37). The renderer holds Z and the live buffer,
   // and reaches everything else through the bridge.

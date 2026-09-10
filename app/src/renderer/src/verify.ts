@@ -2471,6 +2471,46 @@ export async function runVerify(request: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'image') {
+      // A picture pasted into the notebook (R7). **Driven as a real paste**, so
+      // what is being tested is the editor's own handler and not a function the
+      // harness happened to call.
+      const PNG = Uint8Array.from(atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQott' +
+        'AAAAABJRU5ErkJggg==',
+      ), c => c.charCodeAt(0))
+      const file = new File([PNG], 'kitchen plan.png', { type: 'image/png' })
+      const data = new DataTransfer()
+      data.items.add(file)
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+      view.contentDOM.dispatchEvent(
+        new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }),
+      )
+      await settle(2500)
+      const text = view.state.doc.toString()
+      say('inserted', /!\[\]\(\S+\.png\)/.exec(text)?.[0] ?? '')
+      say('rawWhileEditing', document.querySelectorAll('.cm-content img').length)
+      // **A figure, once the caret leaves.** The line the caret is in shows its
+      // raw markup — that is the edit-where-rendered rule (D16) — so the widget
+      // is what you see the moment you look away, and not before.
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(900)
+      say('drawn', document.querySelectorAll('.cm-content img').length)
+      {
+        // **Drawn is not shown.** The widget put an `<img>` on the page for as
+        // long as this feature has existed, and until the corpus had a host to
+        // serve from, every one of them was broken — so the claim has to be
+        // that the picture LOADED, with the size it was pasted at.
+        const img = document.querySelector('.cm-content img') as HTMLImageElement | null
+        say('imgSrc', img?.src ?? '')
+        say('imgLoaded', img !== null && img.complete && img.naturalWidth > 0)
+        say('imgWidth', img?.naturalWidth ?? 0)
+      }
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'print') {
       const all = view.state.doc.toString()
       // From the first VISIBLE character of the heading, which is where a
@@ -3626,6 +3666,8 @@ interface EditorViewLike {
     selection: { main: { head: number; from: number; to: number; empty: boolean } }
   }
   dispatch(spec: unknown): void
+  /** The editable element, for driving a real paste or drop at it (R7). */
+  readonly contentDOM: HTMLElement
   /** Where a position is on screen. Used to check what a reader can see. */
   coordsAtPos(at: number): { top: number; bottom: number; left: number } | null
   posAtCoords(coords: { x: number; y: number }): number | null

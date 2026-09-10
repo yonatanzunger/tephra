@@ -32,7 +32,7 @@ import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
 import { findMarks, setFindMarks, type FindMarks } from './find-marks.ts'
 import type { WindowEdit, WindowPosition, DocumentPosition, DocumentWindow, EditOrigin } from '../../../../../shared/document-api.ts'
 import { fromBuffer } from '../../../../../shared/prose.ts'
-import { widgetExtensions } from './widgets.ts'
+import { rebuildWidgets, widgetExtensions } from './widgets.ts'
 import { contextMenu, markAt, readSelection, reportSelection, type Selection } from './range-commands.ts'
 import type { MarkInfo } from '../../annotations.ts'
 import { retag, tagExtents } from './tags.ts'
@@ -67,6 +67,21 @@ export interface BindOptions {
   readonly onCommentAnchors?: (anchors: readonly CommentAnchor[]) => void
   /** The element the margin renders into, or null when this editor goes away. */
   readonly onRailHost?: (host: HTMLElement | null) => void
+  /**
+   * A picture arrived — pasted, or dropped on the text (R7).
+   *
+   * **Handled here because this is where the caret is.** The bytes come with
+   * the event, so nothing has to go and ask the clipboard a second time — and a
+   * drop is not on the clipboard at all, which is what makes asking the wrong
+   * shape.
+   */
+  readonly onImages?: (images: readonly DroppedImage[]) => void
+}
+
+export interface DroppedImage {
+  readonly name: string
+  readonly ext: string
+  readonly bytes: Uint8Array
 }
 
 export interface Binding {
@@ -95,6 +110,15 @@ export interface Binding {
    * found is `find-marks.ts`'s job, and it does it without needing the focus.
    */
   revealAt(at: number): void
+  /**
+   * Draw the widgets again.
+   *
+   * **Because some of what they draw is module state**, not document state:
+   * `widgetOptions` holds the reveal toggles and the directory images resolve
+   * from, and a change to any of those is invisible to CodeMirror — nothing in
+   * the document changed, so nothing would redraw.
+   */
+  rebuildWidgets(): void
   /** Mark the active row's places down the scroll track (D51). */
   showTrackMarks(marks: TrackMarks): void
   /** Where the find's matches are, and which one it is standing on. */
@@ -129,6 +153,17 @@ export function bindEditor(options: BindOptions): Binding {
         listIndent(),
         scrollTrack(),
         findMarks,
+        // **Paste and drop, before the editor treats them as text.** A pasted
+        // screenshot has no text at all, so without this ⌘V does nothing
+        // visible and the picture is silently lost.
+        EditorView.domEventHandlers({
+          paste(event) {
+            return takeImages(event.clipboardData, options.onImages)
+          },
+          drop(event) {
+            return takeImages(event.dataTransfer, options.onImages)
+          },
+        }),
         vimCompartment.of(vimExtensions(options.vim)),
         // NO history() — see the header. Undo is document.undo().
         // **`codeLanguages` is what makes a fence more than one token.** Without
@@ -303,6 +338,9 @@ export function bindEditor(options: BindOptions): Binding {
         { userEvent: 'input' },
       )
       view.focus()
+    },
+    rebuildWidgets(): void {
+      view.dispatch({ effects: rebuildWidgets.of(null) })
     },
     showTrackMarks(next: TrackMarks): void {
       view.dispatch({ effects: setTrackMarks.of(next) })
@@ -550,4 +588,36 @@ function viewportReporter(
     const { from, to } = update.view.viewport
     onViewport({ from: from as WindowPosition, to: to as WindowPosition })
   })
+}
+
+const IMAGE = /^image\/(png|jpeg|gif|webp|avif|heic)$/
+
+/**
+ * Take the images off an event, and say whether any were taken.
+ *
+ * **True means handled**, which stops CodeMirror inserting whatever text the
+ * same event also carried: a screenshot copied from a browser often arrives with
+ * an `<img>` tag beside it, and pasting both would put the picture in twice —
+ * once as a file and once as somebody else's URL.
+ *
+ * **Text alongside an image is not a reason to refuse.** The picture is what was
+ * meant; the markup beside it is the platform being helpful.
+ */
+function takeImages(
+  data: DataTransfer | null,
+  onImages: ((images: readonly DroppedImage[]) => void) | undefined,
+): boolean {
+  if (data === null || onImages === undefined) return false
+  const files = [...data.files].filter(file => IMAGE.test(file.type))
+  if (files.length === 0) return false
+  void Promise.all(
+    files.map(async file => ({
+      // A pasted screenshot is `image.png`; a dropped one has the name somebody
+      // gave it, which is worth keeping.
+      name: file.name.replace(/\.[^.]+$/, '') || 'clipboard',
+      ext: (IMAGE.exec(file.type)?.[1] ?? 'png').replace('jpeg', 'jpg'),
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    })),
+  ).then(onImages)
+  return true
 }
