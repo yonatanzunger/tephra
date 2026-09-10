@@ -15,6 +15,7 @@
 //   1. ⌘F opens a bar, Enter lands on the newest match, and the match is selected
 //   2. Find Earlier walks back through the days, and Find Later comes back
 //   3. a phrase nobody wrote says so, and moves nothing
+//   4. ⌘⇧F shows every place at once, and a row goes there
 
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
@@ -136,6 +137,38 @@ console.log('— finding —')
   check('a phrase nobody wrote says so', r.saidWhenNothing === 'nothing', String(r.saidWhenNothing))
   check('and moves nothing when it does', r.caretUnmoved === true)
   check('Escape closes the bar', r.closed === true)
+  check('and nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
+// ── 4. searching the whole notebook ─────────────────────────────────────────
+console.log('\n— searching —')
+{
+  const root = await week([
+    // Two mentions in ONE line on the newest day: one row, two marks.
+    'Rang the surveyor again, and the surveyor said Thursday.\n',
+    'Nothing much today.\n',
+    'The surveyor came back with a number.\n',
+    'Booked the surveyor for Thursday.\n',
+  ])
+  const r = report(await launch('search', root, { shotDelay: 24_000, timeoutMs: 75_000 }))
+
+  check('the menu item exists and fired', r.menuItemFound === true)
+  check('and the pane came up, named', r.paneShown === true && r.titleWhenEmpty === 'Search',
+    String(r.titleWhenEmpty))
+  check('a row per line, across days', r.rows === 3, `rows=${r.rows}`)
+  check(
+    'each showing the words that answered',
+    r.marked === 4 && r.firstMark === 'surveyor',
+    `marked=${r.marked} first=${JSON.stringify(r.firstMark)}`,
+  )
+  check('two matches in one line are one row, and say so', r.grouped === 1, `grouped=${r.grouped}`)
+  check('and where it came from', r.sources === 3, `sources=${r.sources}`)
+  check('the count says how many', /^3( found)?$/.test(String(r.counted)), String(r.counted))
+  check('the title says what is being looked for', r.titleWhenSearching === 'Search: surveyor',
+    String(r.titleWhenSearching))
+  check('clicking a row goes to the passage', r.wentThere === true, String(r.titleAfterGoing))
+  check('and back returns to the results', r.back === true && r.resultsAgain === 3,
+    `back=${r.back} rows=${r.resultsAgain}`)
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 

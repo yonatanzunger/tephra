@@ -72,7 +72,7 @@ import type { Located } from '../../../shared/nav-api.ts'
  *
  * `from`/`to` are into the file's body; null means the whole of it.
  */
-export interface Candidate {
+export interface CandidateRange {
   readonly file: RelPath
   readonly date: DateKey | null
   /** `whenOf`: noon on a day file's date, an mtime for anything else. */
@@ -97,9 +97,9 @@ export async function candidatesFor(
   index: CorpusIndex,
   scope: Scope,
   order: Ordering,
-): Promise<readonly Candidate[]> {
+): Promise<readonly CandidateRange[]> {
   const files = await index.files()
-  const out: Candidate[] = []
+  const out: CandidateRange[] = []
   for (const file of files) {
     if (!admits(scope, file)) continue
     for (const range of rangesIn(scope, file)) {
@@ -128,7 +128,7 @@ export async function candidatesFor(
  * so its *end* does. Using one end for both was the first draft, and it dropped
  * the very range the cursor was standing in.
  */
-function beyond(c: Candidate, origin: Candidate, back: boolean): boolean {
+function beyond(c: CandidateRange, origin: CandidateRange, back: boolean): boolean {
   const byFile = c.when - origin.when || (c.file < origin.file ? -1 : c.file > origin.file ? 1 : 0)
   if (byFile !== 0) return back ? byFile > 0 : byFile < 0
   return back ? start(c) > start(origin) : end(c) < start(origin)
@@ -168,11 +168,11 @@ function rangesIn(scope: Scope, file: IndexedFile): readonly { from: number | nu
   return ranges ?? []
 }
 
-const start = (c: Candidate): number => c.from ?? 0
-const end = (c: Candidate): number => c.to ?? Number.MAX_SAFE_INTEGER
+const start = (c: CandidateRange): number => c.from ?? 0
+const end = (c: CandidateRange): number => c.to ?? Number.MAX_SAFE_INTEGER
 
 /** Oldest first, and within one file the earliest range first. */
-const cmp = (a: Candidate, b: Candidate): number =>
+const cmp = (a: CandidateRange, b: CandidateRange): number =>
   a.when - b.when || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || start(a) - start(b)
 
 /**
@@ -187,7 +187,7 @@ const cmp = (a: Candidate, b: Candidate): number =>
  * Null when the origin's file is not in the index at all: there is then nothing
  * to be on either side of, and the ordering alone has already said everything.
  */
-function place(origin: Located, files: readonly IndexedFile[]): Candidate | null {
+function place(origin: Located, files: readonly IndexedFile[]): CandidateRange | null {
   const file = files.find(f => f.file === origin.file)
   return file === undefined
     ? null
@@ -222,7 +222,7 @@ class ScanCursor implements Cursor {
   readonly #index: CorpusIndex
   readonly #query: Query
   readonly #match: RegExp | null
-  #candidates: readonly Candidate[] | null = null
+  #candidates: readonly CandidateRange[] | null = null
   #at = 0
   #closed = false
   /** Hits found in the candidate being read, not yet handed over. */
@@ -247,7 +247,7 @@ class ScanCursor implements Cursor {
         continue
       }
       if (this.#closed || this.#at >= this.#candidates.length) break
-      const candidate = this.#candidates[this.#at++] as Candidate
+      const candidate = this.#candidates[this.#at++] as CandidateRange
       this.#held = await this.#read(candidate)
     }
     return out
@@ -268,7 +268,7 @@ class ScanCursor implements Cursor {
   }
 
   /** Every hit in one candidate range, already in the query's order. */
-  async #read(candidate: Candidate): Promise<Hit[]> {
+  async #read(candidate: CandidateRange): Promise<Hit[]> {
     const text = await this.#notebook.read(candidate.file)
     // **A file that has gone is not an error.** The index is a cache of the
     // corpus as it stands (D52), and a scan started a moment ago may reach a
@@ -285,7 +285,16 @@ class ScanCursor implements Cursor {
         out.push(hit(candidate, body, line, null))
         break
       }
-      for (const at of matchesIn(body.slice(line.from, line.to), this.#match)) {
+      const raw = body.slice(line.from, line.to)
+      // **Which occurrence of these words this is**, counted over the whole line
+      // and not only the admitted part: `within` locates the match in the line a
+      // reader sees, and that line holds every occurrence whether or not the
+      // scope admits it.
+      const seen = new Map<string, number>()
+      for (const at of matchesIn(raw, this.#match)) {
+        const words = raw.slice(at.from, at.to)
+        const ordinal = seen.get(words) ?? 0
+        seen.set(words, ordinal + 1)
         // **The line is widened to its edges and the MATCH is not**, which is
         // the difference between *inside the tagged text* and *in a line the
         // tag touches*. A tag covering half a line makes the other half not a
@@ -293,7 +302,7 @@ class ScanCursor implements Cursor {
         // a hit reads as a line or it reads as nothing.
         const where = line.from + at.from
         if (where < from || where >= to) continue
-        out.push(hit(candidate, body, line, at))
+        out.push(hit(candidate, body, line, at, ordinal))
       }
     }
     const back = this.#query.order.direction === 'past'
@@ -320,10 +329,11 @@ function* linesIn(body: string, from: number, to: number): Generator<{ from: num
 }
 
 function hit(
-  candidate: Candidate,
+  candidate: CandidateRange,
   body: string,
   line: { from: number; to: number },
   at: { from: number; to: number } | null,
+  ordinal = 0,
 ): Hit {
   const raw = body.slice(line.from, line.to)
   const plain = plainLine(raw)
@@ -333,16 +343,35 @@ function hit(
     from: line.from + (at?.from ?? 0),
     to: line.from + (at?.to ?? 0),
   }
-  if (at === null) return { at: { ...located, to: line.to }, line: plain, within: null, when: candidate.when }
+  if (at === null) {
+    return { at: { ...located, to: line.to }, line: plain, lineFrom: line.from, within: null, when: candidate.when }
+  }
   // **The offsets are found twice, in two texts, on purpose.** `at` points into
   // the file, where the markers still are; `within` points into the line as a
   // reader sees it, which is shorter by however much machinery was in it. One
   // number cannot be both.
-  const found = plain.indexOf(raw.slice(at.from, at.to))
+  //
+  // **And it is the ORDINAL occurrence, not the first.** `indexOf` was the first
+  // draft and it is wrong for every match after the first in a line: two
+  // mentions of the surveyor in one paragraph both reported the position of the
+  // earlier one, so a results pane marked the same word twice and left the
+  // second untouched.
+  const found = nth(plain, raw.slice(at.from, at.to), ordinal)
   return {
     at: located,
     line: plain,
+    lineFrom: line.from,
     within: found === -1 ? null : { from: found, to: found + (at.to - at.from) },
     when: candidate.when,
   }
+}
+
+/** Where the n-th occurrence of `what` starts, or -1. */
+function nth(text: string, what: string, ordinal: number): number {
+  let at = -1
+  for (let n = 0; n <= ordinal; n++) {
+    at = text.indexOf(what, at + 1)
+    if (at === -1) return -1
+  }
+  return at
 }

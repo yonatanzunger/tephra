@@ -742,7 +742,7 @@ the third thing that had been sharing the name — the composite document — is
 descoped from v1, which is what leaves D9's editability question closed rather
 than forcing it.
 
-- The query engine, the grammar, and the two surfaces (MS1–MS4)
+- The query engine, the grammar, and the two surfaces (MS1–MS4) — **done**
 - Image paste writing a file and inserting a link (R7) — here by schedule, not
   by kinship; it shares nothing with search
 

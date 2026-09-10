@@ -313,6 +313,13 @@ export function installMenu(next?: MenuActions): void {
           accelerator: 'Shift+CmdOrCtrl+G',
           click: () => send(CHANNEL.menuCommand, 'findLater'),
         },
+        // **The other rendering of the same query** (D66): ⌘F walks one
+        // document, this shows every place at once across everything.
+        {
+          label: 'Search Tephra…',
+          accelerator: 'Shift+CmdOrCtrl+F',
+          click: () => send(CHANNEL.menuCommand, 'searchAll'),
+        },
         { type: 'separator' },
         // **Emphasis is editing**, so it lives here: the same kind of act as
         // cut and paste, and the only commands in the set that work from a bare

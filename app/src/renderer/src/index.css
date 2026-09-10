@@ -1680,3 +1680,47 @@ body {
   background: rgb(234 179 8 / .68);
   box-shadow: 0 0 0 1.5px rgb(161 98 7 / .85);
 }
+
+/* Search results (MS4).
+ *
+ * **The link directory's shape, because it is the same kind of thing**: a list
+ * of places, each recognisable without opening it. What differs is what makes a
+ * row recognisable — a link is known by its destination, a hit by the sentence
+ * it sits in, so the lead carries the weight here and wraps rather than
+ * truncating. */
+.results-query { max-width: 30rem; font-size: .95em; }
+
+.results-go {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  color: rgb(var(--text)); background: none; border: 0; padding: 0;
+}
+.results-lead {
+  display: block;
+  font-family: var(--reading-face, inherit); font-size: 1em; line-height: 1.45;
+  /* Two lines, then stop: a paragraph is not a preview, and a list of them is
+     not a list any more. */
+  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
+.results-go:hover .results-lead { color: rgb(var(--text-heading)); }
+/* The words that answered, in the same amber the editor marks them with — one
+   colour for one idea, wherever it is drawn. */
+.results-lead mark {
+  background: rgb(234 179 8 / .38); color: inherit; border-radius: 2px;
+}
+.results-where {
+  display: flex; align-items: baseline; gap: .5rem; margin-top: .25rem;
+  font-family: var(--font-ui);
+}
+.results-when { font-size: .72em; color: rgb(var(--text-muted)); }
+.results-problem {
+  font-family: var(--font-ui); font-size: .8em;
+  color: rgb(var(--warn, var(--text-muted)));
+  padding-bottom: .4rem;
+}
+.results-more {
+  font-family: var(--font-ui); font-size: .8em; cursor: pointer;
+  margin-top: .8rem; padding: .3rem .8rem;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 6px;
+}
+.results-more:hover { background: rgb(var(--text) / .05); }

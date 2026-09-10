@@ -21,6 +21,7 @@ import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { Find, type FindControl } from './frame/Find'
+import { Results } from './frame/Results'
 import { NO_FIND_MARKS } from './editor/kinds/markdown/find-marks'
 import { matchesIn, phraseRegex } from '../../shared/phrase'
 import { parseQuery } from '../../shared/query-text'
@@ -336,6 +337,11 @@ export function App(): React.JSX.Element {
         // it, and pressing again means *let me type over that*.
         setFinding(true)
         findControl.current?.focus()
+      } else if (command === 'searchAll') {
+        // **A location, not a panel** (ML3's shape): back and forward work, the
+        // title bar names it, and a search you navigated away from is one you
+        // can navigate back to.
+        void pane?.goTo({ kind: 'search', text: '' }).catch(fail)
       } else if (command === 'findEarlier' || command === 'findLater') {
         const direction = command === 'findEarlier' ? 'past' : 'future'
         // **⌘G with no bar opens one** rather than doing nothing: it is the same
@@ -1060,6 +1066,10 @@ export function App(): React.JSX.Element {
     // named after and is called what it is.
     location?.kind === 'links'
       ? 'Links'
+      : // A query is called what it is looking for, which is the only name it
+        // has — and an empty one is the field waiting for you.
+        location?.kind === 'search'
+      ? (location.text.trim() === '' ? 'Search' : `Search: ${location.text.trim()}`)
       : // **Asked of the DOCUMENT, not of how we arrived at it.** This tested
         // the location's kind, so a window reached by a span — which is how the
         // sidebar opens a note and how every link-directory row opens anything
@@ -1335,7 +1345,28 @@ export function App(): React.JSX.Element {
         )}
         {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
 
-        {location?.kind === 'links' ? (
+        {location?.kind === 'search' ? (
+          <Results
+            text={location.text}
+            typography={typography}
+            today={doc?.clockDay ?? null}
+            onError={setError}
+            // **Replaced, not pushed**, so the history holds the searches you
+            // ran and not every prefix you typed on the way to them.
+            onSearch={text => void pane?.goTo({ kind: 'search', text }, { push: false }).catch(fail)}
+            onGoTo={(hit, elsewhere) => {
+              if (elsewhere) {
+                void window.tephra.win.create(
+                  hit.at.date !== null
+                    ? { kind: 'date', date: hit.at.date }
+                    : { kind: 'document', id: hit.at.file as unknown as DocumentId },
+                )
+                return
+              }
+              void goToLocated(hit.at, true).catch(fail)
+            }}
+          />
+        ) : location?.kind === 'links' ? (
           // **A location that is not a document draws something that is not a
           // surface** (ML3). Everything around it — the frame, the sidebar, the
           // title bar, back and forward — is unchanged, which is the point:

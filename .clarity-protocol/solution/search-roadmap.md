@@ -469,11 +469,37 @@ the top corner and sat on top of the zone notice. It is in the flow now, below
 any notice — a bar that covers the words you are looking for is the wrong shape
 for a surface whose job is reading.
 
-## MS4 — search Tephra
+## MS4 — search Tephra *(done)*
 
 ⌘⇧F and the results pane, rendered like the link directory: a lead of
 surrounding text, a source, a date, click to go there. Streaming in, so the
-first hits are usable before the scan finishes.
+first hits are usable before the scan finishes. **Done** —
+`renderer/src/frame/Results.tsx`, plus a `search` scene and ten more m4 checks.
+
+**A location, not a panel**, which is the shape ML3 built and said the second
+one would inherit: `{kind:'search', text}`. Back and forward work, the title bar
+names it (*Search: surveyor*), and a search you navigated away from is one you
+can navigate back to.
+
+**And the second one settled the question ML3 left open: these do NOT want a
+shared shape.** The commonality is already expressed by `NavTarget` — a window
+shows a document *or* a query — and folding `links` and `search` into
+`{kind:'query', …}` would put a discriminated payload inside a discriminated
+payload. `links` takes no parameters and this takes a string; there is no shared
+field to hoist.
+
+**A hit is a match; a row is a line.** The pane groups by `lineFrom` and marks
+every match in the line, saying *2 here* when there is more than one. Ungrouped,
+a paragraph mentioning the surveyor twice drew the same sentence twice — the list
+showing its own arithmetic rather than the notebook. The walk still steps through
+every match, which is what ⌘G means.
+
+**Which found a real bug on the way.** `within` was computed with
+`plain.indexOf(matched text)` — the *first* occurrence — so every match after the
+first in a line reported the earlier one's position. Two mentions in a paragraph
+marked the same word twice and left the second untouched. It takes the ordinal
+occurrence now, counted over the whole line rather than the admitted part, since
+the line a reader sees holds every occurrence whether the scope admits it or not.
 
 ---
 

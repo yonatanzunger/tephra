@@ -41,6 +41,22 @@ export type NavTarget =
    * second one will say.
    */
   | { readonly kind: 'links' }
+  /**
+   * Search results (R10, MS4) — the second location that is not a document, and
+   * therefore the one that got to say whether these want a shared shape.
+   *
+   * **They do not.** The commonality is already expressed by this union: a
+   * window shows a document *or* a query, and back, forward, restore and the
+   * title bar all follow from that. Folding the two into `{kind:'query', …}`
+   * would put a discriminated payload inside a discriminated payload and buy
+   * nothing — `links` takes no parameters and this takes a query string, so
+   * there is no shared field to hoist.
+   *
+   * **The text is here so that back and forward work**, which is the whole
+   * reason a query is a location rather than a panel: a search you navigated
+   * away from is a search you can navigate back to.
+   */
+  | { readonly kind: 'search'; readonly text: string }
   | { readonly kind: 'url'; readonly href: string } // browser
   | { readonly kind: 'external'; readonly path: string } // OS intent
 

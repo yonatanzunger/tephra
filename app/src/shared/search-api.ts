@@ -194,9 +194,11 @@ export const isEmpty = (query: Query): boolean =>
 /**
  * One result.
  *
- * **A line, not a match.** *Where* the terms have to appear needs an answer once
- * there can be more than one of them: the file is far too coarse at twenty pages
- * a day, and the line is what a markdown paragraph already is.
+ * **A line is the UNIT, and a match is the hit.** *Where* the terms have to
+ * appear together needs an answer once there can be more than one of them: the
+ * file is far too coarse at twenty pages a day, and the line is what a markdown
+ * paragraph already is. But a line with two matches in it is two hits — the walk
+ * steps through both — so a caller drawing a list groups them by `lineFrom`.
  *
  * **And it is a wrapper rather than a bare `Located` on purpose.** The pane wants
  * surrounding text regardless, and ranking will want a score; wrapping from the
@@ -208,6 +210,17 @@ export interface Hit {
   readonly at: Located
   /** The whole line, plain: markers and bullets stripped, links left alone. */
   readonly line: string
+  /**
+   * Where that line starts, into the file's body.
+   *
+   * **Because a hit is one MATCH and a row is one line**, and those are
+   * different counts: a paragraph mentioning the surveyor twice is two hits, and
+   * the walk should step through both — but a results pane that draws the
+   * sentence twice is showing noise. This is what lets a reader group them
+   * without guessing from the text, which two identical lines in one file would
+   * defeat.
+   */
+  readonly lineFrom: number
   /**
    * Where the match sits inside `line`. Truncating the lead is the pane's job.
    *

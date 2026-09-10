@@ -2393,6 +2393,53 @@ export async function runVerify(request: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'search') {
+      // ⌘⇧F and the results pane (MS4, D66). **The other rendering of the same
+      // query**: the walk goes to one place at a time, this shows every place.
+      say('menuItemFound', await window.tephra.clickMenu('Search Tephra\u2026'))
+      await settle(600)
+      const field = document.querySelector('.results-query') as HTMLInputElement | null
+      say('paneShown', field !== null)
+      say('titleWhenEmpty', document.querySelector('.titlebar .title')?.textContent ?? '')
+      if (field !== null) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(field, 'surveyor')
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(150)
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(2500)
+      }
+      say('rows', document.querySelectorAll('.links-row').length)
+      say('marked', document.querySelectorAll('.results-lead mark').length)
+      say('firstMark', document.querySelector('.results-lead mark')?.textContent ?? '')
+      say('counted', document.querySelector('.links-count')?.textContent ?? '')
+      say('titleWhenSearching', document.querySelector('.titlebar .title')?.textContent ?? '')
+      // Every row says where it came from, or it is not recognisable.
+      say('sources', [...document.querySelectorAll('.results-where .pill')].length)
+      // **A line with two matches is ONE row**, which is the difference between
+      // a list of places and a list of the search's own arithmetic.
+      say('grouped', [...document.querySelectorAll('.results-when')]
+        .filter(n => (n.textContent ?? '').includes('here')).length)
+
+      // **A row goes there**, which is the only thing a result is for.
+      ;(document.querySelector('.results-go') as HTMLElement | null)?.click()
+      await settle(2000)
+      say('wentThere', document.querySelector('.cm-content') !== null)
+      say('titleAfterGoing', document.querySelector('.titlebar .title')?.textContent ?? '')
+
+      // And back returns to the results, because a query is a location (ML3).
+      // Through the titlebar's own control, which is where back lives here.
+      const backer = document.querySelector('.titlebar .nav') as HTMLButtonElement | null
+      say('back', backer !== null && !backer.disabled)
+      backer?.click()
+      await settle(1800)
+      say('resultsAgain', document.querySelectorAll('.links-row').length)
+
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'print') {
       const all = view.state.doc.toString()
       // From the first VISIBLE character of the heading, which is where a
