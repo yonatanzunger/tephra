@@ -225,3 +225,122 @@ test('declines accrue, because the graveyard will have no criterion otherwise', 
   await doc.decline(id)
   assert.equal((await doc.matters())[0]?.declines, 2)
 })
+
+// ── making one ─────────────────────────────────────────────
+
+test('THE COLD START: the first docket goes to `dockets/`, with no section named', async t => {
+  // Without this the first docket was impossible from the UI: the sidebar's
+  // `Dockets` listing only exists once a docket does, so there was no listing
+  // to make one from. File ▸ New Docket is the door, and it names no section.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  assert.equal(id, 'dockets/the-house.docket.md')
+  assert.equal(kindOf(id as string as RelPath), 'docket')
+})
+
+test('and a file made FROM the dockets listing is a docket, with no kind named', async t => {
+  // The other half of one rule. The sidebar passes the listing's own base path
+  // and nothing else; getting a markdown file out of the dockets listing would
+  // be a surprise nobody asked for.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('Birthdays', 'dockets/_index.fileset.md')
+  assert.equal(id, 'dockets/birthdays.docket.md')
+})
+
+test('while a file made anywhere else is still ordinary markdown', async t => {
+  const { service } = await serviced(t)
+  assert.equal(await service.newDocument('A thought'), 'notes/a-thought.md')
+  assert.equal(await service.newDocument('A list', undefined, 'todo'), 'notes/a-list.todo.md')
+})
+
+test('a new docket opens as an empty one, and can be worked at once', async t => {
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  assert.deepEqual(await service.docketMatters(id), [])
+  const matter = await service.docketAdd(id, 'The oven is broken')
+  const matters = await service.docketMatters(id)
+  assert.equal(matters.length, 1)
+  assert.equal(matters[0]?.id, matter)
+  assert.equal(matters[0]?.name, 'The oven is broken')
+  assert.deepEqual(matters[0]?.when, { kind: 'standing' })
+})
+
+test('and `when` is parsed in main, so a bad one is refused rather than stored', async t => {
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await assert.rejects(
+    () => service.docketAdd(id, 'Something', 'next Tuesdayish'),
+    /not a date, a range, or a rule/,
+  )
+  // And the docket is untouched: a refused verb writes nothing.
+  assert.deepEqual(await service.docketMatters(id), [])
+})
+
+test('every docket is listed, by what it is CALLED', async t => {
+  const { service } = await serviced(t)
+  await service.newDocument('The house', undefined, 'docket')
+  await service.newDocument('Speaking engagements', undefined, 'docket')
+  const rows = await service.dockets()
+  assert.deepEqual(rows.map(r => r.title), ['Speaking engagements', 'The house'])
+})
+
+async function serviced(t: TestContext) {
+  const root = await mkdtemp(join(tmpdir(), 'tephra-docket-svc-'))
+  const nb = await Notebook.open({ root, lock: false, watch: false })
+  const { DocumentService } = await import('../../src/main/document-service.ts')
+  const service = new DocumentService(nb, { history: false })
+  t.after(async () => {
+    await service.stop()
+    await nb.close()
+  })
+  await service.info()
+  return { root, service }
+}
+
+// ── renaming ───────────────────────────────────────────────
+
+test('THE BUG: a rename must not change what the document IS', async t => {
+  // `#freeName` read `.fileset.md` or else `.md`, so renaming a docket produced
+  // `the-big-house.md` — silently, since the content is markdown either way and
+  // nothing errors. Reported from use as *"rename does nothing"*, because what
+  // it actually did was take the kind off: the docket editor vanished and the
+  // same file opened as raw text.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const to = await service.renameDocument(id, 'The big house')
+  assert.equal(to, 'dockets/the-big-house.docket.md')
+  assert.equal(kindOf(to as string as RelPath), 'docket')
+})
+
+test('and an overall task list had the same bug, since MT7', async t => {
+  const { service } = await serviced(t)
+  const list = await service.newDocument('Blog posts', undefined, 'todo')
+  const to = await service.renameDocument(list, 'Posts to write')
+  assert.equal(to, 'notes/posts-to-write.todo.md')
+  assert.equal(kindOf(to as string as RelPath), 'todo')
+})
+
+test('a fileset and a plain note keep theirs too', async t => {
+  const { service } = await serviced(t)
+  const note = await service.newDocument('A thought')
+  assert.equal(await service.renameDocument(note, 'A better thought'), 'notes/a-better-thought.md')
+})
+
+test('THE ORDER MATTERS: `.todo.md` ends with `.md`', async t => {
+  // Which is why the suffixes are tried longest-first. A shorter match wins
+  // otherwise and takes the kind off — the exact bug, one line further down.
+  const { service } = await serviced(t)
+  const list = await service.newDocument('Ideas', undefined, 'todo')
+  assert.match(await service.renameDocument(list, 'Later'), /\.todo\.md$/)
+})
+
+test('renaming a docket keeps its matters, ids and all', async t => {
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const matter = await service.docketAdd(id, 'The oven is broken', '2026-10-14')
+  const to = await service.renameDocument(id, 'The big house')
+  const matters = await service.docketMatters(to)
+  assert.equal(matters.length, 1)
+  assert.equal(matters[0]?.id, matter, 'a rename moves the file; it does not remake the contents')
+  assert.deepEqual(matters[0]?.when, { kind: 'on', date: '2026-10-14' })
+})

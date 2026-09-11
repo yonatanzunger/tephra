@@ -89,6 +89,21 @@ export const THEMES_DIR = `${CONFIG_DIR}/themes`
  */
 export const SETTINGS_FILE = `${CONFIG_DIR}/notebook.json`
 export const NOTES_DIR = 'notes'
+/**
+ * Where every docket lives (MH1).
+ *
+ * **One directory, unlike task lists.** A `.todo.md` sits wherever its subject
+ * does — the blog-post list beside the blog notes — because a list belongs to
+ * the thing it is about. A docket is a *domain*, and domains do not belong
+ * anywhere in particular, so spreading them through the notebook would make
+ * "what am I keeping track of" an act of searching. One directory answers it by
+ * being opened.
+ *
+ * **Not in `REQUIRED_DIRS`.** It is made when the first docket is, which is what
+ * keeps the sidebar from showing an empty section to somebody who has none —
+ * the nav derives a section from what is on disk, and nothing is on disk yet.
+ */
+export const DOCKETS_DIR = 'dockets'
 export const SECTIONS_DIR = 'sections'
 export const ATTACHMENTS_DIR = 'attachments'
 

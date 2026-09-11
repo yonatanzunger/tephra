@@ -298,7 +298,7 @@ async function showTasks(): Promise<void> {
   windows?.reveal({ kind: 'document', id: await service.todoList() })
 }
 
-async function newDocument(kind: 'markdown' | 'todo' = 'markdown'): Promise<void> {
+async function newDocument(kind: 'markdown' | 'todo' | 'docket' = 'markdown'): Promise<void> {
   if (service === null) return
   windows?.open({ kind: 'document', id: await service.newDocument(undefined, undefined, kind) })
 }

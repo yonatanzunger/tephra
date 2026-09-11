@@ -4,7 +4,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type WebContents
 import { basename, extname } from 'node:path'
 import { IMAGE_EXTENSIONS } from '../shared/ipc.ts'
 import { readOutsideBytes } from './w/outside.ts'
-import { CHANNEL, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
+import { CHANNEL, type DocketCommand, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
 import { DocumentService } from './document-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
@@ -128,7 +128,7 @@ export function registerDocumentIpc(service: DocumentService): void {
    * not opening.
    */
   ipcMain.handle(CHANNEL.navDocuments, () => service.documents())
-  ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string, kind?: 'markdown' | 'todo') =>
+  ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string, kind?: 'markdown' | 'todo' | 'docket') =>
     service.newDocument(label, section, kind),
   )
 
@@ -147,6 +147,33 @@ export function registerDocumentIpc(service: DocumentService): void {
   }
   let waiting: Capture | null = null
   let claimed: Capture | null = null
+
+  ipcMain.handle(CHANNEL.docket, async (_e, command: DocketCommand) => {
+    switch (command.kind) {
+      case 'list':
+        return service.dockets()
+      case 'matters':
+        return service.docketMatters(command.docket)
+      case 'add':
+        return service.docketAdd(command.docket, command.name, command.when)
+      case 'rename':
+        return service.docketRename(command.docket, command.matter, command.name)
+      case 'when':
+        return service.docketSetWhen(command.docket, command.matter, command.when)
+      case 'owner':
+        return service.docketSetOwner(command.docket, command.matter, command.owner)
+      case 'link':
+        return service.docketSetLink(command.docket, command.matter, command.link)
+      case 'tag':
+        return service.docketTag(command.docket, command.matter, command.subject)
+      case 'untag':
+        return service.docketUntag(command.docket, command.matter, command.subject)
+      case 'remove':
+        return service.docketRemove(command.docket, command.matter)
+      case 'move':
+        return service.docketMove(command.docket, command.matter, command.to)
+    }
+  })
 
   ipcMain.handle(CHANNEL.todo, async (e, command: TodoCommand) => {
     switch (command.kind) {

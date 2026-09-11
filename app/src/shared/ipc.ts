@@ -94,6 +94,9 @@ export const CHANNEL = {
   searchNext: 'tephra:search:next',
   searchClose: 'tephra:search:close',
 
+  /** Dockets: one channel, one union (MH1). */
+  docket: 'tephra:docket',
+
   /** The sidebar's questions, answered by the corpus index (D51, D52). */
   navSubjects: 'tephra:nav:subjects',
   navBookmarks: 'tephra:nav:bookmarks',
@@ -539,6 +542,51 @@ export interface Clipboard {
  * methods over it, so the API a caller sees has the document's own nouns while
  * the wire has one handler to keep in step.
  */
+/**
+ * One verb on one docket (MH1, D68).
+ *
+ * **The task list's shape, because it is the same kind of traffic**: a surface
+ * that is a list of rows, each gesture one small edit to one row. One channel
+ * and a discriminated union rather than a dozen channels — the alternative is a
+ * dozen names to keep in step across four files.
+ */
+export type DocketCommand =
+  /** Every docket there is, newest name last. */
+  | { readonly kind: 'list' }
+  | { readonly kind: 'matters'; readonly docket: DocumentId }
+  | {
+      readonly kind: 'add'
+      readonly docket: DocumentId
+      readonly name: string
+      /** As written: `2026-11-12`, `2026-03..2026-05`, `every 90d`, or nothing. */
+      readonly when?: string
+    }
+  | { readonly kind: 'rename'; readonly docket: DocumentId; readonly matter: string; readonly name: string }
+  | { readonly kind: 'when'; readonly docket: DocumentId; readonly matter: string; readonly when: string }
+  | {
+      readonly kind: 'owner'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly owner: string | null
+    }
+  | { readonly kind: 'link'; readonly docket: DocumentId; readonly matter: string; readonly link: string | null }
+  | { readonly kind: 'tag'; readonly docket: DocumentId; readonly matter: string; readonly subject: string }
+  | { readonly kind: 'untag'; readonly docket: DocumentId; readonly matter: string; readonly subject: string }
+  | { readonly kind: 'remove'; readonly docket: DocumentId; readonly matter: string }
+  /** The move (D71): out of one docket and onto another, keeping the id. */
+  | {
+      readonly kind: 'move'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly to: DocumentId
+    }
+
+/** What a docket is called, for a picker that must not show a filename. */
+export interface DocketRow {
+  readonly id: DocumentId
+  readonly title: string
+}
+
 export type TodoCommand =
   | { readonly kind: 'list' }
   | { readonly kind: 'today'; readonly list: DocumentId }

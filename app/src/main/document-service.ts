@@ -14,7 +14,7 @@
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { LinkRow } from '../shared/nav-api.ts'
 import { isOutside, isStream, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../shared/document-api.ts'
-import { CHANNEL, type Attached, type Base, type DayProse, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
+import { CHANNEL, type Attached, type Base, type DayProse, type DocketRow, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
@@ -25,10 +25,13 @@ import { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import {
   dayFile, documentRoot, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath,
-  resolveInsideNotebook, SECTIONS_DIR, slug, STREAM_DIR,
+  resolveInsideNotebook, DOCKETS_DIR, SECTIONS_DIR, slug, STREAM_DIR,
   type RelPath,
 } from './w/layout.ts'
 import { attach } from './x/documents/attachments.ts'
+import { nameOf } from '../shared/slug.ts'
+import { DocketDocument } from './x/documents/kinds/docket.ts'
+import { parseWhen, STANDING, type Matter } from '../shared/kinds/docket.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { DayClock } from './x/day-clock.ts'
 import { systemZone } from './system-zone.ts'
@@ -1107,12 +1110,29 @@ export class DocumentService {
    * has no single file to create, and the day its first carry materialises is
    * what brings it into being (D59).
    */
-  async newDocument(label?: string, section?: string, kind: 'markdown' | 'todo' = 'markdown'): Promise<DocumentId> {
+  async newDocument(
+    label?: string,
+    section?: string,
+    kind?: 'markdown' | 'todo' | 'docket',
+  ): Promise<DocumentId> {
     const wanted = label?.trim() ?? ''
+    // **One rule, read both ways: every docket lives in `dockets/`** (MH1).
+    //
+    // *Directory → kind*: a file made from the dockets listing is a docket, so
+    // the sidebar's *New File* needs no separate gesture and getting a markdown
+    // file out of that listing would be a surprise nobody asked for.
+    //
+    // *Kind → directory*: a docket asked for by name — File ▸ New Docket — goes
+    // to `dockets/` even though no section was named, because there is nowhere
+    // else it could go. Without this half the FIRST docket was impossible from
+    // the UI: with no `dockets/` on disk the sidebar shows no section, so there
+    // was no listing to make one from.
+    const made = kind ?? (directoryFor(section) === DOCKETS_DIR ? 'docket' : 'markdown')
+    const into = made === 'docket' && section === undefined ? DOCKETS_DIR : directoryFor(section)
     const id = await this.#freeNoteName(
       wanted === '' ? 'untitled' : slug(wanted),
-      directoryFor(section),
-      kind === 'todo' ? '.todo.md' : '.md',
+      into,
+      made === 'todo' ? '.todo.md' : made === 'docket' ? '.docket.md' : '.md',
     )
     await this.#corpus.create(id, wanted === '' ? undefined : wanted)
 
@@ -1191,7 +1211,19 @@ export class DocumentService {
     const rel = id as string as RelPath
     const cut = rel.lastIndexOf('/')
     const dir = cut < 0 ? '' : rel.slice(0, cut)
-    const suffix = rel.endsWith('.fileset.md') ? '.fileset.md' : '.md'
+    // **A rename must not change what the document IS.**
+    //
+    // This read `.fileset.md` or else `.md`, so renaming an overall task list
+    // turned it into a plain markdown file — silently, since the content is
+    // markdown either way and nothing errors. A docket renamed the same way
+    // stopped being a docket, which is how it was found (reported from use,
+    // MH1): *"selecting rename on a docket does nothing"*, because what it
+    // actually did was take the kind off.
+    //
+    // Type is declared by the name (D3), so the name is the one thing a rename
+    // may not invent. Asked as a list rather than a chain of tests, because the
+    // next kind to arrive is the one that would have been forgotten.
+    const suffix = KIND_SUFFIXES.find(end => rel.endsWith(end)) ?? '.md'
 
     for (let n = 1; ; n++) {
       const name = n === 1 ? slug(label) : `${slug(label)}-${n}`
@@ -1598,6 +1630,123 @@ export class DocumentService {
     return file.split('/').slice(0, -1).join('/')
   }
 
+  // ── dockets (MH1, D68) ─────────────────────────────────────
+
+  /**
+   * Every docket, by title.
+   *
+   * **Derived from the directory, not from a list somebody maintains** — the
+   * same rule the sidebar's directory sections follow: a docket is there because
+   * its file is there, which cannot be wrong.
+   */
+  async dockets(): Promise<readonly DocketRow[]> {
+    const ids = await this.#corpus.list('docket')
+    const rows = await Promise.all(ids.map(async id => ({
+      id,
+      // **What it is CALLED, falling back to what it is named.** The frontmatter
+      // title is the person's words; the filename is a slug of them and the only
+      // other name a document has (D59's rule, as `info()` applies it).
+      title: (await this.#corpus.use(id, doc => doc.titleOf(ONLY_SEGMENT))) ?? nameOf(id as string),
+    })))
+    return rows.sort((a, b) => a.title.localeCompare(b.title))
+  }
+
+  async docketMatters(id: DocumentId): Promise<readonly Matter[]> {
+    return this.#corpus.use(id, doc => (doc as DocketDocument).matters())
+  }
+
+  /**
+   * Put a matter on a docket.
+   *
+   * **`when` arrives as text, and is parsed here.** The notation is the one a
+   * person types into the field — `2026-11-12`, `every 90d`, nothing at all —
+   * and the renderer has no business owning a second copy of it (T16's rule,
+   * applied to a second grammar).
+   */
+  async docketAdd(id: DocumentId, name: string, when?: string): Promise<string> {
+    const said = when === undefined ? STANDING : parseWhen(when)
+    if (said === null) throw new Error(`${when} is not a date, a range, or a rule`)
+    const made = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).add(name, said, this.#takenMatterIds)),
+    )
+    this.#touched()
+    return made
+  }
+
+  async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).rename(matter, name)))
+    this.#touched()
+  }
+
+  async docketSetWhen(id: DocumentId, matter: string, when: string): Promise<void> {
+    const said = parseWhen(when)
+    if (said === null) throw new Error(`${when} is not a date, a range, or a rule`)
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setWhen(matter, said)))
+    this.#touched()
+  }
+
+  async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
+    this.#touched()
+  }
+
+  async docketSetLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
+    this.#touched()
+  }
+
+  async docketTag(id: DocumentId, matter: string, subject: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).tagMatter(matter, subject)))
+    this.#touched()
+  }
+
+  async docketUntag(id: DocumentId, matter: string, subject: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
+    this.#touched()
+  }
+
+  async docketRemove(id: DocumentId, matter: string): Promise<void> {
+    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
+    this.#touched()
+  }
+
+  /**
+   * The move: off one docket and onto another, keeping the id (D71).
+   *
+   * **Both halves in one serialised turn**, because a matter that is out of the
+   * first and not yet in the second exists nowhere, and a crash in the gap loses
+   * it. The id surviving is the whole promise — history stays continuous and a
+   * reference still resolves.
+   */
+  async docketMove(id: DocumentId, matter: string, to: DocumentId): Promise<void> {
+    await this.#serial(async () => {
+      const taken = await this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter))
+      await this.#corpus.use(to, doc => (doc as DocketDocument).adopt(taken))
+    })
+    this.#touched()
+  }
+
+  /**
+   * Matter ids taken anywhere in the corpus.
+   *
+   * **Every docket, because an id names a matter and not a docket** — the same
+   * reason `#takenIds` reads every task list. Scanned rather than indexed: a few
+   * hundred matters over a lifetime is not a thing to build an index for
+   * (`solution/horizon.md`), and the index would be the second copy of a truth
+   * the files already hold.
+   */
+  readonly #takenMatterIds = async (): Promise<ReadonlySet<string>> => {
+    const out = new Set<string>()
+    for (const id of await this.#corpus.list('docket')) {
+      for (const matter of await this.docketMatters(id)) {
+        if (matter.id !== null) out.add(matter.id)
+      }
+    }
+    return out
+  }
+
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
     return (await this.#stream).resolveAnchor(name)
   }
@@ -1646,13 +1795,7 @@ function directoryFor(section?: string): string {
   return dir === '' || dir === SECTIONS_DIR ? NOTES_DIR : dir
 }
 
-/** A path's filename, with the extensions this app puts on documents taken off. */
-const nameOf = (path: string): string =>
-  (path.split('/').pop() ?? path)
-    .replace(/\.fileset\.md$/, '')
-    .replace(/\.md$/, '')
-    // Directory documents wear their kind too (D59).
-    .replace(/\.(stream|todo)$/, '')
+
 
 /**
  * Which document a file belongs to, and what to call it.
@@ -1691,3 +1834,13 @@ function whereWritten(file: RelPath): { doc: DocumentId; segment: string; source
 function fileOfBase(base: Base, _today?: DateKey): RelPath {
   return base.kind === 'day' ? dayFile(base.date) : (base.id as string as RelPath)
 }
+
+/**
+ * Every suffix that declares a kind, longest first.
+ *
+ * **Longest first matters**: `.todo.md` ends with `.md`, so a shorter match
+ * would win and take the kind off. One list, and `nameOf` in `shared/slug.ts`
+ * is the other half of the same fact — what comes off a name, and what must
+ * stay on it.
+ */
+const KIND_SUFFIXES: readonly string[] = ['.fileset.md', '.docket.md', '.todo.md', '.md']

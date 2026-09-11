@@ -13,6 +13,7 @@
 import type { ComponentType } from 'react'
 import { MarkdownSurface } from './Markdown.tsx'
 import { TodoSurface } from './Todo.tsx'
+import { DocketSurface } from './Docket.tsx'
 import type { SurfaceProps } from '../surface.ts'
 import type { DocumentKind } from '../../../../shared/document-api.ts'
 
@@ -21,6 +22,10 @@ const SURFACES: Partial<Record<DocumentKind, ComponentType<SurfaceProps>>> = {
   // than running text** (MT3). A fileset will be the second, as a list to drag;
   // stream and markdown stay with the default, because they are prose.
   todo: TodoSurface,
+  // **The second, and the first read by two people at once** (H3, D70): a
+  // docket is worked on beside somebody, which makes legibility at conversational
+  // distance a requirement on this surface rather than polish.
+  docket: DocketSurface,
 }
 
 export function surfaceFor(kind: DocumentKind): ComponentType<SurfaceProps> {

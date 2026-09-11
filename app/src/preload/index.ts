@@ -7,9 +7,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { SelectionState } from '../shared/commands.ts'
 import type {
-  Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchBatch, SearchOpened,
-  SearchRequest, ZoneNotice,
+  Attached, Base, Clipboard, DayProse, DocketRow, ImageAttachment, PrintJob, SearchBatch,
+  SearchOpened, SearchRequest, ZoneNotice,
 } from '../shared/ipc.ts'
+import type { Matter } from '../shared/kinds/docket.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type {
   Followed, IndexStatus, LinkRow, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
@@ -179,6 +180,37 @@ const tephra = {
    * stops being one: a caller writes `todo.setStatus(list, id, 'done')`, which
    * is the document's own vocabulary, and never composes a command object.
    */
+  /**
+   * Dockets (MH1, D68) — the task list's bridge shape, because it is the same
+   * kind of traffic: a list of rows, each gesture one small edit to one row.
+   */
+  docket: {
+    /** Every docket, by what it is called. */
+    list: (): Promise<readonly DocketRow[]> => ipcRenderer.invoke(CHANNEL.docket, { kind: 'list' }),
+    matters: (docket: DocumentId): Promise<readonly Matter[]> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'matters', docket }),
+    /** `when` as a person types it, parsed in main so there is one grammar. */
+    add: (docket: DocumentId, name: string, when?: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'add', docket, name, when }),
+    rename: (docket: DocumentId, matter: string, name: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'rename', docket, matter, name }),
+    setWhen: (docket: DocumentId, matter: string, when: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'when', docket, matter, when }),
+    setOwner: (docket: DocumentId, matter: string, owner: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'owner', docket, matter, owner }),
+    setLink: (docket: DocumentId, matter: string, link: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'link', docket, matter, link }),
+    tag: (docket: DocumentId, matter: string, subject: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'tag', docket, matter, subject }),
+    untag: (docket: DocumentId, matter: string, subject: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'untag', docket, matter, subject }),
+    remove: (docket: DocumentId, matter: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'remove', docket, matter }),
+    /** Out of one docket and onto another, keeping the id (D71). */
+    move: (docket: DocumentId, matter: string, to: DocumentId): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'move', docket, matter, to }),
+  },
+
   todo: {
     /** The notebook's list — the `.todo` directory at the root, made if new. */
     which: (): Promise<DocumentId> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'list' }),
@@ -351,7 +383,11 @@ const tephra = {
      * write. Both absent is the File menu's version: `untitled`, in `notes/`.
      */
     /** A note, or an overall task list — the same gesture with a different kind (MT7). */
-    newDocument: (label?: string, section?: string, kind?: 'markdown' | 'todo'): Promise<DocumentId> =>
+    newDocument: (
+      label?: string,
+      section?: string,
+      kind?: 'markdown' | 'todo' | 'docket',
+    ): Promise<DocumentId> =>
       ipcRenderer.invoke(CHANNEL.newDocument, label, section, kind),
     /** Returns the NEW id — a document's identity is its path, so the old one is gone. */
     renameDocument: (id: DocumentId, label: string): Promise<DocumentId> =>

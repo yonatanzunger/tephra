@@ -209,6 +209,19 @@ export function installMenu(next?: MenuActions): void {
           click: () => actions.newTaskList(),
         },
         {
+          // **The renderer's, because it ASKS first.** A docket is named for a
+          // domain — the house, birthdays, speaking — and a docket called
+          // `untitled` is one nobody will recognise in the sidebar tomorrow. So
+          // this goes through the prompt the sidebar's *New File* already uses,
+          // rather than through main, which has nowhere to ask.
+          //
+          // Which is also what makes the ellipsis honest. *New Task List…*
+          // carries one and does not ask; that is a smaller lie and a separate
+          // fix.
+          label: 'New Docket\u2026',
+          click: () => send(CHANNEL.menuCommand, 'newDocket'),
+        },
+        {
           label: 'Open…',
           accelerator: 'CmdOrCtrl+O',
           click: () => actions.open(false),

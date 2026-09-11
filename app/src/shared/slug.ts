@@ -20,3 +20,27 @@ export function slug(name: string): string {
     .slice(0, 80)
   return s === '' ? 'untitled' : s
 }
+
+/**
+ * What a document is NAMED, from its path — the other name it has.
+ *
+ * **Shared because four places wanted it and had three answers.** `App.tsx`,
+ * `document-service.ts` and `x/fileset.ts` each carried a copy of this rule, and
+ * MH1 found them apart the way such things are always found: a docket appeared
+ * in the sidebar as `house.docket` while the titlebar called it *The house*,
+ * because only two of the three copies had learned the new suffix.
+ *
+ * **Every suffix this app puts on a document comes off**, including the ones a
+ * multi-file kind wears on its directory (D59). What is left is the person's
+ * words, slugged — which is why this is the *fallback* for a title and never the
+ * title itself: `titleOf` is what they actually wrote.
+ */
+export function nameOf(path: string): string {
+  return (path.split('/').pop() ?? path)
+    .replace(/\.fileset\.md$/, '')
+    .replace(/\.docket\.md$/, '')
+    .replace(/\.todo\.md$/, '')
+    .replace(/\.md$/, '')
+    // A directory document wears its kind on the directory (D59).
+    .replace(/\.(stream|todo)$/, '')
+}

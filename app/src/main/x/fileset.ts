@@ -14,6 +14,7 @@
 // panel sees when the order and the directory disagree.
 
 import type { Corpus } from './documents/corpus.ts'
+import { nameOf } from '../../shared/slug.ts'
 import { asFileset, type FilesetDocument } from './documents/kinds/fileset.ts'
 import {
   documentRoot,
@@ -487,6 +488,5 @@ const humanise = (name: string): string =>
 const isSectionFile = (path: string): boolean =>
   path.startsWith(`${SECTIONS_DIR}/`) && path.endsWith('.fileset.md')
 
-const nameOf = (path: string): string =>
-  (path.split('/').pop() ?? path).replace(/\.fileset\.md$/, '').replace(/\.md$/, '')
+
 

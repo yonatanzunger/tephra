@@ -51,3 +51,23 @@ test('and an empty base means the notebook root, which is the safe answer', () =
   // be placed draws as broken rather than as some other file.
   assert.equal(imageSrc('attachments/x.png', ''), 'tephra://notebook/attachments/x.png')
 })
+
+// ── what a document is named (MH1) ─────────────────────────
+
+/**
+ * **The bug this pins**: three copies of this rule lived in `App.tsx`,
+ * `document-service.ts` and `x/fileset.ts`, and MH1 found them apart the way
+ * such things always are — a docket showed in the sidebar as `house.docket`
+ * while the titlebar called it *The house*, because only some of the copies had
+ * learned the new suffix.
+ */
+test('every suffix this app puts on a document comes off', async () => {
+  const { nameOf } = await import('../../../src/shared/slug.ts')
+  assert.equal(nameOf('dockets/house.docket.md'), 'house')
+  assert.equal(nameOf('notes/offer.md'), 'offer')
+  assert.equal(nameOf('blog-posts.todo.md'), 'blog-posts')
+  assert.equal(nameOf('sections/house-deal.fileset.md'), 'house-deal')
+  // A directory document wears its kind on the directory (D59).
+  assert.equal(nameOf('tasks.todo'), 'tasks')
+  assert.equal(nameOf('notebook.stream'), 'notebook')
+})

@@ -1816,3 +1816,90 @@ body {
 }
 
 
+
+/* A docket (MH1, H3).
+ *
+ * **Read by two people at one screen, one of whom is not driving** — which is a
+ * hard requirement rather than polish (D70), and it decides nearly everything
+ * here. Type at the notebook's reading size rather than UI size; rows wide and
+ * untruncated; no control that appears only under a cursor, because two people
+ * cannot both point at the same row. */
+.docket {
+  min-width: 0; min-height: 0; overflow-y: auto;
+  padding: .6rem 0 2rem;
+  font-family: var(--font-ui);
+}
+.docket-problem {
+  font-family: var(--font-ui); font-size: 13px;
+  color: rgb(var(--text)); background: rgb(234 179 8 / .22);
+  border-radius: 6px; padding: .4rem .6rem; margin: 0 0 .6rem;
+  max-width: var(--measure);
+}
+.docket-empty {
+  font-size: 14px; line-height: 1.5; color: rgb(var(--text-muted));
+  max-width: 34rem; margin: .8rem 0 0;
+}
+
+.docket-list { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
+.docket-row {
+  padding: .55rem 0 .5rem;
+  border-bottom: 1px solid rgb(var(--border) / .5);
+}
+/* The name and the date on one line, the date pushed to the right where the eye
+   goes for it — era 1 drew a due date as the loud thing and T9 is why. */
+.docket-line { display: flex; align-items: baseline; gap: 1rem; }
+
+/* **Reading size, in the reading face.** This is the text that gets read aloud. */
+.docket-name {
+  flex: 1; min-width: 0; text-align: left; cursor: text;
+  font-family: var(--reading-face, inherit);
+  font-size: calc(var(--reading-size, 20px) * .82);
+  line-height: 1.35; color: rgb(var(--text));
+  background: none; border: 0; padding: 0;
+}
+.docket-name:hover { color: rgb(var(--text-heading)); }
+
+/* **The question the conversation is about.** Tabular so a column of dates
+   lines up, and visibly a *state* when there is not one yet. */
+.docket-when {
+  flex: 0 0 auto; cursor: text;
+  font-variant-numeric: tabular-nums; font-size: 14px;
+  color: rgb(var(--text)); background: none;
+  border: 0; border-radius: 5px; padding: .05rem .3rem;
+}
+.docket-when:hover { background: rgb(var(--text) / .06); }
+.docket-when.undecided { color: rgb(var(--text-muted)); font-style: italic; }
+
+.docket-under {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
+  margin-top: .3rem;
+}
+/* Present without shouting, and present for BOTH readers — never hover-only. */
+.docket-quiet {
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid transparent; border-radius: 5px; padding: .05rem .3rem;
+}
+.docket-quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .06); }
+.docket-quiet.danger:hover { color: rgb(var(--bad, var(--text))); }
+
+.docket-field {
+  font: inherit; font-size: 15px; font-family: var(--font-body);
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .15rem .35rem;
+  min-width: 8rem;
+}
+.docket-field.wide { flex: 1; min-width: 12rem; }
+.docket-field:focus { outline: none; border-color: rgb(var(--accent) / .6); }
+
+.docket-new {
+  display: flex; align-items: center; gap: .5rem;
+  max-width: var(--measure); padding: .6rem 0;
+}
+.docket-add {
+  font: inherit; font-size: 13px; cursor: pointer;
+  margin-top: .7rem; padding: .3rem .8rem;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 6px;
+}
+.docket-add:hover { background: rgb(var(--text) / .05); }

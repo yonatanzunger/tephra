@@ -21,6 +21,7 @@ import { Nav } from './frame/Nav'
 import { AnomalyBadge, AnomalyList } from './frame/Anomalies'
 import { Prompt, type PromptRequest } from './frame/Prompt'
 import { Find, type FindControl } from './frame/Find'
+import { nameOf } from '../../shared/slug'
 import type { DroppedImage } from './editor/kinds/markdown/bind'
 import { widgetOptions } from './editor/kinds/markdown/widgets'
 import type { Base } from '../../shared/ipc'
@@ -126,22 +127,6 @@ function covering(w: DocumentWindow | null, at: DocumentPosition): Where {
     subjects: inside.filter(a => a.kind === 'tag').map(a => a.subject),
   }
 }
-
-/** A document's filename, which is its name of last resort. */
-/**
- * What a document is called when it has no title of its own: its filename.
- *
- * **A directory document is named the same way** (D59): `tasks.todo` is
- * "tasks", by the same rule that makes `notes/offer.md` "offer". Only the
- * extension is new — capitalising would have been a nicer title for the task
- * list and a changed one for every note in the notebook, which is not a trade
- * this had any business making.
- */
-const nameOf = (id: string): string =>
-  (id.split('/').pop() ?? id)
-    .replace(/\.fileset\.md$/, '')
-    .replace(/\.md$/, '')
-    .replace(/\.(stream|todo)$/, '')
 
 export function App(): React.JSX.Element {
   /** The STREAM, which is what the app opens with and what the title bar dates. */
@@ -344,6 +329,28 @@ export function App(): React.JSX.Element {
         setFinding(true)
         setFindSeed(null)
         findControl.current?.focus()
+      } else if (command === 'newDocket') {
+        // **Named before it exists** (MH1). A docket is named for a domain —
+        // the house, birthdays, speaking engagements — and one called
+        // `untitled` is one nobody recognises in the sidebar tomorrow. The
+        // prompt is the same one the sidebar's *New File* uses; `dockets/` is
+        // decided by the kind, not by a section (`newDocument`).
+        setPrompt({
+          title: 'Call the new docket',
+          placeholder: 'the house · birthdays · speaking',
+          submitLabel: 'Create',
+          onSubmit: label => {
+            void window.tephra.doc
+              .newDocument(label, undefined, 'docket')
+              // Straight into it, in this window: a docket you just made is one
+              // you are about to sit down with.
+              .then(async id => {
+                await pane?.goTo({ kind: 'document', id })
+                setNavGeneration(n => n + 1)
+              })
+              .catch(fail)
+          },
+        })
       } else if (command === 'searchAll') {
         // **A panel, not a location**, which is the correction MS4 made to its
         // own first design: a result set is something you keep beside you while

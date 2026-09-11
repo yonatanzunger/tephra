@@ -2501,6 +2501,70 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'docket') {
+      // Making a docket and working it (MH1, D68). **Driven through the real
+      // menu item**, because the thing being tested is that the gesture exists
+      // and asks — the first cut created `untitled.docket.md` without asking,
+      // which was reported from use before anything else about this phase was.
+      say('menuItemFound', await window.tephra.clickMenu('New Docket\u2026'))
+      await settle(500)
+      const naming = document.querySelector('.prompt input') as HTMLInputElement | null
+      say('asked', naming !== null)
+      if (naming !== null) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(naming, 'The house')
+        naming.dispatchEvent(new Event('input', { bubbles: true }))
+        naming.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(2500)
+      }
+      say('title', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('surface', document.querySelector('.docket') !== null)
+      // The sidebar found it because its file is there, and calls it by name.
+      say('inSidebar', [...document.querySelectorAll('.nav-row, .nav-nested')]
+        .map(n => n.textContent ?? '').filter(t => t.includes('house')).length > 0)
+
+      // Add a matter, with a date typed the way a person types one.
+      ;(document.querySelector('.docket-add') as HTMLElement | null)?.click()
+      await settle(300)
+      const fields = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+      const set = (at: HTMLInputElement, value: string): void => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(at, value)
+        at.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      if (fields[0] !== undefined) set(fields[0], 'Service the boiler')
+      if (fields[1] !== undefined) set(fields[1], '2026-10-14')
+      fields[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(1800)
+      say('rows', document.querySelectorAll('.docket-row').length)
+      say('names', [...document.querySelectorAll('.docket-name')].map(n => n.textContent))
+      say('whens', [...document.querySelectorAll('.docket-when')].map(n => n.textContent))
+
+      // A matter with no date says so in words, because *not decided* is a state.
+      ;(document.querySelector('.docket-add') as HTMLElement | null)?.click()
+      await settle(300)
+      const more = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+      if (more[0] !== undefined) set(more[0], 'The oven is broken')
+      more[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(1800)
+      say('undated', [...document.querySelectorAll('.docket-when.undecided')].map(n => n.textContent))
+
+      // **Legibility has a floor even though it has no instrument** (H3): the
+      // name is read aloud across a table, so it takes the notebook's reading
+      // face at reading size rather than a UI size.
+      {
+        const name = document.querySelector('.docket-name') as HTMLElement | null
+        say('type', name === null ? null : {
+          size: Math.round(parseFloat(getComputedStyle(name).fontSize)),
+          face: (getComputedStyle(name).fontFamily.split(',')[0] ?? '').replace(/["']/g, ''),
+        })
+      }
+
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(800)
+    }
+
     if (scene === 'print') {
       const all = view.state.doc.toString()
       // From the first VISIBLE character of the heading, which is where a
