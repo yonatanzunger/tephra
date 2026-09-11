@@ -771,10 +771,10 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
-## MH — the horizon and dockets *(designed, not started)*
+## MH — the horizon and dockets *(MH1 built; MH2–MH6 designed)*
 
 **Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
-Requirements: `goal/horizon.md`. Decisions: D68–D72.**
+Requirements: `goal/horizon.md`. Decisions: D68–D75.**
 
 The first design cycle after v1, driven by what daily use taught. **R19's gate
 was opened and returned a negative**: pinned lists shipped months ago, an events
@@ -794,6 +794,40 @@ migrations of shipped, in-daily-use behaviour are inside it.
 
 **It also answers Q3a**, which was deferred in September specifically to be
 answered from use, and was.
+
+### MH1 — docket files *(built 2026-09-10)*
+
+A docket is a document kind with its own editing surface. `New Docket…` asks for
+a name and writes `dockets/<name>.docket.md`; matters carry a name, `when`, tags,
+an owner, a link, run-ups, prose notes, and the four fields that cannot be
+backfilled. `when` takes a date, a range, a season, a recurrence with an anchor,
+or nothing — and *nothing* is a state that says **no date yet** in words rather
+than showing a blank.
+
+**Sections divide a docket for reading** — *periodic maintenance*, *need to do*,
+*major projects* — as ordinary markdown headings with matters nested under them.
+A section is told from a matter by **content, not heading depth**, which is what
+lets dockets written before sections existed keep working. A matter can be moved
+between sections or nudged up and down inside one; a nudge stops at the section
+edge, and removing a heading keeps everything that was under it. Nothing sorts
+itself.
+
+**Recurrence setup, run-up editing, notes and sections were pulled in from later
+phases** by the planning conversation the phase exists to serve; nothing
+generates or fires yet, which is MH3's whole substance. The roadmap records that
+trade where it was made.
+
+**Verified by `npm run mh1`**, a real window driven through the actual menu item.
+It exists because every defect in this phase was found from *use* after the unit
+suites were green: a gesture that invented a filename instead of asking, a rename
+that stripped the kind, an empty field under every matter, a recurrence reading
+back as `every 90d from 2026-10-01` beside a run-up that said *2 weeks before*,
+and a reading form the parser then refused to accept back.
+
+**Sections are recorded as D75**, including the one decision in them that is
+load-bearing: content, not heading depth, tells a section from a matter, because
+a depth rule would have read every docket written earlier in the phase as a file
+of empty sections and shown an empty screen where a house was.
 
 ## The backlog — built when we decide we want them
 

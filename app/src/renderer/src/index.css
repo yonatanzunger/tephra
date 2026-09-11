@@ -1841,6 +1841,54 @@ body {
 }
 
 .docket-list { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
+
+/* Sections (MH1).
+ *
+ * **A heading between the document's title and a matter's name**, in the
+ * reading face because it is read aloud with everything else on the page — but
+ * smaller and in muted ink, because it is a signpost and not the content. Two
+ * people scanning for *major projects* need to find it in one pass; nobody needs
+ * it to compete with the matters under it. */
+.docket-section { max-width: var(--measure); }
+.docket-section + .docket-section { margin-top: 1.4rem; }
+.docket-section-head {
+  display: flex; align-items: baseline; gap: .5rem;
+  padding: .2rem 0 .15rem;
+  border-bottom: 1px solid rgb(var(--border));
+}
+.docket-section-name {
+  flex: 1; margin: 0;
+  font-family: var(--reading-face, var(--font-body));
+  font-size: calc(var(--reading-size, 16px) * .92);
+  font-weight: 600; letter-spacing: .01em;
+  color: rgb(var(--text-muted));
+}
+.docket-section-empty {
+  font-size: 12.5px; font-style: italic; color: rgb(var(--text-muted));
+  margin: .45rem 0 0;
+}
+
+/* Between what a matter IS and where it sits: two kinds of act, so a gap. */
+.docket-sep {
+  width: 1px; align-self: stretch; min-height: .9em;
+  background: rgb(var(--border)); margin: 0 .15rem;
+}
+.docket-quiet:disabled {
+  opacity: .3; cursor: default;
+}
+.docket-quiet:disabled:hover { color: rgb(var(--text-muted)); background: none; }
+/* The one control that says where a matter is AND moves it. */
+.docket-where {
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid rgb(var(--border) / .7); border-radius: 5px;
+  padding: .05rem .2rem; max-width: 11rem;
+}
+.docket-where:hover { color: rgb(var(--text)); }
+
+.docket-adders { display: flex; align-items: center; gap: .5rem; }
+.docket-add.quiet { color: rgb(var(--text-muted)); background: none; }
+.docket-add.quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .05); }
 .docket-row {
   padding: .55rem 0 .5rem;
   border-bottom: 1px solid rgb(var(--border) / .5);
@@ -1932,3 +1980,28 @@ body {
   color: rgb(var(--text));
 }
 .docket-field.narrow { min-width: 0; width: 4.5rem; }
+
+/* A matter's note (MH1).
+ *
+ * **Shown whenever there is one.** The quote from the plumber is what the
+ * conversation needs in front of both people (H3), and a note you have to go
+ * and find is a note that does not get read. Set in the reading face, because
+ * it is prose somebody wrote. */
+.docket-note {
+  margin: .3rem 0 .1rem 1.1rem;
+  padding-left: .7rem;
+  border-left: 2px solid rgb(var(--border));
+  font-family: var(--reading-face, inherit);
+  font-size: calc(var(--reading-size, 20px) * .68);
+  line-height: 1.45; color: rgb(var(--text-muted));
+}
+.docket-note p { margin: 0 0 .15rem; }
+.docket-note-field {
+  display: block; width: 100%; box-sizing: border-box; resize: vertical;
+  margin: .3rem 0 .1rem 1.1rem; max-width: calc(var(--measure) - 1.1rem);
+  font-family: var(--reading-face, inherit);
+  font-size: calc(var(--reading-size, 20px) * .68); line-height: 1.45;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .3rem .45rem;
+}
+.docket-note-field:focus { outline: none; border-color: rgb(var(--accent) / .6); }

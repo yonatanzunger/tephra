@@ -10,7 +10,7 @@ import type {
   Attached, Base, Clipboard, DayProse, DocketRow, ImageAttachment, PrintJob, SearchBatch,
   SearchOpened, SearchRequest, ZoneNotice,
 } from '../shared/ipc.ts'
-import type { Matter } from '../shared/kinds/docket.ts'
+import type { Matter, Section } from '../shared/kinds/docket.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type {
   Followed, IndexStatus, LinkRow, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
@@ -190,8 +190,9 @@ const tephra = {
     matters: (docket: DocumentId): Promise<readonly Matter[]> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'matters', docket }),
     /** `when` as a person types it, parsed in main so there is one grammar. */
-    add: (docket: DocumentId, name: string, when?: string): Promise<string> =>
-      ipcRenderer.invoke(CHANNEL.docket, { kind: 'add', docket, name, when }),
+    /** `section` is where it goes; absent means the undivided run (MH1). */
+    add: (docket: DocumentId, name: string, when?: string, section?: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'add', docket, name, when, section }),
     rename: (docket: DocumentId, matter: string, name: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'rename', docket, matter, name }),
     setWhen: (docket: DocumentId, matter: string, when: string): Promise<void> =>
@@ -206,6 +207,9 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'untag', docket, matter, subject }),
     remove: (docket: DocumentId, matter: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'remove', docket, matter }),
+    /** The prose under a matter — the quote, what the plumber said. Not parsed. */
+    setNotes: (docket: DocumentId, matter: string, notes: readonly string[]): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'notes', docket, matter, notes }),
     /** *This long before, do this.* `offset` as typed: `3d`, `2w`, `+1w` for after. */
     addTrigger: (
       docket: DocumentId, matter: string, offset: string, text: string, effect?: string,
@@ -213,6 +217,22 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'addTrigger', docket, matter, offset, text, effect }),
     removeTrigger: (docket: DocumentId, matter: string, at: number): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'removeTrigger', docket, matter, at }),
+    /** The docket divided into sections, in file order. How it is read (MH1). */
+    sections: (docket: DocumentId): Promise<readonly Section[]> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'sections', docket }),
+    addSection: (docket: DocumentId, name: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'addSection', docket, name }),
+    renameSection: (docket: DocumentId, name: string, to: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'renameSection', docket, name, to }),
+    /** The heading goes; everything under it stays where it is. */
+    removeSection: (docket: DocumentId, name: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'removeSection', docket, name }),
+    /** Into a section of the same docket — `''` for the undivided run. */
+    place: (docket: DocumentId, matter: string, section: string, before?: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'place', docket, matter, section, before }),
+    /** One place up or down inside its own section; false at the ends. */
+    nudge: (docket: DocumentId, matter: string, delta: number): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'nudge', docket, matter, delta }),
     /** Out of one docket and onto another, keeping the id (D71). */
     move: (docket: DocumentId, matter: string, to: DocumentId): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'move', docket, matter, to }),

@@ -602,3 +602,113 @@ rewritten in place left its predecessor further down the file**, and the stale
 copy won on order alone. The symptom was a colour that ignored the rule the
 visible source obeyed. When a style refuses to apply and the rule looks right,
 grep for a second copy of the selector before doubting the cascade.
+
+## A verify scene with no runner asserts nothing
+
+The `docket` scene was written during MH1, printed twenty-odd `VERIFY` lines, and
+was read by **no script**: there was no `mh1-acceptance.mjs` and no `mh1` in
+`package.json`, so nothing in `test:full` ever looked at its output. The scene was
+being *run* by hand and eyeballed, which is not the same as being checked, and it
+would have gone on printing correct-looking lines about a broken app indefinitely.
+
+This is the same family as `npx tsc --noEmit -p .` above — **a verification that
+cannot fail is not verifying** — and it has now appeared as a missing flag and as
+a missing consumer. The general form: *something produces evidence; establish that
+something reads it and can say no.*
+
+**The instrument found two of its own defects on first run**, both mine and both
+in the measurement rather than the app: `rows` was sampled after the *first*
+matter was added and then asserted as though it were the total, and the run-up
+count used `.docket-runup-when`, which the still-open *add* row also carries (the
+word *before* between its two fields). A selector that matches the thing under
+test plus the form for making another one silently over-counts by exactly one.
+
+## One throw in a verify scene silently drops every assertion after it
+
+The docket scene called `window.tephra.doc.text()`, which does not exist on the
+bridge. It threw, the scene's remaining half never ran, and the effect was not an
+error but **twelve checks failing for absent evidence** — `offered=undefined`,
+`field=undefined`, `appError=undefined`. The shape on the terminal looks exactly
+like a broken feature, and the first instinct is to go and debug the feature.
+
+**The tell is `appError: undefined` rather than a value.** That say is the last
+line of every scene, so if it is missing the scene did not reach the end, and the
+fault is in the scene rather than in the app. Read the failures top-down and find
+the first one whose evidence is *missing* rather than *wrong*; everything below it
+is noise. The three wrong theories that preceded the print-window fix were the
+same mistake made without this rule.
+
+## Shape is not validity, and the docket grammar got it wrong in every form
+
+`parseWhen` validated dates with `/\d{4}-\d{2}-\d{2}/` and never called
+`asDateKey`, so a matter could be scheduled for **the thirtieth of February** —
+parsed, stored, displayed, and impossible. Every form had it: a day, both ends of
+a range, both months of a season, and the new recurrence anchors. A backwards
+range was accepted too.
+
+**What makes this worth recording is that the sibling module got it right.**
+`shared/query-text.ts` was careful about exactly this and reports a `Problem` for
+an impossible date. The second grammar was written from the first one's *shape*
+and inherited its regexes without its checking — which is the predictable failure
+of copying a pattern rather than a principle.
+
+**The rule: a regex that matches a date establishes that somebody typed something
+date-shaped, and nothing else.** Anywhere a string becomes a `DateKey`, the
+conversion is the validation, and the answer to a date nobody could have meant is
+to say so rather than to file it.
+
+## A reading form that cannot be typed back is a trap, not a convenience
+
+Reported from use, one day after it was built: the docket row read **every 90
+days** and the field it was read out of accepted only `every 90d`. The reading
+form was added for legibility — the row was switching languages halfway across,
+notation beside a run-up that said *2 weeks before* in words — and it made the
+surface teach a notation the parser refused.
+
+**A displayed value IS input.** People retype what they see and correct it in
+place, so every form the app renders has to parse back to the value that produced
+it. The fix was the parser's, not the renderer's: `UNIT` accepts `d` or `days`,
+the count is optional because *every 1 week* is not English and so is never
+written, and `parseOffset` takes `2 weeks before` because that is the whole
+sentence the row just said.
+
+**The property is testable and now is**: for every form, `parseWhen(readWhen(w))`
+and `parseWhen(spellWhen(w))` both equal `w`. Two rendering functions exist on
+purpose — one round-trips into the file, one is read aloud — and the loop has to
+close through both.
+
+## Content, not depth, told a section from a matter
+
+Sections were added to the docket format a phase after matters were. The obvious
+rule was heading depth: `##` a section, `###` a matter. It would have **silently
+lost a house**: every docket written in MH1 has its matters at `##`, so a
+depth-based reader would have seen a file full of empty sections and no matters
+at all — no error, no missing file, just an empty screen where a docket was.
+
+The rule that works is **content**: a heading with nothing under it is a section,
+a heading with anything under it is a matter. It cannot fail that way, because
+the writer always emits `when:` under a matter's heading. Depth is still written
+correctly for new files, so the outline is true markdown — it is just not what
+the reader trusts.
+
+**The general form: when a format grows a new construct, the discriminator must
+be something every file already written gets right.** Anything else is a
+migration disguised as a parser change, and the loud failures are the lucky ones.
+
+## Two acceptance suites at once share one `out/` and quietly ruin each other
+
+Every `mN` script begins with `npm run build`, and the build writes to one
+`out/`. Running two of them concurrently — two backgrounded shells, each with its
+own `for` loop — has the second build rewriting the bundle the first one's
+Electron process is loading. The failure is not a crash: the suite prints no
+summary line at all, which read as *nothing to report* and passed a `grep -E
+"passed, [0-9]+ failed"` filter by matching nothing.
+
+**Acceptance suites are serial**, and there is nothing to parallelise anyway —
+each one drives a real window. The same mechanism is the best available
+explanation for the single unreproduced unit-test failure earlier in the same
+session, which happened in the one run that shared the machine with a build.
+
+**And the reporting lesson is the same one as the timed-out scene:** a filter
+that only matches success cannot distinguish *passed* from *never finished*.
+Assert on the presence of the summary, not on the absence of failures.

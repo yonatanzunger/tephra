@@ -155,7 +155,7 @@ export function registerDocumentIpc(service: DocumentService): void {
       case 'matters':
         return service.docketMatters(command.docket)
       case 'add':
-        return service.docketAdd(command.docket, command.name, command.when)
+        return service.docketAdd(command.docket, command.name, command.when, command.section)
       case 'rename':
         return service.docketRename(command.docket, command.matter, command.name)
       case 'when':
@@ -170,12 +170,28 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.docketUntag(command.docket, command.matter, command.subject)
       case 'remove':
         return service.docketRemove(command.docket, command.matter)
+      case 'notes':
+        return service.docketSetNotes(command.docket, command.matter, command.notes)
       case 'addTrigger':
         return service.docketAddTrigger(
           command.docket, command.matter, command.offset, command.text, command.effect,
         )
       case 'removeTrigger':
         return service.docketRemoveTrigger(command.docket, command.matter, command.at)
+      case 'sections':
+        return service.docketSections(command.docket)
+      case 'addSection':
+        return service.docketAddSection(command.docket, command.name)
+      case 'renameSection':
+        return service.docketRenameSection(command.docket, command.name, command.to)
+      case 'removeSection':
+        return service.docketRemoveSection(command.docket, command.name)
+      case 'place':
+        return service.docketMoveMatter(
+          command.docket, command.matter, command.section, command.before,
+        )
+      case 'nudge':
+        return service.docketNudgeMatter(command.docket, command.matter, command.delta)
       case 'move':
         return service.docketMove(command.docket, command.matter, command.to)
     }

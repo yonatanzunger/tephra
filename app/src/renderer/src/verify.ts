@@ -2549,6 +2549,74 @@ export async function runVerify(request: string): Promise<void> {
       await settle(1800)
       say('undated', [...document.querySelectorAll('.docket-when.undecided')].map(n => n.textContent))
 
+      // **A recurrence, anchored** — *every 90 days, starting in October.* The
+      // anchor is typed with it because it cannot be reconstructed later: the
+      // matter's arrival date is re-stamped by `adopt`, so guessing from it is
+      // wrong twice.
+      ;(document.querySelector('.docket-add') as HTMLElement | null)?.click()
+      await settle(300)
+      const again = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+      if (again[0] !== undefined) set(again[0], 'Change the air filters')
+      if (again[1] !== undefined) set(again[1], 'every 90d from 2026-10-01')
+      again[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await settle(1800)
+      // Read back in WORDS, like the run-up beside it: the row must not switch
+      // languages halfway across (H3).
+      say('recurrence', [...document.querySelectorAll('.docket-when')]
+        .map(n => n.textContent).filter(t => (t ?? '').startsWith('every')))
+
+      // A note on the boiler, which is the quote both people need in front of
+      // them — so it shows without a click once it exists.
+      {
+        const row = [...document.querySelectorAll('.docket-row')].find(
+          r => (r.querySelector('.docket-name')?.textContent ?? '').includes('boiler'),
+        )
+        const note = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
+          b => b.textContent === 'note',
+        ) as HTMLElement | null
+        say('noteOffered', note !== null)
+        note?.click()
+        await settle(300)
+        const field = document.querySelector('.docket-note-field') as HTMLTextAreaElement | null
+        say('noteField', field !== null)
+        if (field !== null) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+          setter?.call(field, 'The firm on the high street did the last one.\nQuoted 480 for the part, plus labour.')
+          field.dispatchEvent(new Event('input', { bubbles: true }))
+          // ⌘-Enter, because Enter inside a note writes the second sentence.
+          field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true }))
+          await settle(1800)
+        }
+        say('note', [...document.querySelectorAll('.docket-note p')].map(n => n.textContent))
+        say('noteShownWithoutAsking', document.querySelector('.docket-note') !== null)
+      }
+
+      // And a run-up on the same matter, to prove the two live together: a note
+      // and a run-up under one matter, neither eating the other.
+      {
+        const row = [...document.querySelectorAll('.docket-row')].find(
+          r => (r.querySelector('.docket-name')?.textContent ?? '').includes('boiler'),
+        )
+        const runup = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
+          b => b.textContent === 'run-up',
+        ) as HTMLElement | null
+        runup?.click()
+        await settle(300)
+        const when = row?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
+        const what = row?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+        if (when !== null && when !== undefined) set(when, '2w')
+        if (what !== null && what !== undefined) set(what, 'book the boiler service')
+        what?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1800)
+        const committed = '.docket-runup:not(.new) .docket-runup-when'
+        say('runup', [...document.querySelectorAll(committed)].map(n => n.textContent))
+        say('bothUnderOne', {
+          note: document.querySelectorAll('.docket-note').length,
+          runups: document.querySelectorAll(committed).length,
+        })
+        say('rowsAtEnd', document.querySelectorAll('.docket-row').length)
+      }
+
       // **Legibility has a floor even though it has no instrument** (H3): the
       // name is read aloud across a table, so it takes the notebook's reading
       // face at reading size rather than a UI size.
@@ -2558,6 +2626,118 @@ export async function runVerify(request: string): Promise<void> {
           size: Math.round(parseFloat(getComputedStyle(name).fontSize)),
           face: (getComputedStyle(name).fontFamily.split(',')[0] ?? '').replace(/["']/g, ''),
         })
+      }
+
+      // ── sections: dividing the docket up to read it (MH1) ──
+      {
+        const click = (sel: string, text?: string): boolean => {
+          const found = [...document.querySelectorAll(sel)].find(
+            n => text === undefined || n.textContent === text,
+          ) as HTMLElement | undefined
+          found?.click()
+          return found !== undefined
+        }
+        const type = (sel: string, value: string): void => {
+          const field = document.querySelector(sel) as HTMLInputElement | null
+          if (field === null) return
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+          setter?.call(field, value)
+          field.dispatchEvent(new Event('input', { bubbles: true }))
+          field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        }
+        click('.docket-runup.new .docket-quiet', 'done')
+        await settle(300)
+        say('sectionOffered', click('.docket-add.quiet', 'Add a section'))
+        await settle(300)
+        type('.docket-field.section', 'Periodic maintenance')
+        await settle(1500)
+        click('.docket-add.quiet', 'Add a section')
+        await settle(300)
+        type('.docket-field.section', 'Major projects')
+        await settle(1500)
+        say('sections', [...document.querySelectorAll('.docket-section-name')].map(n => n.textContent))
+        // An empty one says what it is rather than looking broken.
+        say('emptySaidSo', [...document.querySelectorAll('.docket-section-empty')].length)
+
+        // Move the boiler into the first section with the control that also
+        // says where it is.
+        const rowOf = (word: string): Element | undefined =>
+          [...document.querySelectorAll('.docket-row')].find(
+            r => (r.querySelector('.docket-name')?.textContent ?? '').includes(word),
+          )
+        const where = rowOf('boiler')?.querySelector('.docket-where') as HTMLSelectElement | null
+        say('whereOffered', where !== null)
+        say('whereSays', where?.options?.[0]?.textContent ?? null)
+        if (where !== null) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+          setter?.call(where, 'Periodic maintenance')
+          where.dispatchEvent(new Event('change', { bubbles: true }))
+          await settle(1800)
+        }
+        const filters = rowOf('air filters')?.querySelector('.docket-where') as HTMLSelectElement | null
+        if (filters !== null) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+          setter?.call(filters, 'Periodic maintenance')
+          filters.dispatchEvent(new Event('change', { bubbles: true }))
+          await settle(1800)
+        }
+        say('grouped', [...document.querySelectorAll('.docket-section')].map(s2 => ({
+          name: s2.querySelector('.docket-section-name')?.textContent ?? '',
+          matters: [...s2.querySelectorAll('.docket-name')].map(n => n.textContent),
+        })))
+        // The moved matter took its note and its run-up with it.
+        say('keptItsNote', (rowOf('boiler')?.querySelectorAll('.docket-note p').length ?? 0))
+        say('keptItsRunUp',
+          rowOf('boiler')?.querySelectorAll('.docket-runup:not(.new) .docket-runup-when').length ?? 0)
+
+        // Reorder inside a section, and stop at its edge.
+        const arrows = (word: string): HTMLButtonElement[] =>
+          [...(rowOf(word)?.querySelectorAll('.docket-quiet') ?? [])].filter(
+            b => b.textContent === '↑' || b.textContent === '↓',
+          ) as HTMLButtonElement[]
+        say('firstIsPinned', arrows('boiler')[0]?.disabled ?? null)
+        arrows('air filters')[0]?.click()
+        await settle(1800)
+        say('reordered', [...document.querySelectorAll('.docket-section')].map(s2 =>
+          [...s2.querySelectorAll('.docket-name')].map(n => n.textContent)))
+        say('nowPinned', arrows('air filters')[0]?.disabled ?? null)
+
+        // **Ungrouping the POPULATED one**, because the claim worth checking in
+        // a live window is that taking a heading away does not take a house
+        // with it.
+        const ungroup = [...(document.querySelectorAll('.docket-section-head')[0]
+          ?.querySelectorAll('.docket-quiet') ?? [])].find(
+          b => b.textContent === 'ungroup',
+        ) as HTMLElement | null
+        ungroup?.click()
+        await settle(1500)
+        say('afterUngroup', {
+          sections: [...document.querySelectorAll('.docket-section-name')].map(n => n.textContent),
+          matters: [...document.querySelectorAll('.docket-name')].map(n => n.textContent).length,
+        })
+
+        // And put them back, so what is left on the screen at the end is a
+        // docket somebody would actually be reading.
+        for (const word of ['air filters', 'boiler']) {
+          const pick = rowOf(word)?.querySelector('.docket-where') as HTMLSelectElement | null
+          if (pick === null) continue
+          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+          setter?.call(pick, 'Major projects')
+          pick.dispatchEvent(new Event('change', { bubbles: true }))
+          await settle(1200)
+        }
+        const head = document.querySelector('.docket-section-head .docket-quiet') as HTMLElement | null
+        head?.click()
+        await settle(300)
+        const rename = document.querySelector('.docket-field.section') as HTMLInputElement | null
+        if (rename !== null) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+          setter?.call(rename, 'Periodic maintenance')
+          rename.dispatchEvent(new Event('input', { bubbles: true }))
+          rename.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await settle(1500)
+        }
+        say('renamed', [...document.querySelectorAll('.docket-section-name')].map(n => n.textContent))
       }
 
       await window.tephra.doc.flush()

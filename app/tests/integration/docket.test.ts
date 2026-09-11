@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocketDocument } from '../../src/main/x/documents/kinds/docket.ts'
+import { STANDING } from '../../src/shared/kinds/docket.ts'
 import { kindOf, type RelPath } from '../../src/main/w/layout.ts'
 import type { DocumentId } from '../../src/shared/document-api.ts'
 
@@ -425,4 +426,363 @@ test('and completion-relative recurrence, which is the other household shape', a
   await doc.addTrigger(id, '2w', 'book the service')
   assert.match(await file(), /^when: 6m after done$/m)
   assert.deepEqual((await doc.matters())[0]?.when, { kind: 'after', n: 6, unit: 'm' })
+})
+
+// ── notes on a matter (MH1) ────────────────────────────────
+
+test('THE NOTE: prose under a matter, kept and nothing else touched', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('The oven is broken')
+  await doc.tagMatter(id, 'house')
+  await doc.setNotes(id, [
+    'The element went on Tuesday.',
+    'Quoted 480 for the part, plus labour.',
+  ])
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.notes, ['The element went on Tuesday.', 'Quoted 480 for the part, plus labour.'])
+  assert.deepEqual(matter?.tags, ['house'], 'and the rest of the matter is untouched')
+  assert.match(await file(), /^Quoted 480 for the part, plus labour\.$/m)
+})
+
+test('a note is replaced wholesale, which is how the task list does it too', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('The oven is broken')
+  await doc.setNotes(id, ['first'])
+  await doc.setNotes(id, ['second', 'third'])
+  assert.deepEqual((await doc.matters())[0]?.notes, ['second', 'third'])
+})
+
+test('and empty lines are dropped, because a note of nothing is no note', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('A thing')
+  await doc.setNotes(id, ['  ', '', 'something'])
+  assert.deepEqual((await doc.matters())[0]?.notes, ['something'])
+  await doc.setNotes(id, [''])
+  assert.deepEqual((await doc.matters())[0]?.notes, [])
+  assert.ok(!(await file()).includes('something'))
+})
+
+test('a note coexists with a run-up and neither eats the other', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('Service the boiler', { kind: 'on', date: '2026-10-14' as never })
+  await doc.addTrigger(id, '2w', 'book it')
+  await doc.setNotes(id, ['The firm on the high street did the last one.'])
+  const matter = (await doc.matters())[0]
+  assert.equal(matter?.triggers.length, 1)
+  assert.deepEqual(matter?.notes, ['The firm on the high street did the last one.'])
+})
+
+// ── anchored recurrence (MH1, H7) ──────────────────────────
+
+test('THE ANCHOR: a recurrence records what it recurs from', async t => {
+  // *Every ninety days* is not a schedule until you know ninety days from what,
+  // and MH3 cannot reconstruct it — so it is recorded now or never.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Change the air filters', {
+    kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as never,
+  })
+  assert.match(await file(), /^when: every 90d from 2026-10-01$/m)
+  assert.deepEqual((await doc.matters())[0]?.when,
+    { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+  void id
+})
+
+test('and setting one later is how a conversation actually goes', async t => {
+  // *Every 90 days* is said first; *starting in October* is said second.
+  const { doc } = await docket(t)
+  const id = await doc.add('Change the air filters', { kind: 'every', n: 90, unit: 'd' })
+  assert.deepEqual((await doc.matters())[0]?.when, { kind: 'every', n: 90, unit: 'd' })
+  await doc.setWhen(id, { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as never })
+  assert.deepEqual((await doc.matters())[0]?.when,
+    { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+})
+
+test('an impossible date never reaches the file', async t => {
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  for (const said of ['2026-02-30', '2026-13-01', '2026-11-14..2026-11-12']) {
+    await assert.rejects(() => service.docketAdd(id, 'A thing', said), /not a date/)
+  }
+  assert.deepEqual(await service.docketMatters(id), [])
+})
+
+// ── sections (MH1) ─────────────────────────────────────────
+
+/** A docket with three matters in it, to divide up. */
+async function three(t: TestContext) {
+  const made = await docket(t)
+  const boiler = await made.doc.add('Service the boiler')
+  const oven = await made.doc.add('The oven is broken')
+  const kitchen = await made.doc.add('Redo the kitchen')
+  return { ...made, boiler, oven, kitchen }
+}
+
+const named = async (doc: DocketDocument): Promise<unknown> =>
+  (await doc.sections()).map(s => [s.name, s.matters.map(m => m.name)])
+
+test('THE SECTION: a docket with none reads as one undivided run', async t => {
+  const { doc } = await three(t)
+  assert.deepEqual(await named(doc), [['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']]])
+})
+
+test('and adding one divides it without moving anything', async t => {
+  const { doc, file } = await three(t)
+  await doc.addSection('Major projects')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
+    ['Major projects', []],
+  ])
+  // An empty section is a real state: it is said before it is filled.
+  assert.match(await file(), /^## Major projects$/m)
+})
+
+test('a matter moves into a section, and goes a heading deeper with it', async t => {
+  const { doc, file, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken']],
+    ['Major projects', ['Redo the kitchen']],
+  ])
+  const text = await file()
+  assert.match(text, /^### Redo the kitchen$/m, 'inside a section, so one level down')
+  assert.match(text, /^## Service the boiler$/m, 'and the undivided ones are untouched')
+})
+
+test('THE ID SURVIVES A MOVE, which is what makes it a move', async t => {
+  const { doc, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  const moved = (await doc.matters()).find(m => m.name === 'Redo the kitchen')
+  assert.equal(moved?.id, kitchen)
+})
+
+test('and everything on it survives the move too', async t => {
+  const { doc, kitchen } = await three(t)
+  await doc.setWhen(kitchen, { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as never })
+  await doc.tagMatter(kitchen, 'house')
+  await doc.addTrigger(kitchen, '2w', 'get quotes')
+  await doc.setNotes(kitchen, ['Three firms quoted.'])
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  const moved = (await doc.matters()).find(m => m.id === kitchen)
+  assert.deepEqual(moved?.when, { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+  assert.deepEqual(moved?.tags, ['house'])
+  assert.equal(moved?.triggers.length, 1)
+  assert.deepEqual(moved?.notes, ['Three firms quoted.'])
+})
+
+test('a matter moves back out to the undivided run', async t => {
+  const { doc, file, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  await doc.moveMatter(kitchen, '')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
+    ['Major projects', []],
+  ])
+  assert.match(await file(), /^## Redo the kitchen$/m, 'and comes back up a level')
+})
+
+test('and before another matter, which is how *above that one* is said', async t => {
+  const { doc, boiler, kitchen } = await three(t)
+  await doc.moveMatter(kitchen, '', boiler)
+  assert.deepEqual(await named(doc), [
+    ['', ['Redo the kitchen', 'Service the boiler', 'The oven is broken']],
+  ])
+})
+
+test('NUDGE: one place up, one place down', async t => {
+  const { doc, oven } = await three(t)
+  assert.equal(await doc.nudgeMatter(oven, -1), true)
+  assert.deepEqual(await named(doc), [
+    ['', ['The oven is broken', 'Service the boiler', 'Redo the kitchen']],
+  ])
+  assert.equal(await doc.nudgeMatter(oven, 1), true)
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
+  ])
+  assert.equal(await doc.nudgeMatter(oven, 1), true)
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'Redo the kitchen', 'The oven is broken']],
+  ])
+})
+
+test('and it says NO at the ends rather than doing nothing quietly', async t => {
+  const { doc, boiler, kitchen } = await three(t)
+  assert.equal(await doc.nudgeMatter(boiler, -1), false, 'already first')
+  assert.equal(await doc.nudgeMatter(kitchen, 1), false, 'already last')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
+  ])
+})
+
+test('THE SECTION EDGE: a nudge stops at it rather than reclassifying', async t => {
+  // Pressing *down* one more time must not move a matter out of *periodic
+  // maintenance* and into *major projects*. Crossing is `moveMatter`, which
+  // says where.
+  const { doc, boiler, oven, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  await doc.moveMatter(oven, 'Major projects')
+  assert.equal(await doc.nudgeMatter(boiler, 1), false, 'last in the undivided run')
+  assert.equal(await doc.nudgeMatter(kitchen, -1), false, 'first in its section')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler']],
+    ['Major projects', ['Redo the kitchen', 'The oven is broken']],
+  ])
+})
+
+test('a section is renamed, and keeps what is in it', async t => {
+  const { doc, file, kitchen } = await three(t)
+  await doc.addSection('Big jobs')
+  await doc.moveMatter(kitchen, 'Big jobs')
+  await doc.renameSection('Big jobs', 'Major projects')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken']],
+    ['Major projects', ['Redo the kitchen']],
+  ])
+  assert.doesNotMatch(await file(), /Big jobs/)
+})
+
+test('DELETING A HEADING MUST NOT DELETE A HOUSE', async t => {
+  const { doc, file, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  await doc.removeSection('Major projects')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
+  ])
+  const text = await file()
+  assert.doesNotMatch(text, /Major projects/)
+  assert.match(text, /^## Redo the kitchen$/m, 'promoted back to the top level')
+})
+
+test('and an orphan joins the section that now contains it, at its depth', async t => {
+  const { doc, file, oven, kitchen } = await three(t)
+  await doc.addSection('Periodic maintenance')
+  await doc.addSection('Major projects')
+  await doc.moveMatter(oven, 'Periodic maintenance')
+  await doc.moveMatter(kitchen, 'Major projects')
+  await doc.removeSection('Major projects')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler']],
+    ['Periodic maintenance', ['The oven is broken', 'Redo the kitchen']],
+  ])
+  // Still one level down, because it is still inside a section.
+  assert.match(await file(), /^### Redo the kitchen$/m)
+})
+
+test('two sections cannot share a name, because a move names one', async t => {
+  const { doc } = await three(t)
+  await doc.addSection('Major projects')
+  await assert.rejects(() => doc.addSection('Major projects'), /already has a section/)
+  await assert.rejects(() => doc.addSection('  '), /needs a name/)
+  const first = (await doc.matters())[0]?.id ?? ''
+  await assert.rejects(() => doc.moveMatter(first, 'Nowhere'), /no section/)
+})
+
+test('A HAND-WRITTEN DOCKET with sections is read as written', async t => {
+  const { doc } = await docket(t, [
+    '---', 'tephra: 1', 'kind: docket', '---', '',
+    '## Periodic maintenance', '',
+    '### Service the boiler', 'when: 2026-10-14', '',
+    '### Change the air filters', 'when: every 90 days', '',
+    '## Major projects', '',
+    '### Redo the kitchen', 'when: —', '',
+  ].join('\n'))
+  assert.deepEqual(await named(doc), [
+    ['Periodic maintenance', ['Service the boiler', 'Change the air filters']],
+    ['Major projects', ['Redo the kitchen']],
+  ])
+  // Written in words, and read: the file is a person's to type in.
+  const filters = (await doc.matters()).find(m => m.name === 'Change the air filters')
+  assert.deepEqual(filters?.when, { kind: 'every', n: 90, unit: 'd' })
+})
+
+test('A DOCKET FROM BEFORE SECTIONS EXISTED still reads as its matters', async t => {
+  // Every matter at `##`, which is what the format wrote for a whole phase. A
+  // rule based on heading DEPTH would read these as empty sections and lose a
+  // house; the rule is based on content, and cannot.
+  const { doc } = await docket(t, [
+    '---', 'tephra: 1', 'kind: docket', '---', '',
+    '## Service the boiler', 'when: 2026-10-14', '<!--tephra:matter aaaa1111 1757462400 0-->', '',
+    '## The oven is broken', 'when: —', '<!--tephra:matter bbbb2222 1757462400 0-->', '',
+  ].join('\n'))
+  assert.deepEqual(await named(doc), [['', ['Service the boiler', 'The oven is broken']]])
+  assert.equal((await doc.matters()).length, 2)
+})
+
+test('and a verb on one of those leaves it at the depth it was written', async t => {
+  const { doc, file } = await docket(t, [
+    '---', 'tephra: 1', 'kind: docket', '---', '',
+    '## Service the boiler', 'when: 2026-10-14', '<!--tephra:matter aaaa1111 1757462400 0-->', '',
+  ].join('\n'))
+  await doc.setOwner('aaaa1111', 'me')
+  assert.match(await file(), /^## Service the boiler$/m, 'editing an owner must not reshape the outline')
+})
+
+test('THE BLOCK RULE HOLDS ACROSS A MOVE: the others stay byte-identical', async t => {
+  const { doc, file, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  const before = await file()
+  const untouched = before.split('## Redo the kitchen')[0] as string
+  await doc.moveMatter(kitchen, 'Major projects')
+  const after = await file()
+  assert.ok(after.startsWith(untouched), `\n--- was ---\n${untouched}\n--- now ---\n${after}`)
+})
+
+test('and the file stays tidy: one blank line between blocks, no holes', async t => {
+  const { doc, file, oven, kitchen } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  await doc.moveMatter(oven, 'Major projects')
+  await doc.nudgeMatter(oven, -1)
+  const text = await file()
+  assert.doesNotMatch(text, /\n\n\n/, 'no gaps opened by a splice')
+  assert.doesNotMatch(text, /-->\n##/, 'and none closed up either')
+  assert.equal(text.match(/^#{2,3} /gm)?.length, 4, `3 matters + 1 section\n${text}`)
+})
+
+test('A NEW MATTER IS NOT FILED BY GUESSWORK', async t => {
+  // The end of the file is *inside the last section*, so appending — right
+  // while a docket was one flat list — would make `fix the fence` a major
+  // project without anybody saying so. The default is the undivided run.
+  const { doc, file } = await three(t)
+  await doc.addSection('Major projects')
+  const fence = await doc.add('Fix the fence')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen', 'Fix the fence']],
+    ['Major projects', []],
+  ])
+  assert.match(await file(), /^## Fix the fence$/m, 'and at the top level, where it is')
+  void fence
+})
+
+test('and it goes where it is told when it is told', async t => {
+  const { doc, file } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.add('Redo the bathroom', STANDING, undefined, 'Major projects')
+  assert.deepEqual(await named(doc), [
+    ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
+    ['Major projects', ['Redo the bathroom']],
+  ])
+  assert.match(await file(), /^### Redo the bathroom$/m, 'a level down, inside the section')
+})
+
+test('a section named in an add that does not exist is refused, not invented', async t => {
+  const { doc } = await three(t)
+  await assert.rejects(() => doc.add('Fix the fence', STANDING, undefined, 'Nowhere'), /no section/)
+  assert.equal((await doc.matters()).length, 3)
+})
+
+test('and the file stays tidy when a matter is added into a section', async t => {
+  const { doc, file } = await three(t)
+  await doc.addSection('Major projects')
+  await doc.add('Redo the bathroom', STANDING, undefined, 'Major projects')
+  await doc.add('Fix the fence')
+  const text = await file()
+  assert.doesNotMatch(text, /\n\n\n/)
+  assert.doesNotMatch(text, /-->\n#/)
+  assert.equal(text.match(/^#{2,3} /gm)?.length, 6, `5 matters + 1 section\n${text}`)
 })

@@ -558,8 +558,10 @@ export type DocketCommand =
       readonly kind: 'add'
       readonly docket: DocumentId
       readonly name: string
-      /** As written: `2026-11-12`, `2026-03..2026-05`, `every 90d`, or nothing. */
+      /** As written: `2026-11-12`, `2026-03..2026-05`, `every 90 days`, or nothing. */
       readonly when?: string
+      /** Which section to put it in. Absent means the undivided run. */
+      readonly section?: string
     }
   | { readonly kind: 'rename'; readonly docket: DocumentId; readonly matter: string; readonly name: string }
   | { readonly kind: 'when'; readonly docket: DocumentId; readonly matter: string; readonly when: string }
@@ -573,6 +575,13 @@ export type DocketCommand =
   | { readonly kind: 'tag'; readonly docket: DocumentId; readonly matter: string; readonly subject: string }
   | { readonly kind: 'untag'; readonly docket: DocumentId; readonly matter: string; readonly subject: string }
   | { readonly kind: 'remove'; readonly docket: DocumentId; readonly matter: string }
+  /** Prose under a matter. Nothing in it is parsed. */
+  | {
+      readonly kind: 'notes'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly notes: readonly string[]
+    }
   /** A run-up: *this long before, do this* (H4). `offset` as a person types it. */
   | {
       readonly kind: 'addTrigger'
@@ -587,6 +596,39 @@ export type DocketCommand =
       readonly docket: DocumentId
       readonly matter: string
       readonly at: number
+    }
+  // ── sections: how a docket is divided for reading (MH1) ──
+  | { readonly kind: 'sections'; readonly docket: DocumentId }
+  | { readonly kind: 'addSection'; readonly docket: DocumentId; readonly name: string }
+  | {
+      readonly kind: 'renameSection'
+      readonly docket: DocumentId
+      readonly name: string
+      readonly to: string
+    }
+  /** The heading goes; everything under it stays. */
+  | { readonly kind: 'removeSection'; readonly docket: DocumentId; readonly name: string }
+  /**
+   * Put a matter in a section of THIS docket — `''` is the undivided run.
+   *
+   * **`place`, not `move`**: `move` below is D71's between-dockets transfer, and
+   * two verbs a letter apart that mean different things is how a wrong call gets
+   * made. This one never changes which document a matter is on.
+   */
+  | {
+      readonly kind: 'place'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly section: string
+      /** Above this one, rather than at the end of the section. */
+      readonly before?: string
+    }
+  /** One place up or down inside its own section. Answers whether it moved. */
+  | {
+      readonly kind: 'nudge'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly delta: number
     }
   /** The move (D71): out of one docket and onto another, keeping the id. */
   | {

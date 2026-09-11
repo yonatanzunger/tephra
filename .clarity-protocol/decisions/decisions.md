@@ -3237,3 +3237,53 @@ inside the task surface — narrowing H8 to *present when you are in the task li
 — without the design's lapse-proofing collapsing in the meantime. **MH4 is still
 owed**, and the narrowing is recorded in the roadmap so it is not mistaken for
 done.
+
+## D75: A docket is divided by sections, told apart by content rather than depth
+
+**Date:** 2026-09-10
+**Status:** decided
+**Amends:** D72's format (settling its open question). **Amends:** the claim that
+a docket is in *creation order and nothing else*, inherited from `goal/todo.md`.
+**Design:** `solution/horizon.md`.
+
+**Decision.** A docket is divided for reading by **sections** — ordinary markdown
+headings, with matters nested one level under them. A heading **with nothing
+under it is a section**; a heading **with anything under it is a matter**.
+Matters can be moved between sections and nudged up and down inside one. Nothing
+ever sorts itself.
+
+**Why sections at all.** A docket's claim is completeness — *everything true
+about the house* — which means it is long by design, and most of it is dormant.
+A flat list of everything is exactly the artifact nobody reads, which would
+defeat H2 by satisfying it. *Periodic maintenance*, *need to do*, *major
+projects* is how two people at one screen actually navigate one, and the
+requirement that governs this surface is that it be legible to the person not
+driving the keyboard (H3, D70).
+
+**Why content and not depth, which is the load-bearing half.** The obvious rule
+was `##` for a section and `###` for a matter. It would have **silently lost a
+house**: every docket written in MH1 has its matters at `##`, so a depth-based
+reader sees a file of empty sections and no matters — no error, no missing file,
+an empty screen where a docket was. Content cannot fail that way, because
+`matterBlock` has always written `when:` under a matter's heading. Depth is still
+*written* correctly, so the file's outline is true markdown and reads properly in
+any other tool; it is simply not what the reader trusts.
+
+**What this costs.** A section cannot carry a description, because prose under a
+heading is what a note looks like. Accepted: sections are for grouping.
+
+**And it overturns an inherited rule rather than an argued one.** The docket said
+*creation order and nothing else*, citing `goal/todo.md`'s ban on rearranging.
+That ban is about a list that turns over daily, where nesting would have had to
+mean urgency *or* subject and could not mean both. A docket turns over never and
+is reasoned about whole. What survives of the rule is the part that mattered:
+**the machine never reorders anything.** A person may.
+
+**Two consequences that were defects until they were decided.** A nudge stops at
+a section edge rather than reclassifying a matter by one extra keypress, and
+**removing a section heading keeps every matter under it** — the matters join
+whatever now contains them. A gesture that could delete a house by deleting a
+label is not a gesture worth offering. And a new matter defaults to **no
+section**, asked for at the moment of adding: the only available guess was the
+end of the file, which is inside the *last* section, so *fix the fence* would
+have become a major project without anybody saying so.

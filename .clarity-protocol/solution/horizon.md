@@ -1,6 +1,6 @@
 # The Horizon and Dockets — Design
 
-**Requirements: `goal/horizon.md` (H1–H15). Decisions: D68–D72.** Written to be
+**Requirements: `goal/horizon.md` (H1–H15). Decisions: D68–D75.** Written to be
 read on its own: the problem, how the parts combine to solve it, the experiences
 that follow, and the architecture those experiences force. Rationale for the
 requirements lives in `goal/horizon.md`; what is here is the thing to build.
@@ -238,6 +238,36 @@ it is small and better settled against real code.
 **What does not change:** the file stays plain, durable and readable without
 Tephra, and its type is declared by its containing directory rather than
 inferred, which is what keeps merges safe.
+
+> **Settled against real code, 2026-09-10 (MH1). Recorded as D75.** The open question above was
+> decided as a block per matter: a heading, `key: value` lines, an indented
+> trigger list, prose, and the bookkeeping marker last. Nothing is
+> whitespace-significant and every unknown key survives a round trip.
+>
+> **And sections were added, because reading a long docket demanded them.** A
+> docket is divided by ordinary markdown headings — *periodic maintenance*,
+> *need to do*, *major projects* — with its matters nested one level under them.
+> The rule that separates a section from a matter is **content, not depth**: a
+> heading with nothing under it is a section, a heading with anything under it is
+> a matter. Depth was the obvious rule and it was the wrong one, because dockets
+> written before sections existed have their matters at `##`, and a
+> depth-based rule would have read every one of them as an empty section and
+> silently lost a house. Content cannot fail that way: every matter this app has
+> ever written has `when:` under its heading.
+>
+> The cost, stated: **a section cannot carry a description**, since prose under a
+> heading is what a note looks like. Sections are for grouping, which is what
+> they were for.
+>
+> **Arranging is a person's act and never the machine's.** Nothing sorts itself;
+> a matter can be moved between sections or nudged up and down inside one, and a
+> nudge stops at the section edge rather than reclassifying by one keypress. The
+> earlier claim that a docket is in *creation order and nothing else* was
+> borrowed from `goal/todo.md`'s ban on rearranging a task list — a rule about a
+> list that turns over daily, where nesting could express urgency *or* subject
+> but never both. A docket turns over never, and grouping is how two people find
+> their way around one. **Removing a section heading keeps every matter under
+> it**, which is the property that makes the gesture safe to offer.
 
 ## The rules that govern behaviour
 

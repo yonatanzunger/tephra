@@ -11,7 +11,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  matterBlock, parseMatter, parseOffset, parseWhen, scanMatters, spellOffset, spellWhen,
+  matterBlock, parseMatter, parseOffset, parseWhen, readWhen, scanMatters, spellOffset, spellWhen,
   unusedMatterId, STANDING, type Matter,
 } from '../../../src/shared/kinds/docket.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
@@ -20,7 +20,7 @@ const MARK = '<!--tephra:matter 7f3a1b2c 1757462400 0-->'
 
 const bare = (over: Partial<Matter> = {}): Matter => ({
   id: '7f3a1b2c', name: 'The oven is broken', when: STANDING, tags: [], owner: null,
-  link: null, triggers: [], arrived: 1757462400, declines: 0, occurrence: null, extra: [],
+  link: null, triggers: [], notes: [], arrived: 1757462400, declines: 0, occurrence: null, extra: [],
   ...over,
 })
 
@@ -145,7 +145,10 @@ test('but something that is not a heading is not a matter', () => {
 
 // ── leniency ───────────────────────────────────────────────
 
-test('THE LENIENCY RULE: a key this does not know survives verbatim', () => {
+test('THE LENIENCY RULE: nothing a person wrote is lost, whatever it is', () => {
+  // Two different survivals, and the line between them is whether it reads as a
+  // field: an unknown `key: value` is kept as one, and bare prose is a note.
+  // Neither is dropped, which is the only part that matters.
   const block = [
     '## The oven is broken',
     'when: —',
@@ -155,9 +158,28 @@ test('THE LENIENCY RULE: a key this does not know survives verbatim', () => {
   ].join('\n')
   const matter = parseMatter(block)
   assert.ok(matter !== null)
-  assert.deepEqual(matter.extra, ['quoted: 480 for the part, plus labour', 'a line of ordinary prose about the oven'])
-  assert.ok(matterBlock(matter).includes('quoted: 480 for the part, plus labour'))
-  assert.ok(matterBlock(matter).includes('a line of ordinary prose about the oven'))
+  assert.deepEqual(matter.extra, ['quoted: 480 for the part, plus labour'])
+  assert.deepEqual(matter.notes, ['a line of ordinary prose about the oven'])
+  const back = matterBlock(matter)
+  assert.ok(back.includes('quoted: 480 for the part, plus labour'))
+  assert.ok(back.includes('a line of ordinary prose about the oven'))
+})
+
+test('THE DATE BUG: shape is not validity', () => {
+  // Every form here matched `\d{4}-\d{2}-\d{2}` and validated nothing, so a
+  // matter could be scheduled for the thirtieth of February — stored, shown,
+  // and impossible. The query notation already validated with `asDateKey`; this
+  // one only checked the shape.
+  assert.equal(parseWhen('2026-02-30'), null)
+  assert.equal(parseWhen('2026-13-01'), null)
+  assert.equal(parseWhen('2026-11-12..2026-11-40'), null)
+  assert.equal(parseWhen('2026-13..2026-15'), null)
+})
+
+test('and a backwards range is refused rather than silently swapped', () => {
+  // The same call the query notation makes: a swap files a date nobody chose.
+  assert.equal(parseWhen('2026-11-14..2026-11-12'), null)
+  assert.equal(parseWhen('2026-05..2026-03'), null)
 })
 
 test('and a trigger line it cannot read is kept rather than dropped', () => {
@@ -275,9 +297,14 @@ test('an offset of nothing is a date, not a run-up', () => {
 })
 
 test('and what is not an offset says so rather than guessing', () => {
-  for (const said of ['', 'soon', 'two weeks', '14', 'd14', '14 days']) {
+  // `14 days` was on this list until use reported the asymmetry it came from:
+  // the row read *14 days before* and the field beside it took only `14d`. A
+  // spelled-out NUMBER is still refused — *two weeks* would need a numeral
+  // parser, and nothing on the surface ever renders one.
+  for (const said of ['', 'soon', 'two weeks', '14', 'd14', 'fortnight']) {
     assert.equal(parseOffset(said), null, said)
   }
+  assert.equal(parseOffset('14 days'), '-14d', 'this one is now the point')
 })
 
 test('whitespace and case are forgiven, because this is typed while talking', () => {
@@ -312,4 +339,180 @@ test('a trigger round-trips through the block', () => {
   assert.deepEqual(matter.triggers.map(t => `${t.offset} ${t.effect}`),
     ['-60d doc', '-14d task', '+3d task'])
   assert.deepEqual(parseMatter(matterBlock(matter))?.triggers, matter.triggers)
+})
+
+// ── anchored recurrence (MH1, H7) ──────────────────────────
+
+test('THE ANCHOR: every 90 days from WHAT', () => {
+  // *Every ninety days* is not a schedule until you know ninety days from what.
+  // The type claimed "a fixed origin" and carried no field for one.
+  assert.deepEqual(parseWhen('every 90d from 2026-10-01'),
+    { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+  assert.equal(spellWhen({ kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as DateKey }),
+    'every 90d from 2026-10-01')
+})
+
+test('and the unanchored form still parses, because that is what gets said first', () => {
+  // *Every 90 days* comes out of somebody's mouth before *starting in October*.
+  // The notation has to take the incomplete version; MH3 is what must refuse to
+  // generate from it rather than inventing a date.
+  assert.deepEqual(parseWhen('every 90d'), { kind: 'every', n: 90, unit: 'd' })
+  assert.equal(spellWhen({ kind: 'every', n: 90, unit: 'd' }), 'every 90d')
+})
+
+test('completion-relative recurrence takes an anchor too, for its first one', () => {
+  assert.deepEqual(parseWhen('6m after done from 2026-10-01'),
+    { kind: 'after', n: 6, unit: 'm', from: '2026-10-01' })
+  assert.equal(spellWhen({ kind: 'after', n: 6, unit: 'm', from: '2026-10-01' as DateKey }),
+    '6m after done from 2026-10-01')
+})
+
+test('a nonsense anchor is not a recurrence at all', () => {
+  // Better said out loud than half-read: `from soon` is not a date, so the whole
+  // `when` is unreadable rather than silently becoming an unanchored rule.
+  assert.equal(parseWhen('every 90d from soon'), null)
+  assert.equal(parseWhen('every 90d from 2026-13-01'), null)
+})
+
+// ── notes on a matter (MH1) ────────────────────────────────
+
+test('THE NOTE: bare prose in the block, and nothing in it is parsed', () => {
+  const matter = parseMatter([
+    '## The oven is broken',
+    'when: —',
+    'The element went on Tuesday. Cheaper to replace the whole thing #maybe',
+    'Waiting on a quote from the second firm.',
+    MARK,
+  ].join('\n'))
+  assert.ok(matter !== null)
+  assert.deepEqual(matter.notes, [
+    'The element went on Tuesday. Cheaper to replace the whole thing #maybe',
+    'Waiting on a quote from the second firm.',
+  ])
+  // The hash in the note is NOT a tag: a note is prose (D56's rule, carried).
+  assert.deepEqual(matter.tags, [])
+})
+
+test('a note round-trips, and sits between the fields and the marker', () => {
+  const matter = bare({ notes: ['Quoted 480 for the part.'], tags: ['house'] })
+  const block = matterBlock(matter)
+  assert.equal(block, [
+    '## The oven is broken',
+    'when: —',
+    'tags: #house',
+    'Quoted 480 for the part.',
+    MARK,
+  ].join('\n'))
+  assert.deepEqual(parseMatter(block), matter)
+})
+
+test('a note and a run-up coexist without confusing each other', () => {
+  const matter = parseMatter([
+    '## Service the boiler',
+    'when: 2026-10-14',
+    'triggers:',
+    '- -2w task: book it',
+    'Last one was done by the firm on the high street.',
+    MARK,
+  ].join('\n'))
+  assert.equal(matter?.triggers.length, 1)
+  assert.deepEqual(matter?.notes, ['Last one was done by the firm on the high street.'])
+})
+
+test('and a note that reads as a field is kept as one rather than lost', () => {
+  // No text is lost either way; only its classification differs, and it
+  // round-trips in place.
+  const matter = parseMatter(`## x\nwhen: —\ncost: about 500\n${MARK}`)
+  assert.deepEqual(matter?.notes, [])
+  assert.deepEqual(matter?.extra, ['cost: about 500'])
+  assert.ok(matterBlock(matter as never).includes('cost: about 500'))
+})
+
+test('THE READING FORM: a recurrence is said in words, not in notation', () => {
+  // `every 90d from 2026-10-01` sat inches from a run-up reading *two weeks
+  // before*. One row, two languages — which is the legibility floor (H3), since
+  // the person this surface is for is the one not driving the keyboard.
+  const read = (said: string): string => {
+    const when = parseWhen(said)
+    assert.ok(when !== null, said)
+    return readWhen(when)
+  }
+  assert.equal(read('every 90d from 2026-10-01'), 'every 90 days from 2026-10-01')
+  assert.equal(read('every 1y'), 'every year') // not *every 1 year*, which is not English
+  assert.equal(read('6m after done from 2026-10-01'), '6 months after done from 2026-10-01')
+})
+
+test('and a plain date is left exactly as it is, because a column is scanned', () => {
+  for (const said of ['2026-11-12', '2026-11-12..2026-11-20', '2026-03..2026-05', '—']) {
+    const when = parseWhen(said)
+    assert.ok(when !== null)
+    assert.equal(readWhen(when), spellWhen(when), said)
+  }
+})
+
+test('THE ROUND TRIP is the other form: what it writes, the parser reads', () => {
+  // Which is why there are two functions. `spellWhen` is the file and the edit
+  // field; words would not survive either.
+  for (const said of ['2026-11-12', 'every 90d from 2026-10-01', '6m after done', '2026-03..2026-05']) {
+    const when = parseWhen(said)
+    assert.ok(when !== null)
+    assert.deepEqual(parseWhen(spellWhen(when)), when, said)
+  }
+})
+
+// ── what the app renders, the app parses ───────────────────
+
+test('THE CLOSED LOOP: every reading form parses back to what produced it', () => {
+  // The defect this pins, reported from use: the row read *every 90 days* and
+  // the field beside it accepted only `every 90d`. A displayed value is input —
+  // people retype it and correct it in place — so a reading form the parser
+  // refuses is worse than none at all.
+  const forms = [
+    '2026-11-12', '2026-11-12..2026-11-20', '2026-03..2026-05', '—',
+    'every 90d', 'every 1w', 'every 3m', 'every 1y',
+    'every 90d from 2026-10-01', 'every 1m from 2026-10-01',
+    '6m after done', '1d after done', '6m after done from 2026-10-01',
+  ]
+  for (const said of forms) {
+    const when = parseWhen(said)
+    assert.ok(when !== null, said)
+    // Both ways out of the type go back in, and land on the same value.
+    assert.deepEqual(parseWhen(readWhen(when)), when, `read: ${readWhen(when)}`)
+    assert.deepEqual(parseWhen(spellWhen(when)), when, `spell: ${spellWhen(when)}`)
+  }
+})
+
+test('and a recurrence is typed the way it is said, not the way it is stored', () => {
+  const every = (said: string): unknown => parseWhen(said)
+  assert.deepEqual(every('every 90 days'), every('every 90d'))
+  assert.deepEqual(every('every 3 months'), every('every 3m'))
+  assert.deepEqual(every('Every 90 Days'), every('every 90d'))
+  // *Every 1 week* is not English, so the count is optional both ways.
+  assert.deepEqual(every('every week'), every('every 1w'))
+  const weekly = parseWhen('every 1w')
+  assert.ok(weekly !== null)
+  assert.equal(readWhen(weekly), 'every week')
+  assert.deepEqual(every('every year'), { kind: 'every', n: 1, unit: 'y' })
+  assert.deepEqual(parseWhen('6 months after done'), parseWhen('6m after done'))
+})
+
+test('a run-up is too, because its row reads back in words as well', () => {
+  assert.equal(parseOffset('2 weeks'), '-2w')
+  assert.equal(parseOffset('2 weeks before'), '-2w')
+  assert.equal(parseOffset('3 days after'), '+3d')
+  assert.equal(parseOffset('week'), '-1w')
+  // An explicit sign is the more deliberate of the two, so it wins.
+  assert.equal(parseOffset('-3d after'), '-3d')
+  for (const offset of ['-14d', '+3d', '-1w', '-6m', '+2y']) {
+    assert.equal(parseOffset(spellOffset(offset)), offset, spellOffset(offset))
+  }
+})
+
+test('and nonsense is still nonsense', () => {
+  for (const said of ['every 90 fortnights', 'every 90 dayz', 'every 0 days', 'every', 'every days days']) {
+    assert.equal(parseWhen(said), null, said)
+  }
+  for (const said of ['2 fortnights', '0 days', '2 weeks sideways', '']) {
+    assert.equal(parseOffset(said), null, said)
+  }
 })

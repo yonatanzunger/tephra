@@ -25,8 +25,9 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  matterBlock, parseMatter, parseOffset, scanMatters, STANDING, unusedMatterId,
-  type Matter, type ScannedMatter, type When,
+  MATTER_LEVEL, matterBlock, outline, parseMatter, parseOffset, scanBlocks, scanMatters,
+  sectionHeading, STANDING, unusedMatterId,
+  type Matter, type ScannedBlock, type ScannedMatter, type Section, type When,
 } from '../../../../shared/kinds/docket.ts'
 import { nowSeconds } from '../../../../shared/dates.ts'
 import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
@@ -74,21 +75,49 @@ export class DocketDocument extends SegmentedDocument {
   // ── reading ────────────────────────────────────────────────
 
   /**
-   * Every matter, in the order written.
+   * Every matter, in file order, flat — sections and all.
    *
-   * **Creation order, and nothing else** — the task list's rule, and for the
-   * same reason: `goal/todo.md` forbids rearranging a list because era 2's
-   * nesting could express urgency or subject but never both. A docket is
-   * reasoned about as a whole, so the order you put things in is the order you
-   * know your way around.
+   * **File order, and nothing computed** — the task list's rule, held in the
+   * part that matters: nothing here sorts itself, ever. What changed is the
+   * claim that came with it, which was *creation order and nothing else*,
+   * borrowed from `goal/todo.md`'s ban on rearranging. That ban was about a list
+   * that turns over daily, where nesting would have had to mean urgency *or*
+   * subject and could not mean both. A docket turns over never, and arranging it
+   * — *periodic maintenance*, *need to do*, *major projects* — is how two people
+   * find their way around it. So a person may move things; the machine may not.
+   *
+   * `sections()` is the divided view and the one the surface draws. This stays
+   * flat because the horizon and the index want every matter, not the grouping.
    */
   async matters(): Promise<readonly Matter[]> {
     return (await this.#scan()).map(found => found.matter)
   }
 
+  /**
+   * The docket divided into its sections, which is what the surface draws.
+   *
+   * **Sections are for reading, and they are the only ordering this kind has.**
+   * `matters()` above says creation order and nothing else, inheriting the task
+   * list's rule against rearranging — and that rule was about a list that turns
+   * over daily, where nesting would have had to mean urgency *or* subject. A
+   * docket turns over never and is reasoned about as a whole, so grouping *is*
+   * how you know your way around it: *periodic maintenance*, *need to do*,
+   * *major projects*. The flat order is still the fallback, because a docket
+   * with no sections has to work exactly as it did.
+   */
+  async sections(): Promise<readonly Section[]> {
+    const segment = await this.segment(ONLY_SEGMENT)
+    return outline(segment.body)
+  }
+
   async #scan(): Promise<readonly ScannedMatter[]> {
     const segment = await this.segment(ONLY_SEGMENT)
     return scanMatters(segment.body)
+  }
+
+  async #blocks(): Promise<readonly ScannedBlock[]> {
+    const segment = await this.segment(ONLY_SEGMENT)
+    return scanBlocks(segment.body)
   }
 
   async #find(id: string): Promise<ScannedMatter> {
@@ -108,37 +137,57 @@ export class DocketDocument extends SegmentedDocument {
    * rate — the one measurement that says whether the graveyard tier does
    * anything — is unreconstructible.
    */
-  async add(name: string, when: When = STANDING, taken?: TakenIds): Promise<string> {
+  async add(
+    name: string,
+    when: When = STANDING,
+    taken?: TakenIds,
+    section = '',
+  ): Promise<string> {
     const said = name.trim()
     if (said === '') throw new Error('a matter needs a name')
-    const segment = await this.segment(ONLY_SEGMENT)
     const id = unusedMatterId(new Set([
       ...(await this.matters()).flatMap(m => (m.id === null ? [] : [m.id])),
       ...(taken === undefined ? [] : [...(await taken())]),
     ]))
     const matter: Matter = {
-      id, name: said, when, tags: [], owner: null, link: null, triggers: [],
+      id, name: said, when, tags: [], owner: null, link: null, triggers: [], notes: [],
       arrived: nowSeconds(), declines: 0, occurrence: null, extra: [],
     }
+    // **Where it goes is said, never guessed.** Appending to the end of the file
+    // was right while a docket was one flat list and became wrong the moment it
+    // could be divided: the end of the file is inside the *last* section, so
+    // adding *fix the fence* to a docket whose last heading is *major projects*
+    // would have filed it as one, silently, in the middle of a conversation. A
+    // section is a claim; adding a matter makes no claim, so the default is the
+    // undivided run and anything else is asked for.
+    const { at, level } = await this.#endOf(section)
+    const body = (await this.segment(ONLY_SEGMENT)).body
     // **A blank line between blocks, always.** The file is read by people and by
     // other markdown renderers, and two headings with nothing between them read
     // as one run-on section in both.
-    const body = segment.body
-    const gap = body === '' || body.endsWith('\n\n') ? '' : body.endsWith('\n') ? '\n' : '\n\n'
-    const at = body.length
+    const lead = at === 0 || body.slice(0, at).endsWith('\n\n')
+      ? ''
+      : body.slice(0, at).endsWith('\n') ? '\n' : '\n\n'
+    const tail = at >= body.length ? '\n' : '\n\n'
     await this.replace([{
       span: { begin: this.at(ONLY_SEGMENT, at), end: this.at(ONLY_SEGMENT, at) },
-      payload: `${gap}${matterBlock(matter)}\n` as DocumentText,
+      payload: `${lead}${matterBlock(matter, level)}${tail}` as DocumentText,
     }], 'operation')
     return id
   }
 
-  /** Rewrite one matter's block. Every field verb goes through here. */
+  /**
+   * Rewrite one matter's block. Every field verb goes through here.
+   *
+   * **At the depth it was found at**, never at the default: a matter inside a
+   * section is a heading level deeper, and a verb that reset that would flatten
+   * the file's outline as a side effect of editing an owner.
+   */
   async #write(id: string, change: (was: Matter) => Matter): Promise<void> {
     const found = await this.#find(id)
     await this.replace([{
       span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, found.to) },
-      payload: matterBlock(change(found.matter)) as DocumentText,
+      payload: matterBlock(change(found.matter), found.level) as DocumentText,
     }], 'operation')
   }
 
@@ -218,6 +267,19 @@ export class DocketDocument extends SegmentedDocument {
   }
 
   /**
+   * Rewrite the prose under a matter.
+   *
+   * **Replaced wholesale, not appended to**, which is the task list's shape for
+   * the same reason: the surface edits a block of text and hands back what it
+   * now says, so there is one path and no merge to get wrong. Empty lines are
+   * dropped — a note of nothing is no note.
+   */
+  async setNotes(id: string, notes: readonly string[]): Promise<void> {
+    const kept = notes.map(line => line.trim()).filter(line => line !== '')
+    await this.#write(id, was => ({ ...was, notes: kept }))
+  }
+
+  /**
    * Take a matter off this docket, block and all.
    *
    * **The delete half of a move** (D71). The append half belongs to whoever is
@@ -259,6 +321,189 @@ export class DocketDocument extends SegmentedDocument {
    */
   async decline(id: string): Promise<void> {
     await this.#write(id, was => ({ ...was, declines: was.declines + 1 }))
+  }
+
+  // ── sections (MH1) ─────────────────────────────────────────
+
+  /**
+   * Where a matter goes and what order things sit in, as text moves.
+   *
+   * **A move is a splice, not a re-render.** The block that moves is written
+   * out afresh — it is the one being touched — and every other block is left
+   * exactly as its bytes were, which is the property the whole format rests on.
+   * The two edits go in ONE `replace()` so a move is one undo, not a
+   * disappearance followed by a reappearance.
+   */
+  async #splice(id: string, insertAt: number, level: number): Promise<void> {
+    const blocks = await this.#blocks()
+    const which = blocks.findIndex(b => b.kind === 'matter' && b.matter.id === id)
+    const found = blocks[which]
+    if (found === undefined || found.kind !== 'matter') {
+      throw new Error(`${this.id} has no matter ${id}`)
+    }
+    // Take the blank run after the block with it, so a move leaves no hole and
+    // lands with the same separation it had.
+    const gapEnd = blocks[which + 1]?.from ?? (await this.segment(ONLY_SEGMENT)).body.length
+    if (insertAt > found.from && insertAt < gapEnd) return // already there
+    const body = (await this.segment(ONLY_SEGMENT)).body
+    const tail = insertAt >= body.length ? '' : '\n\n'
+    const lead = insertAt >= body.length && body !== '' && !body.endsWith('\n\n')
+      ? (body.endsWith('\n') ? '\n' : '\n\n')
+      : ''
+    await this.replace([
+      {
+        span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, gapEnd) },
+        payload: '' as DocumentText,
+      },
+      {
+        span: { begin: this.at(ONLY_SEGMENT, insertAt), end: this.at(ONLY_SEGMENT, insertAt) },
+        payload: `${lead}${matterBlock(found.matter, level)}${tail}` as DocumentText,
+      },
+    ], 'operation')
+  }
+
+  /** Where a section's matters end — the next section heading, or the end. */
+  async #endOf(section: string): Promise<{ at: number; level: number }> {
+    const blocks = await this.#blocks()
+    const body = (await this.segment(ONLY_SEGMENT)).body
+    if (section === '') {
+      // The unnamed run is everything above the first heading.
+      const first = blocks.find(b => b.kind === 'section')
+      return { at: first?.from ?? body.length, level: MATTER_LEVEL }
+    }
+    const start = blocks.findIndex(b => b.kind === 'section' && b.name === section)
+    if (start < 0) throw new Error(`${this.id} has no section called ${section}`)
+    const next = blocks.slice(start + 1).find(b => b.kind === 'section')
+    return { at: next?.from ?? body.length, level: MATTER_LEVEL + 1 }
+  }
+
+  /**
+   * Add a section, at the end.
+   *
+   * **At the end and empty, because that is the gesture**: somebody says *we
+   * should have one for major projects* and then puts things in it. Inserting it
+   * anywhere else would be guessing at an order nobody has given yet, and
+   * sections can be reordered by moving their matters.
+   */
+  async addSection(name: string): Promise<string> {
+    const said = name.trim()
+    if (said === '') throw new Error('a section needs a name')
+    if ((await this.sections()).some(s => s.name === said)) {
+      throw new Error(`this docket already has a section called ${said}`)
+    }
+    const body = (await this.segment(ONLY_SEGMENT)).body
+    const gap = body === '' || body.endsWith('\n\n') ? '' : body.endsWith('\n') ? '\n' : '\n\n'
+    const at = body.length
+    await this.replace([{
+      span: { begin: this.at(ONLY_SEGMENT, at), end: this.at(ONLY_SEGMENT, at) },
+      payload: `${gap}${sectionHeading(said)}\n` as DocumentText,
+    }], 'operation')
+    return said
+  }
+
+  async renameSection(name: string, to: string): Promise<void> {
+    const said = to.trim()
+    if (said === '') throw new Error('a section needs a name')
+    const found = (await this.#blocks()).find(b => b.kind === 'section' && b.name === name)
+    if (found === undefined) throw new Error(`${this.id} has no section called ${name}`)
+    await this.replace([{
+      span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, found.to) },
+      payload: sectionHeading(said) as DocumentText,
+    }], 'operation')
+  }
+
+  /**
+   * Take a section heading away and keep everything that was under it.
+   *
+   * **Deleting a heading must never delete a house.** The matters stay exactly
+   * where they are in the file and join whatever now contains them — the section
+   * above, or the undivided run at the top — and they are re-written only to fix
+   * their heading depth, so the outline stays true. A section is a way of
+   * reading, so removing one is a reading change and nothing else.
+   */
+  async removeSection(name: string): Promise<void> {
+    const blocks = await this.#blocks()
+    const which = blocks.findIndex(b => b.kind === 'section' && b.name === name)
+    const found = blocks[which]
+    if (found === undefined || found.kind !== 'section') {
+      throw new Error(`${this.id} has no section called ${name}`)
+    }
+    const body = (await this.segment(ONLY_SEGMENT)).body
+    const gapEnd = blocks[which + 1]?.from ?? body.length
+    // Whatever contains them now decides how deep they are written.
+    const above = blocks.slice(0, which).filter(b => b.kind === 'section')
+    const level = above.length > 0 ? MATTER_LEVEL + 1 : MATTER_LEVEL
+    const orphans: ScannedMatter[] = []
+    for (const block of blocks.slice(which + 1)) {
+      if (block.kind === 'section') break
+      orphans.push(block)
+    }
+    await this.replace([
+      {
+        span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, gapEnd) },
+        payload: '' as DocumentText,
+      },
+      ...orphans
+        .filter(m => m.level !== level)
+        .map(m => ({
+          span: { begin: this.at(ONLY_SEGMENT, m.from), end: this.at(ONLY_SEGMENT, m.to) },
+          payload: matterBlock(m.matter, level) as DocumentText,
+        })),
+    ], 'operation')
+  }
+
+  /**
+   * Put a matter in a section — `''` for the undivided run at the top.
+   *
+   * At the end of that section, or immediately before `before` if one is named,
+   * which is how *put this above that one* is expressed.
+   */
+  async moveMatter(id: string, section: string, before?: string): Promise<void> {
+    const { at, level } = await this.#endOf(section)
+    if (before === undefined) {
+      await this.#splice(id, at, level)
+      return
+    }
+    const target = (await this.#blocks()).find(b => b.kind === 'matter' && b.matter.id === before)
+    if (target === undefined) throw new Error(`${this.id} has no matter ${before}`)
+    await this.#splice(id, target.from, level)
+  }
+
+  /**
+   * Move a matter one place up or down **inside its own section**.
+   *
+   * **The gesture is relative because the intention is** — *this one first* —
+   * and stopping at the section edge is the point rather than a limitation:
+   * nudging a matter out of *periodic maintenance* and into *major projects* by
+   * pressing the same key one more time would be a reclassification nobody
+   * asked for. Crossing a boundary is `moveMatter`, which says where.
+   *
+   * Answers whether it moved, so a surface can leave the control alone at the
+   * ends instead of offering a gesture that does nothing.
+   */
+  async nudgeMatter(id: string, delta: number): Promise<boolean> {
+    if (delta === 0) return false
+    const blocks = await this.#blocks()
+    const which = blocks.findIndex(b => b.kind === 'matter' && b.matter.id === id)
+    if (which < 0) throw new Error(`${this.id} has no matter ${id}`)
+    const found = blocks[which] as ScannedBlock & { kind: 'matter' }
+    // Its own section: the run of matters bounded by section headings either way.
+    let first = which
+    while (first > 0 && (blocks[first - 1] as ScannedBlock).kind === 'matter') first -= 1
+    let last = which
+    while (last + 1 < blocks.length && (blocks[last + 1] as ScannedBlock).kind === 'matter') last += 1
+    const wanted = which + (delta < 0 ? -1 : 1)
+    if (wanted < first || wanted > last) return false
+    const neighbour = blocks[wanted] as ScannedBlock
+    if (delta < 0) {
+      await this.#splice(id, neighbour.from, found.level)
+    } else {
+      // After the neighbour means at the start of whatever follows it.
+      const after = blocks[wanted + 1]?.from
+        ?? (await this.segment(ONLY_SEGMENT)).body.length
+      await this.#splice(id, after, found.level)
+    }
+    return true
   }
 
   // ── the two that make new documents, which this kind does not ──

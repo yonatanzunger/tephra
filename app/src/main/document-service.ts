@@ -31,7 +31,7 @@ import {
 import { attach } from './x/documents/attachments.ts'
 import { nameOf } from '../shared/slug.ts'
 import { DocketDocument } from './x/documents/kinds/docket.ts'
-import { parseWhen, STANDING, type Matter } from '../shared/kinds/docket.ts'
+import { parseWhen, STANDING, type Matter, type Section } from '../shared/kinds/docket.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { DayClock } from './x/day-clock.ts'
 import { systemZone } from './system-zone.ts'
@@ -1663,11 +1663,17 @@ export class DocumentService {
    * and the renderer has no business owning a second copy of it (T16's rule,
    * applied to a second grammar).
    */
-  async docketAdd(id: DocumentId, name: string, when?: string): Promise<string> {
+  async docketAdd(
+    id: DocumentId,
+    name: string,
+    when?: string,
+    section?: string,
+  ): Promise<string> {
     const said = when === undefined ? STANDING : parseWhen(when)
     if (said === null) throw new Error(`${when} is not a date, a range, or a rule`)
     const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).add(name, said, this.#takenMatterIds)),
+      this.#corpus.use(id, doc =>
+        (doc as DocketDocument).add(name, said, this.#takenMatterIds, section)),
     )
     this.#touched()
     return made
@@ -1705,6 +1711,60 @@ export class DocumentService {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
     this.#touched()
+  }
+
+  /** The prose under a matter. Nothing in it is parsed (D56's rule, carried). */
+  async docketSetNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setNotes(matter, notes)))
+    this.#touched()
+  }
+
+  // ── sections on a docket (MH1) ──────────────────────────────
+
+  /** The docket divided into its sections, which is how it is read. */
+  async docketSections(id: DocumentId): Promise<readonly Section[]> {
+    return this.#corpus.use(id, doc => (doc as DocketDocument).sections())
+  }
+
+  async docketAddSection(id: DocumentId, name: string): Promise<string> {
+    const made = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).addSection(name)))
+    this.#touched()
+    return made
+  }
+
+  async docketRenameSection(id: DocumentId, name: string, to: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).renameSection(name, to)))
+    this.#touched()
+  }
+
+  /** Take the heading away and keep everything that was under it. */
+  async docketRemoveSection(id: DocumentId, name: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).removeSection(name)))
+    this.#touched()
+  }
+
+  /** Into a section — `''` is the undivided run — optionally above one matter. */
+  async docketMoveMatter(
+    id: DocumentId,
+    matter: string,
+    section: string,
+    before?: string,
+  ): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).moveMatter(matter, section, before)))
+    this.#touched()
+  }
+
+  /** One place up or down inside its own section. False at the ends. */
+  async docketNudgeMatter(id: DocumentId, matter: string, delta: number): Promise<boolean> {
+    const moved = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).nudgeMatter(matter, delta)))
+    if (moved) this.#touched()
+    return moved
   }
 
   /** A run-up on a matter: *this long before, do this* (H4). */

@@ -1,7 +1,7 @@
 # The Horizon and Dockets — Roadmap
 
 **Design: `solution/horizon.md`. Requirements: `goal/horizon.md`. Decisions:
-D68–D72.** Feature-level; the architectural design happens per phase, at the
+D68–D75.** Feature-level; the architectural design happens per phase, at the
 keyboard.
 
 Six phases. **Usable at the end of MH1**, and directly useful for household
@@ -42,7 +42,8 @@ house, a set of speaking engagements or a list of blog post ideas goes on one
 naturally, and can be worked as a group.
 
 **In:** the `docket` kind; the format (D72); the docket view and editing surface;
-matters carrying `when` as a date, a range, or nothing.
+matters carrying `when` as a date, a range, or nothing; **sections**, which
+divide a docket for reading and are the only arranging this kind has.
 
 **The cut line, set by the forcing event.** There is a household planning
 conversation in a few days, and it is what MH1 exists to serve — so what is in is
@@ -53,7 +54,39 @@ trigger *editing* (MH3) and anything that generates or reminds. With a deadline
 the temptation is to reach for MH3; the meeting does not need it and MH1 does not
 get better by carrying it.
 
-**Out:** the horizon, generation, recurrence, the review flow, the root dockets.
+**Out:** the horizon, generation, the review flow, the root dockets.
+
+> **Amended 2026-09-10, by the forcing event itself.** The cut line above was
+> argued and then overturned within the phase, which is worth leaving visible
+> rather than tidying away. It said *everything else waits, including trigger
+> editing (MH3) and anything that generates or reminds*, and concluded: *the
+> meeting does not need it and MH1 does not get better by carrying it.*
+>
+> The first half held and the second did not. **Setting up a recurrence, editing
+> a run-up, and writing a note on a matter are all in MH1**, because the meeting
+> needs to *say* "every ninety days, starting in October" and "the quote was
+> 480" — and a surface that cannot hold either sends the decision back to paper,
+> which is the thing dockets exist to stop.
+>
+> **What that did not pull in is the part the argument was actually right
+> about:** nothing generates and nothing fires. A recurrence is *recorded* here
+> and *acted on* in MH3 — so MH1 remains a filing cabinet, exactly as described
+> below, and the hazard MH3 has to test (a month away yielding one task, not
+> thirty) is untouched.
+>
+> **Sections came in the same way, and from the same forcing event**: a docket's
+> claim is completeness, so it is long by design, and a flat list of everything
+> true about a house is the artifact nobody reads — it would satisfy H2 and
+> defeat it. Recorded as D75, including the part that had teeth: a section is
+> told from a matter by content rather than heading depth, because a depth rule
+> would have read every docket already written in this phase as a file of empty
+> sections.
+>
+> **And one field came out of it that MH3 could not have added later.** `every
+> 90d` alone is not a schedule until you know ninety days *from what*, so
+> `When`'s `every` and `after` forms carry an optional **anchor**. Guessing it in
+> MH3 from the matter's arrival date is wrong twice over, because `adopt`
+> re-stamps that date. Un-backfillable, so it goes in with the format.
 
 **This is the phase that serves a planning conversation**, which is why it leads.
 Open `House`, see everything true about the house, edit it together. Generation
@@ -72,11 +105,13 @@ un-backfillable fields — **id, arrived-on, decline count, occurrence pointer**
 go in at the moment the first docket file is written. The mechanisms over them
 arrive in MH3 and MH5; the fields cannot.
 
-**Triggers: representation now, editing in MH3.** A trigger is *not*
-un-backfillable — a matter that gains one later loses nothing — but D72's whole
-justification for a structured format **is** triggers, so a format that cannot
-hold them would force a migration in MH3. Design the representation here and
-build its editing there. The format is committed once; the UI follows the need.
+**Triggers: representation now, and — as it turned out — editing now too.** A
+trigger is *not* un-backfillable — a matter that gains one later loses nothing —
+but D72's whole justification for a structured format **is** triggers, so a
+format that cannot hold them would force a migration in MH3. The plan was to
+design the representation here and build its editing there; the editing came
+here as well, for the reason in the amendment above. **What MH3 still owns is
+the firing**, which is the hard half.
 
 **This is the largest phase, and it is first deliberately.** An earlier draft led
 with the horizon precisely because a new document kind is a big first slice. A
@@ -122,7 +157,11 @@ every docket in one date-ordered list, which a single docket's view cannot give.
 **End condition:** a docket can trigger both tasks and horizon items, and
 recurrence works. **The system is directly usable for household management.**
 
-**In:** triggers (*offset → effect*); generation keyed to `clockDay`, idempotent
+**Narrowed by MH1, 2026-09-10.** Authoring a trigger and anchoring a recurrence
+shipped in MH1 (see its amendment). What remains here is everything that *acts*
+on them, which was always the substance of this phase.
+
+**In:** triggers (*offset → effect*) **firing**; generation keyed to `clockDay`, idempotent
 and unattended — a background pass at midnight **and** the same pass at startup,
 since the app is not running at midnight most nights; provenance on generated
 tasks; recurrence rules; completion flowing back along an **explicitly
