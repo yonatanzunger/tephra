@@ -163,9 +163,15 @@ It must also recompute cheaply, at every day rollover and whenever a date
 changes.
 
 **The full horizon spans dockets and the task list**, so it is **a query, not a
-document**. Nothing is authored in it. It is the second instance of the existing
-filtered-view mechanism and takes its read-only fork, so it settles nothing about
-whether filtered views can be edited.
+document**. Nothing is authored in it, and it settles nothing about whether
+filtered views can be edited.
+
+**It is a location, not a panel** (D74) — the second one, after the link
+directory. D66's test is whether following a row means you are done with the
+list, and here it does not *because the list is usually left open in a window of
+its own*: it gets a `NavTarget` and a ⌘-number beside ⌘0 and ⌘1. That is also
+what carries most of the compact strip's job in practice, long before the strip
+reaches the frame.
 
 **Working a docket is a genuine editing surface read by two people**, so the
 docket needs **its own view, shipping with the format rather than after it**.
@@ -235,9 +241,27 @@ inferred, which is what keeps merges safe.
 
 ## The rules that govern behaviour
 
-**Generation is idempotent over elapsed time.** It produces what *should be live
-now*, not one item per day missed. Without that rule a month away from the desk
-yields thirty air-filter tasks.
+**Generation is idempotent, and that is the load-bearing rule.** It produces what
+*should be live now* — never one item per day missed, and never a second copy of
+something it already made. Without it a month away from the desk yields thirty
+air-filter tasks.
+
+**The mechanism is deliberately left open; the property is not.** It can be
+derived — H13 puts provenance on every generated item and the corpus index
+already reads every file, so *does a task for this matter and this occurrence
+exist?* is answerable without storing anything — or it can be recorded on the
+matter. Deriving keeps one copy of the truth and survives someone hand-editing a
+day file; recording is cheaper to read. Settle it at the keyboard.
+
+**Everything is keyed to `clockDay`**, not `writingDay`: *three days before the
+talk* does not depend on when anybody was typing (D62 gives both dates for a
+reason, and this is the case that wants the calendar one).
+
+**It runs unattended, and therefore must also catch up.** The intended shape is a
+background pass at midnight with no user-visible moment at all — and the app is
+not running at midnight most nights, so the same pass must run at startup and
+produce the same answer. That is idempotence-over-elapsed-time arriving from a
+second direction, and it is why the away-for-a-month test is the real one.
 
 **The recurrence is on the matter; the work it generates is not.** The air filter
 is one durable matter with a history; each occurrence mints a **fresh,
@@ -247,7 +271,9 @@ touching the recurrence.
 **Completion flows backward.** Because occurrences are independent, a matter
 cannot recover *when did this last happen* from a task's history — so one
 generated task per occurrence is designated as the one whose completion advances
-the matter's clock. The same link tells the matter whether an occurrence is still
+the matter's clock. **The designation is explicit and authored**, not inferred
+from trigger order: a matter with a document at −60d and tasks at −14d and −2d
+has to say which one closing means *this happened*. The same link tells the matter whether an occurrence is still
 outstanding, which is what stops an uncompleted task from either duplicating
 every cycle or silently ending the recurrence.
 
@@ -274,13 +300,45 @@ on.**
 line. The new one is `move(id, toDocket)`, a delete plus an append in which the
 matter **keeps its id**.
 
-**`backlog` leaves `TodoStatus`**, which drops from six members to five. With a
-real destination, *still here but not active* need not be a status.
+**`backlog` stays a status, and changes meaning** — *corrected 2026-09-10; an
+earlier draft had it leaving `TodoStatus`, and that would have been a corruption
+path.* `[>]` is written into day files, past day files are never rewritten, and
+the parser is strict: *a bracket we do not know is not an item*. Dropping the
+glyph would make every historical backlogged line stop parsing as an item at all,
+which costs three things — `tephra:todo/<id>` would stop resolving for exactly
+the items D71 promises to keep continuous; the history scrub would render those
+days as plain text; and **`unusedItemId` mints against `CorpusIndex.itemIds()`,
+so their ids would leave the taken set and a new item could collide with a real
+historical one.**
 
-**The horizon is a scan, not an index** — *proposed*. Dockets are small — a few
-hundred matters over a lifetime — and every *live* task is in today's file by
-construction, so the horizon reads the dockets plus one day file. An index would
-arrive years before the problem it solves.
+**What actually changes is what `[>]` means: transferred to a docket.** Which is
+what the glyph already said — the notation was chosen because `>` is *migrated
+forward* — so this is the same mark with a real destination behind it at last.
+Two consequences:
+
+- **It becomes a resolved state.** `isLive` already excludes it, correctly and
+  unchanged. What flips is `resolvedByTag`, which today skips it with *"backlogged
+  is not resolved — it is waiting, and it has its own drawer."* It is not waiting
+  any more; it has gone somewhere, and that is resolution.
+- **`CorpusIndex.backlog()` retires rather than changing.** The drawer was a
+  query over items in a waiting status; the docket is a document you open. The
+  status stays; the query it fed does not.
+
+**Which makes MH5's migration much smaller than it looked**: no file is
+rewritten, no glyph changes, and only *live* backlogged items need moving into
+the miscellaneous docket.
+
+**The horizon is its own API, and deliberately not the search engine** — *decided,
+D73*. Behind the API it is a scan: dockets are small — a few hundred matters over
+a lifetime — and every *live* task is in today's file by construction, so the
+horizon reads the dockets plus one day file. An index would arrive years before
+the problem it solves.
+
+**It is two queries interleaved, not one**: *items on the task list coming due*,
+and *matters on dockets coming up*. Both are date-ordered projections, and
+neither is a text search — so they share nothing useful with D65's engine beyond
+the word *query*. An API in front of them is what lets the implementation be a
+scan today and a persisted artifact later without anything above noticing.
 
 **Reorient is mostly assembly** — *proposed*. Movement 2 is the existing walk
 unchanged, movement 1 is the horizon query at a small limit, and movement 3

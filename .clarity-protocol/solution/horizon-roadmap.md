@@ -16,9 +16,19 @@ each is a migration rather than a build:
 
 | shipped | becomes | phase |
 |---|---|---|
-| the due-soon band above the task list | rows on the compact horizon | MH4 |
+| the due-soon band above the task list | rows on the compact horizon | MH2, in place; relocated MH4 |
 | overall-todo files (MT7) | dockets | MH5 |
-| the `backlog` status | a move to the miscellaneous docket | MH5 |
+| the backlog **drawer** (`CorpusIndex.backlog()`) | the miscellaneous docket | MH5 |
+
+**The `backlog` STATUS is not superseded — it is reinterpreted, and nothing on
+disk changes.** `[>]` stays in the glyph table and in `TodoStatus`, because past
+day files hold those lines forever and the parser treats an unknown bracket as
+*not an item*: dropping the glyph would stop historical backlogged lines parsing
+at all, which would break `tephra:todo/<id>` for exactly the items D71 promises
+to keep continuous and — worse — drop their ids out of the set `unusedItemId`
+mints against. What changes is the *meaning*: `[>]` becomes **transferred to a
+docket**, which is what the notation always said, and it counts as **resolved**
+rather than waiting. One line of `resolvedByTag` inverts; no file is rewritten.
 
 **The band is the one to be careful with.** It is used every morning, so the
 horizon must be good enough to replace it *before* it comes out. The staging
@@ -33,6 +43,15 @@ naturally, and can be worked as a group.
 
 **In:** the `docket` kind; the format (D72); the docket view and editing surface;
 matters carrying `when` as a date, a range, or nothing.
+
+**The cut line, set by the forcing event.** There is a household planning
+conversation in a few days, and it is what MH1 exists to serve — so what is in is
+what a conversation needs: a docket file, a view legible to someone not driving
+the keyboard, add and edit, tags, an owner, `when` as a date or a range or
+nothing, and the four un-backfillable fields. **Everything else waits**, including
+trigger *editing* (MH3) and anything that generates or reminds. With a deadline
+the temptation is to reach for MH3; the meeting does not need it and MH1 does not
+get better by carrying it.
 
 **Out:** the horizon, generation, recurrence, the review flow, the root dockets.
 
@@ -66,8 +85,18 @@ real planning session is worth the trade, but the trade is real.
 ## MH2 — The horizon
 
 **End condition:** the horizon exists, drawing on **both** its sources — matters
-on dockets, and items coming due on the task list. Its **full view** is new and
-dedicated. Its **compact view is the existing due-soon band**, unmoved.
+on dockets, and items coming due on the task list. Its **full view** is new,
+dedicated, and **a location with a ⌘-number** (D74), expected to sit open in a
+window of its own. Its **compact view is the existing due-soon band**, extended
+in place.
+
+**Reusing the band's space is the first cut, and it narrows H8 on purpose.** The
+band lives inside the task surface, so *"present whatever you are doing"* becomes
+*"present when you are in the task list"* until MH4 moves it. That is a real
+weakening of what H8 promises — H8 is what the design says makes a skipped
+reorient safe — and it is affordable here for two reasons: the task view is where
+a great deal of time is already spent, and the full horizon being a window left
+open covers much of the rest. **Recorded so MH4 is not considered optional.**
 
 **In:** the query and its shape; both sources; the full horizon view,
 date-ordered, read-only.
@@ -93,9 +122,11 @@ every docket in one date-ordered list, which a single docket's view cannot give.
 **End condition:** a docket can trigger both tasks and horizon items, and
 recurrence works. **The system is directly usable for household management.**
 
-**In:** triggers (*offset → effect*); generation at the day rollover, idempotent
-over elapsed time; provenance on generated tasks; recurrence rules; completion
-flowing back; outstanding-occurrence handling.
+**In:** triggers (*offset → effect*); generation keyed to `clockDay`, idempotent
+and unattended — a background pass at midnight **and** the same pass at startup,
+since the app is not running at midnight most nights; provenance on generated
+tasks; recurrence rules; completion flowing back along an **explicitly
+designated** occurrence; outstanding-occurrence handling.
 
 **Out:** the document-template trigger — the least-evidenced of the three
 projections, since the trip template is instantiated by hand today. Park it at
@@ -133,9 +164,14 @@ safe — finally holds.
 **miscellaneous** docket, the docket **review flow** exists, and decline counts
 begin accruing.
 
-**In:** root dockets; `move`, preserving identity; `backlog` leaving
-`TodoStatus`; the review session; migration of existing backlogged items and of
-MT7's overall-todo files.
+**In:** root dockets; `move`, preserving identity; `[>]` reinterpreted as
+*transferred* and counted as resolved; the review session; migration of the
+**live** backlogged items and of MT7's overall-todo files; `CorpusIndex.backlog()`
+retired.
+
+**The migration is smaller than it sounds.** No file is rewritten and no glyph
+changes — only items *currently* sitting in `[>]` need a home on the
+miscellaneous docket, and history is left exactly as it is.
 
 **Out:** the graveyard, deliberately — see MH6.
 

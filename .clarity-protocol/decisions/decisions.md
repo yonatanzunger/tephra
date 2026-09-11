@@ -3034,6 +3034,34 @@ and promoted from. D55's overall-todo file is a docket; the TODO backlog is the
 status and becomes a **move**, with the item keeping its id so its history stays
 continuous and `tephra:todo/<id>` still resolves.
 
+**Amended 2026-09-10, before any of it was built: `backlog` does NOT stop being a
+status.** It stays in `TodoStatus` and in the glyph table, and what changes is
+what `[>]` *means* — **transferred to a docket**, which is what the notation
+always said, now counting as **resolved** rather than waiting.
+
+**The draft's version would have been a corruption path, not a tidy-up.** `[>]`
+is written into day files; past day files are never rewritten (T2); and the item
+parser treats an unrecognised bracket as *not an item at all*. So removing the
+glyph would have:
+
+- stopped `tephra:todo/<id>` resolving for precisely the items this decision
+  promises to keep continuous — the ones that were put down;
+- rendered those past days as plain text in the history scrub; and
+- **dropped their ids out of `CorpusIndex.itemIds()`, which is the set
+  `unusedItemId` mints against** — so a new item could be given an id that
+  already belongs to a historical one. That is the only one of the three that
+  costs data rather than display.
+
+**What is superseded is the backlog DRAWER, not the status**:
+`CorpusIndex.backlog()` was a query over items in a waiting status, and a docket
+is a document you open. The query retires; the mark stays. One line of
+`resolvedByTag` inverts — it currently skips `[>]` with *"backlogged is not
+resolved — it is waiting, and it has its own drawer"*, and it is not waiting any
+more.
+
+**And the migration shrinks accordingly**: no file is rewritten, no glyph changes,
+and only the *live* backlogged items need a home.
+
 **Why it is not a stretch.** *A kind with one distinguished instance at the root*
 is the pattern already used three times — one stream is *the* notebook, the
 `.todo` at the root is *the* list, `sections/_index.fileset.md` is *the*
@@ -3148,3 +3176,64 @@ against real code.
 **What would reopen this.** Triggers turning out, in use, to be rare enough that
 almost every matter has one or none — in which case the flat markdown form wins
 and this type rejoins the syntax family.
+
+## D73: The horizon is its own API, and deliberately not the search engine
+
+**Date:** 2026-09-10
+**Status:** decided
+**Design:** `solution/horizon.md`. **Answers:** a question raised reading it.
+
+**Decision.** The horizon is served by an **API of its own**, whose
+implementation is free to be a scan now and a persisted artifact later. Behind it
+are **two queries interleaved** — items on the task list coming due, and matters
+on dockets coming up — and it does **not** go through D65's query engine.
+
+**Why not reuse D65**, which was the obvious thing to ask. On paper a horizon row
+is *everything dated in a window*, which is a scope-only query with a date range
+and no phrase — a shape the engine already supports and already orders
+chronologically. But the engine's product is a `Hit`: a location, a plain line and
+a match range, built for *finding text you remember writing*. A horizon row is a
+`when`, a name and a provenance, and most of them are not lines of prose at all.
+Making one engine serve both would mean distorting `Hit` to carry structured
+fields it has no use for, which is a worse outcome than two query paths that share
+nothing but the word.
+
+**And the API is the part that matters**, not the scan behind it. Dockets are
+small — a few hundred matters over a lifetime — and every *live* task is in
+today's file by construction, so a scan of the dockets plus one day file is the
+whole implementation. An index would arrive years before the problem it solves;
+an API means it can arrive without anything above it noticing.
+
+**This project's preference for one mechanism is the reason to record the
+exception.** The rule that has paid repeatedly — one notation, one scanner, one
+matcher — applies where the *shape* genuinely matches. Here it does not, and
+saying so explicitly is what stops a later reader assuming the omission was an
+oversight.
+
+## D74: The full horizon is a location with a window of its own
+
+**Date:** 2026-09-10
+**Status:** decided
+**Design:** `solution/horizon.md`. **Applies:** D66's test.
+
+**Decision.** The **full horizon is a location** — a `NavTarget`, with a
+⌘-number beside ⌘0 (the notebook) and ⌘1 (the task list) — and is expected to sit
+open in a window of its own. The **compact horizon is neither**: it is a strip,
+and for its first cut it reuses the space the due-soon band already occupies
+inside the task surface.
+
+**Why a location rather than a panel**, which is the distinction MS4 had to
+discover the hard way. D66's test is *whether following an entry means you are
+done with the list*: the link directory is somewhere you go, search results are
+something you keep beside you while reading. The horizon looks like the second at
+first glance — you consult it while doing something else — but the answer is the
+first, **because the way it is kept beside you is a second window rather than a
+panel over the first one.** Left open on screen, a window needs no panel.
+
+**Which also carries most of the compact strip's job long before MH4.** H8 asks
+for a strip present whatever you are doing; a horizon window left open is present
+whatever the *other* window is doing. The strip's first cut can therefore live
+inside the task surface — narrowing H8 to *present when you are in the task list*
+— without the design's lapse-proofing collapsing in the meantime. **MH4 is still
+owed**, and the narrowing is recorded in the roadmap so it is not mistaken for
+done.
