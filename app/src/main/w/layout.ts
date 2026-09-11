@@ -254,6 +254,11 @@ export function kindOf(rel: RelPath): DocumentKind | null {
   const root = documentRoot(rel)
   if (root !== null) return directoryKind(root.slice(root.lastIndexOf('/') + 1))
   if (rel.endsWith('.fileset.md')) return 'fileset'
+  // **A docket is one file, so its kind is in its suffix** (MH1, D68) — the
+  // same arrangement `.todo.md` and `.fileset.md` use. It has no day
+  // segmentation to need a directory for: a docket is complete rather than
+  // paged, which is the property that distinguishes it (H2).
+  if (rel.endsWith('.docket.md')) return 'docket'
   // **Two shapes of one kind** (D55 as amended, MT7). A `.todo` DIRECTORY is a
   // daily list — carried, walked, with a working set that turns over. A single
   // `.todo.md` is an OVERALL list: the blog posts you mean to write, which does

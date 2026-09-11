@@ -197,3 +197,13 @@ export function isKnownZone(zone: string): boolean {
 // Where this machine thinks it is is deliberately NOT here. It is a question
 // about the machine rather than about dates, and asking it from a renderer gets
 // the zone that renderer's context was created in — see `main/system-zone.ts`.
+
+/**
+ * Seconds since the epoch.
+ *
+ * **Here rather than in a kind's grammar**, which is where it started: the item
+ * marker wanted it first (D56) and the matter marker wants it too (MH1), and a
+ * docket reaching into the task list's grammar for a clock would be a dependency
+ * that says something untrue about the two.
+ */
+export const nowSeconds = (): number => Math.floor(Date.now() / 1000)

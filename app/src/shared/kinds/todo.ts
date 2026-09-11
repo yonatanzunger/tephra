@@ -18,7 +18,7 @@
 // minted. That is the document's, in `main/x/documents/kinds/todo.ts`.
 
 import type { DateKey } from '../document-api.ts'
-import { addDays, weekdayOf } from '../dates.ts'
+import { addDays, nowSeconds, weekdayOf } from '../dates.ts'
 import { tagMark } from '../tags.ts'
 
 /**
@@ -408,7 +408,7 @@ export function unusedItemId(taken: ReadonlySet<string>, random: () => number = 
 }
 
 /** Seconds since the epoch: what the marker carries, and what T3 asks for. */
-export const nowSeconds = (): number => Math.floor(Date.now() / 1000)
+export { nowSeconds } from '../dates.ts'
 
 /**
  * One heading's worth of the list, when the list is grouped by tag (T8).

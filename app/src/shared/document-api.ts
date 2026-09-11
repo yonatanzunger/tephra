@@ -368,7 +368,7 @@ export interface DocumentChange {
 // Document
 // ─────────────────────────────────────────────────────────────
 
-export type DocumentKind = 'stream' | 'markdown' | 'todo' | 'fileset'
+export type DocumentKind = 'stream' | 'markdown' | 'todo' | 'fileset' | 'docket'
 
 /**
  * The stream's id: the `.stream` directory at the notebook's root (D59).
