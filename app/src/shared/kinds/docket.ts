@@ -114,6 +114,43 @@ export interface Trigger {
   readonly text: string
 }
 
+const OFFSET = /^([+-]?)(\d+)\s*([dwmy])$/
+
+/**
+ * An offset as somebody says it out loud, normalised to what the file holds.
+ *
+ * **A bare number is BEFORE**, and that is the whole reason this exists. The
+ * concept is a *run-up window* (H4) and every example in the requirements is
+ * ahead of the date — two weeks before a talk, months before a birthday, days
+ * before a filter. Making somebody type a minus sign to get the ordinary case is
+ * a tax on the common gesture, and `-` is punctuation nobody says in a
+ * conversation.
+ *
+ * **`+` is how you get the other one**, because it exists: *file the expenses
+ * three days after the trip.* Explicit, because it is the rare case and a silent
+ * one would be a surprise.
+ */
+export function parseOffset(text: string): string | null {
+  const found = OFFSET.exec(text.trim().toLowerCase())
+  if (found === null) return null
+  const n = Number(found[2])
+  if (n === 0) return null // an offset of nothing is a date, not a run-up
+  return `${found[1] === '+' ? '+' : '-'}${n}${found[3] as string}`
+}
+
+/** How long before, said the way a person would read it back. */
+export function spellOffset(offset: string): string {
+  const found = OFFSET.exec(offset)
+  if (found === null) return offset
+  const n = Number(found[2])
+  const unit = { d: 'day', w: 'week', m: 'month', y: 'year' }[found[3] as string] ?? found[3]
+  const plural = n === 1 ? unit : `${unit}s`
+  return `${n} ${plural} ${found[1] === '+' ? 'after' : 'before'}`
+}
+
+/** What a trigger does. `doc` is authored here and spent in MH3. */
+export const EFFECTS: readonly string[] = ['task', 'note', 'doc']
+
 export interface Matter {
   readonly id: string | null
   readonly name: string

@@ -573,6 +573,21 @@ export type DocketCommand =
   | { readonly kind: 'tag'; readonly docket: DocumentId; readonly matter: string; readonly subject: string }
   | { readonly kind: 'untag'; readonly docket: DocumentId; readonly matter: string; readonly subject: string }
   | { readonly kind: 'remove'; readonly docket: DocumentId; readonly matter: string }
+  /** A run-up: *this long before, do this* (H4). `offset` as a person types it. */
+  | {
+      readonly kind: 'addTrigger'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly offset: string
+      readonly text: string
+      readonly effect?: string
+    }
+  | {
+      readonly kind: 'removeTrigger'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly at: number
+    }
   /** The move (D71): out of one docket and onto another, keeping the id. */
   | {
       readonly kind: 'move'

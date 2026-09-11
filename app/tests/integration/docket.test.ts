@@ -344,3 +344,85 @@ test('renaming a docket keeps its matters, ids and all', async t => {
   assert.equal(matters[0]?.id, matter, 'a rename moves the file; it does not remake the contents')
   assert.deepEqual(matters[0]?.when, { kind: 'on', date: '2026-10-14' })
 })
+
+// ── run-ups on a matter (MH1, H4) ──────────────────────────
+
+test('THE RECONCILER: a matter carries its own run-up', async t => {
+  // H4's per-matter window is what lets a complete record project onto a short
+  // horizon — a birthday wants months, a filter wants days, and no global
+  // setting can say both.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Service the boiler', { kind: 'on', date: '2026-10-14' as never })
+  await doc.addTrigger(id, '2w', 'book the boiler service')
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.triggers, [
+    { offset: '-2w', effect: 'task', text: 'book the boiler service' },
+  ])
+  assert.match(await file(), /^triggers:\n- -2w task: book the boiler service$/m)
+})
+
+test('and several are kept in the order they FIRE, not the order typed', async t => {
+  // Two run-ups in the order they happened to be said is a list nobody can
+  // scan; earliest-first is the order they are read and the order they will run.
+  const { doc } = await docket(t)
+  const id = await doc.add('The ACM talk', { kind: 'on', date: '2026-11-12' as never })
+  await doc.addTrigger(id, '2w', 'draft the slides')
+  await doc.addTrigger(id, '2m', 'start the outline')
+  await doc.addTrigger(id, '3d', 'print the handout')
+  assert.deepEqual((await doc.matters())[0]?.triggers.map(t => t.offset), ['-2m', '-2w', '-3d'])
+})
+
+test('an offset after the date sorts last, because it fires last', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A trip', { kind: 'on', date: '2026-11-12' as never })
+  await doc.addTrigger(id, '+3d', 'file the expenses')
+  await doc.addTrigger(id, '1w', 'pack')
+  assert.deepEqual((await doc.matters())[0]?.triggers.map(t => t.offset), ['-1w', '+3d'])
+})
+
+test('a run-up that is not an offset is refused, and nothing is written', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('A thing')
+  await assert.rejects(() => doc.addTrigger(id, 'soon', 'do it'), /not an offset/)
+  await assert.rejects(() => doc.addTrigger(id, '2w', '   '), /needs to say what happens/)
+  assert.deepEqual((await doc.matters())[0]?.triggers, [])
+  assert.ok(!(await file()).includes('triggers:'))
+})
+
+test('dropping one leaves the others and the rest of the matter alone', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('The ACM talk', { kind: 'on', date: '2026-11-12' as never })
+  await doc.tagMatter(id, 'speaking')
+  await doc.addTrigger(id, '2w', 'draft the slides')
+  await doc.addTrigger(id, '3d', 'print the handout')
+  await doc.removeTrigger(id, 0)
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.triggers.map(t => t.text), ['print the handout'])
+  assert.deepEqual(matter?.tags, ['speaking'])
+  assert.deepEqual(matter?.when, { kind: 'on', date: '2026-11-12' })
+  assert.equal(matter?.id, id)
+})
+
+test('THE MEETING CASE: recurrence and its run-up, authored together', async t => {
+  // *The air filters need changing every ninety days, and remind me three days
+  // before* — which is the whole of what a planning conversation has to be able
+  // to say. Nothing fires until MH3; saying it is what MH1 owes.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Change the air filters', { kind: 'every', n: 90, unit: 'd' })
+  await doc.addTrigger(id, '3d', 'change the air filters #house')
+  const text = await file()
+  assert.match(text, /^when: every 90d$/m)
+  assert.match(text, /^- -3d task: change the air filters #house$/m)
+  // And the whole thing survives a reread, which is what makes it a record.
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.when, { kind: 'every', n: 90, unit: 'd' })
+  assert.equal(matter?.triggers.length, 1)
+})
+
+test('and completion-relative recurrence, which is the other household shape', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Service the car', { kind: 'after', n: 6, unit: 'm' })
+  await doc.addTrigger(id, '2w', 'book the service')
+  assert.match(await file(), /^when: 6m after done$/m)
+  assert.deepEqual((await doc.matters())[0]?.when, { kind: 'after', n: 6, unit: 'm' })
+})

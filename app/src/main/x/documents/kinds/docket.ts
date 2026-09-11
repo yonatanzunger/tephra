@@ -25,7 +25,7 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  matterBlock, parseMatter, scanMatters, STANDING, unusedMatterId,
+  matterBlock, parseMatter, parseOffset, scanMatters, STANDING, unusedMatterId,
   type Matter, type ScannedMatter, type When,
 } from '../../../../shared/kinds/docket.ts'
 import { nowSeconds } from '../../../../shared/dates.ts'
@@ -181,6 +181,43 @@ export class DocketDocument extends SegmentedDocument {
   }
 
   /**
+   * Add a run-up to a matter (H4, MH1).
+   *
+   * **The parameter that reconciles a complete record with a short horizon.** A
+   * docket holds everything, most of it dormant; the horizon has to stay short
+   * or it stops being read. The trigger is what decides when a matter crosses
+   * from one to the other, and it is per matter because prep time ranges from
+   * days for a filter to months for a birthday whose output is *sitting down and
+   * writing a plan*.
+   *
+   * **Offsets are normalised on the way in** (`parseOffset`): a bare `14d` is
+   * fourteen days *before*, because run-up is the case and a minus sign is
+   * punctuation nobody says out loud.
+   */
+  async addTrigger(id: string, offset: string, text: string, effect = 'task'): Promise<void> {
+    const at = parseOffset(offset)
+    if (at === null) throw new Error(`${offset} is not an offset like 3d, 2w or 6m`)
+    const said = text.trim()
+    if (said === '') throw new Error('a run-up needs to say what happens')
+    await this.#write(id, was => ({
+      ...was,
+      // **Sorted by when they fire**, earliest first, because that is the order
+      // they are read in and the order they will run in. Two run-ups on one
+      // matter in the order they happened to be typed is a list nobody can scan.
+      triggers: [...was.triggers, { offset: at, effect, text: said }]
+        .sort((a, b) => days(a.offset) - days(b.offset)),
+    }))
+  }
+
+  /** Take one off, by its place in the matter's own order. */
+  async removeTrigger(id: string, at: number): Promise<void> {
+    await this.#write(id, was => ({
+      ...was,
+      triggers: was.triggers.filter((_, n) => n !== at),
+    }))
+  }
+
+  /**
    * Take a matter off this docket, block and all.
    *
    * **The delete half of a move** (D71). The append half belongs to whoever is
@@ -236,3 +273,20 @@ export class DocketDocument extends SegmentedDocument {
 }
 
 export { parseMatter }
+
+/**
+ * An offset in days, for ordering only.
+ *
+ * **Approximate on purpose.** A month is thirty days here, which is wrong as a
+ * date and right as a sort key: the question is only *which of these fires
+ * first*, and nothing is computed from this. When MH3 turns an offset into a
+ * date it will do it against a real calendar.
+ */
+const PER = { d: 1, w: 7, m: 30, y: 365 } as const
+
+function days(offset: string): number {
+  const found = /^([+-])(\d+)([dwmy])$/.exec(offset)
+  if (found === null) return 0
+  const size = PER[found[3] as keyof typeof PER]
+  return Number(found[2]) * size * (found[1] === '-' ? -1 : 1)
+}

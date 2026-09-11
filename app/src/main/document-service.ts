@@ -1707,6 +1707,25 @@ export class DocumentService {
     this.#touched()
   }
 
+  /** A run-up on a matter: *this long before, do this* (H4). */
+  async docketAddTrigger(
+    id: DocumentId,
+    matter: string,
+    offset: string,
+    text: string,
+    effect?: string,
+  ): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).addTrigger(matter, offset, text, effect)))
+    this.#touched()
+  }
+
+  async docketRemoveTrigger(id: DocumentId, matter: string, at: number): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).removeTrigger(matter, at)))
+    this.#touched()
+  }
+
   async docketRemove(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
     this.#touched()

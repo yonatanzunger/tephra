@@ -206,6 +206,13 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'untag', docket, matter, subject }),
     remove: (docket: DocumentId, matter: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'remove', docket, matter }),
+    /** *This long before, do this.* `offset` as typed: `3d`, `2w`, `+1w` for after. */
+    addTrigger: (
+      docket: DocumentId, matter: string, offset: string, text: string, effect?: string,
+    ): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'addTrigger', docket, matter, offset, text, effect }),
+    removeTrigger: (docket: DocumentId, matter: string, at: number): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'removeTrigger', docket, matter, at }),
     /** Out of one docket and onto another, keeping the id (D71). */
     move: (docket: DocumentId, matter: string, to: DocumentId): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'move', docket, matter, to }),

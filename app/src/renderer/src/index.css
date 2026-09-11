@@ -1903,3 +1903,32 @@ body {
   border: 1px solid rgb(var(--border)); border-radius: 6px;
 }
 .docket-add:hover { background: rgb(var(--text) / .05); }
+
+/* A matter's run-ups (MH1, H4).
+ *
+ * **Indented under the matter, and always shown when there are any.** The
+ * run-up is what the conversation is actually about — *how long before this do
+ * we need to start* — so hiding it behind a click would keep it off the screen
+ * both people are reading (H3). */
+.docket-runups {
+  display: flex; flex-direction: column; gap: .2rem;
+  margin: .35rem 0 .1rem 1.1rem;
+  padding-left: .7rem;
+  border-left: 2px solid rgb(var(--border));
+}
+.docket-runup { display: flex; align-items: baseline; gap: .5rem; }
+/* Read back in words: *two weeks before — book the boiler service.* Tabular so
+   a column of them lines up when a matter has several. */
+.docket-runup-when {
+  flex: 0 0 auto; min-width: 7.5rem;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-muted));
+}
+.docket-runup-when.quiet { min-width: 0; }
+.docket-runup-what {
+  flex: 1; min-width: 0;
+  font-family: var(--reading-face, inherit);
+  font-size: calc(var(--reading-size, 20px) * .68);
+  color: rgb(var(--text));
+}
+.docket-field.narrow { min-width: 0; width: 4.5rem; }

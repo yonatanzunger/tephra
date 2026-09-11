@@ -11,8 +11,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  matterBlock, parseMatter, parseWhen, scanMatters, spellWhen, unusedMatterId, STANDING,
-  type Matter,
+  matterBlock, parseMatter, parseOffset, parseWhen, scanMatters, spellOffset, spellWhen,
+  unusedMatterId, STANDING, type Matter,
 } from '../../../src/shared/kinds/docket.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
 
@@ -249,4 +249,67 @@ test('ids are minted against what is already taken', () => {
   const made = unusedMatterId(taken, () => 0.5)
   assert.equal(made.length, 8)
   assert.ok(!taken.has(made))
+})
+
+// ── run-ups (MH1, H4) ──────────────────────────────────────
+
+test('THE COMMON CASE IS BEFORE, so a bare offset needs no minus sign', () => {
+  // The concept is a *run-up window* and every example in the requirements is
+  // ahead of the date. Making somebody type punctuation nobody says out loud to
+  // get the ordinary case is a tax on the common gesture.
+  assert.equal(parseOffset('14d'), '-14d')
+  assert.equal(parseOffset('2w'), '-2w')
+  assert.equal(parseOffset('6m'), '-6m')
+  assert.equal(parseOffset('1y'), '-1y')
+})
+
+test('and `+` is how you get the other one, explicitly', () => {
+  // Because it exists — *file the expenses three days after the trip* — and a
+  // silent version of the rare case would be a surprise.
+  assert.equal(parseOffset('+3d'), '+3d')
+  assert.equal(parseOffset('-3d'), '-3d')
+})
+
+test('an offset of nothing is a date, not a run-up', () => {
+  assert.equal(parseOffset('0d'), null)
+})
+
+test('and what is not an offset says so rather than guessing', () => {
+  for (const said of ['', 'soon', 'two weeks', '14', 'd14', '14 days']) {
+    assert.equal(parseOffset(said), null, said)
+  }
+})
+
+test('whitespace and case are forgiven, because this is typed while talking', () => {
+  assert.equal(parseOffset(' 2W '), '-2w')
+  assert.equal(parseOffset('2 w'), '-2w')
+})
+
+test('THE READBACK: an offset is read in words, not in notation', () => {
+  // This is the line somebody says out loud across a table.
+  assert.equal(spellOffset('-14d'), '14 days before')
+  assert.equal(spellOffset('-1d'), '1 day before')
+  assert.equal(spellOffset('-2w'), '2 weeks before')
+  assert.equal(spellOffset('-6m'), '6 months before')
+  assert.equal(spellOffset('+3d'), '3 days after')
+})
+
+test('and an offset it cannot read is shown as written rather than swallowed', () => {
+  assert.equal(spellOffset('whenever'), 'whenever')
+})
+
+test('a trigger round-trips through the block', () => {
+  const matter = parseMatter([
+    '## The ACM talk',
+    'when: 2026-11-12',
+    'triggers:',
+    '- -60d doc: from the talk template',
+    '- -14d task: draft the slides',
+    '- +3d task: file the expenses',
+    MARK,
+  ].join('\n'))
+  assert.ok(matter !== null)
+  assert.deepEqual(matter.triggers.map(t => `${t.offset} ${t.effect}`),
+    ['-60d doc', '-14d task', '+3d task'])
+  assert.deepEqual(parseMatter(matterBlock(matter))?.triggers, matter.triggers)
 })

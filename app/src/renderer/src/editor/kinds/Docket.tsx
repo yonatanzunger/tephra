@@ -27,7 +27,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
-import { NO_DATE, spellWhen, type Matter } from '../../../../shared/kinds/docket.ts'
+import { NO_DATE, spellOffset, spellWhen, type Matter } from '../../../../shared/kinds/docket.ts'
 import type { DocumentId } from '../../../../shared/document-api.ts'
 
 export function DocketSurface({
@@ -41,6 +41,15 @@ export function DocketSurface({
   const [adding, setAdding] = useState(false)
   /** Which field is open for editing: one at a time, so the row stays legible. */
   const [editing, setEditing] = useState<{ matter: string; field: Field } | null>(null)
+  /**
+   * Which matter's run-ups are open.
+   *
+   * **A matter that HAS one is always open**, because the run-up is the thing
+   * the conversation is about — *how long before this do we need to start* — and
+   * hiding it behind a click means it is not on the screen both people are
+   * reading (H3).
+   */
+  const [open, setOpen] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -89,6 +98,14 @@ export function DocketSurface({
             key={matter.id ?? matter.name}
             matter={matter}
             editing={editing?.matter === matter.id ? editing.field : null}
+            adding={open === matter.id}
+            onAdding={want => setOpen(want && matter.id !== null ? matter.id : null)}
+            onAddRunUp={(offset, text) => {
+              if (matter.id !== null) void act(window.tephra.docket.addTrigger(id, matter.id, offset, text))
+            }}
+            onDropRunUp={at => {
+              if (matter.id !== null) void act(window.tephra.docket.removeTrigger(id, matter.id, at))
+            }}
             onEdit={field => setEditing(field === null || matter.id === null ? null : { matter: matter.id, field })}
             onCommit={(field, value) => {
               setEditing(null)
@@ -150,15 +167,24 @@ function commit(docket: DocumentId, matter: string, field: Field, value: string)
 function Row({
   matter,
   editing,
+  adding,
+  onAdding,
   onEdit,
   onCommit,
   onRemove,
+  onAddRunUp,
+  onDropRunUp,
 }: {
   matter: Matter
   editing: Field | null
+  /** Whether the *add a run-up* fields are showing. The list shows regardless. */
+  adding: boolean
+  onAdding: (open: boolean) => void
   onEdit: (field: Field | null) => void
   onCommit: (field: Field, value: string) => void
   onRemove: () => void
+  onAddRunUp: (offset: string, text: string) => void
+  onDropRunUp: (at: number) => void
 }): React.JSX.Element {
   const said = spellWhen(matter.when)
   const undated = matter.when.kind === 'standing'
@@ -176,7 +202,7 @@ function Row({
         {editing === 'when' ? (
           <Field1
             initial={undated ? '' : said}
-            placeholder="2026-11-12 · 2026-03..2026-05 · every 90d"
+            placeholder="2026-11-12 · 2026-03..2026-05 · every 90d · 90d after done"
             onCommit={v => onCommit('when', v === '' ? NO_DATE : v)}
             onCancel={() => onEdit(null)}
           />
@@ -215,14 +241,113 @@ function Row({
             {matter.owner ?? 'who'}
           </button>
         )}
-        {matter.triggers.length > 0 && (
-          // Representation ships in MH1 and editing in MH3, so this says they
-          // are there rather than pretending they are not.
-          <span className="docket-quiet">{matter.triggers.length} run-up</span>
-        )}
+        <button className="docket-quiet" onClick={() => onAdding(!adding)}>
+          {/* **Named for what it IS, not for the mechanism.** *Run-up* is the
+              word the requirements use and the thing being discussed: how long
+              before this do we need to start. "Trigger" is the implementation. */}
+          {matter.triggers.length === 0
+            ? 'run-up'
+            : `${matter.triggers.length} run-up${matter.triggers.length === 1 ? '' : 's'}`}
+        </button>
         <button className="docket-quiet danger" onClick={onRemove}>remove</button>
       </div>
+
+      {/* **Two independent states, and conflating them broke both.** A matter's
+          existing run-ups always show, because they are what the conversation is
+          about; the *add* fields show only when asked. One flag for both meant
+          an empty field sitting under every matter that had any — clutter in a
+          list being scanned — and a toggle that could never close, because the
+          triggers kept it open. It looked dead. */}
+      {(matter.triggers.length > 0 || adding) && (
+        <div className="docket-runups">
+          {matter.triggers.map((trigger, at) => (
+            <div key={`${trigger.offset}-${at}`} className="docket-runup">
+              {/* Read back in words, because this is the line somebody says out
+                  loud: *two weeks before — book the boiler service.* */}
+              <span className="docket-runup-when">{spellOffset(trigger.offset)}</span>
+              <span className="docket-runup-what">{trigger.text}</span>
+              {trigger.effect !== 'task' && <span className="pill label">{trigger.effect}</span>}
+              <button className="docket-quiet danger" onClick={() => onDropRunUp(at)}>drop</button>
+            </div>
+          ))}
+          {adding && (
+            <NewRunUp
+              onCommit={(offset, text) => onAddRunUp(offset, text)}
+              onDone={() => onAdding(false)}
+            />
+          )}
+        </div>
+      )}
     </li>
+  )
+}
+
+/**
+ * *This long before — do this.*
+ *
+ * **Two fields, not three.** A trigger carries an offset, an effect and a text,
+ * and asking for three in the middle of a conversation is a form. The effect is
+ * `task` unless somebody says otherwise, because every example in the
+ * requirements is a task; `note` and `doc` are authored in the file today and
+ * get their control when MH3 gives them something to do.
+ */
+function NewRunUp({
+  onCommit,
+  onDone,
+}: {
+  onCommit: (offset: string, text: string) => void
+  onDone: () => void
+}): React.JSX.Element {
+  const [offset, setOffset] = useState('')
+  const [text, setText] = useState('')
+  const when = useRef<HTMLInputElement>(null)
+  // Asked for, so the caret is already in it: the gesture is *add a run-up*,
+  // and making somebody click twice for one act is a click too many.
+  useEffect(() => when.current?.focus(), [])
+  const done = (): void => {
+    if (offset.trim() === '' || text.trim() === '') return
+    onCommit(offset, text)
+    setOffset('')
+    setText('')
+    // **Stays open, focus back at the start.** A matter with one run-up usually
+    // wants two — get quotes, then book it — so the second costs no gesture.
+    when.current?.focus()
+  }
+  return (
+    <div className="docket-runup new">
+      <input
+        ref={when}
+        className="docket-field narrow"
+        value={offset}
+        placeholder="2w"
+        aria-label="How long before"
+        spellCheck={false}
+        onChange={e => setOffset(e.currentTarget.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            done()
+          } else if (e.key === 'Escape') onDone()
+        }}
+      />
+      <span className="docket-runup-when quiet">before</span>
+      <input
+        className="docket-field wide"
+        value={text}
+        placeholder="what needs doing then"
+        aria-label="What happens"
+        spellCheck={false}
+        onChange={e => setText(e.currentTarget.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            done()
+          } else if (e.key === 'Escape') onDone()
+        }}
+      />
+      <button className="docket-quiet" onClick={done}>add</button>
+      <button className="docket-quiet" onClick={onDone}>done</button>
+    </div>
   )
 }
 
@@ -298,7 +423,7 @@ function NewMatter({
       <input
         className="docket-field"
         value={when}
-        placeholder="when, or leave it"
+        placeholder="a date, every 90d, or leave it"
         spellCheck={false}
         onChange={e => setWhen(e.currentTarget.value)}
         onKeyDown={e => {

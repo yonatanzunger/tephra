@@ -170,6 +170,12 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.docketUntag(command.docket, command.matter, command.subject)
       case 'remove':
         return service.docketRemove(command.docket, command.matter)
+      case 'addTrigger':
+        return service.docketAddTrigger(
+          command.docket, command.matter, command.offset, command.text, command.effect,
+        )
+      case 'removeTrigger':
+        return service.docketRemoveTrigger(command.docket, command.matter, command.at)
       case 'move':
         return service.docketMove(command.docket, command.matter, command.to)
     }
