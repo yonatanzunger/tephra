@@ -133,11 +133,15 @@ This also settles a category the first reading dismissed. *"The most important t
 
 **H4. Every matter carries a ramp-up window**, authored per matter, which decides when it becomes live. This is what reconciles H2 with H8.
 
+> **Amended 2026-09-11 (D76), by MH1 in daily use.** This said the need was evidenced and the shape was not, and the shape was wrong. *Ramp-up* names one case — preparation ahead of a known date — and the first case real use produced was the opposite: a repair with **no date at all**, whose steps run *forward* from the moment somebody decides to start it. What a matter carries is an ordered list of **steps**, each either `T±N` from its critical date or `{step} + N` after another step completes. The window is then derived rather than authored: a matter becomes live at the earliest of its steps.
+
 **H5. Matters generate TODO items** — templated text with substitution from the occurrence, tags, and a due date — and may instantiate **a document from a template**. Generation is **automatic, on the day boundary, and never contingent on reorient** (H10).
 
-**H6. A matter may generate awareness with no task.** The run-up state is a thing to be in, which no TODO item can express.
+**H6. A matter may generate awareness with no task.** The run-up state is a thing to be in, which no TODO item can express. *(D76: this is a step of the **status** kind, beside the **task** kind and the **reschedule** kind.)*
 
 **H7. Recurrence covers one-off, an explicit list, a pointer to an ICS file, and *N days after the last time it actually happened*.** Calendar-rule recurrence — Hebrew dates, third Thursday of November — is wanted later and not now.
+
+> **Amended 2026-09-11 (D76).** *N days after it last happened* is **not a kind of schedule** — it is a **reschedule step**, `{change the filter} + 90d`. It was the only recurrence here whose meaning depended on an event rather than a calendar, and as a step it becomes a case of the dependency mechanism that step chaining needs anyway. What remains a schedule is: **none**, a **fixed** critical date, or an **interval** periodicity. Intervals are calendar arithmetic on a date, so `every 1y` lands on the same day each year and covers a birthday without a rule grammar; the rule grammar this requirement defers stays deferred.
 
 **H7b. A matter need not have a date at all.** Three kinds, and the household case produced all three at once:
 
@@ -145,11 +149,13 @@ This also settles a category the first reading dismissed. *"The most important t
 - **Dated** — the talk, the birthday. Has a date and a ramp-up window.
 - **Standing** — the broken oven, repainting the house. Has **no** date, and giving it one is the *point of the review*. It is true about the domain indefinitely, which is exactly what H2 asks a docket to hold, so it fits the container without stretching it.
 
-**And a standing matter may be scheduled to a season rather than a date** — *"during which months will we be driving these"* — because a major project is committed to a period long before it has a day, and the commitment has downstream consequences in money and travel. Nothing else in this design schedules coarser than a day.
+~~**And a standing matter may be scheduled to a season rather than a date**~~ — *"during which months will we be driving these"* — ~~because a major project is committed to a period long before it has a day~~.
+
+> **Withdrawn 2026-09-11 (D76).** Built in MH1 (`2026-03..2026-05` and day ranges both) and then found to be a premature optimisation. The case it was imagined for is *a major project that spreads over months* — and such a project is not qualitatively different from anything else on a docket. It is a matter with **steps** spread out, which the step list says better than a fuzzy date did. Removed rather than left unused (D66).
 
 **H7a. The matter recurs; the tasks it generates do not.** The air filter is one durable matter with identity and history, and each occurrence mints a **fresh, independent** TODO item that can be edited, retagged, deferred or dropped without touching the recurrence. Two things follow, and neither is optional:
 
-- **Completion flows backward.** Because occurrences are independent, "N days since it last happened" cannot be recovered from an item's own history — the matter has to be told. One generated item per occurrence is designated as the one whose completion advances the clock.
+- **Completion flows backward.** Because occurrences are independent, "N days since it last happened" cannot be recovered from an item's own history — the matter has to be told. One generated item per occurrence is designated as the one whose completion advances the clock. *(D76: the designation is the **antecedent of the reschedule step**, which is authored rather than inferred — exactly what Qa demanded. And completion is stamped on the **step**, not read off the generated item, because the item can be edited away and because suspension has to preserve the answer after withdrawing the items. It is cleared when a reschedule starts a new instance, or the second filter change would be born already done.)*
 - **A matter knows whether it has an occurrence outstanding.** Otherwise a filter task never completed either generates a duplicate every cycle or silently stops recurring — accumulation or a graveyard, and both are failures this project is named against. An outstanding occurrence is shown as overdue rather than reissued.
 
 **H8. The compact horizon is always present** in the ordinary working view, short by construction, and holds **everything bearing down, whatever its source** — matters inside their ramp-up window, holidays and trips, and TODO items whose due dates are approaching or already past. It runs from a little behind you to some distance ahead, because something overdue is as much a thing to have in mind as something coming.
@@ -195,6 +201,19 @@ Two things go past the evidence and should be argued with. **The ramp-up window 
 
 - **Drop on any generated occurrence** means either *skip this one* or *this never happened and is still owed*. MT5a rejected exactly this shape once — a control whose meaning depends on invisible state — so the two have to be told apart rather than merged.
 - **Drop on the DESIGNATED occurrence** additionally decides what happens to *when did this last happen*. Dropping the thing the clock reads from is the sharper case, and it has no answer yet.
+
+> **Narrowed 2026-09-11 (D76).** The second question stops being global. There is
+> no designated *occurrence* any more — there is the **antecedent of a reschedule
+> step**, which is authored explicitly, so the question becomes *what does
+> dropping the antecedent of a reschedule do?* Three answers are now sayable
+> where none were before: the step stays owed and the matter does not recur until
+> it is done; the reschedule fires anyway from the drop; or the matter suspends.
+> **Still open, but local** — about one step rather than about the whole shape of
+> recurrence.
+>
+> **And a third question arrives with suspension.** *Suspend* withdraws pending
+> tasks and horizon rows, so it needs to find what a matter generated — which is
+> MH3's provenance requirement, now load-bearing rather than nice to have.
 
 **Qb. RESOLVED — four types, and the increment is paid for rather than waived.** *"If you have three of something, you'll end up with N"* — true, and the counting rule survives that as long as the number stays a constraint rather than a defence. What is added is exactly one type: **the docket, a document kind with its own UX**, as TODO is. **The horizon is not a second addition** — it is a *query over everything dated*, spanning dockets and the task list both, which is D9's filtered-view pattern and precisely the shape the link directory already took corpus-wide. And reorient spans types, so it is a flow rather than a type. **Three becomes four, not five**, and the next candidate must make the same argument this one did: why it cannot be a mode of something existing. `scope.md` is amended when this ships, not before — it describes what is built.
 

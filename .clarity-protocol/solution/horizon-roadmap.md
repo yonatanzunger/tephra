@@ -1,13 +1,47 @@
 # The Horizon and Dockets — Roadmap
 
 **Design: `solution/horizon.md`. Requirements: `goal/horizon.md`. Decisions:
-D68–D75.** Feature-level; the architectural design happens per phase, at the
+D68–D76.** Feature-level; the architectural design happens per phase, at the
 keyboard.
 
-Six phases. **Usable at the end of MH1**, and directly useful for household
-management at the end of MH3. Each phase is a slice that works end to end, and
-each has to pass one test: *is it worth having if everything after it is
-cancelled?*
+**Build order: MH1 ✓ → MH3a → MH3b → MH2 → MH4 → MH5 → MH6.** The numbers are
+**identities, not sequence** — they are cited across the decisions and the notes,
+and renumbering to restore the coincidence would break every reference to buy a
+tidiness that would last until the next reorder. It was the numbers doubling as
+an order that made this need saying at all.
+
+Each phase is a slice that works end to end, and each has to pass one test: *is
+it worth having if everything after it is cancelled?*
+
+## What MH1 taught, and what it moved
+
+MH1 went into daily use immediately, and two things came back that no amount of
+design would have produced.
+
+**The docket is a backlog manager first and a recurrence engine second.** The
+house docket filled up with repair projects grouped by scale of work — none of
+them recurring, each pulled off the list once and then acted on. That is D71's
+premise arrived at from the other direction, and it changes what the next phase
+is *for*: the payoff is *activate this and the work appears on my list*, not
+*remind me when this comes round*.
+
+**And the phase boundaries were in the wrong place**, which the drift makes
+plain. What MH1 shipped against what it planned:
+
+| planned for | actually shipped in MH1 |
+|---|---|
+| MH1 | the kind, the format, the surface, matters, tags, owner, the four un-backfillable fields |
+| MH3 | trigger **authoring** and editing; recurrence **setup**, with an anchor |
+| nowhere | notes on a matter; **sections**, with moving and reordering (D75) |
+| MH3 — still out | anything that **fires** |
+
+So MH1 absorbed the authoring half of MH3 and a feature that was in no phase at
+all, and held the line exactly where it mattered. **The line it held is the one
+worth learning from**: authoring is cheap, and firing is the substance.
+
+**Two consequences for the plan.** The horizon and generation swap places, for
+the reason under MH2; and what was MH3 splits in half, because after D76 its two
+halves fail in opposite directions and want separate tests.
 
 ## What is already shipped that this changes
 
@@ -35,87 +69,103 @@ horizon must be good enough to replace it *before* it comes out. The staging
 below keeps it exactly where it is until MH4, and overlap is the honest plan
 rather than a simultaneous switch.
 
-## MH1 — Docket files
+## MH1 — Docket files ✓ *(built 2026-09-10)*
 
-**End condition:** dockets are a document type that can be viewed and edited. A
-house, a set of speaking engagements or a list of blog post ideas goes on one
-naturally, and can be worked as a group.
+**End condition, met:** dockets are a document type that can be viewed and
+edited. A house, a set of speaking engagements or a list of blog post ideas goes
+on one naturally, and can be worked as a group.
 
-**In:** the `docket` kind; the format (D72); the docket view and editing surface;
-matters carrying `when` as a date, a range, or nothing; **sections**, which
-divide a docket for reading and are the only arranging this kind has.
+**Shipped:** the `docket` kind; the format (D72); the docket view and editing
+surface; matters carrying a name, `when`, tags, an owner, a link, steps, prose
+notes and the four un-backfillable fields; **sections** (D75), which divide a
+docket for reading and carry the only arranging this kind has.
 
-**The cut line, set by the forcing event.** There is a household planning
-conversation in a few days, and it is what MH1 exists to serve — so what is in is
-what a conversation needs: a docket file, a view legible to someone not driving
-the keyboard, add and edit, tags, an owner, `when` as a date or a range or
-nothing, and the four un-backfillable fields. **Everything else waits**, including
-trigger *editing* (MH3) and anything that generates or reminds. With a deadline
-the temptation is to reach for MH3; the meeting does not need it and MH1 does not
-get better by carrying it.
-
-**Out:** the horizon, generation, the review flow, the root dockets.
-
-> **Amended 2026-09-10, by the forcing event itself.** The cut line above was
-> argued and then overturned within the phase, which is worth leaving visible
-> rather than tidying away. It said *everything else waits, including trigger
-> editing (MH3) and anything that generates or reminds*, and concluded: *the
-> meeting does not need it and MH1 does not get better by carrying it.*
+> **The cut line was argued and then overturned inside the phase**, which is
+> worth leaving visible rather than tidying away. It said *everything else waits,
+> including trigger editing and anything that generates or reminds*, and
+> concluded: *the meeting does not need it and MH1 does not get better by
+> carrying it.*
 >
-> The first half held and the second did not. **Setting up a recurrence, editing
-> a run-up, and writing a note on a matter are all in MH1**, because the meeting
-> needs to *say* "every ninety days, starting in October" and "the quote was
-> 480" — and a surface that cannot hold either sends the decision back to paper,
-> which is the thing dockets exist to stop.
+> The first half held and the second did not. Setting up a recurrence, editing a
+> run-up and writing a note all came in, because the meeting needed to *say*
+> "every ninety days, starting in October" and "the quote was 480", and a surface
+> that cannot hold either sends the decision back to paper — which is the thing
+> dockets exist to stop. **What it did not pull in is the part the argument was
+> right about:** nothing generates and nothing fires.
 >
-> **What that did not pull in is the part the argument was actually right
-> about:** nothing generates and nothing fires. A recurrence is *recorded* here
-> and *acted on* in MH3 — so MH1 remains a filing cabinet, exactly as described
-> below, and the hazard MH3 has to test (a month away yielding one task, not
-> thirty) is untouched.
->
-> **Sections came in the same way, and from the same forcing event**: a docket's
-> claim is completeness, so it is long by design, and a flat list of everything
-> true about a house is the artifact nobody reads — it would satisfy H2 and
-> defeat it. Recorded as D75, including the part that had teeth: a section is
-> told from a matter by content rather than heading depth, because a depth rule
-> would have read every docket already written in this phase as a file of empty
-> sections.
->
-> **And one field came out of it that MH3 could not have added later.** `every
-> 90d` alone is not a schedule until you know ninety days *from what*, so
-> `When`'s `every` and `after` forms carry an optional **anchor**. Guessing it in
-> MH3 from the matter's arrival date is wrong twice over, because `adopt`
-> re-stamps that date. Un-backfillable, so it goes in with the format.
+> **One field came of it that no later phase could have added.** `every 90d` is
+> not a schedule until you know ninety days from *what*, so the periodic form
+> carries an **anchor**. Guessing it later from the matter's arrival date is
+> wrong twice, because `adopt` re-stamps that date.
 
-**This is the phase that serves a planning conversation**, which is why it leads.
-Open `House`, see everything true about the house, edit it together. Generation
-and the horizon are what make the decisions from such a meeting *stick*; the
-meeting itself needs this and nothing after it.
+## MH3a — A docket that produces work
 
-**It is deliberately a filing cabinet, for one phase.** A dated matter sits here
-and does nothing — no horizon row, no generated task — until MH2 and MH3. That
-shapes what a real use of it tests: **whether this is a good surface to think
-with alongside another person**, not whether it helps anybody remember. The
-second question is not answerable yet, and a disappointing answer to it would
-mean nothing.
+**End condition:** you press **activate** on a repair and *"find a suitable
+shop"* is on today's list; you finish that and *"have the car fixed"* appears.
+**The docket stops being a filing cabinet.**
 
-**The whole record is defined here even though most of it is unused.** The four
-un-backfillable fields — **id, arrived-on, decline count, occurrence pointer** —
-go in at the moment the first docket file is written. The mechanisms over them
-arrive in MH3 and MH5; the fields cannot.
+**In:** the **step** format (D76) — ids, completion stamps, the `T±N` and
+`{step} + N` schedules, and the *task* and *status* kinds; the **removals**
+(ranges, seasons, and `after` as a schedule); **activate** and **suspend**;
+generation into the task list, keyed to `clockDay`, idempotent and unattended — a
+background pass at midnight **and** the same pass at startup, since the app is
+not running at midnight most nights; **provenance** on generated tasks, which
+suspend withdraws by.
 
-**Triggers: representation now, and — as it turned out — editing now too.** A
-trigger is *not* un-backfillable — a matter that gains one later loses nothing —
-but D72's whole justification for a structured format **is** triggers, so a
-format that cannot hold them would force a migration in MH3. The plan was to
-design the representation here and build its editing there; the editing came
-here as well, for the reason in the amendment above. **What MH3 still owns is
-the firing**, which is the hard half.
+**Out:** reschedule steps and recurrence (MH3b); the horizon (MH2), so a
+**status** step is authored here and inert until there is somewhere for it to
+go — the same bargain MH1 made with triggers, which worked; the
+document-template step, still the least-evidenced of the three kinds.
 
-**This is the largest phase, and it is first deliberately.** An earlier draft led
-with the horizon precisely because a new document kind is a big first slice. A
-real planning session is worth the trade, but the trade is real.
+**The format change leads, and it is a one-way door.** Step ids are what
+`{step} + N` points at, and every chain authored before they land is a migration
+afterwards. It is **not a phase of its own**: a step you can author but which
+never fires is what MH1 already has.
+
+**Activation is the verb the backlog was missing.** Nothing today says *we are
+doing this now* short of hand-typing a date, and steps that run forward from the
+moment of activation are exactly what a multi-step repair needs. It also makes
+*backlogged* a **derived** state — has it a critical date? — rather than a stored
+one, which this project has learned to prefer: a status, once written into day
+files, cannot be taken back out.
+
+**Suspend is what makes activation safe**, and it is not symmetry for its own
+sake. It withdraws pending tasks and horizon rows, clears the critical date, and
+**leaves completed steps completed** — so a mis-press is undoable and a genuine
+pause resumes rather than restarts. It is also why **step completion is stamped
+on the step** rather than read off the generated item: the item can be edited
+away, and suspend withdraws the items by definition.
+
+## MH3b — A docket that keeps its own time
+
+**End condition:** the air filters change themselves. **Directly useful for
+household management**, which was the old MH3's promise.
+
+**In:** **reschedule** steps; interval recurrence, on calendar arithmetic so that
+`every 1y` lands on a birthday without a rule grammar; completion flowing back
+along the **authored antecedent** of a reschedule step; outstanding-instance
+handling; clearing per-step completion when a new instance starts.
+
+**Split from MH3a because the two halves now fail in opposite directions.** The
+recorded hazard is *a month away from the desk must yield one air-filter task,
+not thirty* — and D76 halves it: a matter that recurs from its own completion
+cannot accumulate, because no completion means no reschedule means no next
+instance. The overdue task simply sits there. What still needs the idempotence
+machinery is a matter whose instances arrive whether or not anybody acted, which
+is the birthday and not the filter. **Both need a test that forces the long
+absence**, and they need different ones: the calendar kind accumulates, and the
+completion-driven kind goes quiet.
+
+*A path that fires once every few years is broken when it fires*, so neither test
+waits for a holiday to produce the conditions.
+
+**Open: the clamp rule.** *Every 1 month from 31 January* — February has no
+31st. **Recommended: anchor-and-clamp** — occurrence *k* is the anchor plus *k*
+units, clamped to the end of the month, so 31 Jan → 28 Feb → 31 Mar, and a
+leap-day birthday returns to the 29th in leap years. The alternative computes
+each occurrence from the previous one and **drifts permanently** after one short
+month, which loses the intent. Days and weeks are unaffected; completion-driven
+recurrence is unaffected, being one addition rather than a sequence.
 
 ## MH2 — The horizon
 
@@ -125,60 +175,51 @@ dedicated, and **a location with a ⌘-number** (D74), expected to sit open in a
 window of its own. Its **compact view is the existing due-soon band**, extended
 in place.
 
+**In:** the query and its shape; both sources; the full horizon view,
+date-ordered, read-only; **the instance each row belongs to**, shown — two
+recurrences can put rows in one window, and an unlabelled pair of them is worse
+than either alone.
+
+**Out:** generation, anything in the frame.
+
+**It moved after generation, and the argument for going first survived the
+move.** That argument was that the horizon must be built with both sources
+present rather than one — the shape of failure `notes.md` records six times over.
+Dockets exist now, so it holds either way; and it holds *better* here, because by
+this point there are real generated tasks and real status steps waiting for
+somewhere to appear, instead of an empty docket and a task list.
+
+**What it would have added on its own is modest**, which is the other half of the
+reason. Its second source already exists as the due-soon band, so going first
+would have delivered *dated matters also appear in the band* — while generation
+is what stops the docket being a filing cabinet, and backlog management is what
+the thing is actually being used for.
+
+**The computation is specified per schedule kind** (D76, and `notes/05 events
+contd.md`): nothing for inactive matters; generated rows for fixed ones; for
+interval ones an arithmetic sweep over instances, since each step's offset from
+its instance is known and the instances are a sequence; and **next-occurrence
+only** wherever a date depends on another step's completion, because a date that
+has not been earned yet cannot be placed.
+
+**Rows whose preconditions are unmet are not on the horizon at all.** A step with
+a pending `{step} + N` has no date, and a horizon that guessed one would be
+inventing a commitment.
+
 **Reusing the band's space is the first cut, and it narrows H8 on purpose.** The
 band lives inside the task surface, so *"present whatever you are doing"* becomes
 *"present when you are in the task list"* until MH4 moves it. That is a real
 weakening of what H8 promises — H8 is what the design says makes a skipped
-reorient safe — and it is affordable here for two reasons: the task view is where
-a great deal of time is already spent, and the full horizon being a window left
+reorient safe — and it is affordable for two reasons: the task view is where a
+great deal of time is already spent, and the full horizon being a window left
 open covers much of the rest. **Recorded so MH4 is not considered optional.**
 
-**In:** the query and its shape; both sources; the full horizon view,
-date-ordered, read-only.
-
-**Out:** generation, anything in the frame.
-
-**Leading with dockets removed a gap rather than deferring one.** Built the other
-way round, the query would have shipped with a single source and been untested as
-the multi-source thing it claims to be — the shape of failure `notes.md` records
-six times over. Here both sources exist on the first day it does.
-
-**It ships the horizon's contents, not its ubiquity.** H8 requires the strip to
-be present in the ordinary working view whatever you are doing, and keeping it as
-the band inside the task surface does not satisfy that. **That is MH4's
-business**, and should not be considered done because MH2 looks like it delivered
-the compact view.
+**It ships the horizon's contents, not its ubiquity.** That is MH4's business,
+and should not be considered done because MH2 looks like it delivered the compact
+view.
 
 **And this is where the spreadsheet is restored** — every major commitment across
 every docket in one date-ordered list, which a single docket's view cannot give.
-
-## MH3 — Run-ups and recurrence
-
-**End condition:** a docket can trigger both tasks and horizon items, and
-recurrence works. **The system is directly usable for household management.**
-
-**Narrowed by MH1, 2026-09-10.** Authoring a trigger and anchoring a recurrence
-shipped in MH1 (see its amendment). What remains here is everything that *acts*
-on them, which was always the substance of this phase.
-
-**In:** triggers (*offset → effect*) **firing**; generation keyed to `clockDay`, idempotent
-and unattended — a background pass at midnight **and** the same pass at startup,
-since the app is not running at midnight most nights; provenance on generated
-tasks; recurrence rules; completion flowing back along an **explicitly
-designated** occurrence; outstanding-occurrence handling.
-
-**Out:** the document-template trigger — the least-evidenced of the three
-projections, since the trip template is instantiated by hand today. Park it at
-the end of this phase or drop it until wanted.
-
-**Merged deliberately.** An earlier draft split fixed-date generation from
-recurrence. They are one mechanism differing only in what `when` holds, and the
-boundary fell in the middle of it.
-
-**The hazard to test explicitly:** a month away from the desk must yield one
-air-filter task, not thirty. *A path that fires once every few years is broken
-when it fires*, so this needs a test that forces the long absence rather than
-waiting for a holiday to produce one.
 
 ## MH4 — Reorientation
 
@@ -191,11 +232,17 @@ surviving the carry; the compact horizon relocated out of the task surface;
 docket staleness reporting.
 
 **Mostly assembly.** Movement 2 is the existing walk unchanged, movement 1 is
-MH1's query at a small limit, and movement 3 is small and new.
+MH2's query at a small limit, and movement 3 is small and new.
 
 **This is where the band migration lands**, and where H8's promise — that the
 strip is present whatever you are doing, which is what makes a skipped reorient
 safe — finally holds.
+
+**Staleness has a second job after D76: the stalled chain.** A matter whose first
+step was never completed generates nothing further while still looking active,
+and dockets are explicitly for things that go dormant for years, so this will
+happen. It is the docket's version of the problem the graveyard exists for, and
+reporting it is the cheapest half.
 
 ## MH5 — The backlog becomes a pair of dockets
 
@@ -208,9 +255,12 @@ begin accruing.
 **live** backlogged items and of MT7's overall-todo files; `CorpusIndex.backlog()`
 retired.
 
-**The migration is smaller than it sounds.** No file is rewritten and no glyph
-changes — only items *currently* sitting in `[>]` need a home on the
-miscellaneous docket, and history is left exactly as it is.
+**Smaller than it was, and its centre has shifted.** Once activation exists
+(MH3a), the migration is the easy part — no file is rewritten and no glyph
+changes, and only items *currently* sitting in `[>]` need a home. What remains
+substantial is **the review flow**, which is the only thing that makes decline
+counts accrue, which is the only thing that gives MH6 a threshold instead of a
+guess.
 
 **Out:** the graveyard, deliberately — see MH6.
 
@@ -237,11 +287,16 @@ today.
 
 ## Not scheduled
 
-- **ICS import** (H12) — needed for holidays in the full horizon, and holidays
-  are the weakest need in this design. Small, standalone, whenever.
-- **Calendar-rule recurrence** — Hebrew dates, the third Thursday of November.
-  Wanted later by `goal/horizon.md`'s own account.
-- **The document-template trigger** — see MH3.
+- **ICS import** (H12) — **deliberately deferred, to be revisited.** Needed for
+  holidays in the full horizon, and holidays are the weakest need in this design.
+  The `ics` variant stays in `When` as the placeholder for it: unlike ranges and
+  seasons it was not decided against, merely not reached, so D66's *a decision
+  not to use something is a decision to remove it* does not apply to it.
+- **Calendar-rule recurrence** — *the third Thursday of November*, *the Wednesday
+  after Easter*, Hebrew dates. Wanted later by `goal/horizon.md`'s own account,
+  and explicitly out of D76: interval periodicity on calendar arithmetic covers
+  the birthday case without any of this.
+- **The document-template step** — see MH3a.
 
 ## Documents that go stale when this ships
 
@@ -251,6 +306,7 @@ today.
 - **`solution/features.md`** — the events-calendar row reads *"✓ v1 (a pinned
   markdown file — no feature, per the requirement)"*, which stops being true.
 - **`solution/architecture-as-built.md`** — a new kind, a new surface, a new
-  query source.
+  query source. **Already stale for MH1**, which shipped the kind and the
+  surface.
 - **`goal/todo.md`** — T9 satisfied elsewhere (MH4), T11 superseded (MH4), T4's
   status set shortened (MH5).

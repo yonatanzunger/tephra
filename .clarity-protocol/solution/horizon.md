@@ -259,6 +259,17 @@ inferred, which is what keeps merges safe.
 > heading is what a note looks like. Sections are for grouping, which is what
 > they were for.
 >
+> **The trigger line is superseded by D76** (2026-09-11), which replaces triggers
+> with **steps**. A step is a line in the same indented list, and it gains two
+> things the trigger line did not have: an **id**, because `{step} + 90d`
+> references have to point at something that survives a step being inserted above
+> them (D56's rule, a level down), and a **completion stamp**, because a
+> dependency cannot fire without knowing whether its antecedent is done and that
+> answer has to outlive both the generated item and a suspension. Its schedule is
+> either `T±N` or `{id} + N`, and its kind is one of *task*, *status* or
+> *reschedule* — the `effect` field the MH1 format already carried, with the
+> third value being what recurrence-since-completion turns into.
+>
 > **Arranging is a person's act and never the machine's.** Nothing sorts itself;
 > a matter can be moved between sections or nudged up and down inside one, and a
 > nudge stops at the section edge rather than reclassifying by one keypress. The

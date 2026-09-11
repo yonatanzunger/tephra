@@ -771,10 +771,10 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
-## MH — the horizon and dockets *(MH1 built; MH2–MH6 designed)*
+## MH — the horizon and dockets *(MH1 built; MH3a next)*
 
 **Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
-Requirements: `goal/horizon.md`. Decisions: D68–D75.**
+Requirements: `goal/horizon.md`. Decisions: D68–D76.**
 
 The first design cycle after v1, driven by what daily use taught. **R19's gate
 was opened and returned a negative**: pinned lists shipped months ago, an events
@@ -784,25 +784,42 @@ the note that started it: a fourth document kind (the **docket**), a query over
 everything dated (the **horizon**), and a broader daily pass (**reorient**) that
 supersedes the walk.
 
-Six phases, usable at MH1 and directly useful for household management at MH3.
-**Dockets lead**, ahead of the horizon, because a docket's editing surface is
-what a real planning conversation needs and the horizon is not on that path —
-which also has the effect that the horizon gets built with both of its sources
-present rather than one. **It is not purely additive**: the due-soon band, MT7's
-overall-todo files and the `backlog` status are all superseded, so three
-migrations of shipped, in-daily-use behaviour are inside it.
+**Seven phases now, built in the order MH1 · MH3a · MH3b · MH2 · MH4 · MH5 ·
+MH6** — the numbers are identities rather than sequence, which is what made the
+reorder need stating. **Dockets led**, ahead of the horizon, because a docket's
+editing surface is what a real planning conversation needs; **generation follows
+them**, ahead of the horizon too, because MH1 in use turned out to be a backlog
+manager and the payoff there is *activate this and the work appears*. **It is not
+purely additive**: the due-soon band, MT7's overall-todo files and the `backlog`
+status are all superseded, so three migrations of shipped, in-daily-use behaviour
+are inside it.
 
 **It also answers Q3a**, which was deferred in September specifically to be
 answered from use, and was.
+
+**And MH1 in use reshaped the phases after it (D76).** The docket turned out to
+be a **backlog manager** first and a recurrence engine second — the house docket
+filled up with repair projects grouped by scale of work, none of them recurring,
+each pulled off the list once and then acted on. That is D71's premise arrived at
+from the other direction, and it moved three things: generation goes **before**
+the horizon, the old MH3 **splits in two** (producing work, then keeping its own
+time) because after D76 its halves fail in opposite directions, and MH5 shrinks
+to mostly migration plus the review flow. The roadmap carries the reasoning.
+
+**The next slice is MH3a**: the step format — ids and completion stamps, which
+are a one-way door — then **activate** and **suspend**, then generation into the
+task list.
 
 ### MH1 — docket files *(built 2026-09-10)*
 
 A docket is a document kind with its own editing surface. `New Docket…` asks for
 a name and writes `dockets/<name>.docket.md`; matters carry a name, `when`, tags,
 an owner, a link, run-ups, prose notes, and the four fields that cannot be
-backfilled. `when` takes a date, a range, a season, a recurrence with an anchor,
-or nothing — and *nothing* is a state that says **no date yet** in words rather
-than showing a blank.
+backfilled. `when` takes a date, a recurrence with an anchor, or nothing — and
+*nothing* is a state that says **no date yet** in words rather than showing a
+blank. **Ranges and seasons shipped here and were then withdrawn by D76** as a
+premature optimisation: a project spread over months is a matter with spread-out
+steps, not a matter with a fuzzy date.
 
 **Sections divide a docket for reading** — *periodic maintenance*, *need to do*,
 *major projects* — as ordinary markdown headings with matters nested under them.

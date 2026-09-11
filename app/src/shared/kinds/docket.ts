@@ -517,7 +517,19 @@ export function parseMatter(block: string): Matter | null {
       // **`ics:` is a `when`, and it collides with the field syntax.** `when:
       // ics: holidays.ics` reads as a field whose value is itself a field, so
       // the value is re-joined before parsing rather than split twice.
-      when = parseWhen(value) ?? STANDING
+      const said = parseWhen(value)
+      if (said === null) {
+        // **A `when` this cannot read is KEPT, not quietly dropped.** It used to
+        // fall back to *no date yet* and lose the text on the next write of the
+        // block, which is the one thing the leniency rule exists to prevent —
+        // and it is a live path rather than a hypothetical: a form removed from
+        // the grammar (D76 withdrew ranges and seasons) turns every file that
+        // used it into exactly this case. The matter still reads as undated,
+        // because it is; the words survive to be corrected.
+        extra.push(line)
+      } else {
+        when = said
+      }
     } else if (key === 'triggers') {
       inTriggers = true
       if (value !== '') extra.push(line)

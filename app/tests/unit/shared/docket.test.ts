@@ -516,3 +516,26 @@ test('and nonsense is still nonsense', () => {
     assert.equal(parseOffset(said), null, said)
   }
 })
+
+test('A `when` THIS CANNOT READ IS KEPT, not quietly dropped', () => {
+  // It fell back to *no date yet* and lost the text on the next write, which is
+  // the one thing the leniency rule exists to prevent. Found while removing the
+  // range forms (D76): withdrawing a grammar turns every file that used it into
+  // this case, so the words have to survive the withdrawal.
+  const block = ['## The roof', 'when: 2026-13-99', MARK].join('\n')
+  const matter = parseMatter(block)
+  assert.ok(matter !== null)
+  assert.deepEqual(matter.when, STANDING, 'undated, because it is')
+  assert.deepEqual(matter.extra, ['when: 2026-13-99'], 'and the words are still there')
+  assert.ok(matterBlock(matter).includes('when: 2026-13-99'))
+})
+
+test('and it survives a round trip rather than doubling or vanishing', () => {
+  const block = ['## The roof', 'when: sometime in the spring', MARK].join('\n')
+  const once = parseMatter(block)
+  assert.ok(once !== null)
+  const twice = parseMatter(matterBlock(once))
+  assert.ok(twice !== null)
+  assert.deepEqual(twice.extra, ['when: sometime in the spring'], 'exactly one copy')
+  assert.equal(matterBlock(twice), matterBlock(once), 'and it has settled')
+})

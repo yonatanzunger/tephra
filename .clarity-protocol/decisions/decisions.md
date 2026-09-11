@@ -3315,3 +3315,109 @@ label is not a gesture worth offering. And a new matter defaults to **no
 section**, asked for at the moment of adding: the only available guess was the
 end of the file, which is inside the *last* section, so *fix the fence* would
 have become a major project without anybody saying so.
+
+## D76: A matter is a schedule and a list of steps
+
+**Date:** 2026-09-11
+**Status:** decided
+**Supersedes:** D72's trigger line; H4's *run-up window* as the shape of the
+parameter. **Amends:** `When` (the `after` variant comes out; ranges and seasons
+come out). **Answers:** half of Qa's open pair. **Source:** `notes/05 events
+contd.md`, written after MH1 was in daily use.
+
+**Decision.** A matter carries a **schedule** and an ordered list of **steps**.
+
+The schedule is one of three things, and nothing else:
+
+| schedule | means | example |
+|---|---|---|
+| none | **inactive** — on the backlog, generating nothing | a repair nobody has started |
+| fixed | a **critical date** | a talk on the 14th |
+| periodic | an interval from an anchor | air filters every 90 days |
+
+Each step is one of three kinds — **a task to complete** (which becomes a TODO
+item), **a status to be aware of** (which becomes a horizon row), or **the next
+instance of this matter** (which reschedules it) — and is scheduled either
+**`T±N`** from the critical date or **`{step} + N`** from another step's
+completion.
+
+**Why this replaces *run-up*.** H4 asked for a per-matter window and said
+plainly that the need was evidenced and the shape was not. The shape was wrong:
+*run-up* names one case — preparation ahead of a known date — and the case that
+came up first in real use was the opposite, a repair with **no date at all**
+whose steps run *forward* from the moment somebody decides to start. The same
+list serves both, so there is one mechanism rather than a run-up and a
+whatever-the-forward-one-would-have-been-called.
+
+**And `after` stops being a kind of schedule.** *Every 90 days since it was last
+done* is now a step — a reschedule at `{change the filter} + 90d` — rather than
+a seventh variant of `When`. It was the only variant whose meaning depended on an
+event rather than a calendar, which is what made it need its own machinery in
+MH3; now it is a case of the dependency mechanism that daisy-chaining needs
+anyway. **One mechanism fewer, and the survivor is the general one.**
+
+**This also removes half of MH3's stated hazard.** *A month away from the desk
+must yield one air-filter task, not thirty* — and under completion-driven
+recurrence there is nothing to pile up: no completion, no reschedule, no next
+instance. The overdue task simply sits there, which is the honest outcome and
+needs no idempotence to achieve. Calendar-driven recurrence still needs it,
+because its instances arrive whether or not anybody acted, and that is the easier
+half.
+
+**Activation and suspension, which is what makes a backlog usable.** An inactive
+matter has an **activate** button where its date would be; pressing it sets the
+critical date to today, **generates immediately** rather than waiting for the
+next pass — a button that appears to do nothing is a broken button, especially
+mid-conversation — and the steps then run forward from that moment. **Suspend**
+is its inverse: pending tasks and horizon rows are withdrawn, the critical date
+is cleared, and **already-completed steps stay completed**, so an accidental
+activation is undoable and a genuine pause resumes rather than restarts.
+
+**Which forces one new piece of state: step completion, scoped to the instance.**
+A dependency cannot fire without knowing whether its antecedent is done, and that
+cannot be read off the generated TODO item, because the item may be edited away,
+the day file may be old, and suspend has to preserve the answer across the
+withdrawal of the items themselves. So completion is stamped on the step — and
+**cleared when a reschedule starts a new instance**, or the second filter change
+would be born already done. This is what the `occurrence` pointer becomes: which
+instance is live.
+
+**Ranges and seasons come out.** `2026-11-12..2026-11-20` and `2026-03..2026-05`
+were built in MH1 and were a premature optimisation: the case they were imagined
+for was *a major project that spreads over months*, and such a project is not
+qualitatively different from anything else here — it is a matter with steps
+spread out, which the step list expresses better than a fuzzy date ever did. A
+decision not to use something is a decision to remove it (D66).
+
+**Periodicity is intervals only.** `every 90d`, `every 1y` — implemented as
+calendar arithmetic on a date, so a yearly interval lands on the same day of the
+month and covers a birthday without a rule grammar. What is deliberately **not**
+built is a grammar for *the third Thursday of November* or *the Wednesday after
+Easter*; those stay unscheduled (`horizon-roadmap.md`).
+
+**Steps are identified, not positional.** A `{step}` reference needs something
+stable to point at, so a step carries an id minted on write and preserved
+thereafter — D56's rule, applied a level down. Positional references would
+silently repoint themselves the moment a step was inserted above.
+
+**ICS stays where it is, deliberately.** With ranges and seasons withdrawn,
+`ics` is the last variant of `When` the surface never produces — and it is kept
+anyway, because unlike them it was never decided against: H12 wants it and no
+phase has reached it. D66's *a decision not to use something is a decision to
+remove it* governs the first case and not the second. Revisited when H12 is
+scheduled.
+
+**Left open: the clamp rule for month and year intervals.** *Every 1 month from
+31 January* has no thirty-first in February. The recommendation on the record is
+**anchor-and-clamp** — occurrence *k* is the anchor plus *k* units, clamped to
+the month's end — because computing each occurrence from the previous one drifts
+permanently after one short month and loses the intent. Not decided here;
+MH3b's, and carried in the roadmap.
+
+**Multiple reschedule steps are allowed.** The simpler rule — at most one, so
+that *every 90 days* is always statable — was considered and declined: it is more
+work to enforce than to permit, and how this gets used is not yet known. The
+consequence is accepted and handled in the surface rather than in the model:
+**the date column always shows the next critical date**, which is computable
+whatever the step list looks like, and shows a periodicity *only* when one can be
+read off unambiguously. Nothing has to say *see the step list*.
