@@ -1822,8 +1822,8 @@ body {
  * **Read by two people at one screen, one of whom is not driving** — which is a
  * hard requirement rather than polish (D70), and it decides nearly everything
  * here. Type at the notebook's reading size rather than UI size; rows wide and
- * untruncated; no control that appears only under a cursor, because two people
- * cannot both point at the same row. */
+ * untruncated. It does *not* forbid controls that appear under the cursor —
+ * that was an inference drawn here and corrected from use. See `Docket.tsx`. */
 .docket {
   min-width: 0; min-height: 0; overflow-y: auto;
   padding: .6rem 0 2rem;
@@ -1877,18 +1877,79 @@ body {
   opacity: .3; cursor: default;
 }
 .docket-quiet:disabled:hover { color: rgb(var(--text-muted)); background: none; }
-/* The one control that says where a matter is AND moves it. */
+/* **The move menu, made findable.** It was the quietest thing in the row —
+   11.5px, muted ink, a hairline border — and what came back from use was *I'm
+   not sure how to move things into and out of sections*, which is a control
+   failing at the only job it has. Bigger, in ordinary ink, with a real edge: the
+   row's other controls are things you already know are there, and this one has
+   to announce itself. */
 .docket-where {
-  font: inherit; font-size: 11.5px; cursor: pointer;
-  color: rgb(var(--text-muted)); background: none;
-  border: 1px solid rgb(var(--border) / .7); border-radius: 5px;
-  padding: .05rem .2rem; max-width: 11rem;
+  font: inherit; font-size: 12.5px; cursor: pointer;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px;
+  padding: .12rem .25rem; max-width: 12rem;
 }
-.docket-where:hover { color: rgb(var(--text)); }
+.docket-where:hover { border-color: rgb(var(--accent) / .6); }
 
-.docket-adders { display: flex; align-items: center; gap: .5rem; }
-.docket-add.quiet { color: rgb(var(--text-muted)); background: none; }
-.docket-add.quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .05); }
+/* The grip (see `Docket.tsx`): faint, but there without being looked for.
+ *
+ * **Drawn, not typed.** It was a `⠿` and the UI font substituted something that
+ * came out as two dots — a glyph nobody would read as *pick this up*. Six dots
+ * from a gradient depend on no font and land on the pixel grid at any size. */
+.docket-grip {
+  /* **The line that makes it draggable at all.** `draggable` alone left this
+     inert: the engine decides what may start a drag, and this says *this
+     element may*. Belt and braces with the element no longer being a button. */
+  -webkit-user-drag: element; user-select: none;
+  flex: none; display: inline-block; width: 10px; height: 16px; cursor: grab;
+  color: rgb(var(--text-muted) / .85); background: none;
+  border: none; border-radius: 4px; padding: 0; margin-right: .3rem;
+  align-self: center;
+  background-image: radial-gradient(circle at center, currentColor 1.1px, transparent 1.3px);
+  background-size: 4px 4px;
+  background-position: 1px 3px;
+  background-repeat: repeat;
+}
+.docket-grip:hover { color: rgb(var(--text)); background-color: rgb(var(--text) / .06); }
+.docket-grip:focus-visible {
+  outline: 2px solid rgb(var(--accent) / .6); outline-offset: 1px;
+  color: rgb(var(--text));
+}
+.docket-grip:active { cursor: grabbing; }
+
+/* **The row being carried has to LOOK carried**, which was half the report:
+   *nothing is lifted*. Fading it to a ghost is the usual trick and it is wrong
+   here — this is the row somebody is reading aloud while they move it — so it
+   keeps its ink and takes a raised edge instead. */
+.docket-row.lifted {
+  background: rgb(var(--text) / .04);
+  box-shadow: 0 1px 0 rgb(var(--accent) / .5), 0 -1px 0 rgb(var(--accent) / .5);
+  cursor: grabbing;
+}
+/* Nothing else on the page should look selectable while a row is in hand. */
+.docket.lifting, .docket.lifting * { cursor: grabbing; user-select: none; }
+/* Where it would land, as a line between rows rather than a highlight on one —
+   a drop goes *between* two things, and colouring a row says *into* it. */
+.docket-row.over-before { box-shadow: inset 0 2px 0 rgb(var(--accent) / .8); }
+.docket-row.over-after { box-shadow: inset 0 -2px 0 rgb(var(--accent) / .8); }
+.docket-section-head.over { border-bottom-color: rgb(var(--accent) / .8); }
+.docket-section-head.over .docket-section-name { color: rgb(var(--text)); }
+.docket-section-head.loose { border-bottom-style: dashed; }
+.docket-section-head.loose .docket-section-name {
+  font-style: italic; color: rgb(var(--text-muted) / .8);
+}
+.docket-section-empty.over {
+  color: rgb(var(--text)); font-style: normal;
+  border: 1px dashed rgb(var(--accent) / .6); border-radius: 5px;
+  padding: .3rem .45rem;
+}
+
+.docket-add.here {
+  display: block; margin: .45rem 0 0; padding: .2rem .4rem;
+  font-size: 12.5px; color: rgb(var(--text-muted));
+  background: none; border: 0; border-radius: 4px;
+}
+.docket-add.here:hover { color: rgb(var(--accent)); background: rgb(var(--accent) / .08); }
 .docket-row {
   padding: .55rem 0 .5rem;
   border-bottom: 1px solid rgb(var(--border) / .5);
@@ -1922,7 +1983,10 @@ body {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
   margin-top: .3rem;
 }
-/* Present without shouting, and present for BOTH readers — never hover-only. */
+/* Present without shouting. Hover-only is permitted here — the *two people
+   cannot both point* argument was an inference, and a wrong one — but a control
+   nobody can find is still a broken control, which is what happened to the move
+   menu below. */
 .docket-quiet {
   font: inherit; font-size: 11.5px; cursor: pointer;
   color: rgb(var(--text-muted)); background: none;
@@ -1931,10 +1995,15 @@ body {
 .docket-quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .06); }
 .docket-quiet.danger:hover { color: rgb(var(--bad, var(--text))); }
 
+/* **Room around the text, because this is a field you type a sentence into.**
+   The first cut had .15rem of it and the descenders very nearly touched the
+   rule — cramped in a surface whose whole point is that it is comfortable to
+   read. The line-height is set with the padding rather than left to the font,
+   so the box does not change height between an empty field and a full one. */
 .docket-field {
-  font: inherit; font-size: 15px; font-family: var(--font-body);
+  font: inherit; font-size: 15px; font-family: var(--font-body); line-height: 1.5;
   color: rgb(var(--text)); background: rgb(var(--surface));
-  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .15rem .35rem;
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .32rem .45rem;
   min-width: 8rem;
 }
 .docket-field.wide { flex: 1; min-width: 12rem; }

@@ -3279,6 +3279,34 @@ mean urgency *or* subject and could not mean both. A docket turns over never and
 is reasoned about whole. What survives of the rule is the part that mattered:
 **the machine never reorders anything.** A person may.
 
+**How a matter is moved, settled from use.** Arrows first, then **drag handles**
+on request — a grip per row, dropping onto a row's top or bottom half to land
+above or below it, or onto a heading to go into that section. ↑/↓ on a focused
+grip is kept as the keyboard path, so one control carries both. **The reason the
+grip is not hover-only** is not the *two people cannot both point* argument this
+surface used to make — that was an inference and it was wrong (`notes.md`) — it
+is that what was reported was not knowing rows could be moved at all, which an
+affordance you have to find by sweeping the pointer does not answer.
+
+**The drag is pointer events, not HTML5 drag-and-drop**, after two attempts at
+the latter shipped a gesture that did nothing while every check passed: a test
+can only raise `dragstart` itself, which asserts the handlers and skips whether
+the engine would ever begin a drag. `pointerdown` has no such question. Recorded
+because the reasoning generalises to any gesture whose entry point the platform
+owns — see `notes.md`.
+
+**Adding happens per section**, at the foot of the group being added to — the
+task list's `+ Add to house` gesture, adopted on request. It replaces one button
+at the foot of the page plus a dropdown asking which section, a question whose
+answer was already in which button you reached for. The default of *no section*
+survives as the undivided run's own add button, so nothing is filed by guesswork
+either way.
+
+**And the undivided run is labelled once a docket is divided**, rather than a
+drop target being conjured for the duration of a drag. The conjured one pushed
+every row down the moment it appeared, so the row you aimed at was not the row
+you dropped on: nothing that exists *because* a drag started may occupy space.
+
 **Two consequences that were defects until they were decided.** A nudge stops at
 a section edge rather than reclassifying a matter by one extra keypress, and
 **removing a section heading keeps every matter under it** — the matters join

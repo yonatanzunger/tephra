@@ -786,3 +786,77 @@ test('and the file stays tidy when a matter is added into a section', async t =>
   assert.doesNotMatch(text, /-->\n#/)
   assert.equal(text.match(/^#{2,3} /gm)?.length, 6, `5 matters + 1 section\n${text}`)
 })
+
+// ── adjacency: where the boundaries coincide ───────────────
+
+test('THE OVERLAP BUG: dropping one onto its immediate neighbour', async t => {
+  // This is the case that reached use and failed — *edit at 313 overlaps one
+  // ending at 416* — and every test above passed while it did. The old verb
+  // deleted the block and inserted it at the destination as two edits, so when
+  // the destination was the block's own boundary the two overlapped. Adjacency
+  // is exactly where that happens, and nothing tested it.
+  const { doc, boiler, oven } = await three(t)
+  await doc.moveMatter(oven, '', boiler)
+  assert.deepEqual(await named(doc), [
+    ['', ['The oven is broken', 'Service the boiler', 'Redo the kitchen']],
+  ])
+})
+
+test('and the other way round, which is the mirror boundary', async t => {
+  const { doc, boiler, kitchen } = await three(t)
+  // The boiler is first; put it just above the last one, which means the block
+  // after it is where it lands.
+  await doc.moveMatter(boiler, '', kitchen)
+  assert.deepEqual(await named(doc), [
+    ['', ['The oven is broken', 'Service the boiler', 'Redo the kitchen']],
+  ])
+})
+
+test('a matter dropped exactly where it already is changes nothing', async t => {
+  const { doc, file, oven } = await three(t)
+  const before = await file()
+  await doc.moveMatter(oven, '', oven)
+  assert.equal(await file(), before, 'not one byte')
+})
+
+test('and dropped at the end of the run it is already at the end of', async t => {
+  const { doc, file, kitchen } = await three(t)
+  const before = await file()
+  await doc.moveMatter(kitchen, '')
+  assert.equal(await file(), before)
+})
+
+test('every pair of positions is reachable, and none of them throws', async t => {
+  // Exhaustive over three matters, because the failure was arithmetic and
+  // arithmetic is worth brute-forcing at this size.
+  for (const from of [0, 1, 2]) {
+    for (const onto of [0, 1, 2]) {
+      const { doc } = await three(t)
+      const ids = (await doc.matters()).map(m => m.id ?? '')
+      await doc.moveMatter(ids[from] as string, '', ids[onto] as string)
+      const after = (await doc.matters()).map(m => m.id)
+      assert.equal(after.length, 3, `moving ${from} onto ${onto} lost one`)
+      assert.equal(new Set(after).size, 3, `moving ${from} onto ${onto} duplicated one`)
+    }
+  }
+})
+
+test('and so is every nudge, in both directions, from every position', async t => {
+  for (const which of [0, 1, 2]) {
+    for (const delta of [-1, 1]) {
+      const { doc } = await three(t)
+      const ids = (await doc.matters()).map(m => m.id ?? '')
+      const moved = await doc.nudgeMatter(ids[which] as string, delta)
+      const after = (await doc.matters()).map(m => m.id)
+      assert.equal(after.length, 3, `nudging ${which} by ${delta} lost one`)
+      assert.equal(new Set(after).size, 3, `nudging ${which} by ${delta} duplicated one`)
+      // One place, never two — a downward nudge moved two for one run.
+      if (moved) {
+        assert.equal(after.indexOf(ids[which] as string), which + delta,
+          `nudging ${which} by ${delta} went too far`)
+      } else {
+        assert.deepEqual(after, ids, 'and a refused nudge moves nothing')
+      }
+    }
+  }
+})

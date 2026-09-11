@@ -17,9 +17,15 @@
 //   actually about is *when are we doing this*, and for most matters the honest
 //   answer is *we have not decided* — which has to be visible as a state rather
 //   than as a blank.
-// - **No hover-only controls.** Two people cannot both point at the same row,
-//   and a control that appears under one person's cursor does not exist for the
-//   other.
+// - **Controls present enough to be found**, which is a weaker rule than the one
+//   this file used to state. It said *no hover-only controls*, reasoning that two
+//   people cannot both point at the same row — an inference from H3, not
+//   anything the requirements ask for, and corrected from use: sitting next to
+//   somebody and working together is not obstructed by a control that appears
+//   under the cursor. What the surface does owe is **discoverability**, which is
+//   a different thing and the one that actually failed: the move control was the
+//   quietest mark in the row and the report back was *I'm not sure how to move
+//   things into and out of sections*.
 //
 // **Creation order by default, and it never re-sorts on its own** — the task
 // list's rule. What a person may do is arrange it: **sections** divide a docket
@@ -49,7 +55,17 @@ export function DocketSurface({
 }: SurfaceProps): React.JSX.Element {
   const id = docWindow.document.id as DocumentId
   const [sections, setSections] = useState<readonly Section[]>([])
-  const [adding, setAdding] = useState(false)
+  /**
+   * Which section is having a matter added to it — `''` for the undivided run,
+   * `null` for nobody.
+   *
+   * **A place rather than a flag**, which is the task list's shape (`+ Add to
+   * house`) and for the same reason: you ask from where you are looking, so the
+   * matter lands where you asked and there is no question left over. The flag
+   * version put one button at the foot of the page and then had to ask which
+   * section in a dropdown — a question whose answer was already in the gesture.
+   */
+  const [adding, setAdding] = useState<string | null>(null)
   /** Which section header is being renamed, and whether a new one is being typed. */
   const [naming, setNaming] = useState<string | null>(null)
   const [newSection, setNewSection] = useState(false)
@@ -65,6 +81,18 @@ export function DocketSurface({
    */
   const [open, setOpen] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
+  /**
+   * What is being dragged, and where it would land.
+   *
+   * **Held here rather than in the row, and not read out of `dataTransfer`.**
+   * The drop has to be resolved against the *sections* — which section the row
+   * under the pointer is in, and which matter follows it — and only this
+   * component knows that. `dataTransfer` is still filled in, because a drag
+   * with no data attached does not start in every browser, but nothing reads it
+   * back: the truth is here, where it cannot be mangled in transit.
+   */
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [over, setOver] = useState<Landing | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
     setSections(await window.tephra.docket.sections(id))
@@ -98,6 +126,119 @@ export function DocketSurface({
   )
 
   const total = sections.reduce((n, s) => n + s.matters.length, 0)
+  const divided = sections.some(one => one.name !== '')
+
+  /**
+   * The groups to draw — which is the sections, plus an empty undivided run
+   * when the docket is divided and everything happens to be filed.
+   *
+   * **Because there has to be somewhere to drag a matter OUT to.** The first cut
+   * conjured a strip for the duration of the drag, and that was a bad bug rather
+   * than a neat trick: it appeared on `pointerdown`, pushed every row down by
+   * its own height, and so the row you had aimed at was no longer under your
+   * cursor. Nothing that appears *because* a drag started may occupy space.
+   */
+  const groups: readonly Section[] = sections.length === 0
+    // A docket with nothing on it still needs the one place to put something.
+    ? [{ name: '', matters: [] }]
+    : divided && !sections.some(one => one.name === '')
+      ? [{ name: '', matters: [] as readonly Matter[] }, ...sections]
+      : sections
+
+  /**
+   * Where a dropped matter actually goes.
+   *
+   * **A drop on a row means *before it* or *after it* by which half of the row
+   * the pointer is in**, and *after* is expressed as *before the next one* —
+   * which is the same verb, so there is one call and one thing to get wrong. The
+   * last row in a section has no next one, and that absence IS *the end of this
+   * section*, which is exactly what `place` does with no `before`.
+   */
+  const land = useCallback(
+    (landing: Landing): void => {
+      if (dragging === null) return
+      if ('section' in landing) {
+        void act(window.tephra.docket.place(id, dragging, landing.section))
+        return
+      }
+      const holder = sections.find(one => one.matters.some(m => m.id === landing.id))
+      if (holder === undefined) return
+      const at = holder.matters.findIndex(m => m.id === landing.id)
+      const next = landing.edge === 'before' ? landing.id : holder.matters[at + 1]?.id
+      const before = next === null || next === undefined ? undefined : next
+      void act(window.tephra.docket.place(id, dragging, holder.name, before))
+    },
+    [act, dragging, id, sections],
+  )
+
+  /** Every drag ends the same way, however it ended. */
+  const rest = useCallback((): void => {
+    setDragging(null)
+    setOver(null)
+  }, [])
+
+  /**
+   * What is under the pointer, read off the DOM rather than out of React.
+   *
+   * **The rows announce themselves with `data-` attributes** so this is one
+   * geometric lookup instead of a hit-test threaded through every child. A row
+   * answers *above or below me*; a heading, an empty section and the loose strip
+   * all answer *into this group*.
+   */
+  const landingAt = useCallback((x: number, y: number): Landing | null => {
+    const at = document.elementFromPoint(x, y)
+    if (at === null) return null
+    const row = at.closest('[data-matter]')
+    if (row !== null) {
+      const held = row.getAttribute('data-matter')
+      const box = row.getBoundingClientRect()
+      if (held !== null) {
+        return { id: held, edge: y < box.top + box.height / 2 ? 'before' : 'after' }
+      }
+    }
+    const zone = at.closest('[data-drop-section]')
+    const name = zone?.getAttribute('data-drop-section')
+    return name === null || name === undefined ? null : { section: name }
+  }, [])
+
+  /**
+   * The drag itself, on pointer events rather than HTML5 drag-and-drop.
+   *
+   * **Twice this was built on `draggable` and twice it did not start.** First
+   * the handle was a `<button>`, which is not a drag source; then it was a span
+   * that the engine still would not lift. What made the bug expensive was not
+   * the cause but that it was *invisible to the tests*: an acceptance scene can
+   * only dispatch `dragstart` itself, which proves the handlers and skips the
+   * single open question — whether a drag ever begins. Eight checks passed on a
+   * feature that did nothing at all.
+   *
+   * Pointer events have no such question. `pointerdown` fires because a button
+   * went down, the same event a test dispatches is the one a hand produces, and
+   * nothing in the engine gets to decide whether this element is liftable. It
+   * also means the feedback is ours to draw rather than the platform's to
+   * withhold — *nothing is lifted* was the other half of the report.
+   */
+  useEffect(() => {
+    if (dragging === null) return undefined
+    const move = (event: PointerEvent): void => {
+      setOver(landingAt(event.clientX, event.clientY))
+    }
+    const up = (event: PointerEvent): void => {
+      const landing = landingAt(event.clientX, event.clientY)
+      if (landing !== null && !('id' in landing && landing.id === dragging)) land(landing)
+      rest()
+    }
+    // On `window`, not on the handle: the pointer leaves the handle immediately
+    // and a capture that fails silently would strand the drag.
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', rest)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', rest)
+    }
+  }, [dragging, land, landingAt, rest])
 
   const type = {
     '--reading-face': settings.typography.font,
@@ -105,14 +246,28 @@ export function DocketSurface({
   } as React.CSSProperties
 
   return (
-    <main className="docket" aria-label="Docket" style={type}>
+    <main
+      className={`docket${dragging === null ? '' : ' lifting'}`}
+      aria-label="Docket"
+      style={type}
+    >
       {problem !== null && <p className="docket-problem">{problem}</p>}
 
-      {sections.map(section => (
+      {groups.map(section => (
         <section className="docket-section" key={section.name === '' ? ':unsectioned' : section.name}>
-          {/* The undivided run has no heading, because it is not a section:
-              nothing was decided about it, and inventing a name for it would
-              put a decision on the screen that nobody made. */}
+          {/* **The undivided run is labelled only once the docket is divided.**
+              On a docket with no sections it has no heading at all, because
+              there is nothing to tell it apart from — naming it would put a
+              decision on the screen that nobody made. Once there are sections it
+              needs saying, both as a fact about those matters and because it has
+              to be a place you can drag something back to. It gets no rename and
+              no ungroup: it is not a section and there is nothing to remove. */}
+          {section.name === '' && divided && (
+            <div className="docket-section-head loose" data-drop-section="">
+              <h2 className="docket-section-name">no section</h2>
+            </div>
+          )}
+
           {section.name !== '' &&
             (naming === section.name ? (
               <Field1
@@ -128,7 +283,15 @@ export function DocketSurface({
                 onCancel={() => setNaming(null)}
               />
             ) : (
-              <div className="docket-section-head">
+              <div
+                // **Dropping on the heading means *into this section*, at its
+                // end** — the one thing a heading can unambiguously mean, and
+                // the only way to reach a section that has nothing in it yet.
+                data-drop-section={section.name}
+                className={`docket-section-head${
+                  over !== null && 'section' in over && over.section === section.name ? ' over' : ''
+                }`}
+              >
                 <h2 className="docket-section-name">{section.name}</h2>
                 <button className="docket-quiet" onClick={() => setNaming(section.name)}>rename</button>
                 {/* **Not destructive, and says so.** Removing a heading keeps
@@ -175,6 +338,9 @@ export function DocketSurface({
                 onNudge={delta => {
                   if (matter.id !== null) void act(window.tephra.docket.nudge(id, matter.id, delta))
                 }}
+                dragging={dragging === matter.id}
+                edge={over !== null && 'id' in over && over.id === matter.id ? over.edge : null}
+                onLift={() => setDragging(matter.id)}
                 onPlace={into => {
                   if (matter.id === null) return
                   // The menu's own empty value is its prompt, so *out of every
@@ -185,24 +351,48 @@ export function DocketSurface({
             ))}
           </ol>
 
-          {section.name !== '' && section.matters.length === 0 && (
+          {section.matters.length === 0 && divided && (
             // An empty section is a real state — it gets said before it gets
             // filled — so it says what it is rather than looking broken.
-            <p className="docket-section-empty">nothing in this one yet</p>
+            <p
+              data-drop-section={section.name}
+              className={`docket-section-empty${
+                over !== null && 'section' in over && over.section === section.name ? ' over' : ''
+              }`}
+            >
+              {dragging === null ? 'nothing in this one yet' : 'drop it here'}
+            </p>
+          )}
+
+          {/* **Add INTO the group you are looking at** — the task list's
+              gesture (`+ Add to house`), and the same argument: the section is
+              already decided by which button you reached for, so the add row
+              has nothing left to ask. */}
+          {adding === section.name ? (
+            <NewMatter
+              onCancel={() => setAdding(null)}
+              onCommit={(name, when) => {
+                setAdding(null)
+                if (name.trim() === '') return
+                void act(window.tephra.docket.add(
+                  id, name, when, section.name === '' ? undefined : section.name,
+                ))
+              }}
+            />
+          ) : (
+            <button className="docket-add here" onClick={() => setAdding(section.name)}>
+              {section.name === '' ? '+ Add a matter' : `+ Add to ${section.name}`}
+            </button>
           )}
         </section>
       ))}
 
-      {adding ? (
-        <NewMatter
-          sections={sections.flatMap(one => (one.name === '' ? [] : [one.name]))}
-          onCancel={() => setAdding(false)}
-          onCommit={(name, when, into) => {
-            setAdding(false)
-            if (name.trim() !== '') void act(window.tephra.docket.add(id, name, when, into))
-          }}
-        />
-      ) : newSection ? (
+      {/* **Only one thing left down here**, now that adding a matter happens in
+          the group it is being added to. It is an ordinary button rather than a
+          quiet one: muted ink beside a bordered neighbour read as *disabled*,
+          which was reported, and there is no longer a neighbour to be quieter
+          than anyway. */}
+      {newSection ? (
         <Field1
           initial=""
           className="docket-field section"
@@ -214,17 +404,12 @@ export function DocketSurface({
           onCancel={() => setNewSection(false)}
         />
       ) : (
-        <div className="docket-adders">
-          <button className="docket-add" onClick={() => setAdding(true)}>
-            Add a matter
-          </button>
-          <button className="docket-add quiet" onClick={() => setNewSection(true)}>
-            Add a section
-          </button>
-        </div>
+        <button className="docket-add" onClick={() => setNewSection(true)}>
+          Add a section
+        </button>
       )}
 
-      {total === 0 && !adding && (
+      {total === 0 && adding === null && (
         // Absence that explains itself, as every empty state in this app does —
         // and this one says what the thing is FOR, because a docket's whole
         // claim is completeness and an empty one has not made it yet.
@@ -241,6 +426,18 @@ type Field = 'name' | 'when' | 'owner' | 'tags' | 'note'
 
 /** *Out of every section*, as a menu value — `''` is the menu's own prompt. */
 const UNSECTIONED = ':none'
+
+/** Which side of a row a drop lands on. */
+type Edge = 'before' | 'after'
+
+/**
+ * Where a drag would land: beside a matter, or inside a section.
+ *
+ * Two shapes because there are two targets with two meanings — *put it here in
+ * this order* and *put it in this group* — and collapsing them would mean one of
+ * them guessing at the other.
+ */
+type Landing = { id: string; edge: Edge } | { section: string }
 
 function commit(docket: DocumentId, matter: string, field: Field, value: string): Promise<unknown> {
   const said = value.trim()
@@ -278,6 +475,9 @@ function Row({
   onDropRunUp,
   onNudge,
   onPlace,
+  dragging,
+  edge,
+  onLift,
 }: {
   matter: Matter
   /** Which section it is in — `''` for the undivided run. */
@@ -298,6 +498,12 @@ function Row({
   onDropRunUp: (at: number) => void
   onNudge: (delta: number) => void
   onPlace: (into: string) => void
+  /** Whether this row is the one being dragged. */
+  dragging: boolean
+  /** Which side of this row the drop would land on, if any. */
+  edge: Edge | null
+  /** Picked up. Everything after this is the surface's pointer session. */
+  onLift: () => void
 }): React.JSX.Element {
   // The round-trip form is what an edit starts from; the reading form is what
   // the row shows. See `readWhen`.
@@ -305,8 +511,56 @@ function Row({
   const read = readWhen(matter.when)
   const undated = matter.when.kind === 'standing'
   return (
-    <li className="docket-row">
+    <li
+      // **The whole row is the drop target, not just the handle** — aiming at a
+      // grip to *land* on is a harder act than aiming at one to *pick up* by,
+      // and a row is a big target. Which half the pointer is in decides above
+      // or below, worked out in `landingAt` from this attribute.
+      data-matter={matter.id ?? undefined}
+      className={`docket-row${dragging ? ' lifted' : ''}${
+        edge === null ? '' : ` over-${edge}`
+      }`}
+    >
       <div className="docket-line">
+        {/* **Faint, but never invisible.** Hover-only would be allowed here and
+            is still the wrong call for *this* control: the thing being reported
+            was not knowing that rows could be moved at all, and an affordance
+            you have to find by sweeping the pointer over the page does not
+            answer that. So it sits there quietly and firms up under the cursor.
+
+            It is also a button, and a focused one takes ↑ and ↓ — which is the
+            keyboard path that the arrows used to be, kept without spending two
+            controls on it. */}
+        {/* **A span, not a button, and that is the whole reason it works.** It
+            was a `<button draggable>`: the cursor changed, the handlers were
+            wired, and nothing happened when you grabbed it — because a form
+            control is not a drag source in this engine. `mousedown` on a button
+            is an activation gesture and the drag is never begun, so `dragstart`
+            never fires and there is nothing to debug. Focusable and labelled by
+            hand instead, which keeps the keyboard path. */}
+        <span
+          className="docket-grip"
+          role="button"
+          tabIndex={0}
+          aria-label={`Move ${matter.name}`}
+          title="Drag to move — or focus and use ↑ ↓"
+          onPointerDown={event => {
+            if (event.button !== 0 || matter.id === null) return
+            // Stops the press becoming a text selection, and is the reason a
+            // lift does not need the engine's permission.
+            event.preventDefault()
+            onLift()
+          }}
+          onKeyDown={event => {
+            if (event.key === 'ArrowUp' && !first) {
+              event.preventDefault()
+              onNudge(-1)
+            } else if (event.key === 'ArrowDown' && !last) {
+              event.preventDefault()
+              onNudge(1)
+            }
+          }}
+        />
         {editing === 'name' ? (
           <Field1 initial={matter.name} onCommit={v => onCommit('name', v)} onCancel={() => onEdit(null)} />
         ) : (
@@ -372,25 +626,6 @@ function Row({
             are different kinds of act: everything to the left changes what this
             matter IS, and everything to the right changes where it sits. */}
         <span className="docket-sep" aria-hidden="true" />
-        {/* Disabled at the ends rather than hidden: a control that vanishes
-            makes the row twitch as things move, and a row that changes shape
-            while two people are reading it is worse than a dead button. */}
-        <button
-          className="docket-quiet"
-          disabled={first}
-          onClick={() => onNudge(-1)}
-          title="Move up"
-        >
-          ↑
-        </button>
-        <button
-          className="docket-quiet"
-          disabled={last}
-          onClick={() => onNudge(1)}
-          title="Move down"
-        >
-          ↓
-        </button>
         {/* **A menu that says what it DOES, not where this already is.** The
             first cut showed the current section, so every row inside *periodic
             maintenance* read "periodic maintenance" — information the heading
@@ -638,23 +873,17 @@ function Field1({
 
 /** Name and `when` together, because that is how a matter is said out loud. */
 function NewMatter({
-  sections,
   onCommit,
   onCancel,
 }: {
-  /** Every named section, so a new matter can be filed as it is written. */
-  sections: readonly string[]
-  onCommit: (name: string, when?: string, section?: string) => void
+  onCommit: (name: string, when?: string) => void
   onCancel: () => void
 }): React.JSX.Element {
   const [name, setName] = useState('')
   const [when, setWhen] = useState('')
-  /** **Defaults to nowhere**, because adding a matter is not a claim about it. */
-  const [section, setSection] = useState('')
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => input.current?.focus(), [])
-  const done = (): void =>
-    onCommit(name, when.trim() === '' ? undefined : when, section === '' ? undefined : section)
+  const done = (): void => onCommit(name, when.trim() === '' ? undefined : when)
   return (
     <div className="docket-new">
       <input
@@ -684,23 +913,6 @@ function NewMatter({
           } else if (e.key === 'Escape') onCancel()
         }}
       />
-      {/* **Asked at the moment of adding, when the answer is in the air.** The
-          alternative was to guess, and the only available guess — the end of
-          the file — is inside the *last* section, so *fix the fence* would have
-          become a major project without anybody saying so. */}
-      {sections.length > 0 && (
-        <select
-          className="docket-where"
-          value={section}
-          onChange={event => setSection(event.target.value)}
-          title="Which section to put it in"
-        >
-          <option value="">no section</option>
-          {sections.map(one => (
-            <option key={one} value={one}>{one}</option>
-          ))}
-        </select>
-      )}
       <button className="docket-quiet" onClick={done}>add</button>
     </div>
   )

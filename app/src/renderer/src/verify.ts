@@ -2524,13 +2524,26 @@ export async function runVerify(request: string): Promise<void> {
         .map(n => n.textContent ?? '').filter(t => t.includes('house')).length > 0)
 
       // Add a matter, with a date typed the way a person types one.
-      ;(document.querySelector('.docket-add') as HTMLElement | null)?.click()
+      ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
       await settle(300)
       const fields = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
       const set = (at: HTMLInputElement, value: string): void => {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
         setter?.call(at, value)
         at.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      // **The field's own measurements**, because the last screen of the scene
+      // has no field open on it and the complaint was that the text nearly
+      // touched the rule. Numbers, so a regression is caught rather than looked
+      // at.
+      {
+        const one = fields[0]
+        const css = one === undefined ? null : getComputedStyle(one)
+        say('fieldBox', css === null ? null : {
+          padTop: Math.round(parseFloat(css.paddingTop) * 100) / 100,
+          size: Math.round(parseFloat(css.fontSize)),
+          height: Math.round(one?.getBoundingClientRect().height ?? 0),
+        })
       }
       if (fields[0] !== undefined) set(fields[0], 'Service the boiler')
       if (fields[1] !== undefined) set(fields[1], '2026-10-14')
@@ -2541,7 +2554,7 @@ export async function runVerify(request: string): Promise<void> {
       say('whens', [...document.querySelectorAll('.docket-when')].map(n => n.textContent))
 
       // A matter with no date says so in words, because *not decided* is a state.
-      ;(document.querySelector('.docket-add') as HTMLElement | null)?.click()
+      ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
       await settle(300)
       const more = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
       if (more[0] !== undefined) set(more[0], 'The oven is broken')
@@ -2553,7 +2566,7 @@ export async function runVerify(request: string): Promise<void> {
       // anchor is typed with it because it cannot be reconstructed later: the
       // matter's arrival date is re-stamped by `adopt`, so guessing from it is
       // wrong twice.
-      ;(document.querySelector('.docket-add') as HTMLElement | null)?.click()
+      ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
       await settle(300)
       const again = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
       if (again[0] !== undefined) set(again[0], 'Change the air filters')
@@ -2647,15 +2660,23 @@ export async function runVerify(request: string): Promise<void> {
         }
         click('.docket-runup.new .docket-quiet', 'done')
         await settle(300)
-        say('sectionOffered', click('.docket-add.quiet', 'Add a section'))
+        const NAMED = '.docket-section-head:not(.loose) .docket-section-name'
+        const namesOf = (): (string | null)[] =>
+          [...document.querySelectorAll(NAMED)].map(n => n.textContent)
+        const groupsOf = (): { name: string; matters: (string | null)[] }[] =>
+          [...document.querySelectorAll('.docket-section')].map(g => ({
+            name: g.querySelector(NAMED)?.textContent ?? '',
+            matters: [...g.querySelectorAll('.docket-name')].map(n => n.textContent),
+          }))
+        say('sectionOffered', click('.docket-add', 'Add a section'))
         await settle(300)
         type('.docket-field.section', 'Periodic maintenance')
         await settle(1500)
-        click('.docket-add.quiet', 'Add a section')
+        click('.docket-add', 'Add a section')
         await settle(300)
         type('.docket-field.section', 'Major projects')
         await settle(1500)
-        say('sections', [...document.querySelectorAll('.docket-section-name')].map(n => n.textContent))
+        say('sections', namesOf())
         // An empty one says what it is rather than looking broken.
         say('emptySaidSo', [...document.querySelectorAll('.docket-section-empty')].length)
 
@@ -2681,38 +2702,152 @@ export async function runVerify(request: string): Promise<void> {
           filters.dispatchEvent(new Event('change', { bubbles: true }))
           await settle(1800)
         }
-        say('grouped', [...document.querySelectorAll('.docket-section')].map(s2 => ({
-          name: s2.querySelector('.docket-section-name')?.textContent ?? '',
-          matters: [...s2.querySelectorAll('.docket-name')].map(n => n.textContent),
-        })))
+        say('grouped', groupsOf())
         // The moved matter took its note and its run-up with it.
         say('keptItsNote', (rowOf('boiler')?.querySelectorAll('.docket-note p').length ?? 0))
         say('keptItsRunUp',
           rowOf('boiler')?.querySelectorAll('.docket-runup:not(.new) .docket-runup-when').length ?? 0)
 
-        // Reorder inside a section, and stop at its edge.
-        const arrows = (word: string): HTMLButtonElement[] =>
-          [...(rowOf(word)?.querySelectorAll('.docket-quiet') ?? [])].filter(
-            b => b.textContent === '↑' || b.textContent === '↓',
-          ) as HTMLButtonElement[]
-        say('firstIsPinned', arrows('boiler')[0]?.disabled ?? null)
-        arrows('air filters')[0]?.click()
-        await settle(1800)
-        say('reordered', [...document.querySelectorAll('.docket-section')].map(s2 =>
+      // ── moving by hand: the grip, dragged and typed on ──
+      {
+        const rowOf = (word: string): Element | undefined =>
+          [...document.querySelectorAll('.docket-row')].find(
+            r => (r.querySelector('.docket-name')?.textContent ?? '').includes(word),
+          )
+        const gripOf = (word: string): HTMLElement | null =>
+          (rowOf(word)?.querySelector('.docket-grip') as HTMLElement | null) ?? null
+        say('gripOffered', gripOf('boiler') !== null)
+        // **Visible without being hovered**, because the thing reported from use
+        // was not knowing that rows could be moved at all.
+        {
+          const grip = gripOf('boiler')
+          const css = grip === null ? null : getComputedStyle(grip)
+          const box = grip?.getBoundingClientRect()
+          say('gripSeen', css === null ? null : {
+            shown: css.display !== 'none' && css.visibility !== 'hidden',
+            faint: parseFloat(css.opacity) > 0.3,
+            draggable: grip?.getAttribute('draggable'),
+            // Drawn rather than typed, so what proves it is there is a box with
+            // size and a background — a glyph check would have passed while the
+            // font substituted two dots for six.
+            width: Math.round(box?.width ?? 0),
+            height: Math.round(box?.height ?? 0),
+            drawn: css.backgroundImage !== 'none',
+            // **What makes it a drag SOURCE**, which is the part a synthetic
+            // `dragstart` cannot check: dispatching the event by hand proves the
+            // handlers are wired and says nothing about whether the engine would
+            // ever begin a drag here. It would not, while this was a `<button>`.
+            tag: grip?.nodeName,
+            mayDrag: css.getPropertyValue('-webkit-user-drag').trim(),
+          })
+        }
+
+        // **Pick it up, move it, let go — as pointer events, which is the whole
+        // point of the rewrite.** The gesture used to be HTML5 drag-and-drop and
+        // the only way to exercise it from here was to dispatch `dragstart`
+        // ourselves, which proved the handlers and skipped whether a drag ever
+        // began. It did not, twice, and every check passed anyway. These are the
+        // same three events a hand produces.
+        let attempt = 0
+        /**
+         * Press the grip, move, let go — and **aim after the press, not before**.
+         * The target is located by a callback that runs once the row is in hand,
+         * because measuring first is what hid a real defect: a strip that
+         * appeared on `pointerdown` shifted every row down by its own height, so
+         * the row under the cursor at aim time was not the row under it at drop
+         * time. A test that measures before the gesture cannot see that.
+         */
+        const lift = async (from: string, aim: () => { x: number; y: number }): Promise<void> => {
+          attempt += 1
+          const tag = `${attempt}:${from}`
+          const grip = gripOf(from)
+          if (grip === null) return
+          const at = grip.getBoundingClientRect()
+          grip.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, button: 0, pointerId: 1,
+            clientX: at.left + 4, clientY: at.top + 8,
+          }))
+          await settle(120)
+          say(`lifted:${tag}`, document.querySelectorAll('.docket-row.lifted').length)
+          const { x, y } = aim()
+          window.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true, pointerId: 1, clientX: x, clientY: y,
+          }))
+          await settle(120)
+          // What the surface thinks is under the pointer, and what it is
+          // complaining about if anything — `.docket-problem` is where a bad
+          // verb lands, and no check was reading it.
+          {
+            const at2 = document.elementFromPoint(x, y)
+            const marked = document.querySelector('.docket-row.over-before, .docket-row.over-after')
+            say(`aiming:${tag}`, {
+              // Which row the pointer is over, by name, and which side of it the
+              // surface thinks the drop is on.
+              over: at2?.closest('.docket-row')?.querySelector('.docket-name')?.textContent ?? null,
+              zone: at2?.closest('[data-drop-section]')?.getAttribute('data-drop-section') ?? null,
+              marked: marked?.querySelector('.docket-name')?.textContent ?? null,
+              edge: marked?.className.includes('over-before') === true ? 'before' : marked === null ? null : 'after',
+              aimedAt: [Math.round(x), Math.round(y)],
+            })
+          }
+          window.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, pointerId: 1, clientX: x, clientY: y,
+          }))
+          await settle(1800)
+          say(`said:${tag}`, {
+            problem: document.querySelector('.docket-problem')?.textContent ?? 'none',
+            // Zero means the pointerup handler ran and ended the drag.
+            stillLifted: document.querySelectorAll('.docket-row.lifted').length,
+          })
+        }
+        const drag = async (from: string, onto: string, half: 'top' | 'bottom'): Promise<void> => {
+          await lift(from, () => {
+            const box = (rowOf(onto) as Element).getBoundingClientRect()
+            return { x: box.left + 60, y: half === 'top' ? box.top + 3 : box.bottom - 3 }
+          })
+        }
+        await drag('air filters', 'boiler', 'top')
+        say('dragged', [...document.querySelectorAll('.docket-section')].map(s2 =>
           [...s2.querySelectorAll('.docket-name')].map(n => n.textContent)))
-        say('nowPinned', arrows('air filters')[0]?.disabled ?? null)
+
+        // And back down, by aiming at the bottom half instead.
+        await drag('air filters', 'boiler', 'bottom')
+        say('draggedBack', [...document.querySelectorAll('.docket-section')].map(s2 =>
+          [...s2.querySelectorAll('.docket-name')].map(n => n.textContent)))
+
+        // **Out of a section by dragging onto another section's heading**, which
+        // is the gesture that was hard to find before.
+        await lift('oven', () => {
+          // The first NAMED section's heading; the undivided run's is also a
+          // `.docket-section-head`, and dropping onto that would be a move to
+          // where it already is.
+          const heads = [...document.querySelectorAll('.docket-section-head:not(.loose)')]
+          const box = (heads[0] as Element).getBoundingClientRect()
+          return { x: box.left + 20, y: box.top + box.height / 2 }
+        })
+        say('draggedIntoSection', groupsOf())
+
+        // The keyboard path the arrows used to be: focus the grip, press ↓.
+        const grip = gripOf('oven')
+        grip?.focus()
+        say('gripTakesFocus', document.activeElement === grip)
+        grip?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+        await settle(1800)
+        say('byKeyboard', [...document.querySelectorAll('.docket-section')].map(s2 =>
+          [...s2.querySelectorAll('.docket-name')].map(n => n.textContent)))
+      }
 
         // **Ungrouping the POPULATED one**, because the claim worth checking in
         // a live window is that taking a heading away does not take a house
         // with it.
-        const ungroup = [...(document.querySelectorAll('.docket-section-head')[0]
+        const ungroup = [...(document.querySelectorAll('.docket-section-head:not(.loose)')[0]
           ?.querySelectorAll('.docket-quiet') ?? [])].find(
           b => b.textContent === 'ungroup',
         ) as HTMLElement | null
         ungroup?.click()
         await settle(1500)
         say('afterUngroup', {
-          sections: [...document.querySelectorAll('.docket-section-name')].map(n => n.textContent),
+          sections: namesOf(),
           matters: [...document.querySelectorAll('.docket-name')].map(n => n.textContent).length,
         })
 
@@ -2726,7 +2861,9 @@ export async function runVerify(request: string): Promise<void> {
           pick.dispatchEvent(new Event('change', { bubbles: true }))
           await settle(1200)
         }
-        const head = document.querySelector('.docket-section-head .docket-quiet') as HTMLElement | null
+        const head = document.querySelector(
+          '.docket-section-head:not(.loose) .docket-quiet',
+        ) as HTMLElement | null
         head?.click()
         await settle(300)
         const rename = document.querySelector('.docket-field.section') as HTMLInputElement | null
@@ -2737,7 +2874,23 @@ export async function runVerify(request: string): Promise<void> {
           rename.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
           await settle(1500)
         }
-        say('renamed', [...document.querySelectorAll('.docket-section-name')].map(n => n.textContent))
+        say('renamed', namesOf())
+
+        // **Add INTO a section**, the task list's gesture: the button at the
+        // foot of a group adds to that group, so the add row has nothing left
+        // to ask about where it goes.
+        const addTo = [...document.querySelectorAll('.docket-add.here')].find(
+          b => (b.textContent ?? '').includes('Periodic maintenance'),
+        ) as HTMLElement | null
+        say('addHereOffered', addTo !== null)
+        addTo?.click()
+        await settle(300)
+        const typing = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+        say('addHereAsksNothing', document.querySelectorAll('.docket-new .docket-where').length)
+        if (typing[0] !== undefined) set(typing[0], 'Bleed the radiators')
+        typing[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1800)
+        say('addedHere', groupsOf())
       }
 
       await window.tephra.doc.flush()

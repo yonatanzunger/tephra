@@ -21,6 +21,7 @@
 //   2. a matter takes a date, a range, or nothing, and *nothing* says so in words
 //   3. a recurrence is anchored, because the anchor cannot be reconstructed later
 //   4. a note and a run-up live under one matter, both visible without a click
+//      — and a matter is moved by dragging its grip, or by ↑/↓ on a focused one
 //   5. it is legible: reading face, reading size, one language across the row
 
 import { spawn } from 'node:child_process'
@@ -140,6 +141,14 @@ check(
   JSON.stringify(r.whens),
 )
 check(
+  'a field you type a sentence into has room around the text',
+  // The first cut had 2.4px of padding on a 15px face and the descenders very
+  // nearly touched the rule; reported from use. Held to a floor rather than an
+  // exact number, so the type scale can still move.
+  r.fieldBox?.padTop >= 4.5 && r.fieldBox?.height >= r.fieldBox?.size + 12,
+  JSON.stringify(r.fieldBox),
+)
+check(
   'and NOT DECIDED YET is a state that says so in words',
   Array.isArray(r.undated) && r.undated.includes('no date yet'),
   JSON.stringify(r.undated),
@@ -208,22 +217,87 @@ check(
 )
 check('and a moved matter brings its note with it', r.keptItsNote === 2, `lines=${r.keptItsNote}`)
 check('and its run-up', r.keptItsRunUp === 1, `run-ups=${r.keptItsRunUp}`)
+check('every row carries a grip to move it by', r.gripOffered === true)
 check(
-  'up and down reorder inside the section',
-  JSON.stringify(r.reordered) === JSON.stringify([
-    ['The oven is broken'], ['Change the air filters', 'Service the boiler'], [],
-  ]),
-  JSON.stringify(r.reordered),
+  'visible without hovering, because the report was not knowing rows MOVE',
+  r.gripSeen?.shown === true && r.gripSeen?.faint === true,
+  JSON.stringify(r.gripSeen),
 )
 check(
-  'and the gesture is dead at the edge rather than reclassifying',
-  r.firstIsPinned === true && r.nowPinned === true,
-  `before=${r.firstIsPinned} after=${r.nowPinned}`,
+  'and it is DRAWN, after a font substituted two dots for six',
+  r.gripSeen?.drawn === true && r.gripSeen?.width >= 8 && r.gripSeen?.height >= 12,
+  JSON.stringify(r.gripSeen),
+)
+check(
+  'THE ONE THAT WAS BROKEN: pressing the grip actually lifts the row',
+  // Reported twice from use: the cursor changed and nothing happened. It was
+  // HTML5 drag-and-drop — first on a `<button>`, which is not a drag source at
+  // all, then on a span the engine still would not lift. No check here could
+  // see it, because exercising that gesture from a scene means dispatching
+  // `dragstart` by hand, which asserts the handlers and skips the only open
+  // question. The gesture is pointer events now, so THIS is the real thing: a
+  // pointerdown went down on the grip and a row came up.
+  r['lifted:1:air filters'] === 1,
+  `rows lifted by a press: ${r['lifted:1:air filters']}`,
+)
+check(
+  'THE POINT: dragging one onto the top half of another lands it above',
+  JSON.stringify(r.dragged) === JSON.stringify([
+    ['The oven is broken'], ['Change the air filters', 'Service the boiler'], [],
+  ]),
+  JSON.stringify(r.dragged),
+)
+check(
+  'and onto the bottom half lands it below — one gesture, either direction',
+  JSON.stringify(r.draggedBack) === JSON.stringify([
+    ['The oven is broken'], ['Service the boiler', 'Change the air filters'], [],
+  ]),
+  JSON.stringify(r.draggedBack),
+)
+check(
+  'INTO A SECTION by dragging onto its heading, which is the hard-to-find one',
+  JSON.stringify(r.draggedIntoSection) === JSON.stringify([
+    { name: '', matters: [] },
+    {
+      name: 'Periodic maintenance',
+      matters: ['Service the boiler', 'Change the air filters', 'The oven is broken'],
+    },
+    { name: 'Major projects', matters: [] },
+  ]),
+  JSON.stringify(r.draggedIntoSection),
+)
+check('the grip takes keyboard focus', r.gripTakesFocus === true)
+check(
+  'and ↑ on a focused grip still moves it, which is what the arrows were for',
+  JSON.stringify(r.byKeyboard) === JSON.stringify([
+    [], ['Service the boiler', 'The oven is broken', 'Change the air filters'], [],
+  ]),
+  JSON.stringify(r.byKeyboard),
 )
 check(
   'UNGROUPING KEEPS EVERYTHING: the heading goes, the matters stay',
   r.afterUngroup?.sections?.length === 1 && r.afterUngroup?.matters === 3,
   JSON.stringify(r.afterUngroup),
+)
+check(
+  'THE GESTURE: each group has its own add button, at its foot',
+  r.addHereOffered === true,
+)
+check(
+  'and it asks nothing about where, because the button already said',
+  r.addHereAsksNothing === 0,
+  `pickers in the add row: ${r.addHereAsksNothing}`,
+)
+check(
+  'a matter added from a section lands in that section',
+  JSON.stringify(r.addedHere) === JSON.stringify([
+    { name: '', matters: ['The oven is broken'] },
+    {
+      name: 'Periodic maintenance',
+      matters: ['Change the air filters', 'Service the boiler', 'Bleed the radiators'],
+    },
+  ]),
+  JSON.stringify(r.addedHere),
 )
 check(
   'and a section is renamed in place, keeping what is in it',
@@ -249,7 +323,7 @@ check('named from the name given', files[0] === 'the-house.docket.md', files[0] 
 check('declaring its kind, so it opens as one next time', /^kind: docket$/m.test(text))
 check(
   'every matter carrying the four fields that cannot be backfilled',
-  (text.match(/<!--tephra:matter [0-9a-z]{8} \d+ 0-->/g) ?? []).length === 3,
+  (text.match(/<!--tephra:matter [0-9a-z]{8} \d+ 0-->/g) ?? []).length === 4,
   (text.match(/<!--tephra:matter.*-->/g) ?? []).join(' | '),
 )
 check('the note as prose, bracketed by the machinery rather than interrupting it',
@@ -270,6 +344,10 @@ check(
   'and the recurrence in the round-trip form, which the parser reads back',
   /^when: every 90d from 2026-10-01$/m.test(text),
 )
+
+for (const key of Object.keys(r).filter(k => k.startsWith('aiming:') || k.startsWith('said:'))) {
+  console.log(`        ${key}: ${JSON.stringify(r[key])}`)
+}
 
 console.log(`\nshot: ${shot}`)
 console.log(`${spent.map(s => `${s.scene} ${(s.ms / 1000).toFixed(1)}s`).join('  ')}`)

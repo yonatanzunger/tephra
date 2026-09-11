@@ -326,40 +326,59 @@ export class DocketDocument extends SegmentedDocument {
   // ── sections (MH1) ─────────────────────────────────────────
 
   /**
-   * Where a matter goes and what order things sit in, as text moves.
+   * Put a matter at a given place in the block order.
    *
-   * **A move is a splice, not a re-render.** The block that moves is written
-   * out afresh — it is the one being touched — and every other block is left
-   * exactly as its bytes were, which is the property the whole format rests on.
-   * The two edits go in ONE `replace()` so a move is one undo, not a
-   * disappearance followed by a reappearance.
+   * **Stated as an order, not as two offsets, because the offsets were wrong.**
+   * The first cut deleted the block and inserted it at the destination in one
+   * `replace()` — two edits, and when the destination was the block's own
+   * boundary they overlapped: *edit at 313 overlaps one ending at 416*, from
+   * use, on the very first drag. The guard against it was an interval test that
+   * had to be exactly right, and was not.
+   *
+   * So the order is rebuilt instead. Every block that is not moving is put back
+   * **by its original bytes**, sliced out of the body it came from, which is
+   * what keeps the byte-identical property that the format rests on; the one
+   * that moves is written afresh, because it is being touched and its heading
+   * depth may be changing. One edit, and no interval arithmetic to get wrong.
    */
-  async #splice(id: string, insertAt: number, level: number): Promise<void> {
+  async #rearrange(id: string, target: number, level: number): Promise<void> {
+    const body = (await this.segment(ONLY_SEGMENT)).body
     const blocks = await this.#blocks()
-    const which = blocks.findIndex(b => b.kind === 'matter' && b.matter.id === id)
-    const found = blocks[which]
+    const at = blocks.findIndex(b => b.kind === 'matter' && b.matter.id === id)
+    const found = blocks[at]
     if (found === undefined || found.kind !== 'matter') {
       throw new Error(`${this.id} has no matter ${id}`)
     }
-    // Take the blank run after the block with it, so a move leaves no hole and
-    // lands with the same separation it had.
-    const gapEnd = blocks[which + 1]?.from ?? (await this.segment(ONLY_SEGMENT)).body.length
-    if (insertAt > found.from && insertAt < gapEnd) return // already there
-    const body = (await this.segment(ONLY_SEGMENT)).body
-    const tail = insertAt >= body.length ? '' : '\n\n'
-    const lead = insertAt >= body.length && body !== '' && !body.endsWith('\n\n')
-      ? (body.endsWith('\n') ? '\n' : '\n\n')
-      : ''
-    await this.replace([
-      {
-        span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, gapEnd) },
-        payload: '' as DocumentText,
+    const first = blocks[0]
+    if (first === undefined) return
+    const texts = blocks.map(b => body.slice(b.from, b.to))
+    const rest = texts.filter((_, n) => n !== at)
+    // The target is given in the ORIGINAL order, so taking the block out of the
+    // list shifts everything after it down by one.
+    const to = target > at ? target - 1 : target
+    if (to === at && level === found.level) return // already where it is going
+    const ordered = [...rest.slice(0, to), matterBlock(found.matter, level), ...rest.slice(to)]
+    const payload = `${ordered.join('\n\n')}\n`
+    if (payload === body.slice(first.from)) return
+    await this.replace([{
+      span: {
+        begin: this.at(ONLY_SEGMENT, first.from),
+        end: this.at(ONLY_SEGMENT, body.length),
       },
-      {
-        span: { begin: this.at(ONLY_SEGMENT, insertAt), end: this.at(ONLY_SEGMENT, insertAt) },
-        payload: `${lead}${matterBlock(found.matter, level)}${tail}` as DocumentText,
-      },
-    ], 'operation')
+      payload: payload as DocumentText,
+    }], 'operation')
+  }
+
+  /** Which block index is *the end of this section*. */
+  #endIndex(section: string, blocks: readonly ScannedBlock[]): number {
+    if (section === '') {
+      const first = blocks.findIndex(b => b.kind === 'section')
+      return first < 0 ? blocks.length : first
+    }
+    const start = blocks.findIndex(b => b.kind === 'section' && b.name === section)
+    if (start < 0) throw new Error(`${this.id} has no section called ${section}`)
+    const next = blocks.slice(start + 1).findIndex(b => b.kind === 'section')
+    return next < 0 ? blocks.length : start + 1 + next
   }
 
   /** Where a section's matters end — the next section heading, or the end. */
@@ -459,14 +478,18 @@ export class DocketDocument extends SegmentedDocument {
    * which is how *put this above that one* is expressed.
    */
   async moveMatter(id: string, section: string, before?: string): Promise<void> {
-    const { at, level } = await this.#endOf(section)
+    const blocks = await this.#blocks()
+    const level = section === '' ? MATTER_LEVEL : MATTER_LEVEL + 1
+    // Throws on a section that is not there, which is the check `#endIndex` does
+    // anyway — kept ahead of the work so nothing is half done.
+    const end = this.#endIndex(section, blocks)
     if (before === undefined) {
-      await this.#splice(id, at, level)
+      await this.#rearrange(id, end, level)
       return
     }
-    const target = (await this.#blocks()).find(b => b.kind === 'matter' && b.matter.id === before)
-    if (target === undefined) throw new Error(`${this.id} has no matter ${before}`)
-    await this.#splice(id, target.from, level)
+    const target = blocks.findIndex(b => b.kind === 'matter' && b.matter.id === before)
+    if (target < 0) throw new Error(`${this.id} has no matter ${before}`)
+    await this.#rearrange(id, target, level)
   }
 
   /**
@@ -494,15 +517,10 @@ export class DocketDocument extends SegmentedDocument {
     while (last + 1 < blocks.length && (blocks[last + 1] as ScannedBlock).kind === 'matter') last += 1
     const wanted = which + (delta < 0 ? -1 : 1)
     if (wanted < first || wanted > last) return false
-    const neighbour = blocks[wanted] as ScannedBlock
-    if (delta < 0) {
-      await this.#splice(id, neighbour.from, found.level)
-    } else {
-      // After the neighbour means at the start of whatever follows it.
-      const after = blocks[wanted + 1]?.from
-        ?? (await this.segment(ONLY_SEGMENT)).body.length
-      await this.#splice(id, after, found.level)
-    }
+    // Up: take the neighbour's place. Down: the place after it — and note that
+    // `wanted` is ALREADY one past `which`, so this is +1 and not +2. It was
+    // +2 for one run, which moved a matter two places on every downward nudge.
+    await this.#rearrange(id, delta < 0 ? wanted : wanted + 1, found.level)
     return true
   }
 

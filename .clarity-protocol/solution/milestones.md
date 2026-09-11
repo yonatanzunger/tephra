@@ -807,10 +807,13 @@ than showing a blank.
 **Sections divide a docket for reading** — *periodic maintenance*, *need to do*,
 *major projects* — as ordinary markdown headings with matters nested under them.
 A section is told from a matter by **content, not heading depth**, which is what
-lets dockets written before sections existed keep working. A matter can be moved
-between sections or nudged up and down inside one; a nudge stops at the section
-edge, and removing a heading keeps everything that was under it. Nothing sorts
-itself.
+lets dockets written before sections existed keep working. A matter is moved by
+**dragging its grip** — onto another row to sit above or below it, or onto a
+heading to go into that section, the undivided run included — or by ↑/↓ on a
+focused grip, which is the keyboard path. The drag is pointer events rather than
+HTML5 drag-and-drop, for the reason D75 records. **Matters are added per
+section**, from a button at the foot of the group they go into. Removing a heading keeps everything that was under it.
+Nothing sorts itself.
 
 **Recurrence setup, run-up editing, notes and sections were pulled in from later
 phases** by the planning conversation the phase exists to serve; nothing

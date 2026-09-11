@@ -712,3 +712,119 @@ session, which happened in the one run that shared the machine with a build.
 **And the reporting lesson is the same one as the timed-out scene:** a filter
 that only matches success cannot distinguish *passed* from *never finished*.
 Assert on the presence of the summary, not on the absence of failures.
+
+## An inference hardened into a rule, and it was the wrong rule
+
+The docket surface carried this as a design constraint, in the file header and in
+the stylesheet: **no hover-only controls, because two people cannot both point at
+the same row.** Nothing in `goal/horizon.md` or D70 says that. It was inferred
+here from H3's legibility requirement, written down in the imperative, and then
+cited in three places as though it had been decided.
+
+Corrected from use in one sentence: *hover-only controls are fine, I'm not sure
+where that rule came from. Those don't prevent two people from sitting next to
+each other and working together.*
+
+**What H3 actually demands is that the surface be legible and its gestures
+findable** — and the inferred rule had crowded out the real one. In the same
+message: *I'm not sure how to move things into and out of sections.* The move
+control was there, and it was the quietest mark in the row — 11.5px, muted ink, a
+hairline border. The constraint being enforced was invented; the requirement being
+missed was real.
+
+**The tell to look for: a comment that states a rule in the imperative and cites
+a requirement number that does not contain it.** When a constraint is written
+here rather than in the requirements, say that it was inferred, so that whoever
+reads it next knows it can be argued with.
+
+## A glyph is a font dependency, and grips are worth drawing
+
+The drag handle was `⠿` (braille pattern dots-123456), which is the conventional
+grip character. The UI font substituted something that rendered as **two dots** —
+not six — which reads as punctuation rather than as *pick this up*. The
+acceptance check passed the whole time, because it asked whether the element was
+present and visible, and it was.
+
+**Drawn instead**: six dots from a repeating radial-gradient, which depends on no
+font and lands on the pixel grid at any size. And the check now asks for a box
+with real dimensions and a background image, rather than for a character — a
+glyph assertion cannot tell a grip from a colon.
+
+**Screenshots caught this too**, as they have caught every visual defect in this
+project. The count of things found by looking that were not found by testing is
+now high enough that *look at it* belongs in the definition of done.
+
+## A synthetic `dragstart` proves the handlers and not the gesture
+
+The drag handles shipped with eight passing acceptance checks and did not work.
+Reported from use in one sentence: *I can see the grab handles and the cursor
+changes over them, but when I try to grab them, nothing happens.*
+
+**The grip was a `<button draggable>`.** A form control is not a drag source in
+this engine — `mousedown` on a button is an activation gesture, so the browser
+never begins a drag, `dragstart` never fires, and there is no error anywhere.
+Everything downstream of `dragstart` was correct, which is why every check
+passed: the scene *dispatched* `dragstart` by hand. **Dispatching an event skips
+the only question that was open** — whether the engine would ever raise it.
+
+**The first fix did not work either.** A `<span role="button" tabIndex={0}
+draggable>` with `-webkit-user-drag: element` still did not lift, and the check
+written for it — *is this a drag source?* — passed. Two rounds of guessing at
+engine rules I could not observe from here, each validated by a check that could
+not fail.
+
+**The gesture is pointer events now, and that is the lesson.**
+`pointerdown` / `pointermove` / `pointerup`, with the drop resolved by
+`document.elementFromPoint` against `data-` attributes on the rows. Nothing in
+the engine gets to decide whether an element is liftable; the events a test
+dispatches are the events a hand produces, so the check is the gesture rather
+than a proxy for it; and the feedback is ours to draw, which mattered because
+*nothing is lifted* was the other half of the report.
+
+**The general rule: when a test has to synthesise the event under test, it has
+stopped testing the thing and started testing what happens afterwards.** The
+honest response is not a cleverer proxy — I tried two and both passed on a broken
+feature — it is to choose a mechanism whose entry point a test can actually
+produce. Also worth remembering that `cursor: grab` is pure decoration: it says a
+thing looks draggable, never that it is.
+
+## Nothing that appears because a drag started may occupy space
+
+With the gesture finally working, drops still landed in the wrong place. The
+cause: a *drop here* strip rendered only while dragging, at the top of the list.
+It appeared on `pointerdown`, pushed every row down by its own height, and so the
+row you aimed at was no longer under the cursor when you let go. In the scene the
+aim was (337, 213) and the row had moved to 280.
+
+**It is one bug with two faces.** As a defect: content moving under the pointer at
+the exact moment the pointer starts mattering. As a test blind spot: the scene
+measured the target *before* pressing, which is the one ordering that cannot see
+it. Aim after the gesture begins, always — it costs a callback and it is the only
+order that reflects what a hand does.
+
+The fix was to stop conjuring the target: the undivided run is now **labelled
+whenever the docket is divided**, so the place to drag something back to is
+always there, in the layout, before anybody touches anything.
+
+## Two edits computed from offsets, and the gap was adjacency
+
+The move verb deleted a block and inserted it at the destination in one
+`replace()` — two edits — and when the destination coincided with the block's own
+boundary they overlapped: *edit at 313 overlaps one ending at 416*, on the first
+drag anybody ever did. Sixteen integration tests covered moves and every one
+passed, because they all moved a block **past** something. Adjacency — dropping
+onto the row immediately above or below — is where the boundaries coincide, and
+nothing tested it.
+
+**Rewritten as an order rather than as arithmetic.** The verb now rebuilds the
+block sequence: every block that is not moving goes back by its original bytes
+(which is what keeps the byte-identical property), the one that moves is
+re-serialised, and the result is one edit. There is no interval to get wrong.
+
+Getting it wrong once more on the way — a downward nudge that moved two places,
+because the neighbour index was already one past the subject — is why the tests
+for this are now **exhaustive over every position and direction**. At three
+matters that is fifteen cases and they run in milliseconds; the failure mode was
+arithmetic, and arithmetic at this size is worth brute-forcing rather than
+reasoning about.
+
