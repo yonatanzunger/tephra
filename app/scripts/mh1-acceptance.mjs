@@ -235,6 +235,13 @@ check(
   JSON.stringify(r.modesOnRow),
 )
 check(
+  'and the schedule asks its questions together, behind the sentence',
+  // Mode, date and interval were three controls on the resting row; the column
+  // already read as a sentence encoding all three, so it became the way in.
+  r.scheduleAsksTogether?.mode === true && r.scheduleAsksTogether?.when >= 1,
+  JSON.stringify(r.scheduleAsksTogether),
+)
+check(
   'and no menu duplicates the drag, which did the same thing better',
   // *move to…* was the loudest mark on a row otherwise made of quiet ones,
   // for a gesture the grip already covers.
@@ -471,6 +478,21 @@ const stepNamed = (steps, what) =>
   (Array.isArray(steps) ? steps : []).find(one => one.what === what)
 
 check(
+  'THE STEPS FOLD AWAY, so a one-step matter can be one line',
+  // Every matter is born with a step — explicitly, so that nothing downstream
+  // has to infer one — and shown, that step reads as an echo of the matter's
+  // own name.
+  r.folded === true && r.unfolded === true,
+  `folded=${r.folded} unfolded=${r.unfolded}`,
+)
+check(
+  'and the disclosure is big enough to read as a direction',
+  // It was a 9px glyph, smaller than the number beside it: *I can barely see
+  // it, much less tell what it is.* Drawn now, at a size this asserts.
+  r.markSize?.across >= 6 && r.markSize?.along >= 8,
+  JSON.stringify(r.markSize),
+)
+check(
   'NO TICK ON A DOCKET: completion is kept, and set from the task list',
   // A docket describes work; the task list is where work is done. The state has
   // to exist — a dependency reads it and suspending preserves it — but setting
@@ -503,6 +525,14 @@ check(
 )
 
 // ── 7. legibility ───────────────────────────────────────────────────────────
+check(
+  'EVERY CLASS THE SURFACE STYLES has a rule to style it',
+  // A wholesale rewrite of one CSS region silently took four rules with it.
+  // One was caught by eye; the others were controls that look passable at
+  // browser defaults, which is exactly what makes them easy to miss.
+  Array.isArray(r.styled) && r.styled.length === 0,
+  `no rule written for: ${JSON.stringify(r.styled)}`,
+)
 check(
   'the name is set in the notebook reading face at reading size (H3)',
   typeof r.type?.size === 'number' && r.type.size >= 15,

@@ -1066,3 +1066,28 @@ when they want the control. A field that shows the current value is a display;
 a field that only shows when there *is* a current value is a display pretending
 to be a control. Where absence is a real state — *once*, *no date yet*, *on the
 calendar* — say it in words and keep the control.
+
+## Rewriting a region of CSS takes the rules you forgot were in it
+
+A ground-up restyle of the docket replaced two regions of the stylesheet
+wholesale. Both replacements were written by naming the rules they were meant to
+contain — and each region also held rules that had arrived later, for controls
+added in between. Four went silently: `.docket-step-clock`, `.docket-step-kind`,
+`.docket-mode`, `.docket-start`.
+
+**One was caught by eye and three were not**, which is the interesting part. An
+unstyled label is obviously broken — black, 16px, wrong font. An unstyled
+`<select>` or `<button>` looks *plausible*: the browser's defaults are a
+perfectly reasonable-looking control, just not this one. So the failure is
+visible exactly where the element has no default appearance of its own, and
+invisible everywhere else.
+
+**The check is cheap and general**: nothing in this surface uses 16px, so for
+every class the surface styles, assert its computed `font-size` is not the
+browser's. A missing rule shows up as the default and the default is the tell.
+
+**Second time this shape has appeared.** The other was a CSS block rewritten in
+place whose predecessor survived further down the file and won on source order —
+also invisible, also about a stylesheet edit that looked complete because the
+part being *looked at* was correct. A stylesheet has no compiler; the only thing
+that fails loudly is a rule that changes something you happen to be watching.

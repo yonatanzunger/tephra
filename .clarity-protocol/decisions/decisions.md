@@ -3481,9 +3481,35 @@ MH3b's, and carried in the roadmap.
 > obvious; **you do it** against **it happens to you** is the one the first cut
 > could not see, and it is what makes a talk and a repair feel unalike while
 > being structurally identical. It decides the **first step**: work you do
-> becomes a task, something that merely happens becomes a reminder. The four are
-> **templates and not types** — nothing stores which was chosen, so a job that
-> later gets a date is not mislabelled as an event, because there is no label.
+> becomes a task, something that merely happens becomes a reminder. They are
+> called **One-off task · Recurring task · One-off event · Recurring event**,
+> which says both axes in two words each.
+>
+> **And the mode is STORED, not derived** — corrected within the day, having
+> been built the other way first. The argument for deriving it was that nothing
+> could then be mislabelled: a job that gained a date would not still claim to
+> be undated, because there would be no claim. The price was that the surface
+> could only show the **machinery** — an interval and an unlabelled radio group,
+> leaving somebody to work out that the two together meant *this comes round
+> after I do it*. Reported from use in exactly those terms, and it is the same
+> fault as the reschedule step: the implementation on display because the
+> concept had nowhere to live.
+>
+> **Two things make storing it sound.** The mode **governs** the variables
+> rather than describing them — changing it rewrites what it owns, so a one-off
+> keeps no interval and only a recurring *task* keeps an `after`, and nothing
+> else can set those fields. It cannot come to disagree. And it holds a
+> distinction the variables cannot: `(start, —, —)` is both a one-off task and a
+> one-off event, and which one decides whether steps default to a task or a
+> reminder. Once the first step exists, that has no other home.
+>
+> **One vocabulary, two places.** The same four words are the creation picker and
+> the control on every row, so making a thing and changing it later are the same
+> question asked twice rather than two sets of machinery.
+>
+> **Derivation survives as a fallback only**: a block written before modes were
+> stored gets one read back from its shape, with task-against-event guessed from
+> the kind of its first step — the one part that genuinely cannot be recovered.
 >
 > **`start` is the NEXT instance, not a first one**, advanced as instances pass.
 > Far easier to reason about than counting forward from an anchor years back —

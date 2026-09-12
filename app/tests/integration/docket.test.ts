@@ -1369,3 +1369,39 @@ test('THE CHOICE HAS TO BE OFFERED BEFORE IT IS MADE', async t => {
   await doc.setAfter(id, null)
   assert.equal((await doc.matters())[0]?.when.after, null)
 })
+
+test('EVERY MATTER IS BORN WITH A STEP, explicitly rather than by inference', async t => {
+  // The alternative was a matter with no steps being *treated as* having one
+  // according to its mode — a rule that would have leaked into generation, the
+  // horizon and anything else that reads a docket, and which nobody could
+  // reason about from the file alone. The step is written down; the surface
+  // folds it away so it does not read as an echo of the matter's own name.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const made = await service.docketAdd(id, 'Fix the skylight', { mode: 'task' })
+  const matter = (await service.docketMatters(id)).find(one => one.id === made)
+  assert.equal(matter?.steps.length, 1)
+  assert.equal(matter?.steps[0]?.text, 'Fix the skylight')
+  assert.equal(matter?.steps[0]?.kind, 'task')
+})
+
+test('and an event is born with a reminder, which is the other axis', async t => {
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const made = await service.docketAdd(id, 'The ACM talk', { mode: 'event', start: '2026-11-12' })
+  const matter = (await service.docketMatters(id)).find(one => one.id === made)
+  assert.equal(matter?.steps[0]?.kind, 'status')
+})
+
+test('and renaming a matter leaves its steps alone, which is the simple rule', async t => {
+  // A step is something somebody wrote. Keeping it in step with the matter's
+  // name would mean a rule about when they are still the same thing, which is
+  // the kind of inference this design keeps refusing.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const made = await service.docketAdd(id, 'Fix the skylight', { mode: 'task' })
+  await service.docketRename(id, made, 'Fix the roof light')
+  const matter = (await service.docketMatters(id)).find(one => one.id === made)
+  assert.equal(matter?.name, 'Fix the roof light')
+  assert.equal(matter?.steps[0]?.text, 'Fix the skylight')
+})

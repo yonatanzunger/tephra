@@ -1992,23 +1992,81 @@ body {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
   margin-top: .3rem;
 }
-/* Present without shouting. Hover-only is permitted here — the *two people
-   cannot both point* argument was an inference, and a wrong one — but a control
-   nobody can find is still a broken control, which is what happened to the move
-   menu below. */
+/* ── three tiers, and only three ───────────────────────────────────────────
+   **Content** — a matter's name, its steps, its notes — at full ink in the
+   reading face. **Structure** — numbers, schedules, headings — small and
+   muted. **Controls** — absent at rest, muted on hover, full on focus.
+   Structure and controls used to share a tier, so six grey widgets per matter
+   competed with one thing worth reading; at a dozen matters that is seventy
+   controls against twelve pieces of content. */
 .docket-quiet {
-  font: inherit; font-size: 11.5px; cursor: pointer;
+  font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
   color: rgb(var(--text-muted)); background: none;
   border: 1px solid transparent; border-radius: 5px; padding: .05rem .3rem;
 }
 .docket-quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .06); }
 .docket-quiet.danger:hover { color: rgb(var(--bad, var(--text))); }
 
-/* **Room around the text, because this is a field you type a sentence into.**
-   The first cut had .15rem of it and the descenders very nearly touched the
-   rule — cramped in a surface whose whole point is that it is comfortable to
-   read. The line-height is set with the padding rather than left to the font,
-   so the box does not change height between an empty field and a full one. */
+/* **Hover fills space that is already reserved; it never adds a line.** A
+   control row that appeared under the pointer would push every step down — the
+   same fault as the drop strip that shifted the list the moment a drag began.
+   Clicking may reflow, because then the thing that moved is the thing you
+   asked to move. */
+/* **The disclosure, which is structure rather than a control.** Always there,
+   quiet, carrying the count — so it says both that there is something folded
+   away and how much, without a bare number pretending to be a label. */
+.docket-open {
+  flex: none; margin-left: auto;
+  display: inline-flex; align-items: center; gap: .3rem;
+  font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-muted)); cursor: pointer;
+  background: none; border: 0; border-radius: 4px; padding: .1rem .3rem;
+}
+.docket-open:hover { color: rgb(var(--text)); background: rgb(var(--text) / .06); }
+
+/* **Drawn, not typed** — the same reason the grip is: a glyph small enough to
+   sit beside 11px text is at the mercy of whatever the font does with it, and
+   `▸` came out too faint to read as a direction at all. Borders give an exact
+   size and a shape that cannot be substituted. */
+.docket-open-mark {
+  flex: none; width: 0; height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid currentColor;
+  transition: transform .1s;
+}
+.docket-open[aria-expanded='true'] .docket-open-mark { transform: rotate(90deg); }
+
+.docket-tools, .docket-step-tools {
+  display: inline-flex; gap: .1rem;
+  opacity: 0; transition: opacity .1s;
+}
+/* **Centred, not baselined, and given room.** A `select` carries its own
+   padding and metrics, so a baseline shared with a plain label leaves the two
+   a pixel or two out of true — and at `.1rem` they were close enough to read as
+   one run-on control. Centring lines up the boxes rather than the text inside
+   them, which is what these are: boxes. */
+.docket-tools { align-items: center; margin-left: .35rem; gap: .35rem; }
+.docket-step-tools {
+  align-items: center; margin-left: auto; padding-left: .75rem; gap: .7rem;
+}
+.docket-row:hover .docket-tools,
+.docket-tools:focus-within { opacity: 1; }
+.docket-step:hover .docket-step-tools,
+.docket-step-tools:focus-within { opacity: 1; }
+
+/* The whole schedule, opened by clicking the sentence that describes it. */
+.docket-schedule { display: inline-flex; align-items: baseline; gap: .3rem; margin-left: auto; }
+
+.docket-owner { font-size: 12px; color: rgb(var(--text-muted)); }
+/* One relative link to one document (H14), shown by its filename: the path is
+   how it is written and the name is how it is read. */
+.docket-link {
+  font-size: 12px; color: rgb(var(--accent)); text-decoration: none;
+  border-bottom: 1px solid rgb(var(--accent) / .35);
+}
+.docket-link:hover { border-bottom-color: rgb(var(--accent)); }
+
 .docket-field {
   font: inherit; font-size: 15px; font-family: var(--font-body); line-height: 1.5;
   color: rgb(var(--text)); background: rgb(var(--surface));
@@ -2030,117 +2088,101 @@ body {
 }
 .docket-add:hover { background: rgb(var(--text) / .05); }
 
-/* A matter's run-ups (MH1, H4).
+/* A matter's steps (MH1, H4, D76).
  *
- * **Indented under the matter, and always shown when there are any.** The
- * run-up is what the conversation is actually about — *how long before this do
- * we need to start* — so hiding it behind a click would keep it off the screen
- * both people are reading (H3). */
-.docket-runups {
-  display: flex; flex-direction: column; gap: .2rem;
-  margin: .35rem 0 .1rem 1.1rem;
-  padding-left: .7rem;
-  border-left: 2px solid rgb(var(--border));
+ * **A spine, so the steps read as part of the matter rather than near it.** A
+ * hairline down the left of the group is cheaper and flatter than a card —
+ * twenty cards on a docket would weigh more than the noise they replaced — and
+ * it is the mark that says *these belong to that*. */
+.docket-steps {
+  margin: .15rem 0 0 1.15rem; padding-left: .6rem;
+  border-left: 1px solid rgb(var(--border));
 }
-.docket-runup { display: flex; align-items: baseline; gap: .5rem; }
-/* **A done step stays legible and stops competing.** It is history rather than
-   noise — the record of what has already happened on this matter — so it keeps
-   its words and loses its weight. */
-.docket-runup.done .docket-runup-what {
-  color: rgb(var(--text-muted)); text-decoration: line-through;
-  text-decoration-color: rgb(var(--text-muted) / .5);
-}
-.docket-runup.done .docket-runup-when { color: rgb(var(--text-muted) / .7); }
+.docket-step { display: flex; align-items: baseline; gap: .4rem; padding: .05rem 0; }
 
-/* **What kind of thing a matter is** — the control the rest of the row hangs
-   off, so it carries an edge while its dependents stay quiet. */
-.docket-mode {
-  flex: none; font: inherit; font-size: 11.5px; cursor: pointer;
-  color: rgb(var(--text)); background: rgb(var(--surface));
-  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .12rem .25rem;
+/* **Content first, in the column the matter's name is in.** The words used to
+   sit behind the schedule at an indent of their own, so nothing in a step lined
+   up with anything and the rows read as a separate stratum. */
+.docket-step-what {
+  flex: 0 1 auto; min-width: 0; text-align: left;
+  font-family: var(--reading-face, inherit);
+  font-size: calc(var(--reading-size, 20px) * .68);
+  color: rgb(var(--text));
+  background: none; border: 0; border-radius: 4px; padding: 0 .15rem; cursor: text;
 }
-.docket-mode:hover { border-color: rgb(var(--accent) / .6); }
+.docket-step-what:hover { background: rgb(var(--text) / .06); }
 
-/* *And mark this complete* — beside what a step DOES, saying what it means. */
+/* And the schedule after them, as the rest of the sentence. */
+.docket-step-when {
+  flex: none; text-align: left;
+  font: inherit; font-size: 11.5px; font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-muted));
+  background: none; border: 0; border-radius: 4px; padding: 0 .15rem; cursor: text;
+}
+.docket-step-when::before { content: '· '; }
+.docket-step-when:hover { background: rgb(var(--text) / .06); color: rgb(var(--text)); }
+
+/* *And mark this complete* — beside what a step DOES, saying what it means
+   rather than sitting as an unlabelled dot in a group whose membership was
+   invisible. Structure tier: small, muted, and never louder than the step. */
 .docket-step-clock {
   flex: none; display: inline-flex; align-items: center; gap: .25rem;
-  font-size: 11px; color: rgb(var(--text-muted)); cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: 11px; line-height: 1.5; color: rgb(var(--text-muted));
+  cursor: pointer; white-space: nowrap;
 }
 .docket-step-clock input { margin: 0; accent-color: rgb(var(--accent)); }
 .docket-step-clock:hover { color: rgb(var(--text)); }
-/* A step's kind, chosen in place. Quiet until the pointer is on it, like the
-   other controls on this row: for the common case — a task — it should read as
-   a label and not as a question. */
+
+/* Which of the two kinds a step is. **A task says so quietly**, because nearly
+   every step is one and a row announcing the case that is always true is a row
+   of weight spent on nothing. */
 .docket-step-kind {
-  flex: none; font: inherit; font-size: 11px; cursor: pointer;
+  flex: none; font: inherit; font-size: 11px; line-height: 1.5; cursor: pointer;
   color: rgb(var(--text-muted)); background: none;
   border: 1px solid transparent; border-radius: 4px; padding: 0 .1rem;
 }
 .docket-step-kind:hover { color: rgb(var(--text)); border-color: rgb(var(--border)); }
-/* **A task says so quietly**, because nearly every step is one: six rows each
-   announcing `task` is six rows of weight spent on the case that is always
-   true. The kind is interesting when it is *not* a task, so that is the one
-   that keeps its ink — and this stays a control rather than becoming a label,
-   so a wrong one is still correctable where it is read. */
-.docket-step-kind.ordinary { opacity: .35; }
-.docket-runup:hover .docket-step-kind.ordinary,
-.docket-step-kind.ordinary:focus-visible { opacity: 1; }
+.docket-step-kind.ordinary { opacity: .55; }
+.docket-step:hover .docket-step-kind.ordinary { opacity: 1; }
 
-/* Which step starts the next instance. One per matter, which is why it is a
-   radio: the field it sets holds one id. */
-.docket-step-clock { margin: 0 .15rem 0 0; accent-color: rgb(var(--accent)); }
-
-/* The number `after 1` means. Quiet: it is a handle, not content. */
-.docket-step-at {
-  flex: none; width: 1rem; text-align: right;
-  font-size: 11px; font-variant-numeric: tabular-nums;
-  color: rgb(var(--text-muted) / .7);
+/* What sort of thing a matter is, inside the schedule editor — where it is the
+   first question and so the one that carries an edge. */
+.docket-mode {
+  flex: none; font: inherit; font-size: 11.5px; cursor: pointer;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .1rem .2rem;
 }
+.docket-mode:hover { border-color: rgb(var(--accent) / .6); }
 
 /* **Activate is the loudest thing in a backlogged row**, because it is the one
    act that row is for; suspend is its quiet inverse, since stopping is rarer
    than starting and should not invite a stray click. */
 .docket-start {
-  font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  flex: none; font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
   color: rgb(var(--text)); background: rgb(var(--surface));
   border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .1rem .4rem;
+  margin-left: .5rem;
 }
 .docket-start:hover { border-color: rgb(var(--accent) / .7); color: rgb(var(--accent)); }
 .docket-start.quiet {
   color: rgb(var(--text-muted)); background: none; border-color: transparent;
 }
 .docket-start.quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .06); }
-/* Read back in words: *two weeks before — book the boiler service.* Tabular so
-   a column of them lines up when a matter has several. */
-/* **Both halves are buttons now**, because a typo in a step has to be fixable
-   in place — dropping and retyping loses the id that its dependents point at.
-   They are buttons that do not look like buttons until the pointer is on them,
-   which is how the matter's own name and date already behave. */
-.docket-runup-when {
-  flex: 0 0 auto; min-width: 7.5rem; text-align: left;
-  font: inherit; font-size: 12px; font-variant-numeric: tabular-nums;
-  color: rgb(var(--text-muted));
-  background: none; border: 0; border-radius: 4px; padding: 0 .15rem; cursor: text;
-}
-.docket-runup-when:hover { background: rgb(var(--text) / .06); color: rgb(var(--text)); }
-/* Was the word *before* between the two add fields, until a step could run the
-   other way and the label started lying. The placeholder says it instead. */
-.docket-runup-what {
-  flex: 1; min-width: 0; text-align: left;
-  font-family: var(--reading-face, inherit);
-  font-size: calc(var(--reading-size, 20px) * .68);
-  color: rgb(var(--text));
-  background: none; border: 0; border-radius: 4px; padding: 0 .15rem; cursor: text;
-}
-.docket-runup-what:hover { background: rgb(var(--text) / .06); }
-.docket-field.narrow { min-width: 0; width: 4.5rem; }
 
-/* A matter's note (MH1).
- *
- * **Shown whenever there is one.** The quote from the plumber is what the
- * conversation needs in front of both people (H3), and a note you have to go
- * and find is a note that does not get read. Set in the reading face, because
- * it is prose somebody wrote. */
+.docket-step-at {
+  flex: none; width: 1rem; text-align: right;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-muted) / .7);
+}
+
+/* **A done step stays legible and stops competing.** It is the record of what
+   has already happened here — history rather than noise — so it keeps its words
+   and loses its weight. */
+.docket-step.done .docket-step-what {
+  color: rgb(var(--text-muted)); text-decoration: line-through;
+  text-decoration-color: rgb(var(--text-muted) / .5);
+}
+
 .docket-note {
   margin: .3rem 0 .1rem 1.1rem;
   padding-left: .7rem;

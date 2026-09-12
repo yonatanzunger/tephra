@@ -42,6 +42,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
+import { RowMenu, type RowMenuRequest } from '../../frame/RowMenu'
 import {
   MODES, readInterval, readSchedule, readStepWhen, shapeOf, spellInterval, spellStepWhen,
   type Matter, type Mode, type NewMatter as NewMatterShape, type Section, type StepKind,
@@ -70,6 +71,34 @@ export function DocketSurface({
   /** Which section header is being renamed, and whether a new one is being typed. */
   const [naming, setNaming] = useState<string | null>(null)
   const [newSection, setNewSection] = useState(false)
+  /**
+   * Which matters are showing their steps.
+   *
+   * **Collapsed by default, and the reason is the seeded step.** Every matter is
+   * born with one — explicitly, so that nothing downstream has to infer *a
+   * matter with no steps, of this mode, behaves as though it had one*, which is
+   * a rule nobody could reason about. Shown, that step reads as an echo of the
+   * matter's own name; folded away, a one-step matter is one line, which is what
+   * it is.
+   *
+   * **Ephemeral, and never written to the file.** Opening one is a reading act.
+   */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
+  /** The context menu, which is where everything a matter needs rarely lives. */
+  const [menu, setMenu] = useState<RowMenuRequest | null>(null)
+  const show = useCallback((matter: string, want: boolean): void => {
+    // **Folding a matter puts away everything about its steps**, the half-typed
+    // new one included. Without this the add row kept them on screen after a
+    // fold, since it is rendered with them — so the disclosure looked broken
+    // on exactly the matter somebody had just been working on.
+    if (!want) setOpen(was => (was === matter ? null : was))
+    setExpanded(was => {
+      const next = new Set(was)
+      if (want) next.add(matter)
+      else next.delete(matter)
+      return next
+    })
+  }, [])
   /** Which field is open for editing: one at a time, so the row stays legible. */
   const [editing, setEditing] = useState<{ matter: string; field: Field } | null>(null)
   /**
@@ -114,24 +143,25 @@ export function DocketSurface({
     /**
      * Do one thing, and **say whether it worked**.
      *
-     * **The boolean is not decoration.** A row that closes the moment it fires a
+     * **Null means it failed, and anything else is what the verb returned.** A
+     * row that closes the moment it fires a
      * verb throws away what somebody typed if the verb then fails — reported
      * from use: a step with an unreadable `when` vanished on Enter, taking its
      * text with it, and the complaint said *it drops the item*. A caller that
      * can see the failure can keep the words on the screen to be corrected.
      */
-    async (work: Promise<unknown>): Promise<boolean> => {
+    async <T,>(work: Promise<T>): Promise<T | null> => {
       try {
-        await work
+        const got = await work
         setProblem(null)
         await refresh()
-        return true
+        return got
       } catch (err) {
         // **Said in the view, not thrown at the app.** A bad date typed during a
         // conversation is an ordinary event and must not put a dialog between
         // two people and the thing they are discussing.
         setProblem((err as Error).message)
-        return false
+        return null
       }
     },
     [refresh],
@@ -336,20 +366,62 @@ export function DocketSurface({
                 last={at === section.matters.length - 1}
                 editing={editing?.matter === matter.id ? editing.field : null}
                 adding={open === matter.id}
-                onAdding={want => setOpen(want && matter.id !== null ? matter.id : null)}
+                open={matter.id !== null && expanded.has(matter.id)}
+                onMenu={at => {
+                  if (matter.id === null) return
+                  const who = matter.id
+                  setMenu({
+                    at,
+                    about: matter.name,
+                    // **Sentences, because there is room for them.** The row of
+                    // buttons this replaced forced every one of these down to a
+                    // single word — *tag*, *who*, *note* — which said what the
+                    // field was called rather than what pressing it would do.
+                    items: [
+                      { label: 'Rename…', onChoose: () => setEditing({ matter: who, field: 'name' }) },
+                      { label: 'Add a step…', onChoose: () => { show(who, true); setOpen(who) } },
+                      'rule',
+                      { label: 'Add a tag…', onChoose: () => setEditing({ matter: who, field: 'tags' }) },
+                      {
+                        label: matter.owner === null ? 'Say who has it…' : 'Change who has it…',
+                        onChoose: () => setEditing({ matter: who, field: 'owner' }),
+                      },
+                      {
+                        label: matter.notes.length === 0 ? 'Add a note…' : 'Edit the note…',
+                        onChoose: () => setEditing({ matter: who, field: 'note' }),
+                      },
+                      {
+                        label: matter.link === null ? 'Link to a document…' : 'Change the link…',
+                        onChoose: () => setEditing({ matter: who, field: 'link' }),
+                      },
+                      'rule',
+                      {
+                        label: 'Remove this matter',
+                        destructive: true,
+                        onChoose: () => { void act(window.tephra.docket.remove(id, who)) },
+                      },
+                    ],
+                  })
+                }}
+                onShow={want => { if (matter.id !== null) show(matter.id, want) }}
+                onAdding={want => {
+                  setOpen(want && matter.id !== null ? matter.id : null)
+                  // Asking to add a step is asking to see them.
+                  if (want && matter.id !== null) show(matter.id, true)
+                }}
                 onAddStep={async (when, text, kind) => {
-                  if (matter.id === null) return false
+                  if (matter.id === null) return null
                   return act(window.tephra.docket.addStep(id, matter.id, when, text, kind))
                 }}
                 onDropStep={step => {
                   if (matter.id !== null) void act(window.tephra.docket.removeStep(id, matter.id, step))
                 }}
                 onEditStep={async (step, text) => {
-                  if (matter.id === null) return false
+                  if (matter.id === null) return null
                   return act(window.tephra.docket.editStep(id, matter.id, step, text))
                 }}
                 onStepWhen={async (step, when) => {
-                  if (matter.id === null) return false
+                  if (matter.id === null) return null
                   return act(window.tephra.docket.setStepWhen(id, matter.id, step, when))
                 }}
                 onStepKind={(step, kind) => {
@@ -419,7 +491,11 @@ export function DocketSurface({
                 if (name.trim() === '') return
                 void act(window.tephra.docket.add(
                   id, name, shape, section.name === '' ? undefined : section.name,
-                ))
+                )).then(made => {
+                  // **Opened on arrival**, because the step it was seeded with
+                  // is the first thing anybody will want to say differently.
+                  if (typeof made === 'string') show(made, true)
+                })
               }}
             />
           ) : (
@@ -452,6 +528,8 @@ export function DocketSurface({
         </button>
       )}
 
+      {menu !== null && <RowMenu request={menu} onClose={() => setMenu(null)} />}
+
       {total === 0 && adding === null && (
         // Absence that explains itself, as every empty state in this app does —
         // and this one says what the thing is FOR, because a docket's whole
@@ -465,7 +543,7 @@ export function DocketSurface({
   )
 }
 
-type Field = 'name' | 'when' | 'every' | 'owner' | 'tags' | 'note'
+type Field = 'name' | 'when' | 'every' | 'owner' | 'tags' | 'note' | 'untag' | 'link'
 
 /** *Out of every section*, as a menu value — `''` is the menu's own prompt. */
 const UNSECTIONED = ':none'
@@ -516,6 +594,12 @@ function commit(docket: DocumentId, matter: string, field: Field, value: string)
       // One tag at a time is the gesture; the field takes what is typed and the
       // hash is optional, because nobody types punctuation in a conversation.
       return window.tephra.docket.tag(docket, matter, said.replace(/^#/, ''))
+    case 'untag':
+      return window.tephra.docket.untag(docket, matter, said.replace(/^#/, ''))
+    case 'link':
+      // **One relative link to one document** (H14) — the matter's plans, its
+      // quotes, the thread it came out of.
+      return window.tephra.docket.setLink(docket, matter, said === '' ? null : said)
     case 'note':
       // **Lines, because a note is prose and prose has paragraphs.** Split here
       // rather than in main so the field can be an ordinary textarea.
@@ -542,6 +626,9 @@ function Row({
   onStepKind,
   onSetAfter,
   onSetMode,
+  open,
+  onShow,
+  onMenu,
   onActivate,
   onSuspend,
   onNudge,
@@ -565,15 +652,19 @@ function Row({
   onEdit: (field: Field | null) => void
   onCommit: (field: Field, value: string) => void
   onRemove: () => void
-  onAddStep: (when: string, text: string, kind: StepKind) => Promise<boolean>
+  onAddStep: (when: string, text: string, kind: StepKind) => Promise<unknown>
   onDropStep: (step: string) => void
   /** Both answer whether it worked, so a bad value keeps the field open. */
-  onEditStep: (step: string, text: string) => Promise<boolean>
-  onStepWhen: (step: string, when: string) => Promise<boolean>
+  onEditStep: (step: string, text: string) => Promise<unknown>
+  onStepWhen: (step: string, when: string) => Promise<unknown>
   onStepKind: (step: string, kind: StepKind) => void
   /** Which step's completion starts the next instance — null for the calendar. */
   onSetAfter: (step: string | null) => void
   onSetMode: (mode: Mode) => void
+  /** Whether the steps are showing, and how to say otherwise. */
+  open: boolean
+  onShow: (want: boolean) => void
+  onMenu: (at: { x: number; y: number }) => void
   onActivate: () => void
   onSuspend: () => void
   onNudge: (delta: number) => void
@@ -599,6 +690,15 @@ function Row({
   const inactive = matter.when.start === null
   return (
     <li
+      // **Right-click anywhere on a matter** (D10's idiom, as the sidebar and
+      // the task list already use): everything a matter needs rarely lives
+      // here, where an item can be a sentence rather than a word squeezed into
+      // a row, and where opening it moves nothing.
+      onContextMenu={event => {
+        event.preventDefault()
+        event.stopPropagation()
+        onMenu({ x: event.clientX, y: event.clientY })
+      }}
       // **The whole row is the drop target, not just the handle** — aiming at a
       // grip to *land* on is a harder act than aiming at one to *pick up* by,
       // and a row is a big target. Which half the pointer is in decides above
@@ -656,41 +756,86 @@ function Row({
           </button>
         )}
 
-        {/* **The column says which of the four kinds of thing this is**, and
-            it is the only place that does — nothing stores a mode, so the shape
-            has to be legible from what it holds: a bare date, *every 90 days
-            from* a date, or *every 90 days after it is done*. That last is the
-            difference between a calendar's business and yours. */}
+        {/* **The tools live in the slack between the name and the date**, which
+            was dead space, and they appear on hover. **Hover may fill space
+            that is already reserved and may never add or remove a line** — a
+            control row that materialised under the pointer would push every
+            step down, which is the same fault as the drop strip that shifted
+            the list the moment a drag began. Clicking may reflow; hovering may
+            not, because the thing that moved is then the thing you asked to
+            move. */}
+        {/* **Structure, not a control** — always visible, quiet, and carrying
+            the count, so it does not repeat the mistake of a bare number that
+            looked like a label. It sits left of the reserved slack, so the
+            tools appearing under the pointer never shift it. */}
+        <button
+          className="docket-open"
+          aria-expanded={open}
+          onClick={() => { if (matter.id !== null) onShow(!open) }}
+          title={open ? 'Hide the steps' : 'Show the steps'}
+        >
+          <span className="docket-open-mark" aria-hidden="true" />
+          {matter.steps.length}
+        </button>
+        {/* **Only where it means something.** Adding a step to a matter whose
+            steps are folded away offers to make something you cannot see. And
+            the `⋯` that used to sit beside it has gone entirely: it opened a
+            row *below* this line, so the steps jumped down — the no-jumping
+            rule broken by the very thing meant to obey it — and a row of
+            buttons forces every name down to one word. Right-click anywhere on
+            a matter instead, where the items can be sentences. */}
+        {open && (
+          <span className="docket-tools">
+            <button className="docket-quiet" onClick={() => onAdding(!adding)}>+ step</button>
+          </span>
+        )}
+
+        {/* **One thing to click for the whole schedule.** The column already
+            read as a sentence that encodes the mode — *no date yet*, *every 90
+            days after it is done* — so it is the obvious place to change it,
+            and folding the mode, the date and the interval behind it takes
+            three controls out of the resting row. The black-bordered dropdown
+            that used to sit here was the heaviest mark on a page of quiet
+            ones, for a setting that is usually at its default. */}
         {editing === 'when' ? (
-          <Field1
-            initial={matter.when.start ?? ''}
-            placeholder="2026-11-12"
-            title="The next time this happens"
-            onCommit={v => onCommit('when', v)}
-            onCancel={() => onEdit(null)}
-          />
+          <span className="docket-schedule">
+            <select
+              className="docket-mode"
+              value={matter.mode}
+              onChange={event => onSetMode(event.target.value as Mode)}
+            >
+              {MODES.map(one => (
+                <option key={one.key} value={one.key}>{one.title}</option>
+              ))}
+            </select>
+            <Field1
+              initial={matter.when.start ?? ''}
+              className="docket-field narrow"
+              placeholder="when"
+              title="The next time this happens"
+              onCommit={v => onCommit('when', v)}
+              onCancel={() => onEdit(null)}
+            />
+            {shapeOf(matter.mode).repeating && (
+              <Field1
+                initial={matter.when.every === null ? '' : spellInterval(matter.when.every)}
+                className="docket-field narrow"
+                placeholder="how often"
+                title="90d · 6 months · 1y · 1m on 31"
+                onCommit={v => onCommit('every', v)}
+                onCancel={() => onEdit(null)}
+              />
+            )}
+            <button className="docket-quiet" onClick={() => onEdit(null)}>done</button>
+          </span>
         ) : (
           <button
             className={`docket-when${inactive ? ' undecided' : ''}`}
             onClick={() => onEdit('when')}
-            title="When this next happens"
+            title="When this happens, and what sort of thing it is"
           >
             {inactive && matter.when.every === null ? 'no date yet' : read}
           </button>
-        )}
-        {/* Offered only where it means something: how often is a question
-            about a thing that comes round, and nothing else. */}
-        {matter.when.every !== null && (
-          editing === 'every' ? (
-            <Field1
-              initial={spellInterval(matter.when.every)}
-              className="docket-field narrow"
-              placeholder="90d"
-              title="How often: 90d · 6 months · 1m on 31"
-              onCommit={v => onCommit('every', v)}
-              onCancel={() => onEdit(null)}
-            />
-          ) : null
         )}
 
         {/* **The one button that turns a backlog into work** (D76). Inactive
@@ -714,81 +859,59 @@ function Row({
         )}
       </div>
 
-      <div className="docket-under">
-        {matter.tags.map(tag => (
-          <span key={tag} className="pill label">{tag}</span>
-        ))}
-        {editing === 'tags' ? (
-          <Field1 initial="" placeholder="tag" onCommit={v => onCommit('tags', v)} onCancel={() => onEdit(null)} />
-        ) : (
-          <button className="docket-quiet" onClick={() => onEdit('tags')}>tag</button>
-        )}
-        {editing === 'owner' ? (
-          <Field1
-            initial={matter.owner ?? ''}
-            placeholder="who"
-            onCommit={v => onCommit('owner', v)}
-            onCancel={() => onEdit(null)}
-          />
-        ) : (
-          <button className="docket-quiet" onClick={() => onEdit('owner')}>
-            {matter.owner ?? 'who'}
-          </button>
-        )}
-        <button className="docket-quiet" onClick={() => onEdit('note')}>
-          {matter.notes.length === 0 ? 'note' : 'note…'}
-        </button>
-        {/* **An action, not a count.** It read `1 step`, which is information —
-            and information that was already on the screen, since the steps
-            themselves are always listed directly below. So the number said
-            nothing new and made the one control that adds a step look like a
-            label. `+ step` matches *+ Add a matter* and *+ Add to …*, which are
-            the two things next to it that are also doors.
-
-            *Step* is the word D76 settled on, after *run-up* named only one
-            direction — preparation ahead of a known date — and the first thing
-            real use produced ran the other way. */}
-        <button className="docket-quiet" onClick={() => onAdding(!adding)}>
-          + step
-        </button>
-        {/* **Arranging is separated from editing by a divider**, because they
-            are different kinds of act: everything to the left changes what this
-            matter IS, and everything to the right changes where it sits. */}
-        <span className="docket-sep" aria-hidden="true" />
-        {/* **The mode leads, and the fields follow it.** Before this the row
-            showed an interval and a radio group and left somebody to work out
-            that the two together meant *this comes round after I do it* —
-            machinery standing in for a concept. What a person picks between is
-            four kinds of thing; start date and interval are the questions each
-            kind has, and they appear because it was chosen. */}
-        <select
-          className="docket-mode"
-          value={matter.mode}
-          onChange={event => onSetMode(event.target.value as Mode)}
-          title="What sort of thing this is"
-        >
-          {MODES.map(one => (
-            <option key={one.key} value={one.key}>{one.title}</option>
+      {/* **Only what HAS content, and only then.** Tags and an owner are facts
+          about the matter and belong on the page; *tag* and *who* are controls
+          and have gone to the menu. The row is empty and absent when there is
+          nothing to say, which is most of the time. */}
+      {(matter.tags.length > 0 || matter.owner !== null || matter.link !== null
+        || editing === 'tags' || editing === 'owner' || editing === 'link') && (
+        <div className="docket-under">
+          {matter.tags.map(tag => (
+            <button
+              key={tag}
+              className="pill label"
+              title="Remove this tag"
+              onClick={() => onCommit('untag', tag)}
+            >
+              {tag}
+            </button>
           ))}
-        </select>
-        {shapeOf(matter.mode).repeating && (
-          editing === 'every' ? (
+          {editing === 'tags' && (
             <Field1
-              initial={matter.when.every === null ? '' : spellInterval(matter.when.every)}
-              className="docket-field narrow"
-              placeholder="how often"
-              title="90d · 6 months · 1y · 1m on 31"
-              onCommit={value => onCommit('every', value)}
+              initial=""
+              placeholder="tag"
+              onCommit={v => onCommit('tags', v)}
+              onCancel={() => onEdit(null)}
+            />
+          )}
+          {editing === 'owner' ? (
+            <Field1
+              initial={matter.owner ?? ''}
+              placeholder="who"
+              onCommit={v => onCommit('owner', v)}
               onCancel={() => onEdit(null)}
             />
           ) : (
-            <button className="docket-quiet" onClick={() => onEdit('every')}>
-              {matter.when.every === null ? 'how often?' : readInterval(matter.when.every)}
-            </button>
-          )
-        )}
-        <button className="docket-quiet danger" onClick={onRemove}>remove</button>
-      </div>
+            matter.owner !== null && <span className="docket-owner">{matter.owner}</span>
+          )}
+          {editing === 'link' ? (
+            <Field1
+              initial={matter.link ?? ''}
+              className="docket-field wide"
+              placeholder="../notes/the-quote.md"
+              title="A relative path to one document"
+              onCommit={v => onCommit('link', v)}
+              onCancel={() => onEdit(null)}
+            />
+          ) : (
+            matter.link !== null && (
+              <a className="docket-link" href={matter.link} title={matter.link}>
+                {matter.link.split('/').pop() ?? matter.link}
+              </a>
+            )
+          )}
+        </div>
+      )}
 
       {editing === 'note' ? (
         <NoteField
@@ -816,38 +939,49 @@ function Row({
           an empty field sitting under every matter that had any — clutter in a
           list being scanned — and a toggle that could never close, because the
           triggers kept it open. It looked dead. */}
-      {(matter.steps.length > 0 || adding) && (
-        <div className="docket-runups">
+      {(open || adding) && (
+        <div className="docket-steps">
           {matter.steps.map((step, at) => (
             <div
               key={step.id ?? `${at}`}
-              className={`docket-runup${step.done === null ? '' : ' done'}`}
+              className={`docket-step${step.done === null ? '' : ' done'}`}
             >
-              {/* **Tickable, because a step's completion is what the next one
-                  waits on** — and it is stamped on the step rather than read off
-                  whatever it generated, so this is the real control and not a
-                  mirror of one. */}
-              {/* **The number the schedule field refers to.** *After 1* was
-                  sayable before this was visible, which was reported in as many
-                  words: the number is not shown anywhere. It is the reference a
-                  person can type — the real id is eight random characters and
-                  belongs in the file, not on the screen. */}
+              {/* **The number a reference points at.** *After #1* was sayable
+                  before this was visible, which was reported in as many words.
+                  It is the handle a person can type: the real id is eight
+                  random characters and belongs in the file. */}
               <span className="docket-step-at" aria-hidden="true">{at + 1}</span>
-              {/* **Which step starts the next instance** (Qa). Offered only on a
-                  matter that recurs from its own completion, because on anything
-                  else it would be a question with no meaning — a calendar-driven
-                  thing comes round whether or not anybody acted.
 
-                  This is also the reference that cannot be allowed to dangle,
-                  which is why removing the step it names is refused rather than
-                  quietly leaving a matter that stopped recurring. */}
-              {/* **Both halves are editable in place**, which they were not,
-                  and the gap was reported the moment somebody made a typo:
-                  dropping and retyping a step throws away its id — so whatever
-                  was waiting on it is orphaned — and its completion stamp with
-                  it. Read back in words, because this is the line somebody says
-                  out loud: *two weeks before — book the boiler service*, or
-                  *after find a suitable shop — have the car fixed.* */}
+              {/* **The words first, in the column the matter's name is in.**
+                  They used to sit behind the schedule and at an indent of their
+                  own, so the strong marks in a step did not line up with
+                  anything and the steps read as a separate stratum near the
+                  matter rather than as part of it. Editable in place, because a
+                  step has an identity: dropping and retyping it orphans
+                  whatever waits on it and forgets that it was done. */}
+              {fixing?.step === step.id && fixing.part === 'what' ? (
+                <Field1
+                  initial={step.text}
+                  className="docket-field wide"
+                  onCommit={value => {
+                    if (step.id === null) return
+                    const one = step.id
+                    void onEditStep(one, value).then(ok => { if (ok !== null) setFixing(null) })
+                  }}
+                  onCancel={() => setFixing(null)}
+                />
+              ) : (
+                <button
+                  className="docket-step-what"
+                  title="Fix what this step says"
+                  onClick={() => { if (step.id !== null) setFixing({ step: step.id, part: 'what' }) }}
+                >
+                  {step.text}
+                </button>
+              )}
+
+              {/* And the schedule after them, quietly, as the rest of the
+                  sentence: *find an electrician · right away*. */}
               {fixing?.step === step.id && fixing.part === 'when' ? (
                 <Field1
                   initial={spellStepWhen(step.when, one => indexOfStep(matter, one))}
@@ -855,84 +989,56 @@ function Row({
                   placeholder="when"
                   onCommit={value => {
                     if (step.id === null) return
-                    const at = step.id
-                    void onStepWhen(at, value).then(ok => { if (ok) setFixing(null) })
+                    const one = step.id
+                    void onStepWhen(one, value).then(ok => { if (ok !== null) setFixing(null) })
                   }}
                   onCancel={() => setFixing(null)}
                 />
               ) : (
                 <button
-                  className="docket-runup-when"
-                  title="When this step happens — right away · 2 weeks · +3 days · then · after step 1"
+                  className="docket-step-when"
+                  title="When this step happens — right away · 2 weeks · +3 days · then · after #1"
                   onClick={() => { if (step.id !== null) setFixing({ step: step.id, part: 'when' }) }}
                 >
                   {readStepWhen(step.when, one => indexOfStep(matter, one))}
                 </button>
               )}
-              {/* **No tick here, deliberately.** A docket describes work; the
-                  task list is where work is done. Completion still has to
-                  exist — a dependency reads it, and suspending has to preserve
-                  it — but it will arrive from a generated task being finished,
-                  not from somebody ticking a box on the description. Reading
-                  that a step is done belongs here; setting it does not. */}
-              {fixing?.step === step.id && fixing.part === 'what' ? (
-                <Field1
-                  initial={step.text}
-                  className="docket-field wide"
-                  onCommit={value => {
-                    if (step.id === null) return
-                    const at = step.id
-                    void onEditStep(at, value).then(ok => { if (ok) setFixing(null) })
+
+              {/* **The rest fills this line's own slack, on hover.** Never a new
+                  line: the steps below must not move because the pointer
+                  crossed this one. */}
+              <span className="docket-step-tools">
+                {shapeOf(matter.mode).fromCompletion && (
+                  <label className="docket-step-clock" title="Doing this starts the next one">
+                    <input
+                      type="radio"
+                      name={`clock-${matter.id ?? 'x'}`}
+                      checked={matter.when.after === step.id}
+                      disabled={step.id === null}
+                      onChange={() => { if (step.id !== null) onSetAfter(step.id) }}
+                    />
+                    and mark this complete
+                  </label>
+                )}
+                <select
+                  className={`docket-step-kind${step.kind === 'task' ? ' ordinary' : ''}`}
+                  value={step.kind}
+                  disabled={step.id === null}
+                  title="A task to do · a status to be aware of"
+                  onChange={event => {
+                    if (step.id !== null) onStepKind(step.id, event.target.value as StepKind)
                   }}
-                  onCancel={() => setFixing(null)}
-                />
-              ) : (
-                <button
-                  className="docket-runup-what"
-                  title="Fix what this step says"
-                  onClick={() => { if (step.id !== null) setFixing({ step: step.id, part: 'what' }) }}
                 >
-                  {step.text}
+                  <option value="task">Do a task</option>
+                  <option value="status">Raise a reminder</option>
+                </select>
+                <button
+                  className="docket-quiet danger"
+                  onClick={() => { if (step.id !== null) onDropStep(step.id) }}
+                >
+                  drop
                 </button>
-              )}
-              {/* Correctable in place, because everything else on this row is
-                  and a kind chosen in haste is exactly as wrong as a typo. */}
-              {/* **Beside the kind, not beside the number.** On the left it
-                  was an unlabelled dot in a group whose membership was
-                  invisible; here it sits with the other thing that says what
-                  this step *does*, and it says what it means in words. Shown
-                  only on a recurring task, which is the one mode where the
-                  question exists at all. */}
-              {shapeOf(matter.mode).fromCompletion && (
-                <label className="docket-step-clock" title="Doing this starts the next one">
-                  <input
-                    type="radio"
-                    name={`clock-${matter.id ?? 'x'}`}
-                    checked={matter.when.after === step.id}
-                    disabled={step.id === null}
-                    onChange={() => { if (step.id !== null) onSetAfter(step.id) }}
-                  />
-                  and mark this complete
-                </label>
-              )}
-              <select
-                className={`docket-step-kind${step.kind === 'task' ? ' ordinary' : ''}`}
-                value={step.kind}
-                disabled={step.id === null}
-                title="A task to do · a status to be aware of · the next instance of this matter"
-                onChange={event => {
-                  if (step.id !== null) onStepKind(step.id, event.target.value as StepKind)
-                }}
-              >
-                <option value="task">Do a task</option>
-                <option value="status">Raise a reminder</option>
-              </select>
-              <button
-                className="docket-quiet danger"
-                onClick={() => { if (step.id !== null) onDropStep(step.id) }}
-              >
-                drop
-              </button>
+              </span>
             </div>
           ))}
           {adding && (
@@ -961,7 +1067,7 @@ function NewRunUp({
   onDone,
 }: {
   /** Answers whether it worked; the row stays open if it did not. */
-  onCommit: (offset: string, text: string, kind: StepKind) => Promise<boolean>
+  onCommit: (offset: string, text: string, kind: StepKind) => Promise<unknown>
   onDone: () => void
 }): React.JSX.Element {
   const [offset, setOffset] = useState('')
@@ -984,7 +1090,7 @@ function NewRunUp({
       // **A failure keeps the words.** Closing on the way out threw away the
       // typing whenever the schedule was unreadable, which read as *it just
       // drops the item*; the complaint appears above and the text stays put.
-      if (!ok) return
+      if (ok === null) return
       // **A success opens the next one.** Work comes in sequences — find a
       // shop, then have the car fixed, then claim it back — so the row clears
       // and waits rather than making the whole gesture again per step. What
@@ -998,7 +1104,7 @@ function NewRunUp({
     })
   }
   return (
-    <div className="docket-runup new">
+    <div className="docket-step new">
       <input
         className="docket-field narrow"
         value={offset}

@@ -2603,8 +2603,19 @@ export async function runVerify(request: string): Promise<void> {
         const row = [...document.querySelectorAll('.docket-row')].find(
           r => (r.querySelector('.docket-name')?.textContent ?? '').includes('boiler'),
         )
-        const note = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
-          b => b.textContent === 'note',
+        // **Behind the ⋯ now**, with the other things a matter needs rarely:
+        // five controls would not fit the slack they came out of.
+        // **Right-click the matter**, which is where everything it needs rarely
+        // now lives — the `⋯` row that used to hold these pushed the steps down
+        // when it opened, and squeezed every name to one word.
+        row?.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true, cancelable: true, clientX: 200, clientY: 200,
+        }))
+        await settle(250)
+        say('menuItems', [...document.querySelectorAll('.row-menu button')]
+          .map(b => b.textContent))
+        const note = [...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '').includes('note'),
         ) as HTMLElement | null
         say('noteOffered', note !== null)
         note?.click()
@@ -2634,13 +2645,13 @@ export async function runVerify(request: string): Promise<void> {
         ) as HTMLElement | null
         runup?.click()
         await settle(300)
-        const when = row?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
-        const what = row?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+        const when = row?.querySelector('.docket-step.new .docket-field.narrow') as HTMLInputElement | null
+        const what = row?.querySelector('.docket-step.new .docket-field.wide') as HTMLInputElement | null
         if (when !== null && when !== undefined) set(when, '2w')
         if (what !== null && what !== undefined) set(what, 'book the boiler service')
         what?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         await settle(1800)
-        const committed = '.docket-runup:not(.new) .docket-runup-when'
+        const committed = '.docket-step:not(.new) .docket-step-when'
         say('runup', [...document.querySelectorAll(committed)].map(n => n.textContent))
         say('bothUnderOne', {
           note: document.querySelectorAll('.docket-note').length,
@@ -2654,6 +2665,42 @@ export async function runVerify(request: string): Promise<void> {
       // face at reading size rather than a UI size.
       {
         const name = document.querySelector('.docket-name') as HTMLElement | null
+        // **Every class the surface styles, actually styled.** A wholesale
+        // rewrite of one CSS region took four rules with it and only one was
+        // noticed by eye — the others were a `select` and two buttons, which
+        // look perfectly plausible at browser defaults.
+        //
+        // **Asked of the stylesheet, not of a computed size.** The first cut
+        // inferred *unstyled* from a 16px font, which is wrong twice over: the
+        // matter's name legitimately IS 16px, being set at the notebook's
+        // reading size, and the grip is drawn with a gradient so its font size
+        // means nothing at all. Whether a rule exists is the actual question,
+        // and it can be asked directly.
+        {
+          const written = new Set<string>()
+          for (const sheet of [...document.styleSheets]) {
+            let rules: CSSRuleList | null = null
+            try {
+              rules = sheet.cssRules
+            } catch {
+              continue // a sheet from elsewhere; not ours to read
+            }
+            for (const rule of [...(rules ?? [])]) {
+              const selector = (rule as CSSStyleRule).selectorText
+              if (typeof selector !== 'string') continue
+              for (const found of selector.matchAll(/\.(docket-[a-z-]+)/g)) {
+                written.add(found[1] as string)
+              }
+            }
+          }
+          say('styled', [
+            'docket-step-clock', 'docket-step-kind', 'docket-mode', 'docket-start',
+            'docket-grip', 'docket-step-at', 'docket-step-what', 'docket-step-when',
+            'docket-name', 'docket-when', 'docket-quiet', 'docket-tools',
+            'docket-step-tools', 'docket-schedule', 'docket-steps', 'docket-open',
+            'docket-open-mark', 'docket-link', 'docket-owner',
+          ].filter(one => !written.has(one)))
+        }
         say('type', name === null ? null : {
           size: Math.round(parseFloat(getComputedStyle(name).fontSize)),
           face: (getComputedStyle(name).fontFamily.split(',')[0] ?? '').replace(/["']/g, ''),
@@ -2677,7 +2724,7 @@ export async function runVerify(request: string): Promise<void> {
           field.dispatchEvent(new Event('input', { bubbles: true }))
           field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         }
-        click('.docket-runup.new .docket-quiet', 'done')
+        click('.docket-step.new .docket-quiet', 'done')
         await settle(300)
         const NAMED = '.docket-section-head:not(.loose) .docket-section-name'
         const namesOf = (): (string | null)[] =>
@@ -2707,8 +2754,20 @@ export async function runVerify(request: string): Promise<void> {
           )
         say('noMoveMenu', rowOf('boiler')?.querySelector('.docket-where') === null)
         // **The mode is what a row leads with**, and its fields follow it.
+        // **The mode lives inside the schedule editor**, which the sentence in
+        // the date column opens — three controls folded behind the one piece of
+        // text that already described them.
+        ;(rowOf('boiler')?.querySelector('.docket-when') as HTMLElement | null)?.click()
+        await settle(250)
         say('modesOnRow', [...(rowOf('boiler')?.querySelectorAll('.docket-mode option') ?? [])]
           .map(o => o.textContent))
+        say('scheduleAsksTogether', {
+          when: rowOf('boiler')?.querySelectorAll('.docket-schedule .docket-field').length ?? 0,
+          mode: rowOf('boiler')?.querySelector('.docket-schedule .docket-mode') !== null,
+        })
+        ;([...(rowOf('boiler')?.querySelectorAll('.docket-schedule .docket-quiet') ?? [])]
+          .find(b => b.textContent === 'done') as HTMLElement | null)?.click()
+        await settle(250)
 
         // **Moved by dragging**, which is the only way now: the *move to…* menu
         // was the loudest mark on a quiet row and did nothing dragging does not.
@@ -2740,7 +2799,7 @@ export async function runVerify(request: string): Promise<void> {
         // The moved matter took its note and its run-up with it.
         say('keptItsNote', (rowOf('boiler')?.querySelectorAll('.docket-note p').length ?? 0))
         say('keptItsRunUp',
-          rowOf('boiler')?.querySelectorAll('.docket-runup:not(.new) .docket-runup-when').length ?? 0)
+          rowOf('boiler')?.querySelectorAll('.docket-step:not(.new) .docket-step-when').length ?? 0)
 
       // ── moving by hand: the grip, dragged and typed on ──
       {
@@ -2750,6 +2809,36 @@ export async function runVerify(request: string): Promise<void> {
           )
         const gripOf = (word: string): HTMLElement | null =>
           (rowOf(word)?.querySelector('.docket-grip') as HTMLElement | null) ?? null
+        // **Folded away by default**, which is what stops a one-step matter
+        // reading as its own name twice over.
+        // **Big enough to read as a direction.** It was a 9px `▸` — smaller
+        // than the number beside it and at the mercy of the font — so it is
+        // drawn now, and this is its actual size on screen.
+        {
+          const mark = document.querySelector('.docket-open-mark')
+          const box = mark?.getBoundingClientRect()
+          // **Either way up.** It is one shape turned through a right angle
+          // rather than two characters, so an open matter's mark measures its
+          // width and height the other way round.
+          const w = Math.round(box?.width ?? 0)
+          const h = Math.round(box?.height ?? 0)
+          say('markSize', { across: Math.min(w, h), along: Math.max(w, h) })
+        }
+        // **Folded and unfolded, rather than *folded by default***, which is
+        // not measurable here: the scene made these matters, and making one
+        // opens it so its seeded step can be reworded. What the fold has to do
+        // is answer the click.
+        {
+          const fold = (): void => {
+            (rowOf('boiler')?.querySelector('.docket-open') as HTMLElement | null)?.click()
+          }
+          fold()
+          await settle(250)
+          say('folded', rowOf('boiler')?.querySelector('.docket-steps') === null)
+          fold()
+          await settle(250)
+          say('unfolded', rowOf('boiler')?.querySelector('.docket-steps') !== null)
+        }
         say('noTickOffered', document.querySelectorAll('.docket-step-done').length === 0)
         say('gripOffered', gripOf('boiler') !== null)
         // **Visible without being hovered**, because the thing reported from use
@@ -2927,10 +3016,16 @@ export async function runVerify(request: string): Promise<void> {
           [...document.querySelectorAll('.docket-row')].find(
             r => (r.querySelector('.docket-name')?.textContent ?? '').includes(word),
           )
+        /** Show a matter's steps, since they are folded away by default. */
+        const openUp = (word: string): void => {
+          const row = rowOf(word)
+          if (row?.querySelector('.docket-steps') !== null) return
+          ;(row?.querySelector('.docket-open') as HTMLElement | null)?.click()
+        }
         const stepsOf = (word: string): { when: string; what: string; done: boolean }[] =>
-          [...(rowOf(word)?.querySelectorAll('.docket-runup:not(.new)') ?? [])].map(one => ({
-            when: one.querySelector('.docket-runup-when')?.textContent ?? '',
-            what: one.querySelector('.docket-runup-what')?.textContent ?? '',
+          [...(rowOf(word)?.querySelectorAll('.docket-step:not(.new)') ?? [])].map(one => ({
+            when: one.querySelector('.docket-step-when')?.textContent ?? '',
+            what: one.querySelector('.docket-step-what')?.textContent ?? '',
             // **Read from how it LOOKS**, since there is no tick to read: the
             // docket shows that a step is done and no longer offers to set it.
             done: one.className.includes('done'),
@@ -2943,8 +3038,9 @@ export async function runVerify(request: string): Promise<void> {
          * later block typed into a row that was no longer there.
          */
         const openAdd = async (word: string): Promise<void> => {
+          openUp(word)
           const row = rowOf(word)
-          if (row?.querySelector('.docket-runup.new') !== null) return
+          if (row?.querySelector('.docket-step.new') !== null) return
           const toggle = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
             b => (b.textContent ?? '').trim() === '+ step',
           ) as HTMLElement | null
@@ -2960,7 +3056,7 @@ export async function runVerify(request: string): Promise<void> {
           await openAdd(word)
           const row = rowOf(word)
           if (kind !== undefined) {
-            const pick = row?.querySelector('.docket-runup.new .docket-step-kind') as HTMLSelectElement | null
+            const pick = row?.querySelector('.docket-step.new .docket-step-kind') as HTMLSelectElement | null
             if (pick !== null && pick !== undefined) {
               const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
               setter?.call(pick, kind)
@@ -2968,8 +3064,8 @@ export async function runVerify(request: string): Promise<void> {
               await settle(150)
             }
           }
-          const at = row?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
-          const what2 = row?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+          const at = row?.querySelector('.docket-step.new .docket-field.narrow') as HTMLInputElement | null
+          const what2 = row?.querySelector('.docket-step.new .docket-field.wide') as HTMLInputElement | null
           if (at !== null && at !== undefined) set(at, when)
           if (what2 !== null && what2 !== undefined) set(what2, what)
           what2?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
@@ -2992,22 +3088,23 @@ export async function runVerify(request: string): Promise<void> {
         // actually typed, and which used to do nothing at all: the row returned
         // silently on an empty schedule, so the key looked broken.
         await addStep('car', '', 'find a suitable shop')
+        openUp('car')
         say('firstStep', stepsOf('car'))
         // **Stays open for the next step**, so a sequence is typed in one go.
         say('rowWaitsForTheNext', {
-          open: rowOf('car')?.querySelector('.docket-runup.new') !== null,
-          cleared: (rowOf('car')?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null)?.value ?? null,
-          exit: [...(rowOf('car')?.querySelectorAll('.docket-runup.new .docket-quiet') ?? [])]
+          open: rowOf('car')?.querySelector('.docket-step.new') !== null,
+          cleared: (rowOf('car')?.querySelector('.docket-step.new .docket-field.wide') as HTMLInputElement | null)?.value ?? null,
+          exit: [...(rowOf('car')?.querySelectorAll('.docket-step.new .docket-quiet') ?? [])]
             .map(b => b.textContent),
         })
         // And Escape is the way out.
-        ;(rowOf('car')?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLElement | null)
+        ;(rowOf('car')?.querySelector('.docket-step.new .docket-field.narrow') as HTMLElement | null)
           ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
         await settle(400)
-        say('escapeClosesIt', rowOf('car')?.querySelector('.docket-runup.new') === null)
+        say('escapeClosesIt', rowOf('car')?.querySelector('.docket-step.new') === null)
         say('rowAsks', {
-          when: (rowOf('car')?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null)?.placeholder ?? null,
-          buttons: [...(rowOf('car')?.querySelectorAll('.docket-runup.new .docket-quiet') ?? [])]
+          when: (rowOf('car')?.querySelector('.docket-step.new .docket-field.narrow') as HTMLInputElement | null)?.placeholder ?? null,
+          buttons: [...(rowOf('car')?.querySelectorAll('.docket-step.new .docket-quiet') ?? [])]
             .map(b => b.textContent),
         })
 
@@ -3024,6 +3121,7 @@ export async function runVerify(request: string): Promise<void> {
             .find(m => m.name === 'The car needs fixing')
             ?.steps.find(one => one.text === 'find a suitable shop')?.id ?? ''
         await addStep('car', `after ${shopId}`, 'have the car fixed')
+        openUp('car')
         say('chained', stepsOf('car'))
 
         // **A bad `when` must not eat the typing** — reported from use as *it
@@ -3032,8 +3130,8 @@ export async function runVerify(request: string): Promise<void> {
         {
           await openAdd('car')
           const row = rowOf('car')
-          const at = row?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
-          const what = row?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+          const at = row?.querySelector('.docket-step.new .docket-field.narrow') as HTMLInputElement | null
+          const what = row?.querySelector('.docket-step.new .docket-field.wide') as HTMLInputElement | null
           // `soon` — because `then` became a real schedule on request, so the
           // word this once failed on now works, and the failure case had to
           // move to something that is genuinely not a schedule.
@@ -3041,7 +3139,7 @@ export async function runVerify(request: string): Promise<void> {
           if (what !== null && what !== undefined) set(what, 'a step that must survive')
           what?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
           await settle(1500)
-          const still = rowOf('car')?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+          const still = rowOf('car')?.querySelector('.docket-step.new .docket-field.wide') as HTMLInputElement | null
           say('badWhenKeptTheWords', {
             open: still !== null,
             text: still?.value ?? null,
@@ -3049,7 +3147,7 @@ export async function runVerify(request: string): Promise<void> {
             steps: stepsOf('car').length,
           })
           // Correct it in place and it goes in.
-          const fix = rowOf('car')?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
+          const fix = rowOf('car')?.querySelector('.docket-step.new .docket-field.narrow') as HTMLInputElement | null
           if (fix !== null && fix !== undefined) set(fix, '2 weeks')
           still?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
           await settle(1500)
@@ -3072,7 +3170,7 @@ export async function runVerify(request: string): Promise<void> {
         say('stepAddReads', [...(rowOf('car')?.querySelectorAll('.docket-quiet') ?? [])]
           .map(b => (b.textContent ?? '').trim())
           .find(t => t.endsWith('step')) ?? null)
-        say('kindOffered', [...(rowOf('car')?.querySelectorAll('.docket-runup.new .docket-step-kind option') ?? [])]
+        say('kindOffered', [...(rowOf('car')?.querySelectorAll('.docket-step.new .docket-step-kind option') ?? [])]
           .map(o => o.textContent))
         say('caretStartsInWhat', document.activeElement?.className ?? null)
 
@@ -3091,7 +3189,7 @@ export async function runVerify(request: string): Promise<void> {
         await settle(1800)
         say('keepUp', {
           when: rowOf('mower')?.querySelector('.docket-when')?.textContent ?? null,
-          steps: (rowOf('mower')?.querySelectorAll('.docket-runup:not(.new)').length ?? 0),
+          steps: (rowOf('mower')?.querySelectorAll('.docket-step:not(.new)').length ?? 0),
           clock: (rowOf('mower')?.querySelectorAll('.docket-step-clock input:checked').length ?? 0),
         })
 
@@ -3099,10 +3197,10 @@ export async function runVerify(request: string): Promise<void> {
         // label, so the only repair was to drop it — losing the id its
         // dependents point at.
         {
-          const target = [...(rowOf('car')?.querySelectorAll('.docket-runup:not(.new)') ?? [])]
-            .find(one => (one.querySelector('.docket-runup-what')?.textContent ?? '')
+          const target = [...(rowOf('car')?.querySelectorAll('.docket-step:not(.new)') ?? [])]
+            .find(one => (one.querySelector('.docket-step-what')?.textContent ?? '')
               .includes('survive'))
-          const what = target?.querySelector('.docket-runup-what') as HTMLElement | null
+          const what = target?.querySelector('.docket-step-what') as HTMLElement | null
           say('stepTextIsClickable', what?.tagName ?? null)
           what?.click()
           await settle(300)
