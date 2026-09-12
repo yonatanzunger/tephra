@@ -1362,6 +1362,18 @@ export class DocumentService {
     // from. Without this the chain only advances if somebody also went to the
     // docket and said so, which is asking them to do it twice.
     if (status === 'done') await this.#finished(item)
+    // **And putting one down flows back too**, which finishing had covered and
+    // nothing else did. *Nevermind* on a generated task left the step pointing
+    // at an item nobody could see any more and never done — so a recurring
+    // matter's clock never turned and it went quiet for ever, while the docket
+    // still showed it as live work. The reconciler now reads *outstanding* from
+    // the list rather than from the step, so all this has to do is ask it to
+    // look: the resolution is derived, and what changed is only that the
+    // derivation is out of date.
+    // **Any resolution at all**, not just the two new ones: finishing already
+    // wrote the step's stamp above, and this is what turns that stamp into the
+    // next instance without waiting for a day boundary to come round.
+    if (!isLive(status)) await this.reconcile()
   }
 
   /**
@@ -2098,12 +2110,32 @@ export class DocumentService {
     const list = await this.todoList()
     const made: string[] = []
     const withdrawn: string[] = []
+
+    /**
+     * Which of the items dockets made are still being asked of somebody.
+     *
+     * **Outstanding is a computed fact, not a stored one**, and that is what
+     * keeps *nevermind* from wedging a matter for ever. A step that made an item
+     * somebody then dropped is not owed — it is resolved, just not by being
+     * done — and the alternative was a fourth field in the step marker recording
+     * the same thing the task list already knows. D77's rule applied one level
+     * down: do not persist what can be derived from the source of truth.
+     *
+     * An id absent from the live set is resolved however it was resolved:
+     * finished, dropped, backlogged, or deleted outright. All four mean *stop
+     * waiting*, and none of them means *ask again*.
+     */
+    const live = new Set(
+      (await this.todoItems(list, today))
+        .filter(one => isLive(one.status))
+        .flatMap(one => (one.id === null ? [] : [one.id])),
+    )
     for (const docket of await this.#corpus.list('docket')) {
       let touched = false
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
       for (const id of (await this.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
-        if (await this.#advanceDocket(docket, id, today)) touched = true
+        if (await this.#advanceDocket(docket, id, today, live)) touched = true
         const matter = (await this.docketMatters(docket)).find(one => one.id === id)
         if (matter === undefined) continue
         for (const step of matter.steps) {
@@ -2115,10 +2147,14 @@ export class DocumentService {
             await this.#setStepMade(docket, id, step.id, item)
             made.push(item)
             touched = true
-          } else if (!wanted && step.made !== null && step.done === null) {
-            // **Only what it made, and only while it is unfinished.** A task
-            // somebody typed is nobody else's business, and one already done is
-            // a true statement about the past.
+          } else if (!wanted && step.made !== null && step.done === null && live.has(step.made)) {
+            // **Only what it made, and only while it is still being asked.**
+            // Three exemptions, and they are all the same exemption: a task
+            // somebody typed is nobody else's business, one already finished is
+            // a true statement about the past, and one they *dropped* is as much
+            // their decision as one they ticked. Taking any of them back would
+            // be overruling somebody — which is what the finished-item rule was
+            // always really about, stated too narrowly.
             await this.todoRemove(list, step.made)
             await this.#setStepMade(docket, id, step.id, null)
             withdrawn.push(step.made)
@@ -2147,7 +2183,12 @@ export class DocumentService {
    * air-filter task rather than thirty. Bounded, because an interval this
    * cannot make progress on would otherwise spin.
    */
-  async #advanceDocket(docket: DocumentId, id: string, today: DateKey): Promise<boolean> {
+  async #advanceDocket(
+    docket: DocumentId,
+    id: string,
+    today: DateKey,
+    live: ReadonlySet<string>,
+  ): Promise<boolean> {
     let moved = false
     for (let guard = 0; guard < 500; guard += 1) {
       const matter = (await this.docketMatters(docket)).find(one => one.id === id)
@@ -2161,18 +2202,26 @@ export class DocumentService {
         // behind us and nothing it asked for is still owed, counting from the
         // instance that has just passed so the anchored day survives.
         // Owed means *this instance put something on the list and it is still
-        // there* — not merely that a step is undone. A step that never came due
-        // (the app was shut for the whole of 2020) was never asked for, so it
-        // cannot be outstanding, and treating it as owed would wedge the matter
-        // on an instance nobody was ever told about.
+        // being asked of somebody* — not merely that a step is undone. A step
+        // that never came due (the app was shut for the whole of 2020) was never
+        // asked for, so it cannot be outstanding; and one whose item was
+        // dropped is resolved, just not by being done. Treating either as owed
+        // wedges the matter — on an instance nobody was told about in the first
+        // case, and for ever in the second.
         ? [compareDateKeys(matter.when.start, today) < 0
-            && matter.steps.every(one => one.made === null || one.done !== null),
+            && matter.steps.every(one => one.made === null || !live.has(one.made)),
           matter.when.start]
-        // A recurring TASK reads one step, and that step being done is the
-        // instance being over — whatever the calendar says. It counts from the
-        // day it was done, which for a matter years overdue is the difference
-        // between *next spring* and *overdue again immediately*.
-        : [clock?.done != null, clock?.done == null ? null : dateKeyAt(new Date(clock.done * 1000), this.zone)]
+        // A recurring TASK reads one step, and that step being over is the
+        // instance being over — whatever the calendar says. **Over two ways, and
+        // they count from different days.** Done: from the day it was done,
+        // which for a matter years overdue is the difference between *next
+        // spring* and *overdue again immediately*. Dropped: from the day it was
+        // **scheduled**, because *this one did not happen* says nothing about
+        // when the next one is owed — an air filter you skipped in March is due
+        // in June, not three months after you gave up on it.
+        : clock?.done != null
+          ? [true, dateKeyAt(new Date(clock.done * 1000), this.zone)]
+          : [clock?.made != null && !live.has(clock.made), matter.when.start]
       if (!settled || from === null) break
       await this.#serial(async () =>
         this.#corpus.use(docket, doc => (doc as DocketDocument).advanceInstance(id, from)))

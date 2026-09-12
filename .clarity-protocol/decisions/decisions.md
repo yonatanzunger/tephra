@@ -3701,3 +3701,65 @@ moments, and only the person reading knows which moment it is.
 > as a test hook with no appearance, which is recorded in the stylesheet so the
 > absence reads as a decision rather than an omission.
 
+---
+
+## D79: Putting a generated task down is three different acts
+
+**Date:** 2026-09-12
+**Status:** decided (engine built; the three-way offer is MH4)
+**Answers:** Qa's second half — *drop = skip or still owed*. **Amends:** MH3b's
+outstanding rule. **Source:** reasoning about the reorient UX, from use.
+
+**A generated task can be put down in three ways, and they mean different things
+to the matter that made it:**
+
+| | Next instance measured from | Dependent steps fire? |
+|---|---|---|
+| **Advance** — as though completed | **now** | **yes** |
+| **Skip** — this one did not happen | the **scheduled** date | no |
+| **Suspend** — stop asking | — | no |
+
+**The first is why two verbs were not enough.** A step can prove irrelevant *to
+this occurrence* while the work it gated should still proceed — a present bought
+jointly, a form somebody else filed — and the clock should read as though it were
+handled. Collapsing that into *skip* loses the dependent steps; collapsing it
+into *done* is a lie about the record.
+
+**And the second is why *skip* is not *advance*.** An air filter skipped in March
+is due in June, not three months after the day you gave up on it. *This one did
+not happen* says nothing about when the next one is owed.
+
+**Skip only exists where there is a next instance.** On a one-off it collapses
+into suspend, so it is not offered — an option that cannot do anything is the
+affordance mistake MH1 made three times, inverted.
+
+**They live on the matter, and the task list is a shortcut to them** (H1). Both
+are on the matter's menu in the docket; the three-way offer when a generated task
+is dropped or backlogged is the same verbs reached from where you noticed you
+wanted one.
+
+> **The bug this found was live, and it was silent.** A dropped generated item
+> left the step pointing at something nobody could see and never done, so the
+> reconciler's `wanted && made !== null` matched neither branch: a recurring
+> matter's clock never turned and it **went quiet for ever**, while the docket
+> went on showing live work that could never be produced. The same failure MH3b
+> has two tests for, through a door neither watched — both assumed an item is
+> either finished or left alone.
+>
+> **Outstanding became a computed fact rather than a stored one**, which is the
+> fix and is D77 one level down: *owed* means *this step made an item that is
+> still live*, read from the task list, not a fourth field in the step marker
+> recording what the list already knows. An id absent from the live set is
+> resolved however it was resolved — finished, dropped, backlogged, deleted — and
+> all four mean *stop waiting*, none of them *ask again*.
+>
+> **And the withdrawal rule was stated too narrowly.** *Not while it is
+> unfinished* would delete an item somebody had deliberately dropped, overruling
+> them. Three exemptions, one reason: a task somebody typed, one already
+> finished, and one they put down are all decisions that are not ours to take
+> back.
+>
+> **Resolving an item now reconciles immediately**, so ticking a task makes the
+> next step appear rather than waiting for a day boundary. That was always the
+> intended feel; an explicit pass in the tests had been standing in for it.
+

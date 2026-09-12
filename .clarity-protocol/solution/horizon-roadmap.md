@@ -257,7 +257,38 @@ Daily operation gets significantly easier.
 
 **In:** the three movements; the day's selection, stored per day and not
 surviving the carry; the compact horizon relocated out of the task surface;
-docket staleness reporting.
+docket staleness reporting; **the three-way offer when a generated task is put
+down** (D79).
+
+**Settled in advance (2026-09-12), by discussing the experience before building
+it:**
+
+- **Staleness is a matter, not a computation.** Every docket carries one marked
+  matter — a **recurring task to review this docket**, completion-driven. H11
+  already says *"not reviewed since June"*, not *not edited*, and those differ
+  exactly when it matters: a docket you add to weekly is still unreviewed if you
+  never go through the standing matters giving them dates. Three things then come
+  free — *since last time* for the demotion report is the step's completion
+  stamp; the graveyard's exemption is *has none* rather than a special case; and
+  cadence is authored per docket, which the misc docket's own length risk asks
+  for. A real, visible, seeded matter rather than an implicit property, so it can
+  be edited, suspended, or declined outright — but **marked**, the way `after`
+  marks the clock step, so *when was this last reviewed* is answerable without
+  matching on a name.
+- **The stalled chain needs no mechanism of its own.** It is a stall of a TODO
+  item, not of a docket, and reorient already sees the live list. What it did
+  need was D79, which is built.
+- **The day's selection is a per-day MARK, and an item appears in both places.**
+  Not a status and not a tag — both carry forward, and the selection must not.
+  Recorded from use: keeping a separate *today* list means either syncing two
+  lists or losing the tagging, which is what earlier eras did badly.
+- **Movement 3 is never mandatory**, and the *today* section is the topmost one
+  in the task list, marked so it reads as its own region. A differently-coloured
+  *section* is fine exactly where a differently-coloured *row* was not: MT5a
+  objected to a region with mixed membership told apart by a mark, and this
+  region means one thing.
+- **Its appearing pushes the list down, and that is allowed.** D42 is about
+  things moving under you unbidden; this reflow is caused by your own gesture.
 
 **Mostly assembly.** Movement 2 is the existing walk unchanged, movement 1 is
 MH2's query at a small limit, and movement 3 is small and new.
@@ -266,11 +297,11 @@ MH2's query at a small limit, and movement 3 is small and new.
 strip is present whatever you are doing, which is what makes a skipped reorient
 safe — finally holds.
 
-**Staleness has a second job after D76: the stalled chain.** A matter whose first
-step was never completed generates nothing further while still looking active,
-and dockets are explicitly for things that go dormant for years, so this will
-happen. It is the docket's version of the problem the graveyard exists for, and
-reporting it is the cheapest half.
+~~**Staleness has a second job after D76: the stalled chain.**~~ *Superseded
+2026-09-12.* A matter whose first step was never completed generates nothing
+further while still looking active — but that is a stall of a **TODO item**, not
+of a docket, and it turned out to be a live bug rather than a reporting gap
+(D79). The engine no longer wedges, and reorient sees the live list already.
 
 ## MH5 — The backlog becomes a pair of dockets
 

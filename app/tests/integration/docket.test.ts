@@ -1545,10 +1545,13 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   assert.notEqual((await service.docketMatters(id))[0]?.steps[0]?.done, null,
     'the step knows, without anybody telling it')
 
-  const { made: next } = await service.reconcile()
-  assert.equal(next.length, 1)
+  // **And the next one is already there**, rather than waiting for a boundary.
+  // Resolving an item now asks the reconciler to look, so *tick it and the next
+  // step appears* is one gesture — which is what the chain firing is supposed to
+  // feel like, and what the explicit pass here used to be standing in for.
   assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
     ['The car needs fixing', 'have the car fixed'])
+  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
 })
 
 test('and a task nothing generated flows back to nothing, quietly', async t => {
@@ -1847,4 +1850,106 @@ test('AND A MATTER WITH NO INTERVAL NEVER ADVANCES, however long it sits', async
   assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
   assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-03-01')
   void car
+})
+
+// ── putting a generated task down (MH3b, amended) ───────────
+
+test('THE WEDGE: nevermind on a generated task must not silence the matter', async t => {
+  // **Found by reasoning about the UX, not by a test**, and it was live. A
+  // dropped item leaves the step pointing at something nobody can see, never
+  // done — so the clock never turned, the matter never advanced, and the docket
+  // went on showing live work that could never be produced. The same *goes
+  // quiet* failure MH3b has two tests for, through a door neither watched:
+  // both assumed an item is either finished or left alone.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await service.docketAdd(id, 'Change the air filter',
+    { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
+  const list = await service.todoList()
+  const { made } = await service.reconcile()
+  assert.equal(made.length, 1)
+
+  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  const matter = (await service.docketMatters(id))[0]
+  assert.equal(matter?.when.start, '2026-06-10', 'it moved on, rather than stopping for ever')
+})
+
+test('and SKIPPING counts from the day it was SCHEDULED, not from today', async t => {
+  // Which is the distinction that makes three verbs rather than two. *This one
+  // did not happen* says nothing about when the next one is owed: an air filter
+  // skipped in March is due in June, not three months after you gave up on it.
+  const { service, on } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await service.docketAdd(id, 'Change the air filter',
+    { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
+  const list = await service.todoList()
+  const { made } = await service.reconcile()
+
+  // A fortnight of ignoring it, and then *nevermind*.
+  await on('2026-03-24')
+  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-06-10',
+    'three months from the tenth, not from the twenty-fourth')
+})
+
+test('whereas DOING it counts from the day it was done, which is the other verb', async t => {
+  const { service, on } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await service.docketAdd(id, 'Change the air filter',
+    { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
+  const list = await service.todoList()
+  const { made } = await service.reconcile()
+
+  await on('2026-03-24')
+  await service.todoSetStatus(list, made[0] as string, 'done')
+  assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-06-24',
+    'three months from when it actually happened')
+})
+
+test('and BACKLOG resolves it too, an item nobody can see being owed by nobody', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await service.docketAdd(id, 'Change the air filter',
+    { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
+  const list = await service.todoList()
+  const { made } = await service.reconcile()
+  await service.todoSetStatus(list, made[0] as string, 'backlog')
+  assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-06-10')
+})
+
+test('A RECURRING EVENT IS NOT WEDGED BY IT EITHER, owed meaning STILL asked', async t => {
+  // The calendar half of the same bug: *nothing left owing* was reading the
+  // step rather than the list, so a dropped run-up task held the event on an
+  // instance for ever — H7a's overdue rule turned into a trap.
+  const { service, on } = await serviced(t, '2026-03-02T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const day = await service.docketAdd(id, 'The quarterly report',
+    { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
+  await service.docketAddStep(id, day, '3d', 'write it')
+  const list = await service.todoList()
+  const { made } = await service.reconcile()
+
+  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  await on('2026-07-01')
+  await service.reconcile()
+  assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-09-05',
+    'past the one that was dropped and the one after it')
+})
+
+test('AND A DROPPED ITEM IS LEFT ALONE, dropping it being their decision too', async t => {
+  // The withdrawal rule said *not while it is unfinished*, which would delete an
+  // item somebody had deliberately put down — overruling them. What it was
+  // always really about is not taking back what is no longer being asked.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+  await service.docketActivate(id, car)
+  const list = await service.todoList()
+  const { made } = await service.reconcile()
+
+  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  await service.docketSuspend(id, car)
+  const items = await service.todoItems(list, service.today)
+  assert.equal(items.find(one => one.id === made[0])?.status, 'dropped',
+    'still there, still their decision')
 })

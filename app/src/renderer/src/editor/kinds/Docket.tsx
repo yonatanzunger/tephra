@@ -411,6 +411,29 @@ export function DocketSurface({
                         label: matter.link === null ? 'Link to a document…' : 'Change the link…',
                         onChoose: () => setEditing({ matter: who, field: 'link' }),
                       },
+                      // **The two verbs that act on the INSTANCE, not the
+                      // matter's fields.** They belong here because that is what
+                      // they are — acts on the matter — and the task list offers
+                      // them only as a shortcut from where you happen to notice
+                      // you want one (H1: one source, and the list is a
+                      // projection of it).
+                      //
+                      // *Skip* only exists where there IS a next instance: on a
+                      // one-off it would collapse into *suspend*, and an option
+                      // that cannot do anything is the affordance mistake MH1
+                      // made three times, inverted.
+                      ...(matter.when.every !== null && matter.when.start !== null
+                        ? ['rule' as const, {
+                          label: 'Skip to the next one',
+                          onChoose: () => { void act(window.tephra.docket.advance(id, who)) },
+                        }]
+                        : []),
+                      ...(matter.when.start !== null
+                        ? [{
+                          label: 'Suspend this matter',
+                          onChoose: () => { void act(window.tephra.docket.suspend(id, who)) },
+                        }]
+                        : []),
                       'rule',
                       {
                         label: 'Remove this matter',
