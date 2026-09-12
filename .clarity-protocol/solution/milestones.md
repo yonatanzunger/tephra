@@ -771,7 +771,7 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
-## MH — the horizon and dockets *(MH1 built; MH3a next)*
+## MH — the horizon and dockets *(MH1 built; MH3a in progress)*
 
 **Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
 Requirements: `goal/horizon.md`. Decisions: D68–D76.**
@@ -806,9 +806,53 @@ the horizon, the old MH3 **splits in two** (producing work, then keeping its own
 time) because after D76 its halves fail in opposite directions, and MH5 shrinks
 to mostly migration plus the review flow. The roadmap carries the reasoning.
 
-**The next slice is MH3a**: the step format — ids and completion stamps, which
-are a one-way door — then **activate** and **suspend**, then generation into the
-task list.
+### MH3a — a docket that produces work *(in progress)*
+
+**The authoring half is built** (2026-09-11). **Steps** replaced triggers: three
+kinds — a task to complete, a status to be aware of, the next instance of this
+matter — each scheduled either `T±N` from the critical date or `{step} + N`
+after another step completes, and each carrying an **id** minted on write so a
+dependency has something stable to point at, and a **completion stamp** which is
+what a dependency reads. `T+0` became a real schedule, read back as *right
+away*, because the first step of a backlog matter is due the moment it starts.
+
+**No file needed migrating**, which was the happiest part: the old trigger line
+is a readable subset of the new one, so `- -2w task: book it` parses as a task
+step with no id and gains one the next time its block is written. `note` reads
+as `status`, which is what it always meant. Both keys are read; only `steps:` is
+written.
+
+**Activate and suspend** are the inverse pair, and there is **no new field and no
+flag** (D76): no start date means inactive, because `T±N` is not computable
+without one. Activating picks the date that makes the *earliest* step due today
+— forward-only, so a fortnight's run-up starts now rather than dating the matter
+in the past — and suspending clears it while leaving completed steps completed. A
+periodic matter keeps its interval and loses its anchor.
+
+**Ranges, seasons and `N after done` came out** (D76), and an unreadable `when`
+is now preserved verbatim instead of silently becoming *no date yet* — a latent
+bug since MH1, and a precondition for withdrawing a grammar rather than a side
+quest.
+
+**Then MH1 in use reshaped the model itself (D76, amended 2026-09-12).** A
+matter's schedule became **three variables** — a start date, an interval, and the
+step whose completion starts the next instance — out of which the **four kinds of
+matter** fall rather than being stored: something to get done, something
+happening, something that comes round, something to keep up with. *Add a matter*
+offers those four and asks only the questions each one has; the choice is spent
+on the spot, setting the fields and seeding the first step, and never recorded.
+
+**The reschedule stopped being a construct.** It was a schedule variant, then a
+step somebody authored, and is now two fields on the matter — so the step list is
+made only of a person's own words again, and `after` says both *recur from
+completion* and *from which step's*, which is what Qa asked of the designated
+occurrence. **Nothing was migrated**: the old `when:` line and an old
+`reschedule` step are both read and folded in, converting on the next write of
+the block they sit in.
+
+**What remains in MH3a: generation.** The pass that turns a due step into a TODO
+item, keyed to `clockDay`, idempotent, at midnight and at startup, with
+provenance so that suspend can withdraw what it made.
 
 ### MH1 — docket files *(built 2026-09-10)*
 

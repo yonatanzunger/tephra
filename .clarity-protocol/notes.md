@@ -828,3 +828,241 @@ matters that is fifteen cases and they run in milliseconds; the failure mode was
 arithmetic, and arithmetic at this size is worth brute-forcing rather than
 reasoning about.
 
+
+## A scene that finds its controls by label breaks when a label changes
+
+The step rename (*run-up* → *step*, D76) silently disabled a whole section of the
+`docket` scene: it opened the add-a-step row by finding the button whose text was
+`'run-up'`, and no such button existed any more. The scene did not error. It
+carried on, added nothing, and reported the *feature* as broken — a missing step
+in the file — when what was broken was the test.
+
+**Text is the most fragile selector available**, and it is the one a scene reaches
+for because it is how a person finds the control. The tension is real: a scene
+that clicks `.docket-quiet:nth-child(4)` tests nothing anybody can recognise, and
+one that clicks *the button that says step* tests exactly the right thing until
+the word changes.
+
+**What makes it survivable is the failure being loud in the right place.** The
+file check is what caught it — *the step on disk* found nothing — and the useful
+habit is the one already recorded for the timed-out scene: read failures
+top-down, and when the evidence is *missing* rather than *wrong*, suspect the
+scene before the app. A rename is exactly the change that produces missing
+evidence everywhere at once.
+
+## A guard that returns silently is indistinguishable from a broken key
+
+Reported from use, four notes at once about one small row, and the sharpest was:
+*a carriage return in the task doesn't do an "add."* It did. What it did was hit
+this:
+
+```ts
+if (offset.trim() === '' || text.trim() === '') return
+```
+
+The *when* field was empty, so Enter was swallowed and nothing happened and
+nothing was said. From the outside that is a dead key, and no amount of looking
+at the Enter handler would have found it, because the Enter handler was correct.
+
+**Two separate faults, and the guard hid the more interesting one.** A blank
+schedule should never have been refused at all — `T+0` is the commonest step on
+a docket, the first thing to do when work starts, so blank is the *default* and
+not a missing field. The guard turned a design gap into a phantom input bug.
+
+**The rule: a control that declines to act must say why.** Either default the
+missing thing, or refuse out loud. `return` with nothing said is the worst of
+the three, and it is the one that looks like the framework's fault rather than
+ours. Worth remembering that the distinction to preserve is *saying nothing* —
+a choice, so default it — against *saying something unreadable* — a mistake, so
+report it.
+
+**And two controls appeared where one was needed.** The row stayed open after an
+add so a second step cost no gesture, which left *add* and *done* side by side —
+and *done* read as *cancel*, because a row still sitting there after an add makes
+the closing button look like the undo.
+
+**The first fix was to close on add, and it was the wrong half to change.**
+Staying open is the right behaviour: work comes in sequences — find a shop, then
+have the car fixed, then claim it back — and closing made the whole gesture cost
+one row per step. What was actually broken was the *label*. `done` beside `add`
+names no difference; `cancel` does, and Escape means it too.
+
+**The lesson is about which of two things to move.** Two controls that need
+telling apart can be fixed by removing one or by naming them properly, and the
+first is tempting because it is less work. Here it cost a useful behaviour and
+had to be put back a few rounds later — on the report *adding a step should
+immediately open up a new step to add*, which is the behaviour that had just
+been deleted.
+
+## A surface that fires and forgets loses whatever was typed
+
+*"If I hit return on this thing that has a bad when clause, it just seems to drop
+the item."* It did. The add row called the verb and closed in the same breath:
+
+```ts
+onCommit(offset, text)
+onDone()          // ← unconditional
+```
+
+The verb is async. It rejected — *then* is not a schedule — the error landed in
+the banner at the top of the surface, and the row with the words in it was
+already gone. **The complaint said the item was dropped, and from where the
+person was sitting that is exactly what happened.**
+
+**The fix is that an action reports whether it worked**, and the caller keeps the
+words on screen if it did not. Every verb in this surface goes through one
+helper, so it was one signature: `Promise<unknown>` became `Promise<boolean>`,
+and three callers learned to wait. It is the same shape of bug as the silent
+guard above — a control acting as though it had succeeded — and worth stating as
+one rule: **optimistic UI is only honest when there is an undo, and there is no
+undo for text you never got to keep.**
+
+## A label is not editable, and identity is what makes that expensive
+
+Alongside the above: *"why can't I click on 'Find electricion' and correct its
+spelling?"* Because a step's text was rendered as a `<span>`, and the only repair
+was to drop the step and retype it.
+
+**Which is not the same act.** A step's id is what its dependents point at and
+its completion stamp is what they read, so a drop-and-retype orphans whatever
+was waiting on it and forgets that it had been done. The matter's own name and
+date had been click-to-edit since MH1 for exactly this reason; the steps were
+built later and the pattern was not carried down.
+
+**The rule: anything with an identity needs an edit, not a replace** — and the
+tell for where that is missing is a `<span>` holding text a person authored. The
+same sweep found the step's schedule, also a span, also only replaceable.
+
+## A reference nobody can type is not a reference
+
+Steps gained ids so that one could depend on another (D76), and the id is right:
+eight random characters, stable against a step being inserted above it. What was
+wrong is that it was **the only way to point at a step**, and it is unwritable —
+nobody types `okc8kiff`, and the surface never showed it.
+
+So two references arrived from use, in two messages:
+
+- **`then`** — *after whatever is above this in the list*. The word people use
+  when typing a chain top to bottom.
+- **`after 1`** — an index. Which came with its own observation: *saying "after
+  1" is weird because the number 1 isn't shown in the UX anywhere.* It wasn't.
+  The number is the handle, so the number has to be on the screen.
+
+**And `after 1` was already parsing.** The reference pattern was `[0-9a-z]+`, so
+a digit matched, and the step was stored pointing at `"1"` — a name for nothing.
+It would never have come due, and nothing would have said why. **A grammar that
+accepts a reference must resolve it**, against the real list, at the moment it is
+written; anything else stores a pointer whose target was never checked.
+
+**Both normalise on the way in, which is what keeps the file honest.** `then` and
+`after 1` exist only in the field; the block always holds an id. So the two
+questions stay separate — *what can a person type*, and *what does the file
+mean* — and the second one has one answer.
+
+**The shape to remember: a synonym is resolved where the context lives.** `then`
+needs to know what is above it and `after 1` needs the list, so neither can be
+settled by the parser alone — it is handed the answer rather than the question,
+and a file being read back supplies no context at all, which is exactly why a
+step block can still be parsed on its own.
+
+## A count is not a door
+
+The control that adds a step to a matter was labelled with the number of steps:
+`step` when there were none, `1 step`, `2 steps`. Reported from use: *it's very
+unclear that clicking on "1 step" will add a step.* Which is right — a count is
+information, and the only thing a number invites is reading.
+
+**Worse, the information was already on the screen.** A matter's steps are always
+listed directly beneath that control, so the number said nothing the reader could
+not see, and it cost the one door into the step list its legibility. `+ step`
+now, matching the two things beside it that are also doors: *+ Add a matter* and
+*+ Add to …*.
+
+**The tell: a control whose label is a fact about the thing rather than a verb
+about the act.** The others in that row survive the test because they read as
+verbs or as questions — *tag*, *who*, *note* — and the count was the only one
+pretending to be a status line.
+
+**This was also the third scene breakage from finding controls by their text**,
+so the selector now matches `'+ step'` exactly rather than *contains step*. Exact
+is the better trade here: it breaks loudly on a rename instead of quietly
+matching some other control that happens to contain the word.
+
+## `undefined !== null` is true, and a native setter says nothing useful about it
+
+The acceptance scene died with `Illegal invocation` and no indication of where.
+The cause, three guards of this shape:
+
+```ts
+const row = rowOf('air filters')?.querySelector('.docket-where') as HTMLSelectElement | null
+if (row !== null) { setter.call(row, 'Periodic maintenance') }
+```
+
+`rowOf` returns `undefined` when it finds nothing, `?.` propagates that, and the
+cast said `| null` — so the guard passed a missing element straight into a native
+`value` setter, which threw a message about receivers rather than about rows.
+
+**Two faults, and the dull one is the dangerous one.** The interesting fault was
+upstream: a matter was never created, because the scene typed a date into a field
+that shape of matter does not have. The dull one is that the guard turned *there
+is no such row* into *illegal invocation*, which sounds like a DOM problem and
+sent the search to entirely the wrong place.
+
+**The rule: a cast is not a check.** `as T | null` does not make `undefined`
+impossible, it only stops the compiler mentioning it — and a lookup chain with
+`?.` in it produces `undefined`, never `null`. Guard with `== null` when both are
+possible, and be suspicious of any `!== null` sitting downstream of an optional
+chain.
+
+**And the guard that caught this was the one added two days ago** — *a scene that
+did not finish is not a scene that passed*. It reported honestly and said nothing
+about why, so it now prints the window's own output when there is no `appError`
+line. The first run with that in place showed `VERIFY ERROR: "Illegal
+invocation"` on the line after the last good one, which was the whole
+investigation.
+
+## One class, one thing — or every query for it becomes ambiguous
+
+`.docket-where` was the move-to menu. Then a step's kind needed a `select` and it
+got the same class, and so did the shape picker on *Add a matter* — three
+different controls answering to one name, because they looked alike. Nothing
+broke until the move-to menu was removed and a check asked *is it gone?* by
+querying `.docket-where` inside a row: the answer was no, because the add-step
+row happened to be open and its kind picker matched.
+
+**Styling is not identity.** The reason they shared a class was that they should
+look the same, and that is a job for a shared class *alongside* a name — not
+instead of one. Each has its own now: `.docket-where` is gone with the control
+it named, `.docket-step-kind` and `.docket-shape` say what they are.
+
+**The tell is a selector that reads as a question about appearance** — *the
+small bordered select* — rather than about the thing. Every scene in this
+project addresses the UI by class, so a class is an interface, and reusing one is
+an overload nobody declared.
+
+## An affordance that appears only once the thing it sets already exists
+
+Three times in one surface, each time reported as a missing feature and each
+time a visibility condition written from the state where the feature is already
+in use:
+
+- **A step's kind.** Nothing set it, so every step was authored as a task and
+  the kind that made a matter recur had no door at all. *How do I create an
+  interval-scheduled task right now?*
+- **A matter's interval.** The control rendered only when
+  `matter.when.every !== null`, so a matter made as *something to get done*
+  could never become one that recurs.
+- **Which step advances the clock.** The radios rendered only when
+  `after !== null`, so *on the calendar* sat there as the single option in a
+  group of one — the choice could not be made until something had made it.
+
+**The shape of the mistake is the same each time**: the condition is written
+while looking at a thing that already has the value, so it reads as *show this
+where it is relevant* and means *show this where it is already decided*.
+
+**The check: for every control that SETS a value, ask what the surface looks
+like when that value is absent** — which is the state somebody is in precisely
+when they want the control. A field that shows the current value is a display;
+a field that only shows when there *is* a current value is a display pretending
+to be a control. Where absence is a real state — *once*, *no date yet*, *on the
+calendar* — say it in words and keep the control.

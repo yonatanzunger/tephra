@@ -10,6 +10,7 @@ import type {
   WindowEdit, DateKey, DocumentChange, DocumentId, DocumentMeta, EditOrigin, SegmentKey,
   SessionGeneration, Span, SpanKind, TypedSpan, DocumentPosition,
 } from './document-api.ts'
+import type { Mode, NewMatter, StepKind } from './kinds/docket.ts'
 import type { Annotation, Marker, Prose } from './prose.ts'
 import type { StoredCursor, WindowState } from './ui-state.ts'
 import type { NavTarget } from './pane-api.ts'
@@ -558,13 +559,37 @@ export type DocketCommand =
       readonly kind: 'add'
       readonly docket: DocumentId
       readonly name: string
-      /** As written: `2026-11-12`, `2026-03..2026-05`, `every 90 days`, or nothing. */
-      readonly when?: string
+      /** Which of the four shapes, and the details it needs (D76). */
+      readonly shape?: NewMatter
       /** Which section to put it in. Absent means the undivided run. */
       readonly section?: string
     }
   | { readonly kind: 'rename'; readonly docket: DocumentId; readonly matter: string; readonly name: string }
-  | { readonly kind: 'when'; readonly docket: DocumentId; readonly matter: string; readonly when: string }
+  /** Which of the four kinds of thing a matter is (D76, amended). */
+  | { readonly kind: 'mode'; readonly docket: DocumentId; readonly matter: string; readonly mode: Mode }
+  /** The next instance, or nothing — which is the whole of *inactive*. */
+  | {
+      readonly kind: 'start'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly start: string | null
+    }
+  /** How often it comes round, as typed: `90d`, `1m on 31`, or nothing. */
+  | {
+      readonly kind: 'every'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly every: string | null
+    }
+  /** Which step's completion starts the next instance (Qa). */
+  | {
+      readonly kind: 'after'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly after: string | null
+    }
+  /** Move a recurring matter on to its next instance. */
+  | { readonly kind: 'advance'; readonly docket: DocumentId; readonly matter: string }
   | {
       readonly kind: 'owner'
       readonly docket: DocumentId
@@ -582,21 +607,60 @@ export type DocketCommand =
       readonly matter: string
       readonly notes: readonly string[]
     }
-  /** A run-up: *this long before, do this* (H4). `offset` as a person types it. */
+  /** A step: *at this moment, this happens* (H4, D76). `when` as typed. */
   | {
-      readonly kind: 'addTrigger'
+      readonly kind: 'addStep'
       readonly docket: DocumentId
       readonly matter: string
-      readonly offset: string
+      /** `2w`, `+3d`, `right away`, `after <step id>`, `after <id> +90d`. */
+      readonly when: string
       readonly text: string
-      readonly effect?: string
+      /**
+       * Which of the three kinds it is.
+       *
+       * **`stepKind`, because `kind` is the channel's own discriminator.** Two
+       * different things called `kind` in one object is how a wrong one gets
+       * read, so the domain word yields to the protocol word here.
+       */
+      readonly stepKind?: StepKind
     }
+  /** Fix what a step says, keeping its id — and so its dependents and its stamp. */
   | {
-      readonly kind: 'removeTrigger'
+      readonly kind: 'editStep'
       readonly docket: DocumentId
       readonly matter: string
-      readonly at: number
+      readonly step: string
+      readonly text: string
     }
+  /** Reschedule one step. `when` as typed. */
+  | {
+      readonly kind: 'stepWhen'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly step: string
+      readonly when: string
+    }
+  /** Change which of the three kinds a step is. */
+  | {
+      readonly kind: 'stepKind'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly step: string
+      readonly stepKind: StepKind
+    }
+  | { readonly kind: 'removeStep'; readonly docket: DocumentId; readonly matter: string; readonly step: string }
+  /** Stamp it done, or undo that — what a dependency reads. */
+  | {
+      readonly kind: 'completeStep'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly step: string
+      readonly done: boolean
+    }
+  /** Start work on it: the date that makes its first step due today (D76). */
+  | { readonly kind: 'activate'; readonly docket: DocumentId; readonly matter: string }
+  /** Stop work on it, keeping what it has already done. */
+  | { readonly kind: 'suspend'; readonly docket: DocumentId; readonly matter: string }
   // ── sections: how a docket is divided for reading (MH1) ──
   | { readonly kind: 'sections'; readonly docket: DocumentId }
   | { readonly kind: 'addSection'; readonly docket: DocumentId; readonly name: string }

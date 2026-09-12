@@ -33,6 +33,15 @@ const electron = './node_modules/.bin/electron'
 
 /** Today in the reference zone (D38) — never a hard-coded date; see m2. */
 const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
+/** What the window will show for *today*, which is what activation writes. */
+const TODAY = DAY
+/**
+ * And two weeks out, which is what activation writes for a matter that has a
+ * fortnight's run-up: *activate* means **the earliest step is due now**, not
+ * *the start date is today*. Those differ exactly when a step runs backward.
+ */
+const IN_A_FORTNIGHT = new Date(Date.parse(`${DAY}T12:00:00Z`) + 14 * 86_400_000)
+  .toISOString().slice(0, 10)
 const [YEAR, MONTH] = DAY.split('-')
 
 /**
@@ -106,12 +115,16 @@ const check = (name, ok, detail = '') => {
 console.log('— making one, and working it —')
 const root = await notebook()
 const shot = process.env.TEPHRA_MH1_SHOT ?? join(tmpdir(), 'tephra-mh1.png')
-const r = report(await launch('docket', root, { shot }))
+const said = await launch('docket', root, { shot })
+const r = report(said)
 // **A scene that did not finish is not a scene that passed.** `appError` is the
 // last thing every scene says, so its absence means the window stopped early and
 // every check below is measuring nothing.
 if (r.appError === undefined) {
   console.log(' FAIL  the scene ran to the end\n        no appError line: it threw or timed out partway')
+  // **Say what came back instead.** *Nothing was reported* is not a diagnosis,
+  // and the window's own output is the only evidence there is.
+  console.log(said.trim() === '' ? '        (the window said nothing at all)' : said)
   process.exit(1)
 }
 
@@ -129,6 +142,16 @@ check('and the sidebar found the file and calls it by name', r.inSidebar === tru
 // ── 2. matters, dated and not ───────────────────────────────────────────────
 // Sampled right after the FIRST one goes in, so one is the whole claim here;
 // `rowsAtEnd` is the count once all three are on.
+check(
+  'THE FOUR SHAPES: adding a matter begins by asking what sort of thing it is',
+  // Two axes — once against repeatedly, and *you do it* against *it happens to
+  // you* — and the second is what makes a talk and a repair feel unalike while
+  // being structurally identical.
+  JSON.stringify(r.shapesOffered) === JSON.stringify([
+    'One-off task', 'Recurring task', 'One-off event', 'Recurring event',
+  ]),
+  JSON.stringify(r.shapesOffered),
+)
 check('a matter added from the surface appears on it', r.rows === 1, `rows=${r.rows}`)
 check(
   'named as it was typed',
@@ -178,13 +201,14 @@ check(
   'the quote from the plumber is what the conversation needs in front of both people',
 )
 check(
-  'a run-up reads as something a person says out loud',
+  'a step reads as something a person says out loud',
   Array.isArray(r.runup) && r.runup.includes('2 weeks before'),
   JSON.stringify(r.runup),
 )
 check(
-  'and a note and a run-up under one matter do not eat each other',
-  r.bothUnderOne?.note === 1 && r.bothUnderOne?.runups === 1,
+  'and a note and a step under one matter do not eat each other',
+  // Four: the step its shape seeded, plus the three the scene adds.
+  r.bothUnderOne?.note === 1 && r.bothUnderOne?.runups >= 1,
   JSON.stringify(r.bothUnderOne),
 )
 
@@ -202,9 +226,19 @@ check(
   `empty notices: ${r.emptySaidSo}`,
 )
 check(
-  'the move control says what it DOES, not where the row already is',
-  r.whereOffered === true && r.whereSays === 'move to…',
-  `offered=${r.whereOffered} reads=${JSON.stringify(r.whereSays)}`,
+  'THE MODE LEADS on an existing matter too, with the same four words',
+  // The row used to show an interval and a radio group and leave somebody to
+  // work out that together they meant *this comes round after I do it*.
+  JSON.stringify(r.modesOnRow) === JSON.stringify([
+    'One-off task', 'Recurring task', 'One-off event', 'Recurring event',
+  ]),
+  JSON.stringify(r.modesOnRow),
+)
+check(
+  'and no menu duplicates the drag, which did the same thing better',
+  // *move to…* was the loudest mark on a row otherwise made of quiet ones,
+  // for a gesture the grip already covers.
+  r.noMoveMenu === true,
 )
 check(
   'THE POINT: matters gather under the heading they were put under',
@@ -216,7 +250,7 @@ check(
   JSON.stringify(r.grouped),
 )
 check('and a moved matter brings its note with it', r.keptItsNote === 2, `lines=${r.keptItsNote}`)
-check('and its run-up', r.keptItsRunUp === 1, `run-ups=${r.keptItsRunUp}`)
+check('and its steps', r.keptItsRunUp >= 1, `steps=${r.keptItsRunUp}`)
 check('every row carries a grip to move it by', r.gripOffered === true)
 check(
   'visible without hovering, because the report was not knowing rows MOVE',
@@ -284,8 +318,10 @@ check(
   r.addHereOffered === true,
 )
 check(
-  'and it asks nothing about where, because the button already said',
-  r.addHereAsksNothing === 0,
+  'and it asks what SORT of thing it is, never which section',
+  // The section came from the button that was pressed; the shape is the one
+  // question left, and it is the one that cannot be inferred.
+  r.addHereAsksNothing === 1,
   `pickers in the add row: ${r.addHereAsksNothing}`,
 )
 check(
@@ -305,7 +341,168 @@ check(
   JSON.stringify(r.renamed),
 )
 
-// ── 6. legibility ───────────────────────────────────────────────────────────
+// ── 6. steps, chained, and activation (MH3a) ────────────────────────────────
+console.log('\n— a docket that produces work —')
+check(
+  'a matter with no date is INACTIVE, and says so',
+  r.backlogged === 'no date yet',
+  JSON.stringify(r.backlogged),
+)
+check(
+  'THE ONE BUTTON: an inactive matter offers to be started',
+  r.activateOffered === 'activate',
+  JSON.stringify(r.activateOffered),
+)
+check(
+  'THE SILENT KEY: a blank schedule with Enter adds the step, at T+0',
+  // It returned silently on an empty `when`, so Enter did nothing and said
+  // nothing — reported from use as a broken key rather than a missing field.
+  Array.isArray(r.firstStep)
+    && r.firstStep.some(one => one.what === 'find a suitable shop' && one.when === 'right away'),
+  JSON.stringify(r.firstStep),
+)
+check(
+  'THE SEQUENCE: a successful add opens the next step, cleared and focused',
+  // Work comes in sequences, so typing one should not cost the whole gesture
+  // per step. What made this confusing the first time was the exit being
+  // called *done*, which reads as *cancel* beside an *add*.
+  r.rowWaitsForTheNext?.open === true
+    && r.rowWaitsForTheNext?.cleared === ''
+    && JSON.stringify(r.rowWaitsForTheNext?.exit) === '["add","cancel"]',
+  JSON.stringify(r.rowWaitsForTheNext),
+)
+check('and Escape is the way out of it', r.escapeClosesIt === true)
+check(
+  'a step at T+0 reads as *right away*, which is the backlog default',
+  // By name: a matter is born with the step its shape seeded, so this one is
+  // not alone in the list any more.
+  Array.isArray(r.firstStep)
+    && r.firstStep.some(one => one.what === 'find a suitable shop' && one.when === 'right away'),
+  JSON.stringify(r.firstStep),
+)
+check(
+  'THE CHAIN: a dependent step names the step it waits on, not its id',
+  Array.isArray(r.chained)
+    && r.chained.some(one =>
+      one.what === 'have the car fixed' && /^after #\d+$/.test(String(one.when))),
+  JSON.stringify(r.chained),
+)
+check(
+  'AN UNREADABLE SCHEDULE KEEPS THE TYPING, and says what is wrong',
+  // Reported from use as *it just seems to drop the item*: the row closed
+  // before the verb came back, so a bad `when` took the words out with it.
+  r.badWhenKeptTheWords?.open === true
+    && r.badWhenKeptTheWords?.text === 'a step that must survive'
+    && /not a schedule/.test(String(r.badWhenKeptTheWords?.said)),
+  JSON.stringify(r.badWhenKeptTheWords),
+)
+check(
+  'and the complaint names the forms that ARE readable',
+  /right away/.test(String(r.badWhenKeptTheWords?.said)),
+  String(r.badWhenKeptTheWords?.said),
+)
+check(
+  'correcting it in place then adds the step',
+  Array.isArray(r.thenCorrected)
+    && r.thenCorrected.some(one => one.what === 'a step that must survive'),
+  JSON.stringify(r.thenCorrected),
+)
+check(
+  'THE INDEX IS SHOWN, since `after 1` refers to it',
+  Array.isArray(r.indicesShown)
+    && r.indicesShown.length > 0
+    && r.indicesShown.every((one, at) => one === String(at + 1)),
+  JSON.stringify(r.indicesShown),
+)
+check(
+  'THEN resolves to the step above it, and reads back by its number',
+  Array.isArray(r.afterThen) && r.afterThen.some(one => /^after #\d+$/.test(String(one))),
+  JSON.stringify(r.afterThen),
+)
+check(
+  'and AFTER 1 resolves to the first step, by the number on the screen',
+  Array.isArray(r.afterIndex)
+    && r.afterIndex.some(one => /^after #\d+ · and this waits on the first$/.test(String(one))),
+  JSON.stringify(r.afterIndex),
+)
+check(
+  'the control that adds a step reads as an action, not as a count',
+  // It said `1 step`, which is information — and information already on the
+  // screen, since the steps are listed right below it.
+  r.stepAddReads === '+ step',
+  JSON.stringify(r.stepAddReads),
+)
+check(
+  'a step is one of TWO kinds now, the third having become the matter\'s own',
+  JSON.stringify(r.kindOffered) === JSON.stringify(['Do a task', 'Raise a reminder']),
+  JSON.stringify(r.kindOffered),
+)
+check(
+  'A RECURRING TASK says in the column that it runs from being done',
+  r.keepUp?.when === 'every 90 days after it is done',
+  JSON.stringify(r.keepUp),
+)
+check(
+  'and its recurrence is the matter\'s two fields, not a step of machinery',
+  r.keepUp?.steps === 1,
+  JSON.stringify(r.keepUp),
+)
+check(
+  'and one step is marked as the one that starts the next instance (Qa)',
+  r.keepUp?.clock === 1,
+  JSON.stringify(r.keepUp),
+)
+check(
+  'the caret starts in *what*, the field that always needs typing',
+  /docket-field wide/.test(String(r.caretStartsInWhat)),
+  String(r.caretStartsInWhat),
+)
+check(
+  'THE TYPO: a step\'s text is clickable, not a label',
+  r.stepTextIsClickable === 'BUTTON',
+  String(r.stepTextIsClickable),
+)
+check(
+  'and correcting it changes the words in place',
+  Array.isArray(r.typoFixed) && r.typoFixed.includes('a step that did survive'),
+  JSON.stringify(r.typoFixed),
+)
+const stepNamed = (steps, what) =>
+  (Array.isArray(steps) ? steps : []).find(one => one.what === what)
+
+check(
+  'NO TICK ON A DOCKET: completion is kept, and set from the task list',
+  // A docket describes work; the task list is where work is done. The state has
+  // to exist — a dependency reads it and suspending preserves it — but setting
+  // it from the description was a control on the wrong surface.
+  stepNamed(r.ticked, 'find a suitable shop')?.done === true,
+  JSON.stringify(r.ticked),
+)
+check(
+  'and the surface offers no way to set it',
+  r.noTickOffered === true,
+)
+check(
+  'ACTIVATING dates it so the EARLIEST step is due now, and offers the inverse',
+  // This matter has a `-2w` step by now, so the honest answer is a fortnight
+  // out: starting a fortnight's run-up today is what activating it means.
+  r.activated?.when === IN_A_FORTNIGHT && r.activated?.offers === 'suspend',
+  `${JSON.stringify(r.activated)} — expected ${IN_A_FORTNIGHT}, today is ${TODAY}`,
+)
+check(
+  'and SUSPENDING clears the date while keeping what was done',
+  r.suspended?.when === 'no date yet'
+    && stepNamed(r.suspended?.steps, 'find a suitable shop')?.done === true,
+  JSON.stringify(r.suspended),
+)
+
+check(
+  'the schedule field asks one word, and nothing sits between the two boxes',
+  r.rowAsks?.when === null || r.rowAsks?.when === 'when',
+  JSON.stringify(r.rowAsks),
+)
+
+// ── 7. legibility ───────────────────────────────────────────────────────────
 check(
   'the name is set in the notebook reading face at reading size (H3)',
   typeof r.type?.size === 'number' && r.type.size >= 15,
@@ -323,12 +520,22 @@ check('named from the name given', files[0] === 'the-house.docket.md', files[0] 
 check('declaring its kind, so it opens as one next time', /^kind: docket$/m.test(text))
 check(
   'every matter carrying the four fields that cannot be backfilled',
-  (text.match(/<!--tephra:matter [0-9a-z]{8} \d+ 0-->/g) ?? []).length === 4,
+  (text.match(/<!--tephra:matter [0-9a-z]{8} \d+ 0-->/g) ?? []).length === 6,
   (text.match(/<!--tephra:matter.*-->/g) ?? []).join(' | '),
 )
 check('the note as prose, bracketed by the machinery rather than interrupting it',
   /^Quoted 480 for the part, plus labour\.$/m.test(text))
-check('the run-up as a trigger, ready for MH3 to fire', /^- -2w task: book the boiler service$/m.test(text))
+check(
+  'the step on disk, with the id that `after` can point at',
+  /^- -2w task: book the boiler service <!--tephra:step [0-9a-z]{8}-->$/m.test(text),
+  (text.match(/^- .*$/gm) ?? []).join(' | '),
+)
+check(
+  'and the chain, by id, with the finished one stamped',
+  /^- \+0d task: find a suitable shop <!--tephra:step ([0-9a-z]{8}) \d+-->$/m.test(text)
+    && /^- after [0-9a-z]{8} task: have the car fixed <!--tephra:step [0-9a-z]{8}-->$/m.test(text),
+  (text.match(/^- .*$/gm) ?? []).join(' | '),
+)
 check('the section as an ordinary markdown heading', /^## Periodic maintenance$/m.test(text))
 check(
   'with its matters nested under it, so the outline is true markdown',
@@ -341,8 +548,18 @@ check(
 )
 check('no section heading left for the one that was ungrouped', !/Major projects/.test(text))
 check(
-  'and the recurrence in the round-trip form, which the parser reads back',
-  /^when: every 90d from 2026-10-01$/m.test(text),
+  'and the recurrence as the three fields it now is (D76, amended)',
+  /^start: 2026-10-01$/m.test(text) && /^every: 90d$/m.test(text),
+  (text.match(/^(start|every|after):.*$/gm) ?? []).join(' | '),
+)
+check(
+  'a matter that keeps its own time names the step that advances it',
+  /^after: [0-9a-z]{8}$/m.test(text),
+  (text.match(/^after:.*$/gm) ?? []).join(' | '),
+)
+check(
+  'and no machinery step survives anywhere in the file',
+  !/reschedule/.test(text),
 )
 
 for (const key of Object.keys(r).filter(k => k.startsWith('aiming:') || k.startsWith('said:'))) {

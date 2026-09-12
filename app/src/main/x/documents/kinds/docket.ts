@@ -25,14 +25,15 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  MATTER_LEVEL, matterBlock, outline, parseMatter, parseOffset, scanBlocks, scanMatters,
-  sectionHeading, STANDING, unusedMatterId,
-  type Matter, type ScannedBlock, type ScannedMatter, type Section, type When,
+  MATTER_LEVEL, matterBlock, outline, parseMatter, parseStepWhen, scanBlocks, scanMatters,
+  sectionHeading, shapeOf, STEP_KINDS, UNSCHEDULED, unusedMatterId,
+  type Matter, type ScannedBlock, type ScannedMatter, type Section, type Step,
+  type Interval, type Mode, type Schedule, type StepKind, type StepWhen,
 } from '../../../../shared/kinds/docket.ts'
-import { nowSeconds } from '../../../../shared/dates.ts'
+import { addDays, nowSeconds } from '../../../../shared/dates.ts'
 import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import type {
-  DocumentId, DocumentMeta, DocumentText, SegmentKey, Span,
+  DateKey, DocumentId, DocumentMeta, DocumentText, SegmentKey, Span,
 } from '../../../../shared/document-api.ts'
 
 /**
@@ -139,9 +140,10 @@ export class DocketDocument extends SegmentedDocument {
    */
   async add(
     name: string,
-    when: When = STANDING,
+    when: Schedule = UNSCHEDULED,
     taken?: TakenIds,
     section = '',
+    mode: Mode = 'task',
   ): Promise<string> {
     const said = name.trim()
     if (said === '') throw new Error('a matter needs a name')
@@ -150,7 +152,7 @@ export class DocketDocument extends SegmentedDocument {
       ...(taken === undefined ? [] : [...(await taken())]),
     ]))
     const matter: Matter = {
-      id, name: said, when, tags: [], owner: null, link: null, triggers: [], notes: [],
+      id, name: said, when, mode, tags: [], owner: null, link: null, steps: [], notes: [],
       arrived: nowSeconds(), declines: 0, occurrence: null, extra: [],
     }
     // **Where it goes is said, never guessed.** Appending to the end of the file
@@ -198,8 +200,61 @@ export class DocketDocument extends SegmentedDocument {
   }
 
   /** When it happens — or that it does not yet, which is a state (H7b). */
-  async setWhen(id: string, when: When): Promise<void> {
+  async setWhen(id: string, when: Schedule): Promise<void> {
     await this.#write(id, was => ({ ...was, when }))
+  }
+
+  /** The date of the next instance, or none — which is the whole of *inactive*. */
+  /**
+   * Change what kind of thing a matter is.
+   *
+   * **The mode governs, so changing it changes what it governs**: a one-off
+   * keeps no interval, and only a recurring *task* measures from a step being
+   * done. Without that the stored mode could come to disagree with the
+   * variables — the objection that kept it derived for a while, and the answer
+   * is that it sits upstream of them rather than being a label on them.
+   */
+  async setMode(id: string, mode: Mode): Promise<void> {
+    const shape = shapeOf(mode)
+    await this.#write(id, was => ({
+      ...was,
+      mode,
+      when: {
+        start: was.when.start,
+        every: shape.repeating ? was.when.every : null,
+        after: shape.repeating && shape.fromCompletion ? was.when.after : null,
+      },
+    }))
+  }
+
+  async setStart(id: string, start: DateKey | null): Promise<void> {
+    await this.#write(id, was => ({ ...was, when: { ...was.when, start } }))
+  }
+
+  /** How often it comes round, or never. */
+  async setEvery(id: string, every: Interval | null): Promise<void> {
+    await this.#write(id, was => ({
+      ...was,
+      // **Losing the interval loses what measured from it.** A matter that does
+      // not recur has no step advancing its clock, and leaving one behind would
+      // be a pointer that means nothing.
+      when: { ...was.when, every, ...(every === null ? { after: null } : {}) },
+    }))
+  }
+
+  /**
+   * Which step's completion starts the next instance — or none, for a matter
+   * the calendar drives regardless of what anybody did.
+   */
+  async setAfter(id: string, after: string | null): Promise<void> {
+    const found = await this.#find(id)
+    if (after !== null && !found.matter.steps.some(one => one.id === after)) {
+      throw new Error(`${after} is not a step on this matter`)
+    }
+    if (after !== null && found.matter.when.every === null) {
+      throw new Error('a matter with no interval has nothing to reschedule')
+    }
+    await this.#write(id, was => ({ ...was, when: { ...was.when, after } }))
   }
 
   async setOwner(id: string, owner: string | null): Promise<void> {
@@ -243,27 +298,199 @@ export class DocketDocument extends SegmentedDocument {
    * fourteen days *before*, because run-up is the case and a minus sign is
    * punctuation nobody says out loud.
    */
-  async addTrigger(id: string, offset: string, text: string, effect = 'task'): Promise<void> {
-    const at = parseOffset(offset)
-    if (at === null) throw new Error(`${offset} is not an offset like 3d, 2w or 6m`)
+  async addStep(
+    id: string,
+    when: string,
+    text: string,
+    kind: StepKind = 'task',
+  ): Promise<string> {
+    // **`then` means *after the one before it*, and only this level knows which
+    // that is.** The grammar is given the answer rather than the question: the
+    // last step currently on the matter, since a chain is typed top to bottom.
+    const existing = (await this.#find(id)).matter.steps
+    const last = existing[existing.length - 1]?.id
+    const asked = parseStepWhen(when, {
+      ...(last === null || last === undefined ? {} : { previous: last }),
+      resolve: pointer(existing),
+    })
+    if (asked === null) throw new Error(unreadable(when, last === null || last === undefined))
+    const schedule = asked
     const said = text.trim()
-    if (said === '') throw new Error('a run-up needs to say what happens')
+    if (said === '') throw new Error('a step needs to say what happens')
+    const taken = new Set((await this.#find(id)).matter.steps.flatMap(
+      one => (one.id === null ? [] : [one.id]),
+    ))
+    const made = unusedMatterId(taken)
     await this.#write(id, was => ({
       ...was,
       // **Sorted by when they fire**, earliest first, because that is the order
-      // they are read in and the order they will run in. Two run-ups on one
+      // they are read in and the order they will run in. Two steps on one
       // matter in the order they happened to be typed is a list nobody can scan.
-      triggers: [...was.triggers, { offset: at, effect, text: said }]
-        .sort((a, b) => days(a.offset) - days(b.offset)),
+      //
+      // **A dependent step sorts after the one it waits on**, not by an offset
+      // it does not have: its position is only knowable relative to its
+      // antecedent, so it inherits that place and sits just behind it.
+      steps: order([...was.steps, { id: made, kind, when: schedule, text: said, done: null }]),
+    }))
+    return made
+  }
+
+  /**
+   * Fix what a step says.
+   *
+   * **Editing rather than drop-and-retype, because a step has identity.** Its id
+   * is what a dependency points at and its completion stamp is what that
+   * dependency reads, so retyping a typo would orphan the step waiting on it and
+   * forget that it was already done. The same argument as a matter's name, one
+   * level down.
+   */
+  async editStep(id: string, step: string, text: string): Promise<void> {
+    const said = text.trim()
+    if (said === '') throw new Error('a step needs to say what happens')
+    await this.#write(id, was => ({
+      ...was,
+      steps: was.steps.map(one => (one.id === step ? { ...one, text: said } : one)),
     }))
   }
 
-  /** Take one off, by its place in the matter's own order. */
-  async removeTrigger(id: string, at: number): Promise<void> {
+  /** Reschedule one step, keeping its id and whether it is done. */
+  async setStepWhen(id: string, step: string, when: string): Promise<void> {
+    const steps = (await this.#find(id)).matter.steps
+    const at = steps.findIndex(one => one.id === step)
+    // For an existing step, *then* means the one immediately above it — not the
+    // end of the list, which is where a new step would be going.
+    const before = at > 0 ? steps[at - 1]?.id : undefined
+    const schedule = parseStepWhen(when, {
+      ...(before === null || before === undefined ? {} : { previous: before }),
+      resolve: pointer(steps),
+    })
+    if (schedule === null) {
+      throw new Error(unreadable(when, before === null || before === undefined))
+    }
+    if (schedule.kind === 'after' && schedule.step === step) {
+      throw new Error('a step cannot wait for itself')
+    }
     await this.#write(id, was => ({
       ...was,
-      triggers: was.triggers.filter((_, n) => n !== at),
+      steps: order(was.steps.map(one => (one.id === step ? { ...one, when: schedule } : one))),
     }))
+  }
+
+  /**
+   * Change what kind of step it is, keeping everything else.
+   *
+   * **Because otherwise `reschedule` is unreachable.** Asked from use — *how do
+   * I create an interval-scheduled task right now?* — and the honest answer was
+   * that you could not: every step was authored as a `task`, so the one kind
+   * that makes a matter recur from its own completion had no way in.
+   */
+  async setStepKind(id: string, step: string, kind: StepKind): Promise<void> {
+    if (!STEP_KINDS.includes(kind)) throw new Error(`${kind} is not task, status or reschedule`)
+    await this.#write(id, was => ({
+      ...was,
+      steps: was.steps.map(one => (one.id === step ? { ...one, kind } : one)),
+    }))
+  }
+
+  /** Take a step off, by id. */
+  async removeStep(id: string, step: string): Promise<void> {
+    const found = await this.#find(id)
+    // **Refused rather than repaired afterwards.** Taking away the step the
+    // clock reads from would leave a matter that quietly stopped recurring,
+    // which is the shape of failure this project is named against. The
+    // alternative considered was editing a matter as a batch and validating on
+    // save — which would be the first place in this app that asks anybody to
+    // save, and buys one message the price of a whole mode.
+    if (found.matter.when.after === step) {
+      throw new Error('this step is what makes the matter recur; choose another first')
+    }
+    await this.#write(id, was => ({
+      ...was,
+      steps: was.steps.filter(one => one.id !== step),
+    }))
+  }
+
+  /**
+   * Mark a step done, or not done, at a given moment.
+   *
+   * **The stamp is what a dependency reads**, so it lives here rather than being
+   * inferred from whatever the step generated: the generated item can be edited
+   * away, and *suspend* withdraws those items while having to preserve this.
+   */
+  async completeStep(id: string, step: string, at: number | null = nowSeconds()): Promise<void> {
+    await this.#write(id, was => ({
+      ...was,
+      steps: was.steps.map(one => (one.id === step ? { ...one, done: at } : one)),
+    }))
+  }
+
+  // ── activation (D76) ───────────────────────────────────────
+
+  /**
+   * Start work on a matter: give it the start date that makes its first step due
+   * today.
+   *
+   * **Not *today*, but *the first step is due now*** — the same thing only for a
+   * matter whose steps all run forward. A matter with a fortnight's run-up gets
+   * a start date a fortnight out, because starting the run-up *now* is what
+   * activating it means. Forward-only: a matter whose earliest step is `T+3d`
+   * gets today rather than three days ago, since writing a past date into a file
+   * on the strength of one button is a strange thing to do.
+   *
+   * **There is no `activated` field and no suspended flag.** The start date *is*
+   * the state: no date means inactive, because `T±N` is not computable and so
+   * nothing can generate. A periodic matter's anchor is the same thing, which is
+   * why suspending one clears the anchor and leaves the interval.
+   */
+  async activate(id: string, today: DateKey): Promise<DateKey> {
+    const found = await this.#find(id)
+    const lead = Math.max(0, ...found.matter.steps.map(step =>
+      (step.when.kind === 'at' ? -days(step.when.offset) : 0)))
+    const start = addDays(today, lead)
+    await this.#write(id, was => ({ ...was, when: { ...was.when, start } }))
+    return start
+  }
+
+  /**
+   * Stop work on a matter, keeping what it has already done.
+   *
+   * **Clearing the date IS the suspension**, which is what a deferred talk
+   * actually is: *still happening, date to be decided*. Completed steps keep
+   * their stamps, so an accidental activation is undoable and a genuine pause
+   * resumes rather than restarts.
+   *
+   * A periodic matter keeps its interval and loses its anchor, so restarting it
+   * later is one field again.
+   */
+  async suspend(id: string): Promise<void> {
+    // **The shape stays and the date goes**, so a paused recurrence is one field
+    // away from running again — and a matter with an interval and no start is
+    // exactly that rather than a contradiction.
+    await this.#write(id, was => ({ ...was, when: { ...was.when, start: null } }))
+  }
+
+  /**
+   * Move a recurring matter on to its next instance.
+   *
+   * **The stored date is the NEXT one, not a first one years back**, which is
+   * far easier to reason about and is what the surface shows — but it means
+   * rolling forward one step at a time, and that is where a month drifts: the
+   * 31st clamps to the 28th, and rolling again from *that* gives the 28th for
+   * ever. So the roll is computed from the day the person meant, which the
+   * interval carries whenever a clamp has hidden it.
+   */
+  async advanceInstance(id: string): Promise<DateKey | null> {
+    const found = await this.#find(id)
+    const { start, every } = found.matter.when
+    if (start === null || every === null) return null
+    const next = addInterval(start, every)
+    await this.#write(id, was => ({
+      ...was,
+      when: { ...was.when, start: next.date, every: next.every },
+      // A new instance is a fresh one: what was done belonged to the last.
+      steps: was.steps.map(one => ({ ...one, done: null })),
+    }))
+    return next.date
   }
 
   /**
@@ -545,7 +772,103 @@ export { parseMatter }
  * first*, and nothing is computed from this. When MH3 turns an offset into a
  * date it will do it against a real calendar.
  */
+/**
+ * What to say about a schedule this cannot read.
+ *
+ * **It lists the forms, because there is nowhere else to learn them** — asked
+ * from use, in as many words: *how do I even figure out what the allowable
+ * grammar is?* And it says the specific thing when the word was `then` with
+ * nothing above it, since *the forms are these* would be a misleading answer to
+ * a schedule that is right everywhere but here.
+ */
+/**
+ * One instance on to the next, keeping the day somebody meant.
+ *
+ * **Days and weeks are arithmetic; months and years are a calendar.** Adding a
+ * month is not adding thirty days — it is the same day number in the next
+ * month, and where that day does not exist it clamps to the month's end. The
+ * clamp is what would otherwise lose the intent: the 31st becomes the 28th in
+ * February, and a roll computed *from* that 28th gives the 28th of March and
+ * every month after, permanently.
+ *
+ * So the roll is computed from the **intended** day, which the interval carries
+ * whenever it differs from the stored date — and which is set here, the first
+ * time a clamp hides it, rather than being asked for.
+ */
+function addInterval(
+  start: DateKey,
+  every: Interval,
+): { date: DateKey; every: Interval } {
+  if (every.unit === 'd') return { date: addDays(start, every.n), every }
+  if (every.unit === 'w') return { date: addDays(start, every.n * 7), every }
+  const [y, m, d] = (start as string).split('-').map(Number) as [number, number, number]
+  // The day this is really anchored on: what was carried, or what is there now.
+  const meant = every.day ?? d
+  const months = every.unit === 'y' ? every.n * 12 : every.n
+  const at = (y * 12 + (m - 1)) + months
+  const year = Math.floor(at / 12)
+  const month = (at % 12) + 1
+  const room = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const day = Math.min(meant, room)
+  const date = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` as DateKey
+  return {
+    date,
+    // Carried from the moment a clamp first hides it, and dropped again once
+    // the stored day says the same thing — a field that is only ever true.
+    every: day === meant ? { n: every.n, unit: every.unit } : { ...every, day: meant },
+  }
+}
+
+/**
+ * An index or an id as typed, to a step's real id.
+ *
+ * **Indices are what the surface shows and ids are what the file holds**, and
+ * this is the one place the two meet. *After 1* was parsing before this existed
+ * — `1` matched the id pattern — and storing a pointer to nothing, so the step
+ * waiting on it would simply never have come due.
+ *
+ * One-based, because that is what is on the screen. A pure-digit token shorter
+ * than an id is an index; anything else has to already be an id **on this
+ * matter**, which is what stops a reference to a step on some other one.
+ */
+const pointer = (steps: readonly Step[]) => (token: string): string | null => {
+  if (/^\d{1,3}$/.test(token)) return steps[Number(token) - 1]?.id ?? null
+  return steps.some(one => one.id === token) ? token : null
+}
+
+function unreadable(said: string, first: boolean): string {
+  if (first && /^then\b/i.test(said.trim())) {
+    return 'there is no step above this one for `then` to follow'
+  }
+  return `${said} is not a schedule like 2w, +3d, right away, then, or after step 1`
+}
+
 const PER = { d: 1, w: 7, m: 30, y: 365 } as const
+
+/**
+ * Steps in the order they will happen, as far as that is knowable.
+ *
+ * **A dependent step has no offset to sort by** — its moment is only knowable
+ * relative to its antecedent — so it takes its antecedent's place and sits just
+ * behind it. Chains therefore read top to bottom, which is how somebody wrote
+ * them, and a stray dependency on a step that is not there keeps its position
+ * rather than being dropped.
+ */
+function order(steps: readonly Step[]): readonly Step[] {
+  const at = (step: Step): number => (step.when.kind === 'at' ? days(step.when.offset) : NaN)
+  const scored = new Map<string, number>()
+  for (const step of steps) if (step.id !== null) scored.set(step.id, at(step))
+  const key = (step: Step, n: number): [number, number] => {
+    const own = at(step)
+    if (!Number.isNaN(own)) return [own, n]
+    const anchor = step.when.kind === 'after' ? scored.get(step.when.step) : undefined
+    return [anchor === undefined || Number.isNaN(anchor) ? Infinity : anchor, n + 0.5]
+  }
+  return [...steps]
+    .map((step, n) => ({ step, k: key(step, n) }))
+    .sort((a, b) => (a.k[0] - b.k[0]) || (a.k[1] - b.k[1]))
+    .map(one => one.step)
+}
 
 function days(offset: string): number {
   const found = /^([+-])(\d+)([dwmy])$/.exec(offset)

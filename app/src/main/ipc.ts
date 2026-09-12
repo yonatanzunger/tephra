@@ -155,11 +155,19 @@ export function registerDocumentIpc(service: DocumentService): void {
       case 'matters':
         return service.docketMatters(command.docket)
       case 'add':
-        return service.docketAdd(command.docket, command.name, command.when, command.section)
+        return service.docketAdd(command.docket, command.name, command.shape, command.section)
       case 'rename':
         return service.docketRename(command.docket, command.matter, command.name)
-      case 'when':
-        return service.docketSetWhen(command.docket, command.matter, command.when)
+      case 'mode':
+        return service.docketSetMode(command.docket, command.matter, command.mode)
+      case 'start':
+        return service.docketSetStart(command.docket, command.matter, command.start)
+      case 'every':
+        return service.docketSetEvery(command.docket, command.matter, command.every)
+      case 'after':
+        return service.docketSetAfter(command.docket, command.matter, command.after)
+      case 'advance':
+        return service.docketAdvance(command.docket, command.matter)
       case 'owner':
         return service.docketSetOwner(command.docket, command.matter, command.owner)
       case 'link':
@@ -172,12 +180,32 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.docketRemove(command.docket, command.matter)
       case 'notes':
         return service.docketSetNotes(command.docket, command.matter, command.notes)
-      case 'addTrigger':
-        return service.docketAddTrigger(
-          command.docket, command.matter, command.offset, command.text, command.effect,
+      case 'addStep':
+        return service.docketAddStep(
+          command.docket, command.matter, command.when, command.text, command.stepKind,
         )
-      case 'removeTrigger':
-        return service.docketRemoveTrigger(command.docket, command.matter, command.at)
+      case 'editStep':
+        return service.docketEditStep(
+          command.docket, command.matter, command.step, command.text,
+        )
+      case 'stepWhen':
+        return service.docketSetStepWhen(
+          command.docket, command.matter, command.step, command.when,
+        )
+      case 'stepKind':
+        return service.docketSetStepKind(
+          command.docket, command.matter, command.step, command.stepKind,
+        )
+      case 'removeStep':
+        return service.docketRemoveStep(command.docket, command.matter, command.step)
+      case 'completeStep':
+        return service.docketCompleteStep(
+          command.docket, command.matter, command.step, command.done,
+        )
+      case 'activate':
+        return service.docketActivate(command.docket, command.matter)
+      case 'suspend':
+        return service.docketSuspend(command.docket, command.matter)
       case 'sections':
         return service.docketSections(command.docket)
       case 'addSection':

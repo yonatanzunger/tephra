@@ -2526,6 +2526,17 @@ export async function runVerify(request: string): Promise<void> {
       // Add a matter, with a date typed the way a person types one.
       ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
       await settle(300)
+      const shape = (want: string): void => {
+        const pick = document.querySelector('.docket-new .docket-shape') as HTMLSelectElement | null
+        if (pick === null) return
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+        setter?.call(pick, want)
+        pick.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      say('shapesOffered', [...document.querySelectorAll('.docket-new .docket-shape option')]
+        .map(o => o.textContent))
+      shape('event')
+      await settle(200)
       const fields = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
       const set = (at: HTMLInputElement, value: string): void => {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
@@ -2568,10 +2579,18 @@ export async function runVerify(request: string): Promise<void> {
       // wrong twice.
       ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
       await settle(300)
+      // **The shape decides which questions the row asks**, so a recurring
+      // matter is made by choosing one rather than by typing a rule into a date
+      // field. Getting this wrong is what produced *Illegal invocation*: the
+      // date went into a field that shape does not have, the matter was never
+      // made, and a later lookup handed `undefined` to a native setter.
+      shape('recurring-event')
+      await settle(200)
       const again = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
       if (again[0] !== undefined) set(again[0], 'Change the air filters')
-      if (again[1] !== undefined) set(again[1], 'every 90d from 2026-10-01')
-      again[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      if (again[1] !== undefined) set(again[1], '2026-10-01')
+      if (again[2] !== undefined) set(again[2], '90d')
+      again[2]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
       await settle(1800)
       // Read back in WORDS, like the run-up beside it: the row must not switch
       // languages halfway across (H3).
@@ -2611,7 +2630,7 @@ export async function runVerify(request: string): Promise<void> {
           r => (r.querySelector('.docket-name')?.textContent ?? '').includes('boiler'),
         )
         const runup = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
-          b => b.textContent === 'run-up',
+          b => (b.textContent ?? '').trim() === '+ step',
         ) as HTMLElement | null
         runup?.click()
         await settle(300)
@@ -2686,22 +2705,37 @@ export async function runVerify(request: string): Promise<void> {
           [...document.querySelectorAll('.docket-row')].find(
             r => (r.querySelector('.docket-name')?.textContent ?? '').includes(word),
           )
-        const where = rowOf('boiler')?.querySelector('.docket-where') as HTMLSelectElement | null
-        say('whereOffered', where !== null)
-        say('whereSays', where?.options?.[0]?.textContent ?? null)
-        if (where !== null) {
-          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
-          setter?.call(where, 'Periodic maintenance')
-          where.dispatchEvent(new Event('change', { bubbles: true }))
-          await settle(1800)
+        say('noMoveMenu', rowOf('boiler')?.querySelector('.docket-where') === null)
+        // **The mode is what a row leads with**, and its fields follow it.
+        say('modesOnRow', [...(rowOf('boiler')?.querySelectorAll('.docket-mode option') ?? [])]
+          .map(o => o.textContent))
+
+        // **Moved by dragging**, which is the only way now: the *move to…* menu
+        // was the loudest mark on a quiet row and did nothing dragging does not.
+        const dragOntoHeading = async (word: string): Promise<void> => {
+          const grip = rowOf(word)?.querySelector('.docket-grip') as HTMLElement | null
+          if (grip === null || grip === undefined) return
+          const at = grip.getBoundingClientRect()
+          grip.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true, cancelable: true, button: 0, pointerId: 1,
+            clientX: at.left + 4, clientY: at.top + 8,
+          }))
+          await settle(120)
+          const head = document.querySelector('.docket-section-head:not(.loose)')
+          const box = (head as Element).getBoundingClientRect()
+          const x = box.left + 20
+          const y = box.top + box.height / 2
+          window.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true, pointerId: 1, clientX: x, clientY: y,
+          }))
+          await settle(120)
+          window.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true, pointerId: 1, clientX: x, clientY: y,
+          }))
+          await settle(1600)
         }
-        const filters = rowOf('air filters')?.querySelector('.docket-where') as HTMLSelectElement | null
-        if (filters !== null) {
-          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
-          setter?.call(filters, 'Periodic maintenance')
-          filters.dispatchEvent(new Event('change', { bubbles: true }))
-          await settle(1800)
-        }
+        await dragOntoHeading('boiler')
+        await dragOntoHeading('air filters')
         say('grouped', groupsOf())
         // The moved matter took its note and its run-up with it.
         say('keptItsNote', (rowOf('boiler')?.querySelectorAll('.docket-note p').length ?? 0))
@@ -2716,6 +2750,7 @@ export async function runVerify(request: string): Promise<void> {
           )
         const gripOf = (word: string): HTMLElement | null =>
           (rowOf(word)?.querySelector('.docket-grip') as HTMLElement | null) ?? null
+        say('noTickOffered', document.querySelectorAll('.docket-step-done').length === 0)
         say('gripOffered', gripOf('boiler') !== null)
         // **Visible without being hovered**, because the thing reported from use
         // was not knowing that rows could be moved at all.
@@ -2853,14 +2888,7 @@ export async function runVerify(request: string): Promise<void> {
 
         // And put them back, so what is left on the screen at the end is a
         // docket somebody would actually be reading.
-        for (const word of ['air filters', 'boiler']) {
-          const pick = rowOf(word)?.querySelector('.docket-where') as HTMLSelectElement | null
-          if (pick === null) continue
-          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
-          setter?.call(pick, 'Major projects')
-          pick.dispatchEvent(new Event('change', { bubbles: true }))
-          await settle(1200)
-        }
+        for (const word of ['air filters', 'boiler']) await dragOntoHeading(word)
         const head = document.querySelector(
           '.docket-section-head:not(.loose) .docket-quiet',
         ) as HTMLElement | null
@@ -2886,11 +2914,249 @@ export async function runVerify(request: string): Promise<void> {
         addTo?.click()
         await settle(300)
         const typing = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
-        say('addHereAsksNothing', document.querySelectorAll('.docket-new .docket-where').length)
+        say('addHereAsksNothing', document.querySelectorAll('.docket-new .docket-shape').length)
         if (typing[0] !== undefined) set(typing[0], 'Bleed the radiators')
         typing[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         await settle(1800)
         say('addedHere', groupsOf())
+      }
+
+      // ── steps, chained, and activation (MH3a, D76) ──
+      {
+        const rowOf = (word: string): Element | undefined =>
+          [...document.querySelectorAll('.docket-row')].find(
+            r => (r.querySelector('.docket-name')?.textContent ?? '').includes(word),
+          )
+        const stepsOf = (word: string): { when: string; what: string; done: boolean }[] =>
+          [...(rowOf(word)?.querySelectorAll('.docket-runup:not(.new)') ?? [])].map(one => ({
+            when: one.querySelector('.docket-runup-when')?.textContent ?? '',
+            what: one.querySelector('.docket-runup-what')?.textContent ?? '',
+            // **Read from how it LOOKS**, since there is no tick to read: the
+            // docket shows that a step is done and no longer offers to set it.
+            done: one.className.includes('done'),
+          }))
+        /**
+         * Make sure the add row is showing — **never toggle it blind**.
+         * The control is a toggle, and the row now stays open after a
+         * successful add, so clicking it on the assumption that it is closed
+         * shuts it instead. That is what broke seven checks at once: every
+         * later block typed into a row that was no longer there.
+         */
+        const openAdd = async (word: string): Promise<void> => {
+          const row = rowOf(word)
+          if (row?.querySelector('.docket-runup.new') !== null) return
+          const toggle = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
+            b => (b.textContent ?? '').trim() === '+ step',
+          ) as HTMLElement | null
+          toggle?.click()
+          await settle(300)
+        }
+        const addStep = async (
+          word: string,
+          when: string,
+          what: string,
+          kind?: string,
+        ): Promise<void> => {
+          await openAdd(word)
+          const row = rowOf(word)
+          if (kind !== undefined) {
+            const pick = row?.querySelector('.docket-runup.new .docket-step-kind') as HTMLSelectElement | null
+            if (pick !== null && pick !== undefined) {
+              const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+              setter?.call(pick, kind)
+              pick.dispatchEvent(new Event('change', { bubbles: true }))
+              await settle(150)
+            }
+          }
+          const at = row?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
+          const what2 = row?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+          if (at !== null && at !== undefined) set(at, when)
+          if (what2 !== null && what2 !== undefined) set(what2, what)
+          what2?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await settle(1600)
+        }
+
+        // A backlog matter with a chain: the first step is due on activation,
+        // the second waits for the first.
+        ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
+        await settle(300)
+        const made = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+        if (made[0] !== undefined) set(made[0], 'The car needs fixing')
+        made[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1600)
+        say('backlogged', rowOf('car')?.querySelector('.docket-when')?.textContent ?? null)
+        say('activateOffered',
+          rowOf('car')?.querySelector('.docket-start')?.textContent ?? null)
+
+        // **Blank `when`, and Enter from the text field** — which is how it is
+        // actually typed, and which used to do nothing at all: the row returned
+        // silently on an empty schedule, so the key looked broken.
+        await addStep('car', '', 'find a suitable shop')
+        say('firstStep', stepsOf('car'))
+        // **Stays open for the next step**, so a sequence is typed in one go.
+        say('rowWaitsForTheNext', {
+          open: rowOf('car')?.querySelector('.docket-runup.new') !== null,
+          cleared: (rowOf('car')?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null)?.value ?? null,
+          exit: [...(rowOf('car')?.querySelectorAll('.docket-runup.new .docket-quiet') ?? [])]
+            .map(b => b.textContent),
+        })
+        // And Escape is the way out.
+        ;(rowOf('car')?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLElement | null)
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        await settle(400)
+        say('escapeClosesIt', rowOf('car')?.querySelector('.docket-runup.new') === null)
+        say('rowAsks', {
+          when: (rowOf('car')?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null)?.placeholder ?? null,
+          buttons: [...(rowOf('car')?.querySelectorAll('.docket-runup.new .docket-quiet') ?? [])]
+            .map(b => b.textContent),
+        })
+
+        // **The chain.** The field takes the antecedent's id — which is what the
+        // file holds, so that inserting a step above it cannot repoint it — and
+        // the surface reads it back as that step's name.
+        const docketId = (await window.tephra.docket.list())[0]?.id
+        // **By name, because a matter is born with a step now**: the shape it
+        // was made from seeds one, so `steps[0]` is no longer the step this is
+        // about.
+        const shopId = docketId === undefined
+          ? ''
+          : (await window.tephra.docket.matters(docketId))
+            .find(m => m.name === 'The car needs fixing')
+            ?.steps.find(one => one.text === 'find a suitable shop')?.id ?? ''
+        await addStep('car', `after ${shopId}`, 'have the car fixed')
+        say('chained', stepsOf('car'))
+
+        // **A bad `when` must not eat the typing** — reported from use as *it
+        // just seems to drop the item*, because the row closed before the verb
+        // came back and took the words with it.
+        {
+          await openAdd('car')
+          const row = rowOf('car')
+          const at = row?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
+          const what = row?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+          // `soon` — because `then` became a real schedule on request, so the
+          // word this once failed on now works, and the failure case had to
+          // move to something that is genuinely not a schedule.
+          if (at !== null && at !== undefined) set(at, 'soon')
+          if (what !== null && what !== undefined) set(what, 'a step that must survive')
+          what?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await settle(1500)
+          const still = rowOf('car')?.querySelector('.docket-runup.new .docket-field.wide') as HTMLInputElement | null
+          say('badWhenKeptTheWords', {
+            open: still !== null,
+            text: still?.value ?? null,
+            said: document.querySelector('.docket-problem')?.textContent ?? 'none',
+            steps: stepsOf('car').length,
+          })
+          // Correct it in place and it goes in.
+          const fix = rowOf('car')?.querySelector('.docket-runup.new .docket-field.narrow') as HTMLInputElement | null
+          if (fix !== null && fix !== undefined) set(fix, '2 weeks')
+          still?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await settle(1500)
+          say('thenCorrected', stepsOf('car'))
+        }
+
+        // **`then` and `after 1`**, the two references a person can actually
+        // type — an id is eight random characters and never shown. Both are
+        // resolved to a real id on the way in.
+        say('indicesShown', [...(rowOf('car')?.querySelectorAll('.docket-step-at') ?? [])]
+          .map(n => n.textContent))
+        await addStep('car', 'then', 'and then this one')
+        say('afterThen', stepsOf('car').map(one => one.when))
+        await addStep('car', 'after 1', 'and this waits on the first')
+        say('afterIndex', stepsOf('car').map(one => `${one.when} · ${one.what}`))
+
+        // **A reschedule step**, which is how a matter comes to recur from its
+        // own completion — and which had no way in at all until the row could
+        // say which kind it was making.
+        say('stepAddReads', [...(rowOf('car')?.querySelectorAll('.docket-quiet') ?? [])]
+          .map(b => (b.textContent ?? '').trim())
+          .find(t => t.endsWith('step')) ?? null)
+        say('kindOffered', [...(rowOf('car')?.querySelectorAll('.docket-runup.new .docket-step-kind option') ?? [])]
+          .map(o => o.textContent))
+        say('caretStartsInWhat', document.activeElement?.className ?? null)
+
+        // **A matter that keeps its own time**, which is the fourth shape: the
+        // recurrence is the matter's two fields, and the radio says which step
+        // starts the next one. No machinery step anywhere.
+        ;(document.querySelector('.docket-add.here') as HTMLElement | null)?.click()
+        await settle(300)
+        shape('recurring-task')
+        await settle(200)
+        const upkeep = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+        if (upkeep[0] !== undefined) set(upkeep[0], 'Sharpen the mower')
+        if (upkeep[1] !== undefined) set(upkeep[1], '2026-10-01')
+        if (upkeep[2] !== undefined) set(upkeep[2], '90d')
+        upkeep[2]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1800)
+        say('keepUp', {
+          when: rowOf('mower')?.querySelector('.docket-when')?.textContent ?? null,
+          steps: (rowOf('mower')?.querySelectorAll('.docket-runup:not(.new)').length ?? 0),
+          clock: (rowOf('mower')?.querySelectorAll('.docket-step-clock input:checked').length ?? 0),
+        })
+
+        // **Fixing a typo in place**, which was impossible: a step's text was a
+        // label, so the only repair was to drop it — losing the id its
+        // dependents point at.
+        {
+          const target = [...(rowOf('car')?.querySelectorAll('.docket-runup:not(.new)') ?? [])]
+            .find(one => (one.querySelector('.docket-runup-what')?.textContent ?? '')
+              .includes('survive'))
+          const what = target?.querySelector('.docket-runup-what') as HTMLElement | null
+          say('stepTextIsClickable', what?.tagName ?? null)
+          what?.click()
+          await settle(300)
+          const field = target?.querySelector('.docket-field.wide') as HTMLInputElement | null
+          if (field !== null && field !== undefined) set(field, 'a step that did survive')
+          field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await settle(1500)
+          say('typoFixed', stepsOf('car').map(one => one.what))
+        }
+
+        // **Finished through the API, because the surface no longer offers it.**
+        // A docket describes work and the task list is where work is done, so
+        // completion will arrive from a generated task being closed. The state
+        // still has to be here — a dependency reads it and suspending preserves
+        // it — which is exactly what the next two checks are about.
+        {
+          const car = docketId === undefined
+            ? undefined
+            : (await window.tephra.docket.matters(docketId))
+              .find(m => m.name === 'The car needs fixing')
+          const shop = car?.steps.find(one => one.text === 'find a suitable shop')?.id
+          if (docketId !== undefined && car?.id != null && shop != null) {
+            await window.tephra.docket.completeStep(docketId, car.id, shop, true)
+            // **Read back from the API, not from the screen.** Nothing tells an
+            // open surface that another part of the app has written to its
+            // document — which is fine here and is MH3b's problem, since
+            // generation will do exactly that in the background.
+            const after = (await window.tephra.docket.matters(docketId))
+              .find(m => m.id === car.id)
+            say('ticked', after?.steps.map(one => ({
+              what: one.text,
+              done: one.done !== null,
+            })))
+          }
+          await settle(400)
+        }
+
+        // **Activate**, which is what the whole phase is for.
+        const go = rowOf('car')?.querySelector('.docket-start') as HTMLElement | null
+        go?.click()
+        await settle(1800)
+        say('activated', {
+          when: rowOf('car')?.querySelector('.docket-when')?.textContent ?? null,
+          offers: rowOf('car')?.querySelector('.docket-start')?.textContent ?? null,
+        })
+
+        // And suspend, which must not undo the tick.
+        const stop = rowOf('car')?.querySelector('.docket-start') as HTMLElement | null
+        stop?.click()
+        await settle(1800)
+        say('suspended', {
+          when: rowOf('car')?.querySelector('.docket-when')?.textContent ?? null,
+          steps: stepsOf('car'),
+        })
       }
 
       await window.tephra.doc.flush()

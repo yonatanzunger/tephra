@@ -10,7 +10,7 @@ import type {
   Attached, Base, Clipboard, DayProse, DocketRow, ImageAttachment, PrintJob, SearchBatch,
   SearchOpened, SearchRequest, ZoneNotice,
 } from '../shared/ipc.ts'
-import type { Matter, Section } from '../shared/kinds/docket.ts'
+import type { Matter, Mode, NewMatter, Section, StepKind } from '../shared/kinds/docket.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type {
   Followed, IndexStatus, LinkRow, Located, OutlineNode, Reference, SectionTree, Subject, ThreadRow, TimelineDay,
@@ -191,12 +191,25 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'matters', docket }),
     /** `when` as a person types it, parsed in main so there is one grammar. */
     /** `section` is where it goes; absent means the undivided run (MH1). */
-    add: (docket: DocumentId, name: string, when?: string, section?: string): Promise<string> =>
-      ipcRenderer.invoke(CHANNEL.docket, { kind: 'add', docket, name, when, section }),
+    add: (docket: DocumentId, name: string, shape?: NewMatter, section?: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'add', docket, name, shape, section }),
     rename: (docket: DocumentId, matter: string, name: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'rename', docket, matter, name }),
-    setWhen: (docket: DocumentId, matter: string, when: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNEL.docket, { kind: 'when', docket, matter, when }),
+    /** Which of the four kinds of thing a matter is. */
+    setMode: (docket: DocumentId, matter: string, mode: Mode): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'mode', docket, matter, mode }),
+    /** The next instance, or none. No start date is the whole of *inactive*. */
+    setStart: (docket: DocumentId, matter: string, start: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'start', docket, matter, start }),
+    /** How often it comes round, as typed. */
+    setEvery: (docket: DocumentId, matter: string, every: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'every', docket, matter, every }),
+    /** Which step's completion starts the next instance (Qa). */
+    setAfter: (docket: DocumentId, matter: string, after: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'after', docket, matter, after }),
+    /** Move a recurring matter on to its next instance. */
+    advance: (docket: DocumentId, matter: string): Promise<DateKey | null> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'advance', docket, matter }),
     setOwner: (docket: DocumentId, matter: string, owner: string | null): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'owner', docket, matter, owner }),
     setLink: (docket: DocumentId, matter: string, link: string | null): Promise<void> =>
@@ -210,13 +223,38 @@ const tephra = {
     /** The prose under a matter — the quote, what the plumber said. Not parsed. */
     setNotes: (docket: DocumentId, matter: string, notes: readonly string[]): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'notes', docket, matter, notes }),
-    /** *This long before, do this.* `offset` as typed: `3d`, `2w`, `+1w` for after. */
-    addTrigger: (
-      docket: DocumentId, matter: string, offset: string, text: string, effect?: string,
+    /**
+     * *At this moment, this happens* (D76). `when` as typed: `2w`, `+3d`,
+     * `right away`, or `after <step id>` optionally `+90d`.
+     */
+    addStep: (
+      docket: DocumentId, matter: string, when: string, text: string, stepKind?: StepKind,
+    ): Promise<string> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'addStep', docket, matter, when, text, stepKind }),
+    /** Fix what a step says. Keeps its id, its schedule and its stamp. */
+    editStep: (docket: DocumentId, matter: string, step: string, text: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'editStep', docket, matter, step, text }),
+    /** Reschedule one step, as typed. */
+    setStepWhen: (docket: DocumentId, matter: string, step: string, when: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'stepWhen', docket, matter, step, when }),
+    /** Change which of the three kinds a step is — how a `reschedule` is made. */
+    setStepKind: (
+      docket: DocumentId, matter: string, step: string, stepKind: StepKind,
     ): Promise<void> =>
-      ipcRenderer.invoke(CHANNEL.docket, { kind: 'addTrigger', docket, matter, offset, text, effect }),
-    removeTrigger: (docket: DocumentId, matter: string, at: number): Promise<void> =>
-      ipcRenderer.invoke(CHANNEL.docket, { kind: 'removeTrigger', docket, matter, at }),
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'stepKind', docket, matter, step, stepKind }),
+    removeStep: (docket: DocumentId, matter: string, step: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'removeStep', docket, matter, step }),
+    /** Stamp a step done, or undo it. What a dependency reads. */
+    completeStep: (
+      docket: DocumentId, matter: string, step: string, done: boolean,
+    ): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'completeStep', docket, matter, step, done }),
+    /** Start work on it — the date that makes its first step due today. */
+    activate: (docket: DocumentId, matter: string): Promise<DateKey> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'activate', docket, matter }),
+    /** Stop work on it, keeping what it has already done. */
+    suspend: (docket: DocumentId, matter: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'suspend', docket, matter }),
     /** The docket divided into sections, in file order. How it is read (MH1). */
     sections: (docket: DocumentId): Promise<readonly Section[]> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'sections', docket }),

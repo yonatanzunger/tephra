@@ -31,7 +31,10 @@ import {
 import { attach } from './x/documents/attachments.ts'
 import { nameOf } from '../shared/slug.ts'
 import { DocketDocument } from './x/documents/kinds/docket.ts'
-import { parseWhen, STANDING, type Matter, type Section } from '../shared/kinds/docket.ts'
+import {
+  MODES, parseInterval, UNSCHEDULED,
+  type Matter, type Mode, type NewMatter, type Schedule, type Section, type StepKind,
+} from '../shared/kinds/docket.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
 import { DayClock } from './x/day-clock.ts'
 import { systemZone } from './system-zone.ts'
@@ -43,7 +46,7 @@ import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/ki
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
-import { compareDateKeys, dateKeyAt } from '../shared/dates.ts'
+import { asDateKey, compareDateKeys, dateKeyAt, nowSeconds } from '../shared/dates.ts'
 import { StreamDocument } from './x/documents/kinds/stream.ts'
 import { CorpusIndex } from './x/documents/corpus-index.ts'
 import { Scanner } from './x/documents/search.ts'
@@ -1666,17 +1669,80 @@ export class DocumentService {
   async docketAdd(
     id: DocumentId,
     name: string,
-    when?: string,
+    shape?: NewMatter,
     section?: string,
   ): Promise<string> {
-    const said = when === undefined ? STANDING : parseWhen(when)
-    if (said === null) throw new Error(`${when} is not a date, a range, or a rule`)
+    const when = scheduleFor(shape)
     const made = await this.#serial(async () =>
       this.#corpus.use(id, doc =>
-        (doc as DocketDocument).add(name, said, this.#takenMatterIds, section)),
+        (doc as DocketDocument).add(name, when, this.#takenMatterIds, section, shape?.mode)),
     )
+    // **The template's first step, made here rather than by the caller.** The
+    // shape and the step it implies are one decision — *something happening*
+    // means a reminder on the day, *something to get done* means a task when
+    // work starts — so they are one call, and a matter cannot come into being
+    // half-shaped.
+    const mode = MODES.find(one => one.key === shape?.mode)
+    if (mode !== undefined) {
+      const first = await this.#serial(async () =>
+        this.#corpus.use(id, doc =>
+          (doc as DocketDocument).addStep(made, '+0d', name, mode.kind)))
+      // A recurring task measures from a step being done, and on a matter one
+      // step old there is only one it could be.
+      if (mode.fromCompletion && shape?.every !== undefined) {
+        await this.#serial(async () =>
+          this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(made, first)))
+      }
+    }
     this.#touched()
     return made
+  }
+
+  /** Change what kind of thing a matter is — the four a person chooses between. */
+  async docketSetMode(id: DocumentId, matter: string, mode: Mode): Promise<void> {
+    if (!MODES.some(one => one.key === mode)) {
+      throw new Error(`${mode} is not one of the four kinds of matter`)
+    }
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setMode(matter, mode)))
+    this.#touched()
+  }
+
+  /** The date of the next instance, or none — which is the whole of *inactive*. */
+  async docketSetStart(id: DocumentId, matter: string, start: string | null): Promise<void> {
+    const said = start === null || start.trim() === '' ? null : asDateKey(start.trim())
+    if (start !== null && start.trim() !== '' && said === null) {
+      throw new Error(`${start} is not a date`)
+    }
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setStart(matter, said)))
+    this.#touched()
+  }
+
+  /** How often it comes round. `every` as typed: `90d`, `1m on 31`, or nothing. */
+  async docketSetEvery(id: DocumentId, matter: string, every: string | null): Promise<void> {
+    const said = every === null || every.trim() === '' ? null : parseInterval(every)
+    if (every !== null && every.trim() !== '' && said === null) {
+      throw new Error(`${every} is not an interval like 90d, 6 months, or 1m on 31`)
+    }
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setEvery(matter, said)))
+    this.#touched()
+  }
+
+  /** Which step's completion starts the next instance, or none (D76, Qa). */
+  async docketSetAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(matter, after)))
+    this.#touched()
+  }
+
+  /** Move a recurring matter on to its next instance. */
+  async docketAdvance(id: DocumentId, matter: string): Promise<DateKey | null> {
+    const next = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).advanceInstance(matter)))
+    if (next !== null) this.#touched()
+    return next
   }
 
   async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
@@ -1684,12 +1750,7 @@ export class DocumentService {
     this.#touched()
   }
 
-  async docketSetWhen(id: DocumentId, matter: string, when: string): Promise<void> {
-    const said = parseWhen(when)
-    if (said === null) throw new Error(`${when} is not a date, a range, or a rule`)
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setWhen(matter, said)))
-    this.#touched()
-  }
+
 
   async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
@@ -1767,22 +1828,100 @@ export class DocumentService {
     return moved
   }
 
-  /** A run-up on a matter: *this long before, do this* (H4). */
-  async docketAddTrigger(
+  /**
+   * A step on a matter: *at this moment, this happens* (H4, D76).
+   *
+   * **The schedule arrives as text and is parsed here**, the same rule the
+   * `when` field follows: the notation is what a person types — `2w`, `+3d`,
+   * `right away`, `after <step>` — and the renderer has no business owning a
+   * second copy of it (T16's rule, applied to a third grammar).
+   */
+  async docketAddStep(
     id: DocumentId,
     matter: string,
-    offset: string,
+    when: string,
     text: string,
-    effect?: string,
+    kind?: StepKind,
+  ): Promise<string> {
+    const made = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).addStep(matter, when, text, kind)))
+    this.#touched()
+    return made
+  }
+
+  /** Fix what a step says, keeping its id and its completion stamp. */
+  async docketEditStep(
+    id: DocumentId,
+    matter: string,
+    step: string,
+    text: string,
   ): Promise<void> {
     await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).addTrigger(matter, offset, text, effect)))
+      this.#corpus.use(id, doc => (doc as DocketDocument).editStep(matter, step, text)))
     this.#touched()
   }
 
-  async docketRemoveTrigger(id: DocumentId, matter: string, at: number): Promise<void> {
+  /** Reschedule one step. `when` as typed, parsed here. */
+  async docketSetStepWhen(
+    id: DocumentId,
+    matter: string,
+    step: string,
+    when: string,
+  ): Promise<void> {
     await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).removeTrigger(matter, at)))
+      this.#corpus.use(id, doc => (doc as DocketDocument).setStepWhen(matter, step, when)))
+    this.#touched()
+  }
+
+  /** Change a step's kind — the only way to author a `reschedule` (D76). */
+  async docketSetStepKind(
+    id: DocumentId,
+    matter: string,
+    step: string,
+    kind: StepKind,
+  ): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setStepKind(matter, step, kind)))
+    this.#touched()
+  }
+
+  async docketRemoveStep(id: DocumentId, matter: string, step: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).removeStep(matter, step)))
+    this.#touched()
+  }
+
+  /** Stamp a step done, or undo that. What a dependency reads (D76). */
+  async docketCompleteStep(
+    id: DocumentId,
+    matter: string,
+    step: string,
+    done: boolean,
+  ): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc =>
+        (doc as DocketDocument).completeStep(matter, step, done ? nowSeconds() : null)))
+    this.#touched()
+  }
+
+  /**
+   * Start work on a matter — the start date that makes its first step due today.
+   *
+   * **Today comes from the service, not the document**, because the clock is the
+   * service's (D62/D63) and a document that read one would be a second source of
+   * truth about what day it is.
+   */
+  async docketActivate(id: DocumentId, matter: string): Promise<DateKey> {
+    const when = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).activate(matter, this.today)))
+    this.#touched()
+    return when
+  }
+
+  /** Stop work on it, keeping what it has already done (D76). */
+  async docketSuspend(id: DocumentId, matter: string): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
     this.#touched()
   }
 
@@ -1886,6 +2025,38 @@ function directoryFor(section?: string): string {
  * when clicked. A note is its own file and answers the same way, so nothing
  * downstream has to branch.
  */
+/**
+ * What *Add a matter* asked for, as the three variables.
+ *
+ * **The mode is spent here and never stored** (D76, amended). It decides the
+ * shape of the schedule and the kind of the first step, and after that a matter
+ * is described entirely by `start`, `every` and `after` — so a job that later
+ * gets a date does not have to be relabelled as an event, because there is no
+ * label. A dated shape with no date given is simply not started yet, which is a
+ * state the model already had.
+ */
+function scheduleFor(shape: NewMatter | undefined): Schedule {
+  if (shape === undefined) return UNSCHEDULED
+  const mode = MODES.find(one => one.key === shape.mode)
+  if (mode === undefined) throw new Error(`${shape.mode} is not one of the four kinds of matter`)
+  const given = (said: string | undefined): string | null =>
+    said === undefined || said.trim() === '' ? null : said.trim()
+  const start = given(shape.start) === null ? null : asDateKey(given(shape.start) as string)
+  if (given(shape.start) !== null && start === null) {
+    throw new Error(`${shape.start} is not a date`)
+  }
+  const every = given(shape.every) === null ? null : parseInterval(given(shape.every) as string)
+  if (mode.repeating && given(shape.every) !== null && every === null) {
+    throw new Error(`${shape.every} is not an interval like 90d, 6 months, or 1m on 31`)
+  }
+  return {
+    start,
+    every: mode.repeating ? every : null,
+    // Set once the first step exists, since it names one (see `docketAdd`).
+    after: null,
+  }
+}
+
 function whereWritten(file: RelPath): { doc: DocumentId; segment: string; source: string } {
   const root = documentRoot(file)
   if (root === null) {

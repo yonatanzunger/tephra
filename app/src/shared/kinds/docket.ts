@@ -15,16 +15,18 @@
 // <!--tephra:matter 7f3a1b2c 1757462400 0-->
 //
 // ## Change the air filters
-// when: 90d after done
-// triggers:
-// - -3d task: Change the air filters #house
+// when: every 90d from 2026-10-01
+// steps:
+// - +0d task: Change the air filters #house <!--tephra:step 4c8e11a2-->
+// - after 4c8e11a2 +90d reschedule: the next one <!--tephra:step 91bb3d70-->
 // <!--tephra:matter aa11bb22 1757462400 0 2026-09-14-->
 // ```
 //
 // **Why headings rather than one line per matter**, which is what the task list
-// does. A matter carries triggers, and a trigger is *offset → effect*: a small
-// list. D56's indented continuation lines carry a task's notes, which are prose
-// and need no structure — triggers are not prose, and pretending they are is how
+// does. A matter carries **steps**, and a step is *when → what*: a small
+// structured list, which is the one thing about a matter that does not fit on a
+// line. Everything else here is a field, because fields are what people write
+// and need no structure — steps are not prose, and pretending they are is how
 // one trip becomes five sibling matters that must be edited together (D72). A
 // heading opens a block; a blank line or the next heading closes it; nothing in
 // between depends on its indentation.
@@ -37,7 +39,7 @@
 // kept verbatim and written back untouched, in place. A block with no marker is
 // a matter somebody typed by hand, and gets an id the first time Tephra writes.
 
-import { asDateKey, compareDateKeys } from '../dates.ts'
+import { asDateKey } from '../dates.ts'
 import { subjectKey, tagMark } from '../tags.ts'
 import type { DateKey } from '../document-api.ts'
 
@@ -62,18 +64,220 @@ const HEADING = /^(#{2,6})\s+(.*)$/
 const FIELD = /^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$/
 
 /**
- * A trigger line inside a `triggers:` block.
+ * One `- ` line under `steps:` into a step, or null if it is not one.
  *
- * **Strict, unlike the fields a person types into.** This line is written by
- * `matterBlock` and never by hand; a hand-edited one that misses the shape is
- * preserved verbatim by the leniency rule rather than lost, which is the right
- * outcome for a format that has a UI (D72).
+ * **The old trigger line is a readable subset**, which is why there is no
+ * migration script: `- -2w task: book it` parses as a task step at `T−2w` with
+ * no id and nothing done, and gains an id the next time the block is written.
+ * `note` reads as `status`, which is what it always meant.
  */
-const TRIGGER = /^-\s*([+-]?\d+[dwmy])\s+([a-z]+)\s*:\s*(.*)$/
+export function parseStep(line: string): Step | null {
+  let rest = line.trim()
+  let id: string | null = null
+  let done: number | null = null
+  const mark = STEP_MARK.exec(rest)
+  if (mark !== null) {
+    id = mark[1] as string
+    done = mark[2] === undefined ? null : Number(mark[2])
+    rest = rest.slice(0, mark.index)
+  }
+  const found = STEP.exec(rest)
+  if (found === null) return null
+  const kind = KIND_ALIASES[(found[2] as string).toLowerCase()]
+  if (kind === undefined) return null
+  const text = (found[3] as string).trim()
+  if (text === '') return null
+  const when = parseStepWhen(found[1] as string)
+  if (when === null) return null
+  return { id, kind: kind as StepKind, when, text, done }
+}
+
+/** `-2w`, `2 weeks before`, `right away`, `then`, `then +3d`, `after 3f2a +90d`. */
+/**
+ * What a reference in a step's schedule is allowed to point at.
+ *
+ * **A reference has to be resolved against the real list or it is a dangling
+ * pointer**, and this is where that was going wrong: `after 1` matched the
+ * id pattern, so it parsed happily and stored `1`, which names nothing. Ids
+ * cannot be typed by hand anyway — they are eight random characters and the
+ * surface never showed them — so what a person types is an **index** or the word
+ * **then**, and both are turned into an id here, on the way in.
+ *
+ * Absent entirely when reading a FILE back, where the reference is already an
+ * id and there is no list to hand: that path takes the token verbatim, which is
+ * what makes a step block parseable on its own.
+ */
+export interface StepContext {
+  /** What `then` follows. Absent if there is nothing above it. */
+  readonly previous?: string
+  /** An index or an id as typed, to the step's real id — or null for neither. */
+  readonly resolve?: (token: string) => string | null
+}
+
+export function parseStepWhen(text: string, context?: StepContext): StepWhen | null {
+  const said = text.trim()
+  const previous = context?.previous
+  // **Nothing said means `T+0`.** It is the commonest step on a docket — the
+  // first thing to do when work starts — so it is the default rather than a
+  // thing to type, and leaving the field empty is how a person says it.
+  if (said === '') return { kind: 'at', offset: '+0d' }
+  const then = THEN.exec(said.toLowerCase())
+  if (then !== null) {
+    // **Nothing before it means nothing to follow.** Refused rather than quietly
+    // turned into `T+0`, because *then* is a claim about an order and the first
+    // step of a list is not in one.
+    if (previous === undefined) return null
+    const gap = then[1] === undefined ? null : parseOffset(then[1] as string)
+    if (then[1] !== undefined && gap === null) return null
+    return {
+      kind: 'after',
+      step: previous,
+      ...(gap === null ? {} : { offset: gap.replace(/^-/, '+') }),
+    }
+  }
+  const depends = DEPENDS.exec(said.toLowerCase())
+  if (depends !== null) {
+    const token = depends[1] as string
+    // **Resolved when there is a list to resolve against**, and taken verbatim
+    // when there is not (reading a file back). A token that resolves to nothing
+    // is refused rather than stored: a step waiting on a step that does not
+    // exist would simply never come due, silently.
+    const target = context?.resolve === undefined ? token : context.resolve(token)
+    if (target === null) return null
+    const said2 = depends[2]
+    if (said2 === undefined) return { kind: 'after', step: target }
+    const gap = parseOffset(said2)
+    if (gap === null) return null
+    // **An offset after a dependency is always forward**, because *before the
+    // moment another step finished* is a date in the past by construction. A
+    // bare `90d` means before everywhere else in this grammar, so it is flipped
+    // here rather than refused: the only thing it could have meant is after.
+    return { kind: 'after', step: target, offset: gap.replace(/^-/, '+') }
+  }
+  const at = parseOffset(said)
+  return at === null ? null : { kind: 'at', offset: at }
+}
+
+/** A step back into its line. The id and the completion stamp ride at the end. */
+export function stepLine(step: Step): string {
+  const when = step.when.kind === 'at'
+    ? step.when.offset
+    : `after ${step.when.step}${step.when.offset === undefined ? '' : ` ${step.when.offset}`}`
+  const head = `- ${when} ${step.kind}: ${step.text}`
+  if (step.id === null) return head
+  return `${head} <!--tephra:step ${[step.id, ...(step.done === null ? [] : [String(step.done)])].join(' ')}-->`
+}
+
+/**
+ * A step's schedule in the notation, which is what an edit starts from.
+ *
+ * **The round-trip form, as against the reading form below** — the same pair a
+ * matter's `when` has, and for the same reason: what the surface *shows* is
+ * words, and what it hands back to a field has to be something `parseStepWhen`
+ * will take.
+ */
+export function spellStepWhen(
+  when: StepWhen,
+  indexOf?: (id: string) => number | null,
+): string {
+  if (when.kind === 'at') return when.offset
+  // **The index when there is one to give**, because the id is the thing a
+  // person cannot type: prefilling an edit field with `after okc8kiff` hands
+  // back the one form the field was built to avoid needing. Without the
+  // mapping — reading a file, where the block stands alone — it is the id,
+  // which is what the file holds and what the parser takes verbatim.
+  const at = indexOf?.(when.step)
+  const target = at === null || at === undefined ? when.step : `#${at}`
+  return `after ${target}${when.offset === undefined ? '' : ` ${when.offset}`}`
+}
+
+/** `+90d` back into the interval it stands for. */
+const intervalOf = (offset: string | undefined): Interval | null => {
+  if (offset === undefined) return null
+  const found = OFFSET.exec(offset)
+  if (found === null) return null
+  const n = found[2] === undefined ? 1 : Number(found[2])
+  return n === 0 ? null : { n, unit: unitOf(found[3] as string) }
+}
+
+/** How a step's schedule is said out loud, for the surface. */
+export function readStepWhen(step: StepWhen, indexOf?: (id: string) => number | null): string {
+  if (step.kind === 'at') return spellOffset(step.offset)
+  // **By number, not by name.** Naming the step it waits on read well in
+  // isolation and badly in a list: two steps side by side said *after Find
+  // electrician* and *after 1*, which look like different kinds of thing, and
+  // the long one pushed the column of step text out of line with its
+  // neighbours. The number is what the row already shows, and it is one
+  // character wide.
+  //
+  // **`?` when it resolves to nothing**, which is what a dependency on a step
+  // that is not there looks like — visible rather than silently never firing.
+  const at = indexOf?.(step.step)
+  const after = at === null || at === undefined ? '?' : `#${at}`
+  return step.offset === undefined
+    ? `after ${after}`
+    : `${spellOffset(step.offset).replace(/ after$/, '')} after ${after}`
+}
+
+/**
+ * `- <schedule> <kind>: <text>`, the shape of a step line.
+ *
+ * **The schedule is captured loosely and parsed after**, because it is the part
+ * with two forms — an offset or a dependency — and a regex that tried to hold
+ * both would be the least readable thing in this file. The kind is what anchors
+ * the line: everything before the kind word is *when*, everything after the
+ * colon is *what*.
+ *
+ * A `- ` line that does not fit is preserved verbatim by the leniency rule
+ * rather than lost, which is the right outcome for a format that has a UI (D72).
+ */
+const STEP = /^-\s*(.+?)\s+([a-z]+)\s*:\s*(.*)$/
+
+/** `<!--tephra:step <id> [<done>]-->`, at the end of a step line (D56's rule). */
+const STEP_MARK = /\s*<!--tephra:step\s+([0-9a-z]+)(?:\s+(\d+))?\s*-->\s*$/
+
+/**
+ * `after #1`, `after 1`, `after step 1`, `after 3f2a`, any of them `+ 90d`.
+ *
+ * **Accept flexibly, produce strictly.** The word `step` and the `+` are both
+ * optional on the way in, because they are noise a person may or may not type;
+ * what comes back out always has the word and always has the sign, so there is
+ * one form to read and several to write.
+ */
+const DEPENDS = /^after\s+(?:step\s+)?#?([0-9a-z]+)(?:\s*\+?\s*(.+))?$/
+
+/**
+ * `then`, optionally `+ 3d` — *after whatever comes before this in the list*.
+ *
+ * **The word people actually use when writing a chain**, typed top to bottom:
+ * find a shop, *then* have the car fixed. It is a shorthand for a dependency and
+ * is **normalised on the way in** to `after <id>`, so nothing downstream has to
+ * know about it and the file holds one form. An id cannot be typed by hand
+ * anyway, which is what made this the missing word rather than a nicety.
+ */
+const THEN = /^then(?:\s*\+?\s*(.+))?$/
+
+/**
+ * The old effect names, kept readable.
+ *
+ * **`note` was the horizon-awareness effect** and is what `status` now means, so
+ * a file written before D76 reads correctly rather than losing its lines. `doc`
+ * has no kind yet — the document-template step is out of MH3a — so a `doc` line
+ * fails to parse and is preserved verbatim by the leniency rule, which is the
+ * honest outcome for something not built.
+ */
+const KIND_ALIASES: Record<string, StepKind | 'reschedule'> = {
+  task: 'task',
+  status: 'status',
+  note: 'status',
+  // **Read so that it can be converted, never kept.** A reschedule used to be a
+  // step somebody wrote; it is the matter's own `every` and `after` now, and a
+  // file holding the old form is folded into those on the way in (see
+  // `parseMatter`). Machinery does not belong in a list of a person's own words.
+  reschedule: 'reschedule',
+}
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/
-const RANGE = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/
-const MONTHS = /^(\d{4}-\d{2})\.\.(\d{4}-\d{2})$/
 
 /**
  * A unit of time, as a letter or as a word.
@@ -87,6 +291,14 @@ const MONTHS = /^(\d{4}-\d{2})\.\.(\d{4}-\d{2})$/
  * The first letter is the canonical unit and the four words have four distinct
  * initials, so recognising one is taking its head.
  */
+const UNITS: Record<string, string> = { d: 'day', w: 'week', m: 'month', y: 'year' }
+
+/** `90` and `d` as *90 days*, the shared half of reading an interval back. */
+const spellSpan = (n: number, unit: string): string => {
+  const word = UNITS[unit] ?? unit
+  return `${n} ${n === 1 ? word : `${word}s`}`
+}
+
 const UNIT = '(d|w|m|y|days?|weeks?|months?|years?)'
 const unitOf = (said: string): Unit => said[0] as Unit
 
@@ -102,7 +314,7 @@ const FROM = '(?:\\s+from\\s+(\\d{4}-\\d{2}-\\d{2}))?'
 
 /** `every 90d`, `every 90 days`, `every week` — any of them `from 2026-10-01`. */
 const EVERY = new RegExp(`^every\\s+${COUNT}${UNIT}${FROM}$`)
-const AFTER = new RegExp(`^${COUNT}${UNIT}\\s+after\\s+done${FROM}$`)
+
 const ICS = /^ics:\s*(\S+)$/
 
 /**
@@ -113,65 +325,161 @@ const ICS = /^ics:\s*(\S+)$/
  * *point* of the review, so *no date* has to be a state the format can hold
  * rather than a field left blank.
  */
-export type When =
-  | { readonly kind: 'standing' }
-  | { readonly kind: 'on'; readonly date: DateKey }
-  | { readonly kind: 'between'; readonly from: DateKey; readonly until: DateKey }
-  /**
-   * A season: months rather than days (H7b).
-   *
-   * **Coarser than a day, and the only thing in this design that is.** A major
-   * project is committed to a period long before it has a date — *"during which
-   * months will we be driving these"* — and that commitment already has
-   * consequences for money and travel.
-   */
-  | { readonly kind: 'season'; readonly from: string; readonly until: string }
-  /**
-   * Every N days/weeks/months/years — **from a date that has to be recorded.**
-   *
-   * *Every ninety days* is not a schedule until you know ninety days from
-   * **what**. The type said "from a fixed origin" and carried no field for one,
-   * which would have left MH3 guessing — and guessing from `arrived` is wrong
-   * twice: it is metadata rather than intent, and `adopt` re-dates it, so moving
-   * a matter between dockets would silently move its schedule.
-   *
-   * **`from` is optional in the format and not in the meaning.** A person says
-   * *every 90 days* first and *starting the first of October* second, so the
-   * notation must accept the incomplete version — but a recurrence with no
-   * anchor cannot generate, and MH3 has to say so rather than pick a date.
-   * Un-backfillable either way, which is why it is here and not there.
-   */
-  | { readonly kind: 'every'; readonly n: number; readonly unit: Unit; readonly from?: DateKey }
-  /**
-   * N after the last time it *actually happened* (H7).
-   *
-   * Which is why completion has to flow backward: the clock reads from a
-   * designated occurrence's completion, not from a calendar.
-   */
-  | { readonly kind: 'after'; readonly n: number; readonly unit: Unit; readonly from?: DateKey }
-  /** Dates read from an ICS file kept in the notebook (H12, D69). */
-  | { readonly kind: 'ics'; readonly file: string }
-
-export type Unit = 'd' | 'w' | 'm' | 'y'
-
-/** *At this offset, do this.* The run-up, authored per matter (H4). */
-export interface Trigger {
-  /** Signed, in days/weeks/months/years. `-14d` is a fortnight before. */
-  readonly offset: string
-  /** `task`, `note`, `doc` — left open, because MH3 is what spends them. */
-  readonly effect: string
-  readonly text: string
+/**
+ * How often something comes round.
+ *
+ * **`day` exists only to stop a monthly thing drifting.** A schedule keeps its
+ * *next* instance rather than a fixed anchor (see `Schedule.start`), which is
+ * far easier to reason about — nobody should have to compute forward from a date
+ * years ago — but rolling one date to the next loses the day somebody chose the
+ * moment it has to be clamped: 31 January rolls to 28 February, and rolling
+ * again from *that* gives 28 March, for ever. So the intended day is carried
+ * when it differs from the stored one, which happens only for months and years
+ * anchored on the 29th, 30th or 31st.
+ */
+export interface Interval {
+  readonly n: number
+  readonly unit: Unit
+  /** The day of the month meant, when a clamp has hidden it. */
+  readonly day?: number
 }
 
 /**
+ * When a matter happens, in three variables and nothing else.
+ *
+ * **The four modes fall out of these rather than being stored** (D76, amended):
+ *
+ * | start | every | after | what it is |
+ * |---|---|---|---|
+ * | — | — | — | something to get done |
+ * | ✓ | — | — | something happening |
+ * | ✓ | ✓ | — | something that comes round |
+ * | ✓ | ✓ | step | something to keep up with |
+ *
+ * **`start` is a known instance, kept as the NEXT one** — advanced by us as
+ * instances pass, rather than left as a first instance somebody then has to
+ * count forward from. It is also the whole of *active*: no start means `T±N` is
+ * not computable, so nothing generates, whatever the rest says. Suspending
+ * clears it and leaves the shape, which is why a matter with an interval and no
+ * start is a perfectly good paused thing rather than a contradiction.
+ *
+ * **`after` says *recur from completion*, and says which step's** — one field
+ * doing both, which is what Qa demanded: the clock-advancing step is authored
+ * rather than inferred from the order things happen to be in. With it set the
+ * matter reschedules when that step is done; without it, the calendar decides
+ * and the interval runs from `start` regardless of what anybody did.
+ *
+ * **The reschedule is implicit.** It used to be a step somebody wrote, which put
+ * machinery in a list otherwise made of a person's own words; it is derived from
+ * these fields now, and steps are only tasks and reminders again.
+ */
+export interface Schedule {
+  readonly start: DateKey | null
+  readonly every: Interval | null
+  /** The step whose completion starts the next instance, if any. */
+  readonly after: string | null
+}
+
+/** A matter nobody has dated: on the list, generating nothing. */
+export const UNSCHEDULED: Schedule = { start: null, every: null, after: null }
+
+/**
+ * What kind of thing a matter is, as a person thinks of it.
+ *
+ * **Persisted, and primary** — which reverses an earlier draft of this decision.
+ * That one derived the mode from the three variables so that nothing could be
+ * mislabelled, and the price was exposing the machinery: the surface showed an
+ * interval and a radio group and left somebody to work out that those two
+ * together meant *this comes round after I do it*. Reported from use in those
+ * terms, and the objection is right.
+ *
+ * **Two things make storing it sound now.** The mode **governs** the variables
+ * rather than describing them — they are only reachable through the affordances
+ * it puts up, so it cannot come to contradict them. And there is a distinction
+ * it alone can hold: `(start, —, —)` is both a one-off task and a one-off event,
+ * and which one decides whether work is a **task** or a **reminder** — the *you
+ * do it* against *it happens to you* axis, with nowhere else to live once the
+ * first step exists.
+ */
+export type Mode = 'task' | 'recurring-task' | 'event' | 'recurring-event'
+
+export interface ModeShape {
+  readonly key: Mode
+  readonly title: string
+  /** What its first step is, and what a step of its defaults to. */
+  readonly kind: StepKind
+  /** Whether it asks how often. */
+  readonly repeating: boolean
+  /** Whether its recurrence is measured from a step being done. */
+  readonly fromCompletion: boolean
+}
+
+export const MODES: readonly ModeShape[] = [
+  { key: 'task', title: 'One-off task', kind: 'task', repeating: false, fromCompletion: false },
+  {
+    key: 'recurring-task',
+    title: 'Recurring task',
+    kind: 'task',
+    repeating: true,
+    fromCompletion: true,
+  },
+  { key: 'event', title: 'One-off event', kind: 'status', repeating: false, fromCompletion: false },
+  {
+    key: 'recurring-event',
+    title: 'Recurring event',
+    kind: 'status',
+    repeating: true,
+    fromCompletion: false,
+  },
+]
+
+export const shapeOf = (mode: Mode): ModeShape =>
+  MODES.find(one => one.key === mode) ?? (MODES[0] as ModeShape)
+
+/**
+ * The mode of a matter written before modes were stored.
+ *
+ * **Derivation is the fallback, not the rule.** An old block says what its
+ * variables are and nothing about how somebody thought of it, so the best that
+ * can be done is read the shape — and the one thing that cannot be recovered is
+ * task against event, which is why it is guessed from the kind of the first step
+ * rather than from the schedule.
+ */
+export function modeFrom(when: Schedule, steps: readonly Step[]): Mode {
+  const doing = steps[0]?.kind !== 'status'
+  if (when.every === null) return doing ? 'task' : 'event'
+  return when.after !== null || doing ? 'recurring-task' : 'recurring-event'
+}
+
+/** What *Add a matter* was asked for: a shape, and the details it needs. */
+export interface NewMatter {
+  readonly mode: Mode
+  /** The next instance, for the three dated shapes. */
+  readonly start?: string
+  /** How often, for the two repeating ones — as typed. */
+  readonly every?: string
+}
+
+export type Unit = 'd' | 'w' | 'm' | 'y'
+
+/**
+ * What a matter *does*, one entry at a time (D76).
+ *
+ * **This replaced *triggers*, and the rename is the design.** A trigger was an
+ * offset before a known date — a run-up — and the first thing real use produced
+ * was the opposite: a repair with no date at all, whose steps run *forward* from
+ * the moment somebody decides to start. H4 said plainly that the need for a
+ * per-matter window was evidenced and the shape was not, and the shape was
+ * wrong. One list serves both directions.
+ */
+/**
  * `2w`, `2 weeks`, `2 weeks before`, `+3 days after` — and `-14d` from the file.
  *
- * **Worded, for the same reason `EVERY` is** (see `UNIT`): the run-up row reads
- * back *2 weeks before*, so that is what a person will type into the field
+ * **Worded, because the surface reads it back in words** (see `UNIT`): a step
+ * row says *2 weeks before*, so that is what a person will type into the field
  * beside it. The trailing word is accepted because it is half of what was just
  * read aloud, and a field that rejects the second half of its own sentence is a
- * puzzle. An explicit sign still wins over it — `-3d after` is a contradiction,
- * and the punctuation is the more deliberate of the two.
+ * puzzle. An explicit sign still wins over it.
  */
 const OFFSET = new RegExp(`^([+-]?)${COUNT}${UNIT}(?:\\s+(before|after))?$`)
 
@@ -179,45 +487,96 @@ const OFFSET = new RegExp(`^([+-]?)${COUNT}${UNIT}(?:\\s+(before|after))?$`)
  * An offset as somebody says it out loud, normalised to what the file holds.
  *
  * **A bare number is BEFORE**, and that is the whole reason this exists. The
- * concept is a *run-up window* (H4) and every example in the requirements is
+ * concept was a *run-up window* (H4) and every example in the requirements was
  * ahead of the date — two weeks before a talk, months before a birthday, days
  * before a filter. Making somebody type a minus sign to get the ordinary case is
- * a tax on the common gesture, and `-` is punctuation nobody says in a
- * conversation.
+ * a tax on the common gesture, and `-` is punctuation nobody says out loud.
  *
- * **`+` is how you get the other one**, because it exists: *file the expenses
- * three days after the trip.* Explicit, because it is the rare case and a silent
- * one would be a surprise.
+ * **`+` is how you get the other one**, because it exists — *file the expenses
+ * three days after the trip* — and because D76 made the forward direction the
+ * common case for a backlog matter, whose steps all run out from the moment it
+ * was started.
  */
 export function parseOffset(text: string): string | null {
-  const found = OFFSET.exec(text.trim().toLowerCase())
+  const said = text.trim().toLowerCase()
+  // **`T+0` is a real schedule and the commonest one**: the first step of a
+  // backlog matter is due the moment it is activated. It is read back as *right
+  // away*, so — the closed-loop rule — *right away* has to go back in.
+  if (said === 'right away' || said === 'now' || said === 't+0' || said === '0') return '+0d'
+  const found = OFFSET.exec(said)
   if (found === null) return null
   const n = found[2] === undefined ? 1 : Number(found[2])
-  if (n === 0) return null // an offset of nothing is a date, not a run-up
+  if (n === 0) return `+0${unitOf(found[3] as string)}` // T+0 is a real schedule: *now*
   const sign = found[1] === '' ? (found[4] === 'after' ? '+' : '-') : found[1]
   return `${sign === '+' ? '+' : '-'}${n}${unitOf(found[3] as string)}`
 }
 
-/** How long before, said the way a person would read it back. */
+/** How long before or after, said the way a person would read it back. */
 export function spellOffset(offset: string): string {
   const found = OFFSET.exec(offset)
   if (found === null) return offset
-  const n = Number(found[2])
+  const n = found[2] === undefined ? 1 : Number(found[2])
+  // **`T+0` is *now*, not *0 days after*.** It is the default schedule for a
+  // backlog step, so it is the one a person sees most and the one worth saying
+  // in words rather than in arithmetic.
+  if (n === 0) return 'right away'
   return `${spellSpan(n, found[3] as string)} ${found[1] === '+' ? 'after' : 'before'}`
 }
 
-/** What a trigger does. `doc` is authored here and spent in MH3. */
-export const EFFECTS: readonly string[] = ['task', 'note', 'doc']
+export type StepKind =
+  /** Becomes a TODO item. */
+  | 'task'
+  /** Becomes a horizon row — awareness with nothing to tick off (H6). */
+  | 'status'
+
+export const STEP_KINDS: readonly StepKind[] = ['task', 'status']
+
+/** When a step happens. */
+export type StepWhen =
+  /** `T±N` from the matter's critical date. */
+  | { readonly kind: 'at'; readonly offset: string }
+  /**
+   * After another step is completed, optionally plus an interval.
+   *
+   * **By id, not by position.** A positional reference would silently repoint
+   * itself the moment a step was inserted above it — D56's rule, a level down.
+   */
+  | { readonly kind: 'after'; readonly step: string; readonly offset?: string }
+
+export interface Step {
+  /** Minted on write, like a matter's, so that `after` has something to hold. */
+  readonly id: string | null
+  readonly kind: StepKind
+  readonly when: StepWhen
+  readonly text: string
+  /**
+   * When it was completed, in Unix seconds, or null.
+   *
+   * **Stamped on the step rather than read off what it generated**, for two
+   * reasons that are really one: the generated item can be edited away, and
+   * *suspend* withdraws the generated items by definition while having to
+   * preserve this answer. **Cleared when a reschedule starts a new instance**,
+   * or the second filter change would be born already done.
+   */
+  readonly done: number | null
+}
 
 export interface Matter {
   readonly id: string | null
   readonly name: string
-  readonly when: When
+  readonly when: Schedule
+  /**
+   * Which of the four kinds of thing this is, as a person thinks of it.
+   *
+   * **Stored, because it governs rather than describes** — see `Mode`. Absent
+   * in a block written before modes existed, and read back from the shape then.
+   */
+  readonly mode: Mode
   readonly tags: readonly string[]
   readonly owner: string | null
   /** A relative markdown link to one document (H14). */
   readonly link: string | null
-  readonly triggers: readonly Trigger[]
+  readonly steps: readonly Step[]
   /**
    * Prose written under a matter — what the plumber said, the quote, the plan.
    *
@@ -311,7 +670,8 @@ export interface Section {
   readonly matters: readonly Matter[]
 }
 
-export const STANDING: When = { kind: 'standing' }
+/** The old name for an unscheduled matter, kept so callers read either way. */
+export const STANDING: Schedule = UNSCHEDULED
 
 /** What a person writes for *no date yet*, and what this writes back. */
 export const NO_DATE = '—'
@@ -328,126 +688,91 @@ export const NO_DATE = '—'
  */
 const real = (text: string): DateKey | null => asDateKey(text)
 
-/** A month, checked the same way: the first of it has to exist. */
-const realMonth = (text: string): string | null =>
-  asDateKey(`${text}-01`) === null ? null : text
+/**
+ * A matter's schedule, from what somebody typed.
+ *
+ * **Three forms and nothing else** (D76): nothing at all, a fixed date, or an
+ * interval from an anchor. Ranges and seasons were here and were withdrawn — a
+ * project that spreads over months is a matter with spread-out **steps**, not a
+ * matter with a fuzzy date — and *N after done* became a reschedule step, since
+ * it was the only form whose meaning depended on an event rather than a
+ * calendar.
+ */
+/** `90d`, `90 days`, `1m on 31` — an interval, with the day it means. */
+const EVERY_FIELD = new RegExp(`^${COUNT}${UNIT}(?:\\s+on\\s+(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?)?$`)
 
-export function parseWhen(text: string): When | null {
-  const said = text.trim()
-  if (said === '' || said === NO_DATE || said === '-' || said.toLowerCase() === 'standing') {
-    return STANDING
-  }
-  const range = RANGE.exec(said)
-  if (range !== null) {
-    const from = real(range[1] as string)
-    const until = real(range[2] as string)
-    // **Backwards is not a range**, the same call the query notation makes: a
-    // silent swap is worse than a complaint, because it files a date nobody
-    // chose.
-    if (from === null || until === null || compareDateKeys(from, until) > 0) return null
-    return { kind: 'between', from, until }
-  }
-  const months = MONTHS.exec(said)
-  if (months !== null) {
-    const from = realMonth(months[1] as string)
-    const until = realMonth(months[2] as string)
-    if (from === null || until === null || from > until) return null
-    return { kind: 'season', from, until }
-  }
-  if (DAY.test(said)) {
-    const day = real(said)
-    return day === null ? null : { kind: 'on', date: day }
-  }
-  const every = EVERY.exec(said.toLowerCase())
-  if (every !== null) {
-    const from = every[3] === undefined ? undefined : real(every[3] as string)
-    if (every[3] !== undefined && from === null) return null
-    const n = every[1] === undefined ? 1 : Number(every[1])
-    if (n === 0) return null // *every no days* is not a schedule
-    return {
-      kind: 'every',
-      n,
-      unit: unitOf(every[2] as string),
-      ...(from === undefined || from === null ? {} : { from }),
-    }
-  }
-  const after = AFTER.exec(said.toLowerCase())
-  if (after !== null) {
-    const from = after[3] === undefined ? undefined : real(after[3] as string)
-    if (after[3] !== undefined && from === null) return null
-    const n = after[1] === undefined ? 1 : Number(after[1])
-    if (n === 0) return null
-    return {
-      kind: 'after',
-      n,
-      unit: unitOf(after[2] as string),
-      ...(from === undefined || from === null ? {} : { from }),
-    }
-  }
-  const ics = ICS.exec(said)
-  if (ics !== null) return { kind: 'ics', file: ics[1] as string }
-  // **Unparseable is not standing.** A `when` somebody typed and this cannot
-  // read is a thing to say out loud rather than silently treat as undated —
-  // which would quietly stop a matter ever reaching the horizon.
-  return null
+/** The `every:` field: how often, and which day of the month it means. */
+export function parseInterval(text: string): Interval | null {
+  const found = EVERY_FIELD.exec(text.trim().toLowerCase())
+  if (found === null) return null
+  const n = found[1] === undefined ? 1 : Number(found[1])
+  if (n === 0) return null // *every no days* is not a schedule
+  const unit = unitOf(found[2] as string)
+  const day = found[3] === undefined ? undefined : Number(found[3])
+  if (day !== undefined && (day < 1 || day > 31)) return null
+  // The carried day only means anything where a month can be short of it.
+  if (day !== undefined && unit !== 'm' && unit !== 'y') return null
+  return { n, unit, ...(day === undefined ? {} : { day }) }
 }
 
-export function spellWhen(when: When): string {
-  switch (when.kind) {
-    case 'standing':
-      return NO_DATE
-    case 'on':
-      return when.date
-    case 'between':
-      return `${when.from}..${when.until}`
-    case 'season':
-      return `${when.from}..${when.until}`
-    case 'every':
-      return `every ${when.n}${when.unit}${when.from === undefined ? '' : ` from ${when.from}`}`
-    case 'after':
-      return `${when.n}${when.unit} after done${when.from === undefined ? '' : ` from ${when.from}`}`
-    case 'ics':
-      return `ics: ${when.file}`
-  }
+export function spellInterval(every: Interval): string {
+  return `${every.n}${every.unit}${every.day === undefined ? '' : ` on ${every.day}`}`
 }
 
-const UNITS: Record<string, string> = { d: 'day', w: 'week', m: 'month', y: 'year' }
+/** How often, said the way it is read back: *every 90 days*. */
+export function readInterval(every: Interval): string {
+  const span = every.n === 1 ? UNITS[every.unit] ?? every.unit : spellSpan(every.n, every.unit)
+  return `every ${span}${every.day === undefined ? '' : ` on the ${every.day}${ordinal(every.day)}`}`
+}
 
-/** `90` and `d` as *90 days*, the shared half of reading an interval back. */
-const spellSpan = (n: number, unit: string): string => {
-  const word = UNITS[unit] ?? unit
-  return `${n} ${n === 1 ? word : `${word}s`}`
+const ordinal = (n: number): string => {
+  if (n % 100 >= 11 && n % 100 <= 13) return 'th'
+  return { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th'
 }
 
 /**
- * A `when` the way it is said across a table, as against written in the file.
+ * The whole schedule, said out loud for the date column.
  *
- * **Two forms, because they have two jobs.** `spellWhen` round-trips: what it
- * returns is what `parseWhen` reads, so it is what the file holds and what an
- * in-place edit starts from. This one is only ever *read*, so it can use words —
- * and it has to, because `every 90d from 2026-10-01` is notation, and it was
- * sitting inches from a run-up that already said *two weeks before* in plain
- * words. H3's floor is a surface legible to whoever is not driving the keyboard;
- * a row that switches languages halfway across fails it.
- *
- * **Plain dates stay as they are.** A column of ISO dates is scanned, not read
- * aloud, and it lines up; recurrence is the part that was unreadable.
+ * **Four shapes, four sentences**, because the column is what tells two people
+ * which of the four kinds of thing they are looking at — and it is the only
+ * place that says so, now that nothing stores a mode.
  */
-export function readWhen(when: When): string {
-  switch (when.kind) {
-    case 'every':
-      // *Every week*, not *every 1 week* — and `EVERY`'s count is optional
-      // precisely so that this sentence goes back in.
-      return `every ${when.n === 1 ? UNITS[when.unit] ?? when.unit : spellSpan(when.n, when.unit)}${
-        when.from === undefined ? '' : ` from ${when.from}`
-      }`
-    case 'after':
-      return `${spellSpan(when.n, when.unit)} after done${
-        when.from === undefined ? '' : ` from ${when.from}`
-      }`
-    default:
-      return spellWhen(when)
+export function readSchedule(when: Schedule): string {
+  if (when.every === null) return when.start ?? NO_DATE
+  const how = readInterval(when.every)
+  if (when.start === null) return `${how}, not started`
+  // **Said as *after it is done* rather than as a date**, because that is what
+  // the difference between the two recurring shapes actually is: one is the
+  // calendar's business and the other is yours.
+  return when.after === null ? `${how} from ${when.start}` : `${how} after it is done`
+}
+
+/**
+ * An old `when:` line into the three variables.
+ *
+ * **Read, never written** — this is how a docket from before the split opens
+ * without anybody migrating it, the same bargain the trigger line got. A form
+ * that was withdrawn (a range, a season, `N after done`) is not understood here
+ * either, and is kept verbatim by the leniency rule so it can be corrected.
+ */
+export function parseLegacyWhen(text: string): Schedule | null {
+  const said = text.trim()
+  if (said === '' || said === NO_DATE || said === '-' || said.toLowerCase() === 'standing') {
+    return UNSCHEDULED
   }
+  if (DAY.test(said)) {
+    const day = real(said)
+    return day === null ? null : { start: day, every: null, after: null }
+  }
+  const every = EVERY.exec(said.toLowerCase())
+  if (every !== null) {
+    const from = every[3] === undefined ? null : real(every[3] as string)
+    if (every[3] !== undefined && from === null) return null
+    const n = every[1] === undefined ? 1 : Number(every[1])
+    if (n === 0) return null
+    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null }
+  }
+  return null
 }
 
 /**
@@ -465,18 +790,19 @@ export function parseMatter(block: string): Matter | null {
   const name = (head[2] as string).trim()
   if (name === '') return null
 
-  let when: When = STANDING
+  let when: Schedule = UNSCHEDULED
   let owner: string | null = null
   let link: string | null = null
   let id: string | null = null
   let arrived = 0
   let declines = 0
   let occurrence: DateKey | null = null
+  let said: Mode | null = null
   const tags: string[] = []
-  const triggers: Trigger[] = []
+  const steps: Step[] = []
   const notes: string[] = []
   const extra: string[] = []
-  let inTriggers = false
+  let inSteps = false
 
   for (const line of lines.slice(1)) {
     const mark = MARK.exec(line)
@@ -487,23 +813,20 @@ export function parseMatter(block: string): Matter | null {
       occurrence = mark[4] === undefined ? null : (mark[4] as DateKey)
       continue
     }
-    if (inTriggers) {
-      const trigger = TRIGGER.exec(line.trim())
-      if (trigger !== null) {
-        triggers.push({
-          offset: trigger[1] as string,
-          effect: trigger[2] as string,
-          text: (trigger[3] as string).trim(),
-        })
+    if (inSteps) {
+      const step = parseStep(line)
+      if (step !== null) {
+        steps.push(step)
         continue
       }
       // A `- ` line this cannot read is kept rather than dropped: it is
       // somebody's, and losing it is the one thing lenient parsing must not do.
+      // A `doc:` step lands here until the document-template kind is built.
       if (line.trim().startsWith('-')) {
         extra.push(line)
         continue
       }
-      inTriggers = false
+      inSteps = false
     }
     const field = FIELD.exec(line)
     if (field === null) {
@@ -513,11 +836,31 @@ export function parseMatter(block: string): Matter | null {
     }
     const key = (field[1] as string).toLowerCase()
     const value = (field[2] as string).trim()
-    if (key === 'when') {
-      // **`ics:` is a `when`, and it collides with the field syntax.** `when:
-      // ics: holidays.ics` reads as a field whose value is itself a field, so
-      // the value is re-joined before parsing rather than split twice.
-      const said = parseWhen(value)
+    if (key === 'start') {
+      // **`—` is how *no date* is written**, and it is what this writes itself,
+      // so reading it back as unreadable put the field into `extra` on every
+      // round trip of an undated matter.
+      const said = value.trim()
+      if (said === '' || said === NO_DATE || said === '-') when = { ...when, start: null }
+      else {
+        const day = real(said)
+        if (day === null) extra.push(line)
+        else when = { ...when, start: day }
+      }
+    } else if (key === 'every') {
+      const every = parseInterval(value)
+      if (every === null) extra.push(line)
+      else when = { ...when, every }
+    } else if (key === 'after') {
+      const said = value.trim()
+      if (said === '') extra.push(line)
+      else when = { ...when, after: said }
+    } else if (key === 'when') {
+      // **The old one-line form, read and never written** — which is how a
+      // docket written before the split opens without anybody migrating it. A
+      // form that was withdrawn is not understood here either, and is kept
+      // verbatim below so it can be corrected rather than lost.
+      const said = parseLegacyWhen(value)
       if (said === null) {
         // **A `when` this cannot read is KEPT, not quietly dropped.** It used to
         // fall back to *no date yet* and lose the text on the next write of the
@@ -530,8 +873,15 @@ export function parseMatter(block: string): Matter | null {
       } else {
         when = said
       }
-    } else if (key === 'triggers') {
-      inTriggers = true
+    } else if (key === 'mode') {
+      const want = value.trim().toLowerCase()
+      if (MODES.some(one => one.key === want)) said = want as Mode
+      else extra.push(line)
+    } else if (key === 'steps' || key === 'triggers') {
+      // **Both keys read, one written.** `triggers:` is what MH1 wrote, and a
+      // file is not worth migrating when the new reader can simply understand
+      // the old word.
+      inSteps = true
       if (value !== '') extra.push(line)
     } else if (key === 'owner') {
       owner = value === '' ? null : value
@@ -549,7 +899,40 @@ export function parseMatter(block: string): Matter | null {
     }
   }
 
-  return { id, name, when, tags, owner, link, triggers, notes, arrived, declines, occurrence, extra }
+  // **A reschedule step becomes the matter's own recurrence**, which is where
+  // it now lives: the interval is its offset and the clock-advancing step is
+  // what it was waiting on. Done here rather than in a migration script for the
+  // same reason the trigger line was — a reader that understands the old form
+  // costs less than a pass over everybody's files, and cannot half-finish.
+  const folded = steps.filter(one => (one as { kind: string }).kind !== 'reschedule')
+  const machinery = steps.find(one => (one as { kind: string }).kind === 'reschedule')
+  const recurrence: Schedule = machinery === undefined || machinery.when.kind !== 'after'
+    ? when
+    : {
+        ...when,
+        after: machinery.when.step,
+        every: when.every ?? intervalOf(machinery.when.offset),
+      }
+
+  return {
+    id,
+    name,
+    when: recurrence,
+    // **Read back from the shape when the block does not say.** Which is every
+    // block written before modes were stored, and is the one place derivation
+    // still happens — a best guess about how somebody thought of it, rather
+    // than the rule (see `Mode`).
+    mode: said ?? modeFrom(recurrence, folded),
+    tags,
+    owner,
+    link,
+    steps: folded,
+    notes,
+    arrived,
+    declines,
+    occurrence,
+    extra,
+  }
 }
 
 /**
@@ -571,13 +954,22 @@ export const SECTION_LEVEL = 2
  */
 export function matterBlock(matter: Matter, level = MATTER_LEVEL): string {
   const lines = [`${'#'.repeat(Math.max(2, Math.min(6, level)))} ${matter.name}`]
-  lines.push(`when: ${spellWhen(matter.when)}`)
+  // **Three fields rather than one compound string.** `every 90d after 4c8e11a2
+  // from 2026-10-01` was becoming a sentence nobody could scan, and these are
+  // three independent variables — so the file says so, and the notation becomes
+  // purely a thing the surface prints and reads.
+  // **The mode leads, because it is what the rest is in service of** — a person
+  // reading the file sees what kind of thing this is before its parameters.
+  lines.push(`mode: ${matter.mode}`)
+  lines.push(`start: ${matter.when.start ?? NO_DATE}`)
+  if (matter.when.every !== null) lines.push(`every: ${spellInterval(matter.when.every)}`)
+  if (matter.when.after !== null) lines.push(`after: ${matter.when.after}`)
   if (matter.tags.length > 0) lines.push(`tags: ${matter.tags.map(spellTag).join(' ')}`)
   if (matter.owner !== null) lines.push(`owner: ${matter.owner}`)
   if (matter.link !== null) lines.push(`link: ${matter.link}`)
-  if (matter.triggers.length > 0) {
-    lines.push('triggers:')
-    for (const t of matter.triggers) lines.push(`- ${t.offset} ${t.effect}: ${t.text}`)
+  if (matter.steps.length > 0) {
+    lines.push('steps:')
+    for (const step of matter.steps) lines.push(stepLine(step))
   }
   // **After the fields and before the marker**, which is where a reader expects
   // prose: the machinery brackets it rather than interrupting it.

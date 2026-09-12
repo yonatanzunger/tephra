@@ -3400,6 +3400,41 @@ stable to point at, so a step carries an id minted on write and preserved
 thereafter — D56's rule, applied a level down. Positional references would
 silently repoint themselves the moment a step was inserted above.
 
+**Activation is the start date, and there is no second field.** An earlier draft
+of this record — mine, and wrong — gave a matter an `activated` date beside its
+schedule, reasoning that suspension must not clear a date a person typed and so
+the two had to be told apart. **The premise was false.** A dated talk can be
+suspended perfectly meaningfully: it is *deferred to a date to be decided*, which
+is the date being cleared and not a flag being set. So:
+
+| state | means | the action offered |
+|---|---|---|
+| no start date | **inactive** — `T±N` is not computable, so nothing generates | **activate** |
+| a start date | **active** | edit it, or **suspend** by clearing it |
+
+**And the schedule already expresses both.** `standing` is a matter with no date;
+`every 90d` **without** an anchor is a periodic matter that has not been
+started — which MH1 already recorded as unable to generate, for exactly this
+reason. Suspending a periodic matter clears the anchor and leaves the interval,
+so restarting it later is setting one field. Nothing new is stored anywhere.
+
+**Activate does not mean *start date = today*; it means *the first step is due
+now*.** Which is the same thing only for a matter whose steps all run forward.
+The rule is to scan the steps, take the earliest offset, and choose the start
+date so that step lands today:
+
+- every step at `T+N`, `N ≥ 0` → start date is **today**, and the `T+0` step is
+  immediately on the list. This is the backlog case.
+- a step at `T−14d` → start date is **today plus a fortnight**, because starting
+  a fortnight's run-up *now* is what activating it means.
+
+**One reading settled by choosing: `T = today + max(0, −earliest)`.** A matter
+whose earliest step is `T+3d` gets today, not three days ago — the literal *make
+the earliest step due now* would put the critical date in the past, which is a
+strange thing to write into a file on the strength of one button. Forward-only
+matches what activation is for, and it makes *all offsets non-negative → today*
+exactly true.
+
 **ICS stays where it is, deliberately.** With ranges and seasons withdrawn,
 `ics` is the last variant of `When` the surface never produces — and it is kept
 anyway, because unlike them it was never decided against: H12 wants it and no
@@ -3413,6 +3448,94 @@ scheduled.
 the month's end — because computing each occurrence from the previous one drifts
 permanently after one short month and loses the intent. Not decided here;
 MH3b's, and carried in the roadmap.
+
+---
+
+> ## D76 amended, 2026-09-12: three variables, four shapes
+>
+> **MH3a's authoring half went into use and the model got simpler.** A matter's
+> schedule is now **three variables and nothing else** — a start date, an
+> interval, and an interval *source* — and the four kinds of matter fall out of
+> them rather than being stored:
+>
+> | start | every | after | what it is |
+> |---|---|---|---|
+> | — | — | — | something to get done |
+> | ✓ | — | — | something happening |
+> | ✓ | ✓ | — | something that comes round |
+> | ✓ | ✓ | step | something to keep up with |
+>
+> **The reschedule is implicit.** It was a seventh variant of `When`, then a step
+> somebody authored, and is now `every` + `after`. That put machinery into a list
+> otherwise made of a person's own words, and the step kinds are back to two —
+> *do a task*, *raise a reminder*. **`after` does double duty**: it says *recur
+> from completion* and *from which step's*, which is exactly what Qa demanded of
+> the designated occurrence, authored rather than inferred.
+>
+> **This supersedes *multiple reschedule steps are allowed*** below, and settles
+> the objection that came with it. Periodicity is a field on the matter now, so
+> the date column can always state it and nothing ever has to say *see the step
+> list*. One interval per matter; two intervals are two matters.
+>
+> **Naming them took two axes, not one.** *Once* against *repeatedly* is
+> obvious; **you do it** against **it happens to you** is the one the first cut
+> could not see, and it is what makes a talk and a repair feel unalike while
+> being structurally identical. It decides the **first step**: work you do
+> becomes a task, something that merely happens becomes a reminder. The four are
+> **templates and not types** — nothing stores which was chosen, so a job that
+> later gets a date is not mislabelled as an event, because there is no label.
+>
+> **`start` is the NEXT instance, not a first one**, advanced as instances pass.
+> Far easier to reason about than counting forward from an anchor years back —
+> and it reintroduces the drift the clamp question was about, since rolling one
+> date to the next loses a day that had to be clamped. So **the interval carries
+> the day meant** (`every: 1m on 31`), set the first time a clamp hides it and
+> dropped once the stored day says the same thing. 31 Jan → 28 Feb → **31 Mar**.
+>
+> **Deleting the clock-advancing step is refused**, not repaired afterwards:
+> *this step is what makes the matter recur; choose another first.* Editing a
+> matter as a batch and validating on save was considered and declined — it
+> would be the first place in this app that asks anybody to save, which buys one
+> message the price of a whole mode, a second undo story and a way to lose work
+> that the notebook has never had.
+>
+> **The file holds three fields rather than one compound string.** `every 90d
+> after 4c8e11a2 from 2026-10-01` was becoming a sentence nobody could scan.
+> Notation is a thing the surface prints and reads, and the file says what it
+> means: `start:`, `every:`, `after:`.
+>
+> **Nothing was migrated.** The old `when:` line is read and never written, and
+> an old `reschedule` step folds into the matter on read — both convert on the
+> next write of the block they are in, which is the bargain the trigger line got
+> and for the same reason: a reader that understands the old form costs less
+> than a pass over everybody's files and cannot half-finish.
+>
+> **Times stay out.** Dates only, as they have been. Historically a time on an
+> event was an annotation — *what time am I on stage* — beside a date that was
+> the real sort key, so a time belongs in a note until something needs to order
+> by it. Keeping it out leaves the horizon, generation and the `writingDay`
+> split untouched.
+>
+> **A docket describes work; the task list is where work is done.** Steps were
+> given a tick, and it was a control on the wrong surface — reported from use in
+> exactly those terms. The completion **state** stays and is load-bearing: a
+> dependency reads it, and suspending has to preserve it across withdrawing the
+> items themselves. What goes is the docket offering to *set* it, because that
+> will arrive from a generated task being closed (MH3b). Reading that a step is
+> done belongs here — it still shows — and a rare correction can earn a control
+> later if it turns out to be wanted.
+>
+> **This sharpens what the two surfaces are for**, which had blurred: a docket
+> is the complete record of a domain, and the daily list is what is in front of
+> you. A tick on a docket quietly made it a second task list.
+>
+> **Known gap it exposes**: nothing tells an open surface that another part of
+> the app has written to its document, so a docket left open will not show what
+> generation does to it. `onCorpusChanged` covers only on-disk changes that no
+> window holds. MH3b's problem, and named here so it is not discovered as a
+> surprise.
+>
+> **ICS becomes a fifth shape later**, unchanged and still deferred.
 
 **Multiple reschedule steps are allowed.** The simpler rule — at most one, so
 that *every 90 days* is always statable — was considered and declined: it is more

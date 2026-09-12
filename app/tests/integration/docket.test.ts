@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocketDocument } from '../../src/main/x/documents/kinds/docket.ts'
-import { STANDING } from '../../src/shared/kinds/docket.ts'
+import { UNSCHEDULED } from '../../src/shared/kinds/docket.ts'
 import { kindOf, type RelPath } from '../../src/main/w/layout.ts'
 import type { DocumentId } from '../../src/shared/document-api.ts'
 
@@ -55,7 +55,7 @@ test('THE POINT: a matter is added, and the file says so', async t => {
   const id = await doc.add('The oven is broken')
   const text = await file()
   assert.match(text, /^## The oven is broken$/m)
-  assert.match(text, /^when: —$/m)
+  assert.match(text, /^start: —$/m)
   assert.match(text, new RegExp(`<!--tephra:matter ${id} \\d+ 0-->`))
   assert.equal((await doc.matters())[0]?.name, 'The oven is broken')
 })
@@ -89,15 +89,16 @@ test('THE BLOCK RULE: editing one matter leaves the others byte-identical', asyn
     '',
   ].join('\n'))
 
-  await doc.setWhen('bbbb2222', { kind: 'season', from: '2026-03', until: '2026-05' })
+  await doc.setWhen('bbbb2222', { start: null, every: { n: 90, unit: 'd' }, after: null })
   const text = await file()
 
-  assert.match(text, /^## Repaint the house\nwhen: 2026-03\.\.2026-05$/m)
+  assert.match(text, /^## Repaint the house\nmode: \w+\nstart: —\nevery: 90d$/m)
   // Everything else, exactly as it was — including somebody's own `quoted:` line
   // and the two blank lines they left above the edited block.
   assert.match(text, /^quoted: 480 for the part$/m)
   assert.match(text, /\n\n\n## Repaint the house/)
-  assert.match(text, /^## Change the air filters\nwhen: every 90d$/m)
+  assert.match(text, /^## Change the air filters\nwhen: every 90d$/m,
+    'untouched, so still in the old form — which is the point of this test')
   assert.equal((await doc.matters()).length, 3)
 })
 
@@ -119,7 +120,8 @@ test('a hand-written docket is adopted, not reformatted', async t => {
   // The prose above the first matter survives, and so does the lack of ids on
   // the two that were not touched.
   assert.match(text, /^Everything true about it\.$/m)
-  assert.match(text, /^## The gate sticks\nwhen: 2026-10-01$/m)
+  assert.match(text, /^## The gate sticks\nwhen: 2026-10-01$/m,
+    'untouched, so not rewritten into the new form either')
   assert.equal((await doc.matters()).filter(m => m.id !== null).length, 1)
 })
 
@@ -137,7 +139,7 @@ test('ids are unique against the corpus, not merely against this file', async t 
 
 test('the verbs each rewrite one block', async t => {
   const { doc, file } = await docket(t)
-  const id = await doc.add('The ACM talk', { kind: 'on', date: '2026-11-12' as never })
+  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null })
   await doc.tagMatter(id, 'speaking')
   await doc.setOwner(id, 'me')
   await doc.setLink(id, '../notes/acm.md')
@@ -149,7 +151,7 @@ test('the verbs each rewrite one block', async t => {
   assert.deepEqual(matter.tags, ['speaking'])
   assert.equal(matter.owner, 'me')
   assert.equal(matter.link, '../notes/acm.md')
-  assert.deepEqual(matter.when, { kind: 'on', date: '2026-11-12' })
+  assert.deepEqual(matter.when, { start: '2026-11-12', every: null, after: null })
   // And the id survived every one of them.
   assert.equal(matter.id, id)
   assert.match(await file(), new RegExp(`matter ${id} `))
@@ -263,15 +265,15 @@ test('a new docket opens as an empty one, and can be worked at once', async t =>
   assert.equal(matters.length, 1)
   assert.equal(matters[0]?.id, matter)
   assert.equal(matters[0]?.name, 'The oven is broken')
-  assert.deepEqual(matters[0]?.when, { kind: 'standing' })
+  assert.deepEqual(matters[0]?.when, UNSCHEDULED)
 })
 
 test('and `when` is parsed in main, so a bad one is refused rather than stored', async t => {
   const { service } = await serviced(t)
   const id = await service.newDocument('The house', undefined, 'docket')
   await assert.rejects(
-    () => service.docketAdd(id, 'Something', 'next Tuesdayish'),
-    /not a date, a range, or a rule/,
+    () => service.docketAdd(id, 'Something', { mode: 'event', start: 'next Tuesdayish' }),
+    /not a date/,
   )
   // And the docket is untouched: a refused verb writes nothing.
   assert.deepEqual(await service.docketMatters(id), [])
@@ -338,69 +340,76 @@ test('THE ORDER MATTERS: `.todo.md` ends with `.md`', async t => {
 test('renaming a docket keeps its matters, ids and all', async t => {
   const { service } = await serviced(t)
   const id = await service.newDocument('The house', undefined, 'docket')
-  const matter = await service.docketAdd(id, 'The oven is broken', '2026-10-14')
+  const matter = await service.docketAdd(id, 'The oven is broken',
+    { mode: 'event', start: '2026-10-14' })
   const to = await service.renameDocument(id, 'The big house')
   const matters = await service.docketMatters(to)
   assert.equal(matters.length, 1)
   assert.equal(matters[0]?.id, matter, 'a rename moves the file; it does not remake the contents')
-  assert.deepEqual(matters[0]?.when, { kind: 'on', date: '2026-10-14' })
+  assert.deepEqual(matters[0]?.when, { start: '2026-10-14', every: null, after: null })
 })
 
 // ── run-ups on a matter (MH1, H4) ──────────────────────────
 
-test('THE RECONCILER: a matter carries its own run-up', async t => {
+test('THE RECONCILER: a matter carries its own steps', async t => {
   // H4's per-matter window is what lets a complete record project onto a short
   // horizon — a birthday wants months, a filter wants days, and no global
-  // setting can say both.
+  // setting can say both. D76 replaced the *window* with the step list, which
+  // says the same thing in both directions rather than only backwards.
   const { doc, file } = await docket(t)
-  const id = await doc.add('Service the boiler', { kind: 'on', date: '2026-10-14' as never })
-  await doc.addTrigger(id, '2w', 'book the boiler service')
+  const id = await doc.add('Service the boiler', { start: '2026-10-14' as never, every: null, after: null })
+  await doc.addStep(id, '2w', 'book the boiler service')
   const matter = (await doc.matters())[0]
-  assert.deepEqual(matter?.triggers, [
-    { offset: '-2w', effect: 'task', text: 'book the boiler service' },
-  ])
-  assert.match(await file(), /^triggers:\n- -2w task: book the boiler service$/m)
+  assert.equal(matter?.steps.length, 1)
+  const step = matter?.steps[0]
+  assert.deepEqual(step?.when, { kind: 'at', offset: '-2w' })
+  assert.equal(step?.kind, 'task')
+  assert.equal(step?.text, 'book the boiler service')
+  assert.equal(step?.done, null)
+  assert.match(step?.id ?? '', /^[0-9a-z]{8}$/, 'minted on write, so `after` can point at it')
+  assert.match(await file(), /^steps:\n- -2w task: book the boiler service <!--tephra:step [0-9a-z]{8}-->$/m)
 })
 
 test('and several are kept in the order they FIRE, not the order typed', async t => {
   // Two run-ups in the order they happened to be said is a list nobody can
   // scan; earliest-first is the order they are read and the order they will run.
   const { doc } = await docket(t)
-  const id = await doc.add('The ACM talk', { kind: 'on', date: '2026-11-12' as never })
-  await doc.addTrigger(id, '2w', 'draft the slides')
-  await doc.addTrigger(id, '2m', 'start the outline')
-  await doc.addTrigger(id, '3d', 'print the handout')
-  assert.deepEqual((await doc.matters())[0]?.triggers.map(t => t.offset), ['-2m', '-2w', '-3d'])
+  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null })
+  await doc.addStep(id, '2w', 'draft the slides')
+  await doc.addStep(id, '2m', 'start the outline')
+  await doc.addStep(id, '3d', 'print the handout')
+  assert.deepEqual((await doc.matters())[0]?.steps.map(t => (t.when.kind === 'at' ? t.when.offset : 'after')), ['-2m', '-2w', '-3d'])
 })
 
 test('an offset after the date sorts last, because it fires last', async t => {
   const { doc } = await docket(t)
-  const id = await doc.add('A trip', { kind: 'on', date: '2026-11-12' as never })
-  await doc.addTrigger(id, '+3d', 'file the expenses')
-  await doc.addTrigger(id, '1w', 'pack')
-  assert.deepEqual((await doc.matters())[0]?.triggers.map(t => t.offset), ['-1w', '+3d'])
+  const id = await doc.add('A trip', { start: '2026-11-12' as never, every: null, after: null })
+  await doc.addStep(id, '+3d', 'file the expenses')
+  await doc.addStep(id, '1w', 'pack')
+  assert.deepEqual((await doc.matters())[0]?.steps.map(t => (t.when.kind === 'at' ? t.when.offset : 'after')), ['-1w', '+3d'])
 })
 
 test('a run-up that is not an offset is refused, and nothing is written', async t => {
   const { doc, file } = await docket(t)
   const id = await doc.add('A thing')
-  await assert.rejects(() => doc.addTrigger(id, 'soon', 'do it'), /not an offset/)
-  await assert.rejects(() => doc.addTrigger(id, '2w', '   '), /needs to say what happens/)
-  assert.deepEqual((await doc.matters())[0]?.triggers, [])
-  assert.ok(!(await file()).includes('triggers:'))
+  await assert.rejects(() => doc.addStep(id, 'soon', 'do it'), /not a schedule/)
+  await assert.rejects(() => doc.addStep(id, '2w', '   '), /needs to say what happens/)
+  assert.deepEqual((await doc.matters())[0]?.steps, [])
+  assert.ok(!(await file()).includes('steps:'))
 })
 
 test('dropping one leaves the others and the rest of the matter alone', async t => {
   const { doc } = await docket(t)
-  const id = await doc.add('The ACM talk', { kind: 'on', date: '2026-11-12' as never })
+  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null })
   await doc.tagMatter(id, 'speaking')
-  await doc.addTrigger(id, '2w', 'draft the slides')
-  await doc.addTrigger(id, '3d', 'print the handout')
-  await doc.removeTrigger(id, 0)
+  await doc.addStep(id, '2w', 'draft the slides')
+  await doc.addStep(id, '3d', 'print the handout')
+  const first = (await doc.matters())[0]?.steps[0]?.id ?? ''
+  await doc.removeStep(id, first)
   const matter = (await doc.matters())[0]
-  assert.deepEqual(matter?.triggers.map(t => t.text), ['print the handout'])
+  assert.deepEqual(matter?.steps.map(t => t.text), ['print the handout'])
   assert.deepEqual(matter?.tags, ['speaking'])
-  assert.deepEqual(matter?.when, { kind: 'on', date: '2026-11-12' })
+  assert.deepEqual(matter?.when, { start: '2026-11-12', every: null, after: null })
   assert.equal(matter?.id, id)
 })
 
@@ -409,24 +418,17 @@ test('THE MEETING CASE: recurrence and its run-up, authored together', async t =
   // before* — which is the whole of what a planning conversation has to be able
   // to say. Nothing fires until MH3; saying it is what MH1 owes.
   const { doc, file } = await docket(t)
-  const id = await doc.add('Change the air filters', { kind: 'every', n: 90, unit: 'd' })
-  await doc.addTrigger(id, '3d', 'change the air filters #house')
+  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  await doc.addStep(id, '3d', 'change the air filters #house')
   const text = await file()
-  assert.match(text, /^when: every 90d$/m)
-  assert.match(text, /^- -3d task: change the air filters #house$/m)
+  assert.match(text, /^every: 90d$/m)
+  assert.match(text, /^- -3d task: change the air filters #house <!--tephra:step [0-9a-z]{8}-->$/m)
   // And the whole thing survives a reread, which is what makes it a record.
   const matter = (await doc.matters())[0]
-  assert.deepEqual(matter?.when, { kind: 'every', n: 90, unit: 'd' })
-  assert.equal(matter?.triggers.length, 1)
+  assert.deepEqual(matter?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
+  assert.equal(matter?.steps.length, 1)
 })
 
-test('and completion-relative recurrence, which is the other household shape', async t => {
-  const { doc, file } = await docket(t)
-  const id = await doc.add('Service the car', { kind: 'after', n: 6, unit: 'm' })
-  await doc.addTrigger(id, '2w', 'book the service')
-  assert.match(await file(), /^when: 6m after done$/m)
-  assert.deepEqual((await doc.matters())[0]?.when, { kind: 'after', n: 6, unit: 'm' })
-})
 
 // ── notes on a matter (MH1) ────────────────────────────────
 
@@ -464,11 +466,11 @@ test('and empty lines are dropped, because a note of nothing is no note', async 
 
 test('a note coexists with a run-up and neither eats the other', async t => {
   const { doc } = await docket(t)
-  const id = await doc.add('Service the boiler', { kind: 'on', date: '2026-10-14' as never })
-  await doc.addTrigger(id, '2w', 'book it')
+  const id = await doc.add('Service the boiler', { start: '2026-10-14' as never, every: null, after: null })
+  await doc.addStep(id, '2w', 'book it')
   await doc.setNotes(id, ['The firm on the high street did the last one.'])
   const matter = (await doc.matters())[0]
-  assert.equal(matter?.triggers.length, 1)
+  assert.equal(matter?.steps.length, 1)
   assert.deepEqual(matter?.notes, ['The firm on the high street did the last one.'])
 })
 
@@ -479,29 +481,33 @@ test('THE ANCHOR: a recurrence records what it recurs from', async t => {
   // and MH3 cannot reconstruct it — so it is recorded now or never.
   const { doc, file } = await docket(t)
   const id = await doc.add('Change the air filters', {
-    kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as never,
+    start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null,
   })
-  assert.match(await file(), /^when: every 90d from 2026-10-01$/m)
+  assert.match(await file(), /^start: 2026-10-01$/m)
+  assert.match(await file(), /^every: 90d$/m)
   assert.deepEqual((await doc.matters())[0]?.when,
-    { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
   void id
 })
 
 test('and setting one later is how a conversation actually goes', async t => {
   // *Every 90 days* is said first; *starting in October* is said second.
   const { doc } = await docket(t)
-  const id = await doc.add('Change the air filters', { kind: 'every', n: 90, unit: 'd' })
-  assert.deepEqual((await doc.matters())[0]?.when, { kind: 'every', n: 90, unit: 'd' })
-  await doc.setWhen(id, { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as never })
+  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  assert.deepEqual((await doc.matters())[0]?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
+  await doc.setWhen(id, { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null })
   assert.deepEqual((await doc.matters())[0]?.when,
-    { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
 })
 
 test('an impossible date never reaches the file', async t => {
   const { service } = await serviced(t)
   const id = await service.newDocument('The house', undefined, 'docket')
   for (const said of ['2026-02-30', '2026-13-01', '2026-11-14..2026-11-12']) {
-    await assert.rejects(() => service.docketAdd(id, 'A thing', said), /not a date/)
+    await assert.rejects(
+      () => service.docketAdd(id, 'A thing', { mode: 'event', start: said }),
+      /not a date/,
+    )
   }
   assert.deepEqual(await service.docketMatters(id), [])
 })
@@ -559,16 +565,16 @@ test('THE ID SURVIVES A MOVE, which is what makes it a move', async t => {
 
 test('and everything on it survives the move too', async t => {
   const { doc, kitchen } = await three(t)
-  await doc.setWhen(kitchen, { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' as never })
+  await doc.setWhen(kitchen, { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null })
   await doc.tagMatter(kitchen, 'house')
-  await doc.addTrigger(kitchen, '2w', 'get quotes')
+  await doc.addStep(kitchen, '2w', 'get quotes')
   await doc.setNotes(kitchen, ['Three firms quoted.'])
   await doc.addSection('Major projects')
   await doc.moveMatter(kitchen, 'Major projects')
   const moved = (await doc.matters()).find(m => m.id === kitchen)
-  assert.deepEqual(moved?.when, { kind: 'every', n: 90, unit: 'd', from: '2026-10-01' })
+  assert.deepEqual(moved?.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
   assert.deepEqual(moved?.tags, ['house'])
-  assert.equal(moved?.triggers.length, 1)
+  assert.equal(moved?.steps.length, 1)
   assert.deepEqual(moved?.notes, ['Three firms quoted.'])
 })
 
@@ -697,7 +703,7 @@ test('A HAND-WRITTEN DOCKET with sections is read as written', async t => {
   ])
   // Written in words, and read: the file is a person's to type in.
   const filters = (await doc.matters()).find(m => m.name === 'Change the air filters')
-  assert.deepEqual(filters?.when, { kind: 'every', n: 90, unit: 'd' })
+  assert.deepEqual(filters?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
 })
 
 test('A DOCKET FROM BEFORE SECTIONS EXISTED still reads as its matters', async t => {
@@ -762,7 +768,7 @@ test('A NEW MATTER IS NOT FILED BY GUESSWORK', async t => {
 test('and it goes where it is told when it is told', async t => {
   const { doc, file } = await three(t)
   await doc.addSection('Major projects')
-  await doc.add('Redo the bathroom', STANDING, undefined, 'Major projects')
+  await doc.add('Redo the bathroom', UNSCHEDULED, undefined, 'Major projects')
   assert.deepEqual(await named(doc), [
     ['', ['Service the boiler', 'The oven is broken', 'Redo the kitchen']],
     ['Major projects', ['Redo the bathroom']],
@@ -772,14 +778,14 @@ test('and it goes where it is told when it is told', async t => {
 
 test('a section named in an add that does not exist is refused, not invented', async t => {
   const { doc } = await three(t)
-  await assert.rejects(() => doc.add('Fix the fence', STANDING, undefined, 'Nowhere'), /no section/)
+  await assert.rejects(() => doc.add('Fix the fence', UNSCHEDULED, undefined, 'Nowhere'), /no section/)
   assert.equal((await doc.matters()).length, 3)
 })
 
 test('and the file stays tidy when a matter is added into a section', async t => {
   const { doc, file } = await three(t)
   await doc.addSection('Major projects')
-  await doc.add('Redo the bathroom', STANDING, undefined, 'Major projects')
+  await doc.add('Redo the bathroom', UNSCHEDULED, undefined, 'Major projects')
   await doc.add('Fix the fence')
   const text = await file()
   assert.doesNotMatch(text, /\n\n\n/)
@@ -859,4 +865,507 @@ test('and so is every nudge, in both directions, from every position', async t =
       }
     }
   }
+})
+
+// ── steps, chained (MH3a, D76) ──────────────────────────────
+
+test('THE CHAIN: a step waits on another by id, not by position', async t => {
+  // *Find a suitable shop*, then *have the car fixed* once that is done. The
+  // reference is by id because a positional one would silently repoint itself
+  // the moment a step was inserted above it (D56's rule, a level down).
+  const { doc, file } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  const shop = await doc.addStep(id, 'right away', 'find a suitable shop')
+  const fix = await doc.addStep(id, `after ${shop}`, 'have the car fixed')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  assert.deepEqual(steps.map(one => one.text), ['find a suitable shop', 'have the car fixed'])
+  assert.deepEqual(steps[0]?.when, { kind: 'at', offset: '+0d' }, 'T+0 is due on activation')
+  assert.deepEqual(steps[1]?.when, { kind: 'after', step: shop })
+  assert.match(await file(), new RegExp(`^- after ${shop} task: have the car fixed`, 'm'))
+  void fix
+})
+
+test('and inserting a step above the chain does not repoint it', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  const shop = await doc.addStep(id, 'right away', 'find a suitable shop')
+  await doc.addStep(id, `after ${shop}`, 'have the car fixed')
+  // A step that sorts to the front, added last.
+  await doc.addStep(id, '-1w', 'clear the weekend')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  assert.deepEqual(steps.map(one => one.text),
+    ['clear the weekend', 'find a suitable shop', 'have the car fixed'])
+  const dependent = steps.find(one => one.text === 'have the car fixed')
+  assert.deepEqual(dependent?.when, { kind: 'after', step: shop }, 'still pointing at the shop')
+})
+
+test('a dependent step sorts behind what it waits on, having no offset of its own', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A trip')
+  const book = await doc.addStep(id, '-60d', 'book the flights')
+  await doc.addStep(id, '-2d', 'pack')
+  await doc.addStep(id, `after ${book}`, 'claim the expenses')
+  assert.deepEqual((await doc.matters())[0]?.steps.map(one => one.text),
+    ['book the flights', 'claim the expenses', 'pack'])
+})
+
+test('COMPLETION IS STAMPED ON THE STEP, which is what a dependency reads', async t => {
+  // Not read off whatever the step generated: that item can be edited away, and
+  // suspend withdraws those items by definition while having to preserve this.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  const shop = await doc.addStep(id, 'right away', 'find a suitable shop')
+  await doc.completeStep(id, shop, 1789148616)
+  const step = (await doc.matters())[0]?.steps[0]
+  assert.equal(step?.done, 1789148616)
+  assert.match(await file(), new RegExp(`<!--tephra:step ${shop} 1789148616-->`))
+  // And it comes back off, because a tick is a thing people get wrong.
+  await doc.completeStep(id, shop, null)
+  assert.equal((await doc.matters())[0]?.steps[0]?.done, null)
+  assert.match(await file(), new RegExp(`<!--tephra:step ${shop}-->`))
+})
+
+// ── activation (MH3a, D76) ──────────────────────────────────
+
+test('THE POINT OF MH3a: activating a backlog matter dates it TODAY', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  await doc.addStep(id, 'right away', 'find a suitable shop')
+  assert.deepEqual((await doc.matters())[0]?.when, UNSCHEDULED, 'inactive until somebody starts it')
+  const started = await doc.activate(id, '2026-09-11' as never)
+  assert.equal(started, '2026-09-11')
+  assert.deepEqual((await doc.matters())[0]?.when, { start: '2026-09-11', every: null, after: null })
+  assert.match(await file(), /^start: 2026-09-11$/m)
+})
+
+test('and a matter with a run-up is dated FORWARD, so the run-up starts now', async t => {
+  // *Activate* does not mean *start date is today*; it means *the first step is
+  // due today*. Those are the same thing only when every step runs forward.
+  const { doc } = await docket(t)
+  const id = await doc.add('The ACM talk')
+  await doc.addStep(id, '2w', 'draft the slides')
+  await doc.addStep(id, '3d', 'print the handout')
+  const started = await doc.activate(id, '2026-09-11' as never)
+  assert.equal(started, '2026-09-25', 'a fortnight out, because the fortnight starts now')
+})
+
+test('and never backward, even when the earliest step is T+3d', async t => {
+  // The literal *make the earliest step due now* would put the critical date
+  // three days in the past, which is a strange thing to write into a file on
+  // the strength of one button. Forward-only.
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await doc.addStep(id, '+3d', 'the first bit')
+  assert.equal(await doc.activate(id, '2026-09-11' as never), '2026-09-11')
+})
+
+test('a matter with no steps activates to today, having nothing to lead', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  assert.equal(await doc.activate(id, '2026-09-11' as never), '2026-09-11')
+})
+
+test('ACTIVATING A PERIODIC MATTER sets its anchor, not a one-off date', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  await doc.addStep(id, 'right away', 'change the filters')
+  await doc.activate(id, '2026-09-11' as never)
+  assert.deepEqual((await doc.matters())[0]?.when,
+    { start: '2026-09-11', every: { n: 90, unit: 'd' }, after: null })
+  assert.match(await file(), /^start: 2026-09-11$/m)
+})
+
+test('SUSPEND clears the date and keeps what is already done', async t => {
+  const { doc, file } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  const shop = await doc.addStep(id, 'right away', 'find a suitable shop')
+  await doc.addStep(id, `after ${shop}`, 'have the car fixed')
+  await doc.activate(id, '2026-09-11' as never)
+  await doc.completeStep(id, shop, 1789148616)
+  await doc.suspend(id)
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.when, UNSCHEDULED, 'inactive again')
+  assert.equal(matter?.steps[0]?.done, 1789148616, 'and the finished step stayed finished')
+  assert.equal(matter?.steps.length, 2, 'and nothing was lost')
+  assert.match(await file(), /^start: —$/m)
+})
+
+test('and re-activating resumes rather than restarting', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  const shop = await doc.addStep(id, 'right away', 'find a suitable shop')
+  await doc.activate(id, '2026-09-11' as never)
+  await doc.completeStep(id, shop, 1789148616)
+  await doc.suspend(id)
+  await doc.activate(id, '2026-10-01' as never)
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.when, { start: '2026-10-01', every: null, after: null })
+  assert.equal(matter?.steps[0]?.done, 1789148616, 'still done: a pause is not a reset')
+})
+
+test('SUSPENDING A PERIODIC MATTER keeps the interval and loses the anchor', async t => {
+  // So restarting it later is one field again, which is the whole reason the
+  // anchor is optional in the notation.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Change the air filters',
+    { start: '2026-09-11' as never, every: { n: 90, unit: 'd' }, after: null })
+  await doc.suspend(id)
+  assert.deepEqual((await doc.matters())[0]?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
+  assert.match(await file(), /^every: 90d$/m)
+})
+
+test('THE STATE IS THE DATE: there is no suspended flag anywhere', async t => {
+  // D76: inactive means no start date, because `T±N` is not computable without
+  // one and so nothing can generate. A periodic matter with no anchor is the
+  // same state wearing a rule.
+  const { doc, file } = await docket(t)
+  const a = await doc.add('Backlogged')
+  const b = await doc.add('Periodic, unstarted', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  await doc.activate(a, '2026-09-11' as never)
+  await doc.suspend(a)
+  const text = await file()
+  assert.ok(!/suspend|inactive|active:/i.test(text), `no state field was written:\n${text}`)
+  assert.deepEqual((await doc.matters()).map(m => m.when.start), [null, null])
+  assert.deepEqual((await doc.matters()).map(m => m.when.every !== null), [false, true])
+  void b
+})
+
+test('A BLANK SCHEDULE MEANS T+0, rather than silently refusing', async t => {
+  // Reported from use: pressing Enter with the *when* field empty did nothing
+  // and said nothing, which reads as a broken key. Blank is the commonest step
+  // there is — *the first thing to do when work starts* — so it is the default.
+  const { doc } = await docket(t)
+  const id = await doc.add('The car needs fixing')
+  const step = await doc.addStep(id, '', 'find a suitable shop')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  assert.deepEqual(steps[0]?.when, { kind: 'at', offset: '+0d' })
+  assert.equal(steps[0]?.id, step)
+})
+
+test('and whitespace is blank, because that is what a person typed', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await doc.addStep(id, '   ', 'the first bit')
+  assert.deepEqual((await doc.matters())[0]?.steps[0]?.when, { kind: 'at', offset: '+0d' })
+})
+
+test('but a schedule it cannot READ is still refused, not defaulted', async t => {
+  // The distinction that matters: saying nothing is a choice, and saying
+  // something unreadable is a mistake worth hearing about.
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await assert.rejects(() => doc.addStep(id, 'soon', 'do it'), /not a schedule/)
+  await assert.rejects(() => doc.addStep(id, '2 fortnights', 'do it'), /not a schedule/)
+  assert.deepEqual((await doc.matters())[0]?.steps, [])
+})
+
+test('A TYPO IS FIXABLE, and fixing it keeps the id and the stamp', async t => {
+  // Reported from use the moment somebody made one. Dropping and retyping is
+  // not the same act: the id is what a dependent step points at, and the stamp
+  // is what that dependent reads, so a retype orphans one and forgets the other.
+  const { doc } = await docket(t)
+  const id = await doc.add('Fix the skylight')
+  const find = await doc.addStep(id, '', 'Find electrition')
+  await doc.addStep(id, `after ${find}`, 'Have them fix it')
+  await doc.completeStep(id, find, 1789148616)
+  await doc.editStep(id, find, 'Find an electrician')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  assert.equal(steps[0]?.text, 'Find an electrician')
+  assert.equal(steps[0]?.id, find, 'the same step, not a new one')
+  assert.equal(steps[0]?.done, 1789148616, 'and still done')
+  assert.deepEqual(steps[1]?.when, { kind: 'after', step: find }, 'and its dependent still points at it')
+})
+
+test('and a step can be rescheduled without losing either', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('The ACM talk')
+  const draft = await doc.addStep(id, '2w', 'draft the slides')
+  await doc.completeStep(id, draft, 1789148616)
+  await doc.setStepWhen(id, draft, '3 weeks')
+  const step = (await doc.matters())[0]?.steps[0]
+  assert.deepEqual(step?.when, { kind: 'at', offset: '-3w' })
+  assert.equal(step?.id, draft)
+  assert.equal(step?.done, 1789148616)
+})
+
+test('a step cannot be made to wait for itself', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  const one = await doc.addStep(id, '', 'the first bit')
+  await assert.rejects(() => doc.setStepWhen(id, one, `after ${one}`), /wait for itself/)
+})
+
+test('and an unreadable reschedule leaves the step exactly as it was', async t => {
+  // Which is what lets the surface keep the field open with the words still in
+  // it: the verb either works or changes nothing.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('A thing')
+  const one = await doc.addStep(id, '2w', 'the first bit')
+  const before = await file()
+  await assert.rejects(() => doc.setStepWhen(id, one, 'soon'), /not a schedule/)
+  assert.equal(await file(), before, 'not one byte')
+})
+
+test('and editing to blank is refused rather than emptying the step', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  const one = await doc.addStep(id, '2w', 'the first bit')
+  await assert.rejects(() => doc.editStep(id, one, '   '), /needs to say what happens/)
+  assert.equal((await doc.matters())[0]?.steps[0]?.text, 'the first bit')
+})
+
+// ── references: then, and indices (MH3a) ────────────────────
+
+test('THEN means after the one above it, and is stored as a real id', async t => {
+  // The word people use when typing a chain top to bottom. An id cannot be
+  // typed by hand — it is eight random characters — so *then* and an index are
+  // the only references a person can give, and both normalise on the way in.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Fix the skylight')
+  const find = await doc.addStep(id, '', 'find an electrician')
+  await doc.addStep(id, 'then', 'have them fix it')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  assert.deepEqual(steps[1]?.when, { kind: 'after', step: find })
+  assert.match(await file(), new RegExp(`^- after ${find} task: have them fix it`, 'm'))
+})
+
+test('and `then +3d` is a gap after it, forward by construction', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A trip')
+  const trip = await doc.addStep(id, '', 'the trip')
+  await doc.addStep(id, 'then 3d', 'file the expenses')
+  assert.deepEqual((await doc.matters())[0]?.steps[1]?.when,
+    { kind: 'after', step: trip, offset: '+3d' })
+})
+
+test('THEN WITH NOTHING ABOVE IT says so, rather than becoming T+0', async t => {
+  // *Then* is a claim about an order, and the first step of a list is not in
+  // one. Defaulting it would have been a guess about somebody's intent.
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await assert.rejects(() => doc.addStep(id, 'then', 'the first bit'),
+    /no step above this one/)
+  assert.deepEqual((await doc.matters())[0]?.steps, [])
+})
+
+test('AFTER 1 is the index the surface shows, resolved to the id it holds', async t => {
+  // It used to parse and store `1` — the id pattern matches a digit — so the
+  // step waiting on it pointed at nothing and would never have come due.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Fix the skylight')
+  const find = await doc.addStep(id, '', 'find an electrician')
+  await doc.addStep(id, 'after 1', 'have them fix it')
+  assert.deepEqual((await doc.matters())[0]?.steps[1]?.when, { kind: 'after', step: find })
+  assert.doesNotMatch(await file(), /after 1 /, 'the file holds an id, never an index')
+})
+
+test('and an index with no step there is refused, not stored', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await doc.addStep(id, '', 'the only step')
+  await assert.rejects(() => doc.addStep(id, 'after 7', 'the next bit'), /not a schedule/)
+  await assert.rejects(() => doc.addStep(id, 'after 0', 'the next bit'), /not a schedule/)
+  assert.equal((await doc.matters())[0]?.steps.length, 1)
+})
+
+test('and an id that is not on this matter is refused too', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await doc.addStep(id, '', 'the only step')
+  await assert.rejects(() => doc.addStep(id, 'after deadbeef', 'the next bit'),
+    /not a schedule/)
+})
+
+test('a step cannot be made to wait for itself, by index either', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  const one = await doc.addStep(id, '', 'the first bit')
+  await assert.rejects(() => doc.setStepWhen(id, one, 'after 1'), /wait for itself/)
+})
+
+test('and rescheduling to `then` follows the step ABOVE, not the last one', async t => {
+  // Which is the difference between adding and editing: a new step is going to
+  // the end, so *then* means the end; an existing one is already somewhere.
+  const { doc } = await docket(t)
+  const id = await doc.add('A trip')
+  const first = await doc.addStep(id, '-60d', 'book the flights')
+  const second = await doc.addStep(id, '-7d', 'pack')
+  const third = await doc.addStep(id, '-1d', 'check in')
+  await doc.setStepWhen(id, second, 'then')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  const packed = steps.find(one => one.id === second)
+  assert.deepEqual(packed?.when, { kind: 'after', step: first }, 'the one above it')
+  void third
+})
+
+test('ACCEPT FLEXIBLY, PRODUCE STRICTLY: four ways in, one way out', async t => {
+  // `step` and the `+` are optional noise on the way in; what comes back out of
+  // `spellStepWhen` always has the word and always has the sign.
+  const { doc } = await docket(t)
+  const id = await doc.add('A chain')
+  const first = await doc.addStep(id, '', 'the first bit')
+  for (const said of ['after step 1', 'after 1', `after ${first}`, `after step ${1}`]) {
+    const step = await doc.addStep(id, said, `via ${said}`)
+    const made = (await doc.matters())[0]?.steps.find(one => one.id === step)
+    assert.deepEqual(made?.when, { kind: 'after', step: first }, said)
+  }
+})
+
+test('THEN follows the LAST step, which is what makes it a chain', async t => {
+  // Kept out of the loop above for that reason: each iteration adds a step, so
+  // `then` would follow the previous iteration — correctly, and not step one.
+  const { doc } = await docket(t)
+  const id = await doc.add('A chain')
+  await doc.addStep(id, '', 'the first bit')
+  const second = await doc.addStep(id, 'then', 'the second bit')
+  const third = await doc.addStep(id, 'then', 'the third bit')
+  const steps = (await doc.matters())[0]?.steps ?? []
+  assert.deepEqual(steps.find(one => one.id === third)?.when,
+    { kind: 'after', step: second }, 'the one before it, not the first')
+})
+
+test('and the gap is accepted with or without its sign', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A chain')
+  const first = await doc.addStep(id, '', 'the first bit')
+  for (const said of ['after step 1 +3d', 'after step 1 3d', 'after 1 + 3 days']) {
+    const step = await doc.addStep(id, said, `via ${said}`)
+    const made = (await doc.matters())[0]?.steps.find(one => one.id === step)
+    assert.deepEqual(made?.when, { kind: 'after', step: first, offset: '+3d' }, said)
+  }
+})
+
+
+
+
+
+
+test('and every other kind still reads a bare interval as BEFORE', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('The ACM talk')
+  const draft = await doc.addStep(id, '2 weeks', 'draft the slides')
+  assert.deepEqual((await doc.matters())[0]?.steps.find(one => one.id === draft)?.when,
+    { kind: 'at', offset: '-2w' })
+})
+
+test('but a task with no words is still refused', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await assert.rejects(() => doc.addStep(id, '', '   '), /needs to say what happens/)
+})
+
+// ── recurrence is the matter's, not a step's (D76, amended) ─
+
+test('COMPLETION-DRIVEN RECURRENCE is two fields on the matter', async t => {
+  // It was a schedule, then a step somebody wrote, and is now `every` plus
+  // `after` — which is where it belonged: the reschedule is machinery, and the
+  // step list is a person's own words.
+  const { doc, file } = await docket(t)
+  const id = await doc.add('Change the air filters')
+  const change = await doc.addStep(id, '', 'change the filters')
+  await doc.setEvery(id, { n: 90, unit: 'd' })
+  await doc.setAfter(id, change)
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.when.every, { n: 90, unit: 'd' })
+  assert.equal(matter?.when.after, change)
+  assert.equal(matter?.steps.length, 1, 'and no machinery step among the real ones')
+  const text = await file()
+  assert.match(text, /^every: 90d$/m)
+  assert.match(text, new RegExp(`^after: ${change}$`, 'm'))
+})
+
+test('and a calendar-driven one simply has no `after`', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('My sister\'s birthday')
+  await doc.setStart(id, '2026-11-15' as never)
+  await doc.setEvery(id, { n: 1, unit: 'y' })
+  const matter = (await doc.matters())[0]
+  assert.equal(matter?.when.after, null, 'the calendar decides, not anybody doing anything')
+  assert.deepEqual(matter?.when.every, { n: 1, unit: 'y' })
+})
+
+test('THE MIGRATION: an old reschedule STEP folds into the matter on read', async t => {
+  // A reader that understands the old form costs less than a pass over
+  // everybody's files, and cannot half-finish.
+  const { doc, file } = await docket(t, [
+    '---', 'tephra: 1', 'kind: docket', '---', '',
+    '## Change the air filters',
+    'when: —',
+    'steps:',
+    '- +0d task: change the filters <!--tephra:step aaaa1111-->',
+    '- after aaaa1111 +90d reschedule: the next one <!--tephra:step bbbb2222-->',
+    '<!--tephra:matter cccc3333 1757462400 0-->',
+  ].join('\n'))
+  const matter = (await doc.matters())[0]
+  assert.deepEqual(matter?.when.every, { n: 90, unit: 'd' }, 'the offset became the interval')
+  assert.equal(matter?.when.after, 'aaaa1111', 'and what it waited on became the clock')
+  assert.deepEqual(matter?.steps.map(one => one.text), ['change the filters'],
+    'and the machinery is no longer among the words')
+  // And on the next write of that block, the file says so in the new form.
+  await doc.rename('cccc3333', 'Change the air filters')
+  const text = await file()
+  assert.match(text, /^every: 90d$/m)
+  assert.match(text, /^after: aaaa1111$/m)
+  assert.doesNotMatch(text, /reschedule/)
+})
+
+test('REMOVING THE CLOCK STEP IS REFUSED, not repaired afterwards', async t => {
+  // Taking it away would leave a matter that quietly stopped recurring, which
+  // is the shape of failure this project is named against. The alternative was
+  // editing a matter as a batch and validating on save — the first place in
+  // this app that would ask anybody to save.
+  const { doc } = await docket(t)
+  const id = await doc.add('Change the air filters')
+  const change = await doc.addStep(id, '', 'change the filters')
+  await doc.setEvery(id, { n: 90, unit: 'd' })
+  await doc.setAfter(id, change)
+  await assert.rejects(() => doc.removeStep(id, change), /what makes the matter recur/)
+  assert.equal((await doc.matters())[0]?.steps.length, 1)
+  // Pointing the clock elsewhere first is what makes it removable.
+  const other = await doc.addStep(id, 'then', 'and then this')
+  await doc.setAfter(id, other)
+  await doc.removeStep(id, change)
+  assert.equal((await doc.matters())[0]?.steps.length, 1)
+})
+
+test('and the clock can only point at a step that is there', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  await doc.setEvery(id, { n: 90, unit: 'd' })
+  await assert.rejects(() => doc.setAfter(id, 'deadbeef'), /not a step on this matter/)
+})
+
+test('and a matter with no interval has nothing to reschedule', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('A thing')
+  const one = await doc.addStep(id, '', 'the first bit')
+  await assert.rejects(() => doc.setAfter(id, one), /nothing to reschedule/)
+})
+
+test('LOSING THE INTERVAL loses what measured from it', async t => {
+  const { doc } = await docket(t)
+  const id = await doc.add('Change the air filters')
+  const change = await doc.addStep(id, '', 'change the filters')
+  await doc.setEvery(id, { n: 90, unit: 'd' })
+  await doc.setAfter(id, change)
+  await doc.setEvery(id, null)
+  assert.equal((await doc.matters())[0]?.when.after, null, 'a pointer that would mean nothing')
+})
+
+test('THE CHOICE HAS TO BE OFFERED BEFORE IT IS MADE', async t => {
+  // Reported from use: setting an interval showed *on the calendar* as the only
+  // option, because the per-step radios were gated on a step having already
+  // been chosen. So the two recurring shapes were one click apart in one
+  // direction and unreachable in the other.
+  const { doc } = await docket(t)
+  const id = await doc.add('Clean air filters')
+  const step = await doc.addStep(id, '', 'replace filters')
+  await doc.setEvery(id, { n: 90, unit: 'd' })
+  assert.equal((await doc.matters())[0]?.when.after, null, 'the calendar, until told otherwise')
+  // And the step can be chosen, which is what turns it into the fourth shape.
+  await doc.setAfter(id, step)
+  assert.equal((await doc.matters())[0]?.when.after, step)
+  // And back again, which is the other direction.
+  await doc.setAfter(id, null)
+  assert.equal((await doc.matters())[0]?.when.after, null)
 })
