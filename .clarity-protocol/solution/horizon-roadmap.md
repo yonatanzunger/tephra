@@ -4,7 +4,7 @@
 D68–D76.** Feature-level; the architectural design happens per phase, at the
 keyboard.
 
-**Build order: MH1 ✓ → MH3a → MH3b → MH2 → MH4 → MH5 → MH6.** The numbers are
+**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 → MH4 → MH5 → MH6.** The numbers are
 **identities, not sequence** — they are cited across the decisions and the notes,
 and renumbering to restore the coincidence would break every reference to buy a
 tidiness that would last until the next reorder. It was the numbers doubling as
@@ -98,7 +98,7 @@ docket for reading and carry the only arranging this kind has.
 > carries an **anchor**. Guessing it later from the matter's arrival date is
 > wrong twice, because `adopt` re-stamps that date.
 
-## MH3a — A docket that produces work
+## MH3a — A docket that produces work ✓
 
 **End condition:** you press **activate** on a repair and *"find a suitable
 shop"* is on today's list; you finish that and *"have the car fixed"* appears.
@@ -136,7 +136,7 @@ pause resumes rather than restarts. It is also why **step completion is stamped
 on the step** rather than read off the generated item: the item can be edited
 away, and suspend withdraws the items by definition.
 
-## MH3b — A docket that keeps its own time
+## MH3b — A docket that keeps its own time ✓
 
 **End condition:** the air filters change themselves. **Directly useful for
 household management**, which was the old MH3's promise.
@@ -166,6 +166,21 @@ leap-day birthday returns to the 29th in leap years. The alternative computes
 each occurrence from the previous one and **drifts permanently** after one short
 month, which loses the intent. Days and weeks are unaffected; completion-driven
 recurrence is unaffected, being one addition rather than a sequence.
+
+**Settled as built (2026-09-12).** Anchor-and-clamp was taken, and `every: 1m on
+31` is how the intended day travels with the interval. Two things the plan above
+had differently:
+
+- **Reschedule steps did not survive** — D76 replaced them with the matter's own
+  `start` / `every` / `after`, so *recur from completion* and *from which step's*
+  are two fields rather than an authored construct.
+- **The whole pass became a reconciliation** rather than recurrence firing —
+  D77. The plan's framing, *what happens when an instance completes*, is
+  event-shaped, and the paragraph above explaining that completion-driven
+  recurrence "cannot accumulate" is exactly the reasoning that hides the
+  opposite failure: it goes quiet instead. Asking *what should be true?* answers
+  both halves with one rule, and it took two live bugs out with it (see MH3b in
+  `milestones.md`).
 
 ## MH2 — The horizon
 

@@ -1091,3 +1091,41 @@ place whose predecessor survived further down the file and won on source order �
 also invisible, also about a stylesheet edit that looked complete because the
 part being *looked at* was correct. A stylesheet has no compiler; the only thing
 that fails loudly is a rule that changes something you happen to be watching.
+
+## 51. Idempotence has to hold *concurrently*, not just repeatedly
+
+MH3a's generation pass was idempotent in the sense everybody means by it: run it
+again and it makes nothing. MH3b's tests ran it under a frozen clock, and it
+generated every task twice.
+
+**The day-boundary pass was fired unawaited.** `void this.reconcile()` alongside
+the announcement, so the boundary would not be taken down by a background
+failure — reasonable, and it meant that crossing a day started a pass that then
+overlapped whatever the test (or a person) triggered next. Both passes read *this
+step has made nothing* before either one wrote, and both acted on it.
+
+**The word had been doing less work than it looked like it was doing.** Provenance
+on the step makes the operation idempotent *in sequence*: the second run sees what
+the first recorded. It says nothing about two runs in flight at once, because the
+read and the write are not one act. Every reconciler is a read-modify-write, and
+a read-modify-write is only atomic if something makes it so.
+
+**Which is not a niche condition.** Reconcilers get called from everywhere on
+purpose — that is their appeal, since a caller does not need to know what derives
+from what. So being called from two places at once is the *expected* case, not the
+exotic one, and the property has to be stated as *running it more cannot do more*
+rather than *running it twice makes nothing*.
+
+Queueing the passes fixed it in three lines. Finding it took a frozen clock: at
+wall-clock speed the boundary pass and the explicit one do not overlap often
+enough to notice, which is the other half of the lesson — the bug was always
+there, and the test that moved the clock is what made a rare interleaving into
+every run.
+
+**The same run turned up its sibling.** Completion stamps came from
+`nowSeconds()` while the day came from the service's clock (D62) — invisible in
+production except in the minutes either side of midnight, and immediately fatal
+under a clock the test had frozen. Both bugs were *one clock too many*, and both
+were found by the same act: making time a thing the test controls rather than a
+thing it waits for.
+

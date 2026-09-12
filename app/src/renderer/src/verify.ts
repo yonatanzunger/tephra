@@ -3261,7 +3261,7 @@ export async function runVerify(request: string): Promise<void> {
         })
       }
 
-      // ── generation: the docket puts work on the list (MH3a) ──
+      // ── the docket puts work on the list, and keeps it in step (MH3a/b) ──
       {
         const docketId = (await window.tephra.docket.list())[0]?.id
         const mower = docketId === undefined
@@ -3272,12 +3272,26 @@ export async function runVerify(request: string): Promise<void> {
           await window.tephra.docket.activate(docketId, mower.id)
         }
         const made = await window.tephra.docket.generate()
-        say('generated', made.length)
+        say('generated', made.made.length)
         const list = await window.tephra.todo.which()
         const items = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
         say('onTheList', items.map(one => one.text).filter(t => t.includes('mower')))
         // **Twice makes nothing**, which is the rule the whole pass rests on.
-        say('generatedAgain', (await window.tephra.docket.generate()).length)
+        const again = await window.tephra.docket.generate()
+        say('generatedAgain', again.made.length)
+        say('withdrewNothing', again.withdrawn.length)
+
+        // **And it withdraws**, which is the half that makes it a reconciler
+        // rather than a sweep: clearing the start date is the only act, and the
+        // next pass is what notices the task is no longer wanted.
+        if (docketId !== undefined && mower?.id != null) {
+          await window.tephra.docket.suspend(docketId, mower.id)
+          const left = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
+          say('afterSuspend', left.map(one => one.text).filter(t => t.includes('mower')))
+          await window.tephra.docket.activate(docketId, mower.id)
+          const back = await window.tephra.docket.generate()
+          say('generatedAfresh', back.made.length)
+        }
       }
 
       await window.tephra.doc.flush()

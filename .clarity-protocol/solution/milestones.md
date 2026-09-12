@@ -771,7 +771,7 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
-## MH — the horizon and dockets *(MH1 and MH3a built; MH3b next)*
+## MH — the horizon and dockets *(MH1, MH3a and MH3b built; MH2 next)*
 
 **Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
 Requirements: `goal/horizon.md`. Decisions: D68–D76.**
@@ -806,7 +806,7 @@ the horizon, the old MH3 **splits in two** (producing work, then keeping its own
 time) because after D76 its halves fail in opposite directions, and MH5 shrinks
 to mostly migration plus the review flow. The roadmap carries the reasoning.
 
-### MH3a — a docket that produces work *(in progress)*
+### MH3a, the authoring half — steps replace triggers ✓ *(built 2026-09-11)*
 
 **The authoring half is built** (2026-09-11). **Steps** replaced triggers: three
 kinds — a task to complete, a status to be aware of, the next instance of this
@@ -850,7 +850,7 @@ occurrence. **Nothing was migrated**: the old `when:` line and an old
 `reschedule` step are both read and folded in, converting on the next write of
 the block they sit in.
 
-### MH3a — a docket that produces work ✓ *(built 2026-09-12)*
+### MH3a, the generating half — a docket puts work on the list ✓ *(built 2026-09-12)*
 
 **End condition, met:** press **activate** on a repair and *find a suitable
 shop* is on today's list; tick that task and *have the car fixed* appears. The
@@ -885,10 +885,54 @@ does. `documentsChanged` names what changed and the surface asks whether it is
 its own. The task list needed nothing: it holds a window, and a window already
 hears (D45).
 
-**What remains in MH3b:** recurrence firing — advancing a matter to its next
-instance, the clamp rule for months and years, and outstanding-instance
-handling. The two halves fail in opposite directions and want separate tests: a
-calendar-driven matter accumulates, a completion-driven one goes quiet.
+### MH3b — a docket that keeps its own time ✓ *(built 2026-09-12)*
+
+**Recurrence fires, and the pass that fires it stopped being a pass.** MH3a's
+generation became one clause of `DocumentService.reconcile()`, which asks *what
+should be true?* rather than *what just happened* — D77. Advancing instances,
+generating what is due and withdrawing what is not all happen in the one
+operation, and nothing records when it last ran.
+
+**Which collapsed work rather than adding it.** `suspend` had a bespoke
+withdrawal loop; suspending is now *clear the start date* and nothing more,
+because what follows from that is something the pass already works out. One rule
+about what should be true, instead of an undo beside every verb that can make it
+false.
+
+**Two bugs the reconciler's own tests found, both of which were live:**
+
+- **Two overlapping passes each generated the same task.** The day-boundary pass
+  was fired unawaited and raced whatever a person had triggered; both read *this
+  step has made nothing* before either wrote. Idempotence across sequential runs
+  is not enough — read-then-write is only atomic if the passes are queued, so
+  they are, and the boundary now awaits its own.
+- **Completion stamps came from the wall clock**, while the day came from the
+  service (D62). Two sources of truth about one instant, disagreeing exactly in
+  the minutes either side of midnight that D62 exists to keep coherent.
+
+**The two repeating modes count from different days**, which is the same question
+asked twice and was nearly answered once. An event counts from the instance that
+has passed — also the only way the anchored day survives a clamp, so `1m on 31`
+gives Jan 31 · Feb 28 · **Mar 31** · Apr 30. A task counts from the day it was
+*done*: an air filter changed six years late is next due in six months.
+
+**An outstanding instance is overdue, not reissued** (H7a), where *owed* means
+*this instance put something on the list and it is not done* — a step that never
+came due was never asked for. The task list already carries an undone item
+forward, so *shown as overdue* needed no code; the rule is only about not putting
+a second one beside it.
+
+**Both long absences are tested, because they fail in opposite directions.**
+Calendar-driven state **accumulates** — a year away would have yielded thirty
+birthdays, delivered the morning somebody got back. Completion-driven state
+**goes quiet** — no calendar to fall behind, so a trigger on *behind* would have
+found nothing to do and said nothing. Neither reports itself.
+
+**And the name is deliberately broader than the job.** `reconcile()` is where the
+next derived thing — MH2's horizon, an index, anything cached from a file
+somebody can edit behind our back — adds a clause rather than a private sweep.
+`#advanceDocket` and `#setStepMade` are named the other way round to match: the
+pass is generic, its clauses are not.
 
 ### MH1 — docket files *(built 2026-09-10)*
 

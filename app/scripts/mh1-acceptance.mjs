@@ -533,8 +533,8 @@ check(
   JSON.stringify(r.rowAsks),
 )
 
-// ── 7. generation (MH3a) ────────────────────────────────────────────────────
-console.log('\n— a docket that produces work —')
+// ── 7. reconciliation (MH3a, MH3b) ──────────────────────────────────────────
+console.log('\n— a docket that produces work, and keeps it in step —')
 check(
   'THE POINT OF THE PHASE: a started matter puts its step on the task list',
   r.generated >= 1 && Array.isArray(r.onTheList) && r.onTheList.length === 1,
@@ -544,6 +544,21 @@ check(
   'and running again makes nothing, which is what stops a month away from',
   'yielding thirty of them'.length > 0 && r.generatedAgain === 0,
   `second pass made ${r.generatedAgain}`,
+)
+check(
+  'and takes nothing away either, a settled notebook being a quiet one',
+  r.withdrewNothing === 0,
+  `second pass withdrew ${r.withdrewNothing}`,
+)
+check(
+  'IT WITHDRAWS: suspending clears the date, and the pass takes the task back',
+  Array.isArray(r.afterSuspend) && r.afterSuspend.length === 0,
+  `left on the list: ${JSON.stringify(r.afterSuspend)}`,
+)
+check(
+  'and starting it again produces one afresh — not none, and not two',
+  r.generatedAfresh === 1,
+  `made ${r.generatedAfresh}`,
 )
 
 // ── 8. legibility ───────────────────────────────────────────────────────────

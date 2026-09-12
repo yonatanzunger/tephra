@@ -490,11 +490,19 @@ export class DocketDocument extends SegmentedDocument {
    * ever. So the roll is computed from the day the person meant, which the
    * interval carries whenever a clamp has hidden it.
    */
-  async advanceInstance(id: string): Promise<DateKey | null> {
+  async advanceInstance(id: string, from?: DateKey): Promise<DateKey | null> {
     const found = await this.#find(id)
     const { start, every } = found.matter.when
     if (start === null || every === null) return null
-    const next = addInterval(start, every)
+    // **`from` is what *every three months* is three months from**, and the two
+    // repeating shapes answer that differently. A recurring EVENT is on the
+    // calendar, so it counts from the instance that has just passed — which is
+    // also the only way the anchor survives, since the intended day is what the
+    // stored date carries. A recurring TASK counts from the day it was *done*:
+    // an air filter sharpened six years late is next due six months from today,
+    // not six months from a date in 2020 that would have it overdue again the
+    // moment it was finished.
+    const next = addInterval(from ?? start, every)
     await this.#write(id, was => ({
       ...was,
       when: { ...was.when, start: next.date, every: next.every },

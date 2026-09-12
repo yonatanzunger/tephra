@@ -3570,3 +3570,72 @@ consequence is accepted and handled in the surface rather than in the model:
 **the date column always shows the next critical date**, which is computable
 whatever the step list looks like, and shows a periodicity *only* when one can be
 read off unambiguously. Nothing has to say *see the step list*.
+
+---
+
+## D77: Derived state is reconciled, not notified
+
+**Date:** 2026-09-12
+**Status:** decided
+**Amends:** MH3a's generation pass, which becomes one clause of this.
+**Answers:** H7a's *outstanding rather than reissued*. **Source:** built as MH3b.
+
+**A single idempotent pass brings everything derived back into agreement with
+what it derives from, and is the only mechanism by which it happens.**
+`DocumentService.reconcile()` asks *what should be true?* and makes it so. It is
+not told what changed and keeps no record of when it last ran.
+
+**The alternative was event-shaped, and the failure modes are all the same
+shape.** A notification that fires when the source changes has to fire at the
+right moment and exactly once; what breaks it is not exotic. A machine asleep at
+midnight. A crash between two writes. A laptop shut for a fortnight. Two passes
+overlapping — which happened, and both generated the same task, because each read
+*this step has made nothing* before either wrote. In every case the derived state
+ends up wrong and **nothing afterwards notices**, because the thing that would
+have noticed was the event.
+
+**Named for the whole job, not for the dockets**, which are only its first
+clause. The horizon MH2 derives, indices, anything cached from a file somebody
+can edit behind our back — same failure mode, same answer. A new derived thing
+adds a clause, not a private sweep, and everything that already calls the pass
+keeps it current without knowing it exists. `#advanceDocket` and `#setStepMade`
+are named the other way round on purpose: the pass is generic, each clause is
+not, and the names say which is which.
+
+**Both directions, or it is an event handler wearing a hat.** A step that should
+have an item gets one; a step that should not has its item withdrawn. This paid
+for itself immediately: `suspend` had a bespoke withdrawal loop, and now
+suspending is *clear the start date* and nothing more, because what follows from
+that is something the pass already works out.
+
+**Idempotence has to hold concurrently, not just repeatedly.** Read-then-write is
+only atomic if the passes are queued, so they are.
+
+**An instance with something still owed does not move on** (H7a). *Owed* means
+*this instance put something on the list and it is not done* — not merely that a
+step is undone, since a step that never came due was never asked for. This one
+rule is what makes a long absence converge: a year away yields one birthday
+rather than thirty.
+
+**And the two repeating modes count from different days**, which is the same
+question asked twice and was nearly answered once. A recurring **event** counts
+from the instance that has passed, which is also the only way the anchored day
+survives a clamp. A recurring **task** counts from the day it was *done*: an
+air filter changed six years late is next due in six months, not six months from
+a date in 2020, which would have it overdue again the moment it was finished.
+
+**Completion stamps come from the service's clock**, not the wall. A stamp taken
+from one clock while the day comes from another is two sources of truth about one
+instant, and they disagree exactly when it matters — the thirty seconds either
+side of midnight that D62 exists to keep coherent.
+
+> **The two long absences fail in opposite directions**, which is why both are
+> tested rather than one. Calendar-driven state **accumulates**: a pass that
+> generated for each instance it stepped over would produce thirty tasks, and
+> would do it the morning somebody got back from a sabbatical. Completion-driven
+> state **goes quiet**: it has no calendar to fall behind, so a pass that treated
+> *behind* as its trigger would find nothing to do and say nothing about it.
+> Neither reports itself, and a path that fires once a quarter is broken when it
+> fires — so the tests move the clock rather than waiting for a holiday to
+> produce one.
+

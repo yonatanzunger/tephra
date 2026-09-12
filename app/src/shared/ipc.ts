@@ -602,7 +602,7 @@ export type DocketCommand =
   /** Move a recurring matter on to its next instance. */
   | { readonly kind: 'advance'; readonly docket: DocumentId; readonly matter: string }
   /**
-   * Put on the task list whatever the dockets say is due.
+   * Reconcile what the dockets produced with what they say.
    *
    * **Reachable from the renderer only so that it can be TESTED in a window.**
    * It runs unattended — at startup and at the day boundary — and nothing in

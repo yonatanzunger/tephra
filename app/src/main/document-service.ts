@@ -46,7 +46,7 @@ import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/ki
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
-import { addDays, asDateKey, compareDateKeys, dateKeyAt, nowSeconds } from '../shared/dates.ts'
+import { addDays, asDateKey, compareDateKeys, dateKeyAt } from '../shared/dates.ts'
 import { StreamDocument } from './x/documents/kinds/stream.ts'
 import { CorpusIndex } from './x/documents/corpus-index.ts'
 import { Scanner } from './x/documents/search.ts'
@@ -573,6 +573,19 @@ export class DocumentService {
   }
 
   /**
+   * The moment to stamp a completion with.
+   *
+   * **The same clock that answers `today`**, which is the point: a stamp taken
+   * from the wall while the day came from the service is two sources of truth
+   * about the same instant, and they disagree exactly when it matters — under a
+   * frozen clock in a test, and for the thirty seconds either side of midnight
+   * that D62 exists to keep coherent.
+   */
+  get #moment(): number {
+    return Math.floor(this.#now().getTime() / 1000)
+  }
+
+  /**
    * What the calendar says, as against what the notebook is writing into (D62).
    *
    * The interface counts from this — a due date's *in three days*, the
@@ -740,12 +753,15 @@ export class DocumentService {
     if (writing !== this.#announced) {
       this.#announced = writing
       for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
-      // **Unattended, at the boundary** (H5): generation is not contingent on
+      // **Unattended, at the boundary** (H5): reconciliation is not contingent on
       // anybody doing a thing, because the whole point is that it happens while
       // nobody is looking. Failures are swallowed here on purpose — a
       // background pass that throws must not take the day roll with it, and the
       // next pass will try again, since nothing depends on this one having run.
-      void this.generate().catch(() => undefined)
+      // **Awaited, though**: the boundary is not crossed until the state that
+      // derives from the new day agrees with it, which is the same
+      // no-half-crossed-boundary rule the rest of this method is built on.
+      await this.reconcile().catch(() => undefined)
     }
 
     // The same poll notices the machine moving. Changing the system zone is not
@@ -1359,7 +1375,7 @@ export class DocumentService {
         if (step?.id === undefined || step.id === null || matter.id === null) continue
         await this.#serial(async () =>
           this.#corpus.use(docket, doc =>
-            (doc as DocketDocument).completeStep(matter.id as string, step.id as string, nowSeconds())))
+            (doc as DocketDocument).completeStep(matter.id as string, step.id as string, this.#moment)))
         this.#wrote(docket)
         return
       }
@@ -1933,7 +1949,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc =>
-        (doc as DocketDocument).completeStep(matter, step, done ? nowSeconds() : null)))
+        (doc as DocketDocument).completeStep(matter, step, done ? this.#moment : null)))
     this.#wrote(id)
   }
 
@@ -1953,22 +1969,16 @@ export class DocumentService {
 
   /** Stop work on it, keeping what it has already done (D76). */
   async docketSuspend(id: DocumentId, matter: string): Promise<void> {
-    // **Withdraw what it put on the list, and only that.** Suspending means the
-    // work is not happening now, so a task generated for it has no business
-    // still sitting on today's list — and provenance is what makes *only that*
-    // possible: an item somebody typed themselves is untouched, and so is one
-    // that was already finished, because finishing it was true.
-    const found = (await this.docketMatters(id)).find(one => one.id === matter)
-    const list = await this.todoList()
-    for (const step of found?.steps ?? []) {
-      if (step.made === null || step.done !== null || step.id === null) continue
-      await this.todoRemove(list, step.made)
-      await this.#serial(async () =>
-        this.#corpus.use(id, doc => (doc as DocketDocument).setMade(matter, step.id as string, null)))
-    }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
     this.#wrote(id)
+    // **And then reconcile, rather than withdrawing by hand.** Suspending is
+    // only *clear the start date*; what follows from that — the task it put on
+    // the list no longer being wanted — is something the tick already knows how
+    // to work out. This is the reconciler paying for itself: one rule about
+    // what should be true, instead of a bespoke undo beside every verb that
+    // could make it false.
+    await this.reconcile()
   }
 
   async docketRemove(id: DocumentId, matter: string): Promise<void> {
@@ -2011,49 +2021,172 @@ export class DocumentService {
     return out
   }
 
-  // ── generation (MH3a, D76) ─────────────────────────────────
+  // ── reconciliation: the clock tick (MH3a, MH3b, D76) ───────
 
   /**
-   * Put on the task list whatever a docket says is due, and nothing twice.
+   * Bring everything derived back into agreement with what it derives from.
    *
-   * **This is the whole point of a docket** — until now one described work and
-   * produced none. A step comes due when its moment has arrived (`T±N` from the
-   * matter's start, or after the step it waits on was finished) and it has not
-   * already made something.
+   * **A reconciliation, not a sequence of events** — and that distinction is the
+   * whole design. An event-shaped pass has to fire at the right moment and
+   * exactly once: it asks *what just happened* and patches accordingly, so a
+   * missed midnight, a crash between two writes, a laptop shut for a fortnight
+   * or two ticks racing each other all leave the derived state wrong in a way
+   * nothing afterwards notices. This asks a different question — *what should be
+   * true?* — and makes it so.
    *
-   * **Idempotence is the load-bearing rule** (H5), and it is bought with
-   * provenance rather than with a diary of what ran: a step records the item it
-   * made, so running the pass twice, or ten times, or after a month away, makes
-   * one task and not thirty. Nothing consults a *last run* date, which is the
-   * thing that goes wrong when the app was not running at midnight.
+   * **Named for the whole job, not for the dockets**, which are only the first
+   * thing it has to do. Tephra keeps a widening collection of state that is a
+   * function of other state — tasks a docket implies, the horizon MH2 will
+   * derive from dates ahead, indices, anything cached from a file somebody can
+   * edit behind our back — and every one of them has the same failure mode and
+   * therefore wants the same answer: not a notification that fires when the
+   * source changes, but a pass that can be run at any time and leaves the
+   * derived side correct. So this is the place they go. A new derived thing adds
+   * a clause here rather than a private sweep of its own, and everything that
+   * already calls this — startup, the day boundary, a verb that invalidates
+   * something — keeps it up to date without knowing it exists.
    *
-   * **Status steps are authored and inert**, because the horizon does not exist
-   * yet (MH2). The same bargain MH1 made with triggers, which worked.
+   * **Which buys idempotence by construction rather than by bookkeeping.**
+   * Running it twice, or thirty times, or after a month away, converges on the
+   * same answer, so nothing needs a record of when it last ran — and *that* is
+   * the field whose absence made the old design safe against a machine that was
+   * asleep at midnight.
+   *
+   * Two things are reconciled so far, in this order because the first changes
+   * what the second should conclude:
+   *
+   * 1. **Instances.** A matter that recurs moves on when its instance is
+   *    settled — for a recurring task, when the step its clock reads is done;
+   *    for a recurring event, when its date has passed and nothing is left
+   *    owing. A matter with something still owed **does not move on** (H7a):
+   *    outstanding is shown as overdue, never quietly reissued.
+   * 2. **Items.** Every task step that is due and unfinished should have one on
+   *    the list; every step that is not should not. Both directions, because a
+   *    reconciler that only adds is an event handler wearing a hat.
+   *
+   * The return value names what actually changed, which is for logging and for
+   * tests; a caller that acts on it is treating this as an event again.
    */
-  async generate(): Promise<readonly string[]> {
+  async reconcile(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
+    // **One pass at a time, because idempotence across SEQUENTIAL runs is not
+    // enough.** Two overlapping passes both read *this step has made nothing*
+    // before either writes, so both generate — and the pass that does it is the
+    // unattended one at the day boundary, racing whichever one a person
+    // triggered. The reconciler's whole claim is that running it more cannot do
+    // more; that has to hold for *concurrently* as well as *again*, and
+    // read-then-write is only atomic if the passes are queued.
+    const mine = this.#reconciling.then(() => this.#reconcileOnce(),
+      () => this.#reconcileOnce())
+    this.#reconciling = mine.then(() => undefined, () => undefined)
+    return mine
+  }
+
+  #reconciling: Promise<void> = Promise.resolve()
+
+  async #reconcileOnce(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
+    // One clause per kind of derived state. Today there is one; the shape is
+    // here so the second is an added line rather than a second design.
+    return this.#reconcileDockets()
+  }
+
+  /** What the dockets imply, made true: instances advanced, items in step. */
+  async #reconcileDockets(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
     const today = this.today
     const list = await this.todoList()
     const made: string[] = []
+    const withdrawn: string[] = []
     for (const docket of await this.#corpus.list('docket')) {
-      const matters = await this.docketMatters(docket)
-      for (const matter of matters) {
-        if (matter.id === null) continue
+      let touched = false
+      // Re-read after each matter: advancing one rewrites the block, and what
+      // this loop holds would be the version from before that.
+      for (const id of (await this.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
+        if (await this.#advanceDocket(docket, id, today)) touched = true
+        const matter = (await this.docketMatters(docket)).find(one => one.id === id)
+        if (matter === undefined) continue
         for (const step of matter.steps) {
           if (step.id === null || step.kind !== 'task') continue
-          // **Already done, or already made something**: either way this step
-          // has had its turn in this instance of the matter.
-          if (step.done !== null || step.made !== null) continue
           const due = dueOn(step, matter, addDays)
-          if (due === null || compareDateKeys(due, today) > 0) continue
-          const item = await this.todoAdd(list, step.text)
-          await this.#serial(async () =>
-            this.#corpus.use(docket, doc => (doc as DocketDocument).setMade(matter.id as string, step.id as string, item)))
-          made.push(item)
+          const wanted = step.done === null && due !== null && compareDateKeys(due, today) <= 0
+          if (wanted && step.made === null) {
+            const item = await this.todoAdd(list, step.text)
+            await this.#setStepMade(docket, id, step.id, item)
+            made.push(item)
+            touched = true
+          } else if (!wanted && step.made !== null && step.done === null) {
+            // **Only what it made, and only while it is unfinished.** A task
+            // somebody typed is nobody else's business, and one already done is
+            // a true statement about the past.
+            await this.todoRemove(list, step.made)
+            await this.#setStepMade(docket, id, step.id, null)
+            withdrawn.push(step.made)
+            touched = true
+          }
         }
       }
-      if (made.length > 0) this.#wrote(docket)
+      if (touched) this.#wrote(docket)
     }
-    return made
+    return { made, withdrawn }
+  }
+
+  /**
+   * Move a matter on while its instance is settled and behind.
+   *
+   * **Named for the docket, unlike `reconcile`**, because this one genuinely is
+   * docket logic and nothing else will ever want it: what *settled* means, and
+   * what the next instance is counted from, are facts about the four modes of
+   * D76. The generic thing above is the pass; the specific thing is each clause
+   * in it, and the names should say which is which.
+   *
+   *
+   * **A loop, because a year away is a year of instances.** Each turn advances
+   * one and the next asks again, so coming back after a long absence converges
+   * on the current instance and generates that one — a month away yielding one
+   * air-filter task rather than thirty. Bounded, because an interval this
+   * cannot make progress on would otherwise spin.
+   */
+  async #advanceDocket(docket: DocumentId, id: string, today: DateKey): Promise<boolean> {
+    let moved = false
+    for (let guard = 0; guard < 500; guard += 1) {
+      const matter = (await this.docketMatters(docket)).find(one => one.id === id)
+      if (matter === undefined || matter.when.every === null || matter.when.start === null) break
+      // **Settled, and what the next one is measured from, are the same
+      // question asked of the two repeating shapes** — so they are answered
+      // together rather than in two places that could come to differ.
+      const clock = matter.steps.find(one => one.id === matter.when.after)
+      const [settled, from] = matter.when.after === null
+        // A recurring EVENT is on the calendar: it moves on once its date is
+        // behind us and nothing it asked for is still owed, counting from the
+        // instance that has just passed so the anchored day survives.
+        // Owed means *this instance put something on the list and it is still
+        // there* — not merely that a step is undone. A step that never came due
+        // (the app was shut for the whole of 2020) was never asked for, so it
+        // cannot be outstanding, and treating it as owed would wedge the matter
+        // on an instance nobody was ever told about.
+        ? [compareDateKeys(matter.when.start, today) < 0
+            && matter.steps.every(one => one.made === null || one.done !== null),
+          matter.when.start]
+        // A recurring TASK reads one step, and that step being done is the
+        // instance being over — whatever the calendar says. It counts from the
+        // day it was done, which for a matter years overdue is the difference
+        // between *next spring* and *overdue again immediately*.
+        : [clock?.done != null, clock?.done == null ? null : dateKeyAt(new Date(clock.done * 1000), this.zone)]
+      if (!settled || from === null) break
+      await this.#serial(async () =>
+        this.#corpus.use(docket, doc => (doc as DocketDocument).advanceInstance(id, from)))
+      moved = true
+    }
+    return moved
+  }
+
+  /** Same rule as `#advanceDocket`: *step* and *made* are the docket's words. */
+  async #setStepMade(
+    docket: DocumentId,
+    matter: string,
+    step: string,
+    item: string | null,
+  ): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(docket, doc => (doc as DocketDocument).setMade(matter, step, item)))
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
