@@ -133,6 +133,19 @@ const tephra = {
     /** Every document there is, with what it calls itself — the Open… list. */
     documents: (): Promise<readonly { id: DocumentId; title: string }[]> =>
       ipcRenderer.invoke(CHANNEL.navDocuments),
+    /**
+     * A document was written to, by anybody.
+     *
+     * **For surfaces that read through verbs**: a docket redraws from what the
+     * service tells it, so without this it sits stale while another window — or
+     * generation, in the background — writes to the same file.
+     */
+    onDocumentsChanged(handler: Handler<readonly DocumentId[]>): () => void {
+      const listener = (_e: unknown, m: { documents: readonly DocumentId[] }): void =>
+        handler(m.documents)
+      ipcRenderer.on(CHANNEL.documentsChanged, listener)
+      return () => ipcRenderer.removeListener(CHANNEL.documentsChanged, listener)
+    },
     /** Something changed on disk that no window is holding open (D53). */
     onCorpusChanged(handler: Handler<readonly string[]>): () => void {
       const listener = (_e: unknown, paths: readonly string[]): void => handler(paths)

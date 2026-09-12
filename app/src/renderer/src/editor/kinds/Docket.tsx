@@ -132,6 +132,23 @@ export function DocketSurface({
     void refresh().catch((err: Error) => onError?.(err))
   }, [refresh, onError])
 
+  /**
+   * And again whenever this document is written to by anybody else.
+   *
+   * **Without this a docket left open goes quietly stale.** It redraws from
+   * what the service tells it and only asked after its own verbs, so another
+   * window editing the same file — or, from MH3b, generation running in the
+   * background at midnight — would change it underneath and nothing would say
+   * so. The surface is a view of a document, so it has to hear when the
+   * document moves.
+   */
+  useEffect(() => {
+    return window.tephra.nav.onDocumentsChanged(written => {
+      if (!written.includes(id)) return
+      void refresh().catch((err: Error) => onError?.(err))
+    })
+  }, [id, refresh, onError])
+
   // **A docket has no editor handle**, the way the task list has none: there is
   // no caret in it and no selection, so a range command has nothing to act on.
   useEffect(() => {

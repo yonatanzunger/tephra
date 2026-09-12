@@ -121,6 +121,17 @@ export const CHANNEL = {
    */
   corpusChanged: 'tephra:doc:corpusChanged',
   /**
+   * A document was written to, naming which.
+   *
+   * **For surfaces that read through verbs rather than hold a window.** A docket
+   * or a task list asks the service what it contains and redraws from the
+   * answer, so nothing told it when another part of the app wrote to the same
+   * document — and a docket left open would sit there stale while generation
+   * changed it underneath (D76's known gap). `windowChanged` does not serve:
+   * it carries edits, spans and a placement, which are a text window's business.
+   */
+  documentsChanged: 'tephra:doc:documentsChanged',
+  /**
    * Midnight happened while the app was open.
    *
    * An app left running overnight decided which day it was filing into when its

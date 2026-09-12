@@ -3224,16 +3224,20 @@ export async function runVerify(request: string): Promise<void> {
           const shop = car?.steps.find(one => one.text === 'find a suitable shop')?.id
           if (docketId !== undefined && car?.id != null && shop != null) {
             await window.tephra.docket.completeStep(docketId, car.id, shop, true)
-            // **Read back from the API, not from the screen.** Nothing tells an
-            // open surface that another part of the app has written to its
-            // document — which is fine here and is MH3b's problem, since
-            // generation will do exactly that in the background.
             const after = (await window.tephra.docket.matters(docketId))
               .find(m => m.id === car.id)
             say('ticked', after?.steps.map(one => ({
               what: one.text,
               done: one.done !== null,
             })))
+            // **And the open surface knows without being touched**, which is
+            // the whole point: that write came from outside this view, the way
+            // generation will. Nothing was clicked between the verb and this.
+            await settle(600)
+            openUp('car')
+            await settle(200)
+            say('surfaceHeard', stepsOf('car').some(one =>
+              one.what === 'find a suitable shop' && one.done))
           }
           await settle(400)
         }

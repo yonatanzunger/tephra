@@ -1694,7 +1694,7 @@ export class DocumentService {
           this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(made, first)))
       }
     }
-    this.#touched()
+    this.#wrote(id)
     return made
   }
 
@@ -1705,7 +1705,7 @@ export class DocumentService {
     }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setMode(matter, mode)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** The date of the next instance, or none — which is the whole of *inactive*. */
@@ -1716,7 +1716,7 @@ export class DocumentService {
     }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setStart(matter, said)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** How often it comes round. `every` as typed: `90d`, `1m on 31`, or nothing. */
@@ -1727,14 +1727,14 @@ export class DocumentService {
     }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setEvery(matter, said)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Which step's completion starts the next instance, or none (D76, Qa). */
   async docketSetAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(matter, after)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Move a recurring matter on to its next instance. */
@@ -1747,38 +1747,38 @@ export class DocumentService {
 
   async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).rename(matter, name)))
-    this.#touched()
+    this.#wrote(id)
   }
 
 
 
   async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   async docketSetLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   async docketTag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).tagMatter(matter, subject)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   async docketUntag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** The prose under a matter. Nothing in it is parsed (D56's rule, carried). */
   async docketSetNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setNotes(matter, notes)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   // ── sections on a docket (MH1) ──────────────────────────────
@@ -1791,21 +1791,21 @@ export class DocumentService {
   async docketAddSection(id: DocumentId, name: string): Promise<string> {
     const made = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).addSection(name)))
-    this.#touched()
+    this.#wrote(id)
     return made
   }
 
   async docketRenameSection(id: DocumentId, name: string, to: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).renameSection(name, to)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Take the heading away and keep everything that was under it. */
   async docketRemoveSection(id: DocumentId, name: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).removeSection(name)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Into a section — `''` is the undivided run — optionally above one matter. */
@@ -1817,7 +1817,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).moveMatter(matter, section, before)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** One place up or down inside its own section. False at the ends. */
@@ -1845,7 +1845,7 @@ export class DocumentService {
   ): Promise<string> {
     const made = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).addStep(matter, when, text, kind)))
-    this.#touched()
+    this.#wrote(id)
     return made
   }
 
@@ -1858,7 +1858,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).editStep(matter, step, text)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Reschedule one step. `when` as typed, parsed here. */
@@ -1870,7 +1870,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setStepWhen(matter, step, when)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Change a step's kind — the only way to author a `reschedule` (D76). */
@@ -1882,13 +1882,13 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setStepKind(matter, step, kind)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   async docketRemoveStep(id: DocumentId, matter: string, step: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).removeStep(matter, step)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /** Stamp a step done, or undo that. What a dependency reads (D76). */
@@ -1901,7 +1901,7 @@ export class DocumentService {
     await this.#serial(async () =>
       this.#corpus.use(id, doc =>
         (doc as DocketDocument).completeStep(matter, step, done ? nowSeconds() : null)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /**
@@ -1914,7 +1914,7 @@ export class DocumentService {
   async docketActivate(id: DocumentId, matter: string): Promise<DateKey> {
     const when = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).activate(matter, this.today)))
-    this.#touched()
+    this.#wrote(id)
     return when
   }
 
@@ -1922,12 +1922,12 @@ export class DocumentService {
   async docketSuspend(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   async docketRemove(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
-    this.#touched()
+    this.#wrote(id)
   }
 
   /**
@@ -1943,7 +1943,7 @@ export class DocumentService {
       const taken = await this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter))
       await this.#corpus.use(to, doc => (doc as DocketDocument).adopt(taken))
     })
-    this.#touched()
+    this.#wrote(id)
   }
 
   /**
@@ -1991,6 +1991,30 @@ export class DocumentService {
 
   #broadcast(message: WindowChangedMessage): void {
     for (const sink of this.#sinks) sink.send(CHANNEL.windowChanged, message)
+  }
+
+  /**
+   * Written to: the notebook is dirty, and this document in particular changed.
+   *
+   * **One call, because forgetting the second half is silent.** A verb that
+   * marks the notebook dirty without naming what it wrote leaves any surface
+   * holding that document showing yesterday's answer, with nothing to say so.
+   */
+  #wrote(id: DocumentId): void {
+    this.#touched()
+    this.#changed(id)
+  }
+
+  /**
+   * Say that a document was written to, so surfaces holding it can re-read.
+   *
+   * **Named, not blanket.** A surface asks *is this mine?* and ignores the rest,
+   * which keeps a docket from redrawing every time anybody types in the stream.
+   */
+  #changed(id: DocumentId): void {
+    for (const sink of this.#sinks) {
+      sink.send(CHANNEL.documentsChanged, { documents: [id] })
+    }
   }
 
   #broadcastReset(id: WindowId): void {

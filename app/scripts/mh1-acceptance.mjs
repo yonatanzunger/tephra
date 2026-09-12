@@ -505,6 +505,15 @@ check(
   r.noTickOffered === true,
 )
 check(
+  'AN OPEN DOCKET HEARS a write it did not make',
+  // It redrew only after its own verbs, so another window — or generation at
+  // midnight — would change the file underneath and leave it showing
+  // yesterday's answer with nothing to say so. Recorded as a known gap in D76
+  // and fixed before generation, which is what would have hit it.
+  r.surfaceHeard === true,
+  String(r.surfaceHeard),
+)
+check(
   'ACTIVATING dates it so the EARLIEST step is due now, and offers the inverse',
   // This matter has a `-2w` step by now, so the honest answer is a fortnight
   // out: starting a fortnight's run-up today is what activating it means.
