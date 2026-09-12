@@ -166,6 +166,8 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.docketSetEvery(command.docket, command.matter, command.every)
       case 'after':
         return service.docketSetAfter(command.docket, command.matter, command.after)
+      case 'generate':
+        return service.generate()
       case 'advance':
         return service.docketAdvance(command.docket, command.matter)
       case 'owner':

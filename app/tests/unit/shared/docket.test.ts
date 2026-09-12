@@ -136,8 +136,8 @@ test('a block carries everything a matter is', () => {
   // migrating: no id, nothing done, and `note` reading as the `status` kind it
   // always meant.
   assert.deepEqual(matter.steps, [
-    { id: null, kind: 'task', when: { kind: 'at', offset: '-3d' }, text: 'Change the air filters #house', done: null },
-    { id: null, kind: 'status', when: { kind: 'at', offset: '-1d' }, text: 'order filters if none left', done: null },
+    { id: null, kind: 'task', when: { kind: 'at', offset: '-3d' }, text: 'Change the air filters #house', done: null, made: null },
+    { id: null, kind: 'status', when: { kind: 'at', offset: '-1d' }, text: 'order filters if none left', done: null, made: null },
   ])
 })
 
@@ -235,7 +235,7 @@ test('THE PROPERTY: a block round-trips through parse and back', () => {
     tags: ['speaking'],
     owner: 'me',
     link: '../notes/acm.md',
-    steps: [{ id: 'aa11', kind: 'task' as const, when: { kind: 'at' as const, offset: '-14d' }, text: 'draft the slides', done: null }],
+    steps: [{ id: 'aa11', kind: 'task' as const, when: { kind: 'at' as const, offset: '-14d' }, text: 'draft the slides', done: null, made: null }],
     occurrence: '2026-11-12' as DateKey,
     extra: ['venue: Portland'],
   })

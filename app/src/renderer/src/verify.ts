@@ -3261,6 +3261,25 @@ export async function runVerify(request: string): Promise<void> {
         })
       }
 
+      // ── generation: the docket puts work on the list (MH3a) ──
+      {
+        const docketId = (await window.tephra.docket.list())[0]?.id
+        const mower = docketId === undefined
+          ? undefined
+          : (await window.tephra.docket.matters(docketId)).find(m => m.name.includes('mower'))
+        // Started, so its first step is due today.
+        if (docketId !== undefined && mower?.id != null) {
+          await window.tephra.docket.activate(docketId, mower.id)
+        }
+        const made = await window.tephra.docket.generate()
+        say('generated', made.length)
+        const list = await window.tephra.todo.which()
+        const items = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
+        say('onTheList', items.map(one => one.text).filter(t => t.includes('mower')))
+        // **Twice makes nothing**, which is the rule the whole pass rests on.
+        say('generatedAgain', (await window.tephra.docket.generate()).length)
+      }
+
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(800)

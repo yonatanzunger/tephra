@@ -486,6 +486,19 @@ app.whenReady().then(async () => {
   const recovered = await service.recover()
   if (recovered > 0) console.log(`Tephra: recovered ${recovered} unsaved edit(s) from the log`)
 
+  // **And at startup, because the app is not running at midnight most nights**
+  // (H5). The day-boundary pass is the one that fires while somebody is at the
+  // desk; this is the one that catches up after a weekend, a holiday, or a
+  // laptop that was shut. Idempotence is what makes running both safe: a step
+  // that has made something does not make it again, so a month away yields one
+  // task and not thirty.
+  //
+  // **After recovery and before any window**, so that what a reader first sees
+  // is the notebook as it should be rather than as it was a week ago, changing
+  // under them a second later.
+  const generated = await service.generate().catch(() => [])
+  if (generated.length > 0) console.log(`Tephra: ${generated.length} task(s) from dockets`)
+
   // **The other half of taking over: being taken from.** Once another Tephra
   // has the notebook, this one must stop before it writes — so the tiers are
   // stopped first and the telling comes second. `Notebook.write` refuses on its

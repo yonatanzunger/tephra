@@ -75,10 +75,14 @@ export function parseStep(line: string): Step | null {
   let rest = line.trim()
   let id: string | null = null
   let done: number | null = null
+  let made: string | null = null
   const mark = STEP_MARK.exec(rest)
   if (mark !== null) {
     id = mark[1] as string
-    done = mark[2] === undefined ? null : Number(mark[2])
+    // `-` is *not done, but it made something* — the stamp has to hold a place
+    // so that what follows it is unambiguous.
+    done = mark[2] === undefined || mark[2] === '-' ? null : Number(mark[2])
+    made = mark[3] ?? null
     rest = rest.slice(0, mark.index)
   }
   const found = STEP.exec(rest)
@@ -89,7 +93,7 @@ export function parseStep(line: string): Step | null {
   if (text === '') return null
   const when = parseStepWhen(found[1] as string)
   if (when === null) return null
-  return { id, kind: kind as StepKind, when, text, done }
+  return { id, kind: kind as StepKind, when, text, done, made }
 }
 
 /** `-2w`, `2 weeks before`, `right away`, `then`, `then +3d`, `after 3f2a +90d`. */
@@ -165,7 +169,10 @@ export function stepLine(step: Step): string {
     : `after ${step.when.step}${step.when.offset === undefined ? '' : ` ${step.when.offset}`}`
   const head = `- ${when} ${step.kind}: ${step.text}`
   if (step.id === null) return head
-  return `${head} <!--tephra:step ${[step.id, ...(step.done === null ? [] : [String(step.done)])].join(' ')}-->`
+  const marks = [step.id]
+  if (step.done !== null || step.made !== null) marks.push(step.done === null ? '-' : String(step.done))
+  if (step.made !== null) marks.push(step.made)
+  return `${head} <!--tephra:step ${marks.join(' ')}-->`
 }
 
 /**
@@ -234,7 +241,7 @@ export function readStepWhen(step: StepWhen, indexOf?: (id: string) => number | 
 const STEP = /^-\s*(.+?)\s+([a-z]+)\s*:\s*(.*)$/
 
 /** `<!--tephra:step <id> [<done>]-->`, at the end of a step line (D56's rule). */
-const STEP_MARK = /\s*<!--tephra:step\s+([0-9a-z]+)(?:\s+(\d+))?\s*-->\s*$/
+const STEP_MARK = /\s*<!--tephra:step\s+([0-9a-z]+)(?:\s+(\d+|-))?(?:\s+([0-9a-z]+))?\s*-->\s*$/
 
 /**
  * `after #1`, `after 1`, `after step 1`, `after 3f2a`, any of them `+ 90d`.
@@ -559,6 +566,20 @@ export interface Step {
    * or the second filter change would be born already done.
    */
   readonly done: number | null
+  /**
+   * The task this step put on the list, for this instance of the matter.
+   *
+   * **Provenance lives here rather than in the generated item**, which keeps the
+   * task list's format — the oldest and most used in this app — untouched. It
+   * buys three things at once: **idempotence**, since a step that has made
+   * something does not make it again; **withdrawal**, since suspending has to
+   * find what it made; and **completion flowing back**, since finishing that
+   * item has to find the step it came from.
+   *
+   * **Cleared when a new instance starts**, with `done` — the next filter
+   * change is a fresh piece of work, not the last one again.
+   */
+  readonly made: string | null
 }
 
 export interface Matter {
@@ -1054,6 +1075,38 @@ export function outline(body: string): readonly Section[] {
     else (out[out.length - 1] as { matters: Matter[] }).matters.push(block.matter)
   }
   return out.filter((s, at) => at > 0 || s.matters.length > 0)
+}
+
+/**
+ * When a step comes due, or null if it cannot be said yet.
+ *
+ * **Three ways a step has no date**, and they are not the same thing: the matter
+ * has not been started, so `T±N` has nothing to measure from; the step waits on
+ * another that is not done, so its moment has not been earned; or it waits on a
+ * step that is not there, which is a dangling reference and never comes due at
+ * all. All three mean *not now*, and the difference matters to whoever is
+ * explaining why nothing happened.
+ */
+export function dueOn(step: Step, matter: Matter, add: (from: DateKey, days: number) => DateKey): DateKey | null {
+  const start = matter.when.start
+  if (start === null) return null
+  const when = step.when
+  if (when.kind === 'at') return add(start, offsetDays(when.offset))
+  const waits = matter.steps.find(one => one.id === when.step)
+  if (waits === undefined || waits.done === null) return null
+  // **Measured from the day it was finished**, not from the matter's date: that
+  // is the whole meaning of one step following another.
+  const was = new Date(waits.done * 1000).toISOString().slice(0, 10) as DateKey
+  return when.offset === undefined ? was : add(was, offsetDays(when.offset))
+}
+
+/** An offset in whole days. Months are thirty here; see `PER` in the document. */
+function offsetDays(offset: string): number {
+  const found = OFFSET.exec(offset)
+  if (found === null) return 0
+  const n = found[2] === undefined ? 1 : Number(found[2])
+  const per: Record<string, number> = { d: 1, w: 7, m: 30, y: 365 }
+  return n * (per[unitOf(found[3] as string)] ?? 1) * (found[1] === '+' ? 1 : -1)
 }
 
 /** A section's heading line. Always the top level, with matters below it. */

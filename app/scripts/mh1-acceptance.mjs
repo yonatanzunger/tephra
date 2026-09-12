@@ -533,7 +533,20 @@ check(
   JSON.stringify(r.rowAsks),
 )
 
-// ── 7. legibility ───────────────────────────────────────────────────────────
+// ── 7. generation (MH3a) ────────────────────────────────────────────────────
+console.log('\n— a docket that produces work —')
+check(
+  'THE POINT OF THE PHASE: a started matter puts its step on the task list',
+  r.generated >= 1 && Array.isArray(r.onTheList) && r.onTheList.length === 1,
+  `made ${r.generated}, on the list: ${JSON.stringify(r.onTheList)}`,
+)
+check(
+  'and running again makes nothing, which is what stops a month away from',
+  'yielding thirty of them'.length > 0 && r.generatedAgain === 0,
+  `second pass made ${r.generatedAgain}`,
+)
+
+// ── 8. legibility ───────────────────────────────────────────────────────────
 check(
   'EVERY CLASS THE SURFACE STYLES has a rule to style it',
   // A wholesale rewrite of one CSS region silently took four rules with it.

@@ -601,6 +601,15 @@ export type DocketCommand =
     }
   /** Move a recurring matter on to its next instance. */
   | { readonly kind: 'advance'; readonly docket: DocumentId; readonly matter: string }
+  /**
+   * Put on the task list whatever the dockets say is due.
+   *
+   * **Reachable from the renderer only so that it can be TESTED in a window.**
+   * It runs unattended — at startup and at the day boundary — and nothing in
+   * the UI offers it, because a button that says *do the thing that is supposed
+   * to happen by itself* is a confession.
+   */
+  | { readonly kind: 'generate' }
   | {
       readonly kind: 'owner'
       readonly docket: DocumentId

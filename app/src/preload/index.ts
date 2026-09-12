@@ -220,6 +220,9 @@ const tephra = {
     /** Which step's completion starts the next instance (Qa). */
     setAfter: (docket: DocumentId, matter: string, after: string | null): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'after', docket, matter, after }),
+    /** Put on the task list whatever is due. Unattended in life; here to test. */
+    generate: (): Promise<readonly string[]> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'generate' }),
     /** Move a recurring matter on to its next instance. */
     advance: (docket: DocumentId, matter: string): Promise<DateKey | null> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'advance', docket, matter }),

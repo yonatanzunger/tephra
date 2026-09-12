@@ -330,7 +330,10 @@ export class DocketDocument extends SegmentedDocument {
       // **A dependent step sorts after the one it waits on**, not by an offset
       // it does not have: its position is only knowable relative to its
       // antecedent, so it inherits that place and sits just behind it.
-      steps: order([...was.steps, { id: made, kind, when: schedule, text: said, done: null }]),
+      steps: order([
+        ...was.steps,
+        { id: made, kind, when: schedule, text: said, done: null, made: null },
+      ]),
     }))
     return made
   }
@@ -389,6 +392,14 @@ export class DocketDocument extends SegmentedDocument {
     await this.#write(id, was => ({
       ...was,
       steps: was.steps.map(one => (one.id === step ? { ...one, kind } : one)),
+    }))
+  }
+
+  /** Record what a step put on the list, or that it no longer has one. */
+  async setMade(id: string, step: string, made: string | null): Promise<void> {
+    await this.#write(id, was => ({
+      ...was,
+      steps: was.steps.map(one => (one.id === step ? { ...one, made } : one)),
     }))
   }
 
@@ -487,8 +498,9 @@ export class DocketDocument extends SegmentedDocument {
     await this.#write(id, was => ({
       ...was,
       when: { ...was.when, start: next.date, every: next.every },
-      // A new instance is a fresh one: what was done belonged to the last.
-      steps: was.steps.map(one => ({ ...one, done: null })),
+      // **A new instance is a fresh one**: what was done, and what it put on
+      // the list, both belonged to the last one.
+      steps: was.steps.map(one => ({ ...one, done: null, made: null })),
     }))
     return next.date
   }

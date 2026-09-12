@@ -32,7 +32,7 @@ import { attach } from './x/documents/attachments.ts'
 import { nameOf } from '../shared/slug.ts'
 import { DocketDocument } from './x/documents/kinds/docket.ts'
 import {
-  MODES, parseInterval, UNSCHEDULED,
+  dueOn, MODES, parseInterval, UNSCHEDULED,
   type Matter, type Mode, type NewMatter, type Schedule, type Section, type StepKind,
 } from '../shared/kinds/docket.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
@@ -46,7 +46,7 @@ import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/ki
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
-import { asDateKey, compareDateKeys, dateKeyAt, nowSeconds } from '../shared/dates.ts'
+import { addDays, asDateKey, compareDateKeys, dateKeyAt, nowSeconds } from '../shared/dates.ts'
 import { StreamDocument } from './x/documents/kinds/stream.ts'
 import { CorpusIndex } from './x/documents/corpus-index.ts'
 import { Scanner } from './x/documents/search.ts'
@@ -740,6 +740,12 @@ export class DocumentService {
     if (writing !== this.#announced) {
       this.#announced = writing
       for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
+      // **Unattended, at the boundary** (H5): generation is not contingent on
+      // anybody doing a thing, because the whole point is that it happens while
+      // nobody is looking. Failures are swallowed here on purpose — a
+      // background pass that throws must not take the day roll with it, and the
+      // next pass will try again, since nothing depends on this one having run.
+      void this.generate().catch(() => undefined)
     }
 
     // The same poll notices the machine moving. Changing the system zone is not
@@ -1331,6 +1337,33 @@ export class DocumentService {
       this.#corpus.use(id, doc => (doc as TodoDocument).setStatus(item, status, note)),
     )
     this.#touched()
+    // **Completion flows back to whatever asked for it** (H7a). Finishing the
+    // task is the act a person performs; the step it came from has to hear,
+    // because that is what unblocks the next one and what a recurrence measures
+    // from. Without this the chain only advances if somebody also went to the
+    // docket and said so, which is asking them to do it twice.
+    if (status === 'done') await this.#finished(item)
+  }
+
+  /**
+   * Tell the step that made this item that it is done.
+   *
+   * **Found by scanning, because a handful of dockets is a handful.** An index
+   * would be the right answer at a hundred and is a second thing to keep true
+   * at five; `CorpusIndex` is where it goes if that day comes.
+   */
+  async #finished(item: string): Promise<void> {
+    for (const docket of await this.#corpus.list('docket')) {
+      for (const matter of await this.docketMatters(docket)) {
+        const step = matter.steps.find(one => one.made === item)
+        if (step?.id === undefined || step.id === null || matter.id === null) continue
+        await this.#serial(async () =>
+          this.#corpus.use(docket, doc =>
+            (doc as DocketDocument).completeStep(matter.id as string, step.id as string, nowSeconds())))
+        this.#wrote(docket)
+        return
+      }
+    }
   }
 
   async todoRemove(id: DocumentId, item: string): Promise<void> {
@@ -1920,6 +1953,19 @@ export class DocumentService {
 
   /** Stop work on it, keeping what it has already done (D76). */
   async docketSuspend(id: DocumentId, matter: string): Promise<void> {
+    // **Withdraw what it put on the list, and only that.** Suspending means the
+    // work is not happening now, so a task generated for it has no business
+    // still sitting on today's list — and provenance is what makes *only that*
+    // possible: an item somebody typed themselves is untouched, and so is one
+    // that was already finished, because finishing it was true.
+    const found = (await this.docketMatters(id)).find(one => one.id === matter)
+    const list = await this.todoList()
+    for (const step of found?.steps ?? []) {
+      if (step.made === null || step.done !== null || step.id === null) continue
+      await this.todoRemove(list, step.made)
+      await this.#serial(async () =>
+        this.#corpus.use(id, doc => (doc as DocketDocument).setMade(matter, step.id as string, null)))
+    }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
     this.#wrote(id)
@@ -1963,6 +2009,51 @@ export class DocumentService {
       }
     }
     return out
+  }
+
+  // ── generation (MH3a, D76) ─────────────────────────────────
+
+  /**
+   * Put on the task list whatever a docket says is due, and nothing twice.
+   *
+   * **This is the whole point of a docket** — until now one described work and
+   * produced none. A step comes due when its moment has arrived (`T±N` from the
+   * matter's start, or after the step it waits on was finished) and it has not
+   * already made something.
+   *
+   * **Idempotence is the load-bearing rule** (H5), and it is bought with
+   * provenance rather than with a diary of what ran: a step records the item it
+   * made, so running the pass twice, or ten times, or after a month away, makes
+   * one task and not thirty. Nothing consults a *last run* date, which is the
+   * thing that goes wrong when the app was not running at midnight.
+   *
+   * **Status steps are authored and inert**, because the horizon does not exist
+   * yet (MH2). The same bargain MH1 made with triggers, which worked.
+   */
+  async generate(): Promise<readonly string[]> {
+    const today = this.today
+    const list = await this.todoList()
+    const made: string[] = []
+    for (const docket of await this.#corpus.list('docket')) {
+      const matters = await this.docketMatters(docket)
+      for (const matter of matters) {
+        if (matter.id === null) continue
+        for (const step of matter.steps) {
+          if (step.id === null || step.kind !== 'task') continue
+          // **Already done, or already made something**: either way this step
+          // has had its turn in this instance of the matter.
+          if (step.done !== null || step.made !== null) continue
+          const due = dueOn(step, matter, addDays)
+          if (due === null || compareDateKeys(due, today) > 0) continue
+          const item = await this.todoAdd(list, step.text)
+          await this.#serial(async () =>
+            this.#corpus.use(docket, doc => (doc as DocketDocument).setMade(matter.id as string, step.id as string, item)))
+          made.push(item)
+        }
+      }
+      if (made.length > 0) this.#wrote(docket)
+    }
+    return made
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {
