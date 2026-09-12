@@ -771,7 +771,7 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
-## MH — the horizon and dockets *(MH1 built; MH3a in progress)*
+## MH — the horizon and dockets *(MH1 and MH3a built; MH3b next)*
 
 **Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
 Requirements: `goal/horizon.md`. Decisions: D68–D76.**
@@ -850,9 +850,45 @@ occurrence. **Nothing was migrated**: the old `when:` line and an old
 `reschedule` step are both read and folded in, converting on the next write of
 the block they sit in.
 
-**What remains in MH3a: generation.** The pass that turns a due step into a TODO
-item, keyed to `clockDay`, idempotent, at midnight and at startup, with
-provenance so that suspend can withdraw what it made.
+### MH3a — a docket that produces work ✓ *(built 2026-09-12)*
+
+**End condition, met:** press **activate** on a repair and *find a suitable
+shop* is on today's list; tick that task and *have the car fixed* appears. The
+docket stopped being a filing cabinet.
+
+**Provenance lives on the step**, which is what buys everything else: a step
+records the item it made, so it does not make it again (**idempotence**),
+suspending can find and withdraw what it made (**withdrawal**), and finishing
+that item can find the step it came from (**completion flowing back**). The task
+list's own format — the oldest and most used in this app — is untouched.
+
+**Nothing consults a *last run* date**, which is the thing that goes wrong when
+the app was not running at midnight. The pass runs at the day boundary **and** at
+startup, and running it twice or thirty times makes one task. Tested by forcing a
+month's absence rather than waiting for a holiday to produce one.
+
+**Completion flows back from the TASK**, not from the docket. Ticking the task is
+the act a person performs; without the flow-back the chain would only advance if
+they also went to the docket and said so — asking them to do it twice, and the
+half they would forget is the invisible one.
+
+**Suspend withdraws what it made and only that**: a task somebody typed is
+untouched, and so is one already finished, because finishing it was true.
+
+**Reminders are authored and inert** until MH2 gives them somewhere to go — the
+same bargain MH1 made with triggers, which worked.
+
+**And a gap was closed first, in the right order.** Nothing told a surface that
+another part of the app had written to its document, so a docket left open would
+have gone stale the moment generation ran — which is exactly what generation
+does. `documentsChanged` names what changed and the surface asks whether it is
+its own. The task list needed nothing: it holds a window, and a window already
+hears (D45).
+
+**What remains in MH3b:** recurrence firing — advancing a matter to its next
+instance, the clamp rule for months and years, and outstanding-instance
+handling. The two halves fail in opposite directions and want separate tests: a
+calendar-driven matter accumulates, a completion-driven one goes quiet.
 
 ### MH1 — docket files *(built 2026-09-10)*
 
