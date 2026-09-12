@@ -25,7 +25,8 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  MATTER_LEVEL, matterBlock, outline, parseMatter, parseStepWhen, scanBlocks, scanMatters,
+  addInterval, MATTER_LEVEL, matterBlock, outline, parseMatter, parseStepWhen, scanBlocks,
+  scanMatters,
   sectionHeading, shapeOf, STEP_KINDS, UNSCHEDULED, unusedMatterId,
   type Matter, type ScannedBlock, type ScannedMatter, type Section, type Step,
   type Interval, type Mode, type Schedule, type StepKind, type StepWhen,
@@ -801,44 +802,6 @@ export { parseMatter }
  * nothing above it, since *the forms are these* would be a misleading answer to
  * a schedule that is right everywhere but here.
  */
-/**
- * One instance on to the next, keeping the day somebody meant.
- *
- * **Days and weeks are arithmetic; months and years are a calendar.** Adding a
- * month is not adding thirty days — it is the same day number in the next
- * month, and where that day does not exist it clamps to the month's end. The
- * clamp is what would otherwise lose the intent: the 31st becomes the 28th in
- * February, and a roll computed *from* that 28th gives the 28th of March and
- * every month after, permanently.
- *
- * So the roll is computed from the **intended** day, which the interval carries
- * whenever it differs from the stored date — and which is set here, the first
- * time a clamp hides it, rather than being asked for.
- */
-function addInterval(
-  start: DateKey,
-  every: Interval,
-): { date: DateKey; every: Interval } {
-  if (every.unit === 'd') return { date: addDays(start, every.n), every }
-  if (every.unit === 'w') return { date: addDays(start, every.n * 7), every }
-  const [y, m, d] = (start as string).split('-').map(Number) as [number, number, number]
-  // The day this is really anchored on: what was carried, or what is there now.
-  const meant = every.day ?? d
-  const months = every.unit === 'y' ? every.n * 12 : every.n
-  const at = (y * 12 + (m - 1)) + months
-  const year = Math.floor(at / 12)
-  const month = (at % 12) + 1
-  const room = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  const day = Math.min(meant, room)
-  const date = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` as DateKey
-  return {
-    date,
-    // Carried from the moment a clamp first hides it, and dropped again once
-    // the stored day says the same thing — a field that is only ever true.
-    every: day === meant ? { n: every.n, unit: every.unit } : { ...every, day: meant },
-  }
-}
-
 /**
  * An index or an id as typed, to a step's real id.
  *

@@ -13,14 +13,15 @@
     "install:app": "npm run package && node scripts/install-app.mjs",
     "typecheck": "tsc --build --force tsconfig.json",
     "test": "node --experimental-strip-types --test \"tests/**/*.test.ts\"",
-    "test:full": "npm run typecheck && npm test && npm run m0 && npm run m1 && npm run m2 && npm run m3 && npm run m4 && npm run mh1",
+    "test:full": "npm run typecheck && npm test && npm run m0 && npm run m1 && npm run m2 && npm run m3 && npm run m4 && npm run mh1 && npm run mh2",
     "m0": "npm run build && node scripts/m0-acceptance.mjs",
     "m1": "npm run build && node scripts/m1-acceptance.mjs",
     "m2": "npm run build && node scripts/m2-acceptance.mjs",
     "m3": "npm run build && node scripts/m3-acceptance.mjs",
     "icon": "node scripts/icon.mjs",
     "m4": "npm run build && node scripts/m4-acceptance.mjs",
-    "mh1": "npm run build && node scripts/mh1-acceptance.mjs"
+    "mh1": "npm run build && node scripts/mh1-acceptance.mjs",
+    "mh2": "npm run build && node scripts/mh2-acceptance.mjs"
   },
   "type": "module",
   "dependencies": {

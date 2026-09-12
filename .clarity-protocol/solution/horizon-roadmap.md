@@ -4,7 +4,7 @@
 D68–D76.** Feature-level; the architectural design happens per phase, at the
 keyboard.
 
-**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 → MH4 → MH5 → MH6.** The numbers are
+**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 ✓ → MH4 → MH5 → MH6.** The numbers are
 **identities, not sequence** — they are cited across the decisions and the notes,
 and renumbering to restore the coincidence would break every reference to buy a
 tidiness that would last until the next reorder. It was the numbers doubling as
@@ -182,7 +182,7 @@ had differently:
   both halves with one rule, and it took two live bugs out with it (see MH3b in
   `milestones.md`).
 
-## MH2 — The horizon
+## MH2 — The horizon ✓
 
 **End condition:** the horizon exists, drawing on **both** its sources — matters
 on dockets, and items coming due on the task list. Its **full view** is new,
@@ -235,6 +235,19 @@ view.
 
 **And this is where the spreadsheet is restored** — every major commitment across
 every docket in one date-ordered list, which a single docket's view cannot give.
+
+**Settled as built (2026-09-12).** The plan held, with one thing it did not
+anticipate and one it left open:
+
+- **The horizon is its own object** (D78). The plan describes it as *a query over
+  everything dated*, which is right and which the first cut still got wrong by
+  implementing it inside the docket module. Sources implement the horizon; the
+  horizon is not assembled out of them.
+- **How far ahead became a control**, which nothing above called for. The
+  argument is the one this section already makes about noise — it just turns out
+  that no single number serves both *the monthly bill is drowning everything* and
+  *the birthday starts three months out*, and the reader is the only one who
+  knows which is being asked.
 
 ## MH4 — Reorientation
 

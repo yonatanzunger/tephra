@@ -68,6 +68,7 @@ import type { Anomaly } from '../../shared/anomalies.ts'
 import { useFrameMetrics } from './frame/useFrame'
 import { ZoneBar } from './frame/ZoneBar'
 import { Links } from './frame/Links'
+import { Horizon } from './frame/Horizon'
 import type { ZoneNotice } from '../../shared/ipc.ts'
 import { useTheme, typographyOf } from './theme/useTheme'
 import { ThemePanel } from './theme/ThemePanel'
@@ -1163,6 +1164,8 @@ export function App(): React.JSX.Element {
     // named after and is called what it is.
     location?.kind === 'links'
       ? 'Links'
+      : location?.kind === 'horizon'
+      ? 'Horizon'
       : // **Asked of the DOCUMENT, not of how we arrived at it.** This tested
         // the location's kind, so a window reached by a span — which is how the
         // sidebar opens a note and how every link-directory row opens anything
@@ -1445,7 +1448,17 @@ export function App(): React.JSX.Element {
         )}
         {boundary?.earlier.kind === 'extending' && <div className="edge quiet">loading…</div>}
 
-        {location?.kind === 'links' ? (
+        {location?.kind === 'horizon' ? (
+          // **The second location that is not a document** (D74). The frame, the
+          // sidebar, the title bar and back/forward are untouched — which was the
+          // link directory's promise for whatever came next, and this is it.
+          <Horizon
+            typography={typography}
+            today={doc?.clockDay ?? null}
+            onError={setError}
+            onOpenDocument={id => void pane?.goTo({ kind: 'document', id }).catch(fail)}
+          />
+        ) : location?.kind === 'links' ? (
           // **A location that is not a document draws something that is not a
           // surface** (ML3). Everything around it — the frame, the sidebar, the
           // title bar, back and forward — is unchanged, which is the point:

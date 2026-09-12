@@ -24,6 +24,13 @@ const MARKERS = /<!--tephra:[^>]*-->/g
  * links draws them live, in the sentence, exactly where they were written. Only
  * a caller that cannot — a `<button>`'s label, a menu item — flattens as well,
  * with `flattenLinks`, and the two compose in that order.
+ *
+ * **And there is a third rung, which is not here**: a surface that has already
+ * put the date in its own column and has no room for a chip wants the tags and
+ * the due date off as well. That is `shortLine` in `kinds/todo.ts`, where the
+ * grammar it has to cut is defined — it works from the item's own spans rather
+ * than re-matching, which is why it cannot live in a module that only has a
+ * string.
  */
 export function plainLine(text: string): string {
   return text

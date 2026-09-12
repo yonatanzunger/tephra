@@ -20,6 +20,39 @@ export async function runVerify(request: string): Promise<void> {
   const settle = (ms = 200): Promise<void> => new Promise(r => setTimeout(r, ms))
 
   /**
+   * Which of these class names no stylesheet rule mentions.
+   *
+   * **Asked of the stylesheet, not of a computed value**, which is the lesson
+   * note 50 records: inferring *unstyled* from a 16px font is wrong twice over,
+   * since a matter's name legitimately IS 16px at the notebook's reading size,
+   * and an element drawn with a gradient has no meaningful font size at all.
+   * Whether a rule exists is the actual question, and it can be asked directly.
+   *
+   * **Extracted because this is the second surface to need it**, and the failure
+   * it catches has now happened three times — a rewritten CSS region dropping
+   * rules twice, and a stale duplicate winning on source order once. A
+   * stylesheet has no compiler, so the only rule that fails loudly is one that
+   * changes something somebody happens to be watching.
+   */
+  const unstyled = (pattern: RegExp, names: readonly string[]): readonly string[] => {
+    const written = new Set<string>()
+    for (const sheet of [...document.styleSheets]) {
+      let rules: CSSRuleList | null = null
+      try {
+        rules = sheet.cssRules
+      } catch {
+        continue // a sheet from elsewhere; not ours to read
+      }
+      for (const rule of [...(rules ?? [])]) {
+        const selector = (rule as CSSStyleRule).selectorText
+        if (typeof selector !== 'string') continue
+        for (const found of selector.matchAll(pattern)) written.add(found[1] as string)
+      }
+    }
+    return names.filter(one => !written.has(one))
+  }
+
+  /**
    * Wait for something to be true, rather than for long enough that it is.
    *
    * **A fixed wait is a guess about the slowest machine.** It costs that guess
@@ -1351,6 +1384,98 @@ export async function runVerify(request: string): Promise<void> {
       await pane.goTo({ kind: 'links' })
       await settle(900)
       say('linkSource', seen('.links-source'))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
+    if (scene === 'horizon') {
+      // The full horizon (MH2, H8, D74). **Both sources present from the
+      // start**, which is the thing `notes.md` records failing six times over —
+      // a view built against one source and fitted to the second afterwards.
+      const list = await window.tephra.todo.which()
+      // Dates relative to the APP'S today, never the harness's (m2's rule): the
+      // two differ either side of midnight, and this window is the authority.
+      const day = await window.tephra.todo.today(list)
+      const from = (days: number): string =>
+        new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+
+      await window.tephra.doc.newDocument('The house', undefined, 'docket')
+      await settle(1400)
+      const docket = (await window.tephra.docket.list())[0]?.id
+      if (docket !== undefined) {
+        // A dated event with a long run-up: the row that proves a status step
+        // finally has somewhere to go (H6), and that the instance is labelled.
+        const day = await window.tephra.docket.add(docket, 'Ada\u2019s birthday',
+          { mode: 'recurring-event', every: '1y', start: from(90) })
+        await window.tephra.docket.addStep(docket, day, '60d', 'work out what the plan is', 'status')
+        // A monthly one, so two instances of one recurrence land in the window.
+        await window.tephra.docket.add(docket, 'Pay the water bill',
+          { mode: 'recurring-event', every: '1m', start: from(10) })
+        // And a repair with steps, which contributes a task row.
+        const car = await window.tephra.docket.add(docket, 'The car needs fixing', { mode: 'task' })
+        await window.tephra.docket.addStep(docket, car, '+5d', 'have the car fixed')
+        // Started, so its steps have a date to be measured from — an inactive
+        // matter contributes nothing, which is a different claim, tested below.
+        await window.tephra.docket.activate(docket, car)
+      }
+      // The other source: a task with a due date of its own.
+      // **With a link and a tag**, because a raw URL sprawling across a strip
+      // is what use reported and what no assertion here was looking at.
+      await window.tephra.todo.add(list,
+        `Review Steve's [bio draft](https://docs.google.com/document/d/1t8me/edit) #career DUE ${from(3)}`)
+      await window.tephra.doc.flush()
+
+      await pane.goTo({ kind: 'horizon' })
+      await settle(1400)
+      say('title', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('surface', document.querySelector('.horizon') !== null)
+      say('days', [...document.querySelectorAll('.hz-date')].map(n => n.textContent ?? ''))
+      say('rows', [...document.querySelectorAll('.hz-row')].map(n => ({
+        what: (n.querySelector('.hz-what') as HTMLElement | null)?.textContent ?? '',
+        kind: (n.querySelector('.hz-kind') as HTMLElement | null)?.textContent ?? '',
+        matter: (n.querySelector('.hz-matter') as HTMLElement | null)?.textContent ?? null,
+        instance: (n.querySelector('.hz-instance') as HTMLElement | null)?.textContent ?? null,
+      })))
+      say('count', document.querySelector('.hz-count')?.textContent ?? '')
+      say('spans', [...document.querySelectorAll('.hz-spans option')].map(n => n.textContent ?? ''))
+      // **The span control does something**, which is the whole reason it is
+      // there: the named risk of this design is a horizon that fills up.
+      {
+        const pick = document.querySelector('.hz-spans') as HTMLSelectElement | null
+        const wide = document.querySelectorAll('.hz-row').length
+        if (pick !== null) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+          setter?.call(pick, '0')
+          pick.dispatchEvent(new Event('change', { bubbles: true }))
+          await settle(900)
+        }
+        say('narrowed', { wide, narrow: document.querySelectorAll('.hz-row').length })
+      }
+      // **Legibility, checked the way MH1 learned to check it** (notes 50): ask
+      // the stylesheet whether a rule exists, rather than guessing from a
+      // computed value that looks plausible at browser defaults.
+      say('styled', unstyled(/\.(hz-[a-z-]+|horizon)\b/g, [
+        'horizon', 'hz-head', 'hz-count', 'hz-span', 'hz-empty', 'hz-list', 'hz-day',
+        'hz-date', 'hz-row', 'hz-what', 'hz-about', 'hz-kind', 'hz-matter', 'hz-instance',
+        'hz-spans',
+      ]))
+      const what = document.querySelector('.hz-what') as HTMLElement | null
+      const face = what === null ? null : getComputedStyle(what)
+      say('reading', { size: face?.fontSize, family: face?.fontFamily?.slice(0, 24) })
+      // **And the compact half, which is the same content in the other place**
+      // (H8, D74). Narrowed to *present when you are in the task list* until MH4
+      // moves it — recorded in the roadmap so it is not mistaken for done.
+      await pane.goTo({ kind: 'document', id: list })
+      await settle(1600)
+      say('strip', [...document.querySelectorAll('.todo-soon-item')].map(n => ({
+        when: (n.querySelector('.todo-when') as HTMLElement | null)?.textContent ?? '',
+        what: (n.querySelector('.todo-soon-text') as HTMLElement | null)?.textContent ?? '',
+        docket: n.classList.contains('from-docket'),
+      })))
+      // One region, one meaning: sorted by date, not clustered by source.
+      say('stripOrder', [...document.querySelectorAll('.todo-soon-item .todo-when')]
+        .map(n => n.textContent ?? ''))
+
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
     }
@@ -4468,5 +4593,5 @@ interface PaneLike {
    *
    * A window's location is a document **or a query** (ML3), so this takes both.
    */
-  goTo(target: { kind: 'document'; id: unknown } | { kind: 'links' }): Promise<void>
+  goTo(target: { kind: 'document'; id: unknown } | { kind: 'links' } | { kind: 'horizon' }): Promise<void>
 }

@@ -13,6 +13,7 @@
 
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { LinkRow } from '../shared/nav-api.ts'
+import { inHorizon, orderHorizon, type HorizonRow, type HorizonWindow } from '../shared/horizon-api.ts'
 import { isOutside, isStream, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type Attached, type Base, type DayProse, type DocketRow, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
@@ -30,9 +31,11 @@ import {
 } from './w/layout.ts'
 import { attach } from './x/documents/attachments.ts'
 import { nameOf } from '../shared/slug.ts'
+import { flattenLinks } from '../shared/links.ts'
+import { plainLine } from '../shared/plain.ts'
 import { DocketDocument } from './x/documents/kinds/docket.ts'
 import {
-  dueOn, MODES, parseInterval, UNSCHEDULED,
+  dueOn, matterHorizon, MODES, parseInterval, UNSCHEDULED,
   type Matter, type Mode, type NewMatter, type Schedule, type Section, type StepKind,
 } from '../shared/kinds/docket.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
@@ -41,7 +44,7 @@ import { systemZone } from './system-zone.ts'
 import { isKnownZone } from '../shared/dates.ts'
 import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
-import { RESOLVED_DAYS } from '../shared/kinds/todo.ts'
+import { isLive, RESOLVED_DAYS, shortLine } from '../shared/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
@@ -2187,6 +2190,84 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(docket, doc => (doc as DocketDocument).setMade(matter, step, item)))
+  }
+
+  // ── the horizon (MH2, H8, D74) ─────────────────────────────
+
+  /**
+   * Everything bearing down between two days, in date order.
+   *
+   * **One computation, read by both surfaces.** The full view and the compact
+   * strip differ only in the window they ask for, and a second copy of *what
+   * counts as coming up* living in the renderer is the failure T16 is named
+   * against — the more so here, where the docket half needs `dueOn`, interval
+   * arithmetic and the anchor rule, none of which belong in a view.
+   *
+   * **Computed, never stored**, which is why it needs no clause in `reconcile`
+   * (D77): there is no derived copy to fall out of step. It is the one kind of
+   * derived state that shape does not apply to, and saying so is worth a line —
+   * the temptation with a reconciler in hand is to persist everything.
+   *
+   * **Both sources, from the start.** Six times over, `notes.md` records the
+   * failure of building a view against one source and fitting the second in
+   * afterwards; the horizon spans dockets and the task list, so it is built
+   * against both or it is built wrong.
+   */
+  async horizon(from: DateKey, to: DateKey): Promise<readonly HorizonRow[]> {
+    const window: HorizonWindow = { from, to }
+    const rows: HorizonRow[] = []
+
+    // **Dockets: what is coming.** A step already on the list is the other
+    // source's business, which `horizonOf` is what enforces.
+    for (const docket of await this.#corpus.list('docket')) {
+      for (const matter of await this.docketMatters(docket)) {
+        for (const step of matterHorizon(matter, window, addDays)) {
+          rows.push({
+            on: step.on,
+            // **The same treatment, by the rung that fits**: a step is free
+            // prose with no spans to consult, so it composes the two rungs
+            // `plain.ts` describes rather than using the item version.
+            text: flattenLinks(plainLine(step.text)),
+            doc: docket,
+            kind: step.kind,
+            // And the name gets it too, or a matter called after a link would
+            // be compared against a flattened row text and never match.
+            matter: flattenLinks(plainLine(matter.name)),
+            instance: step.instance,
+            item: null,
+            id: matter.id,
+          })
+        }
+      }
+    }
+
+    // **The task list: what is already here and dated.** Read from today's
+    // items, which is the live set — an undone item carries forward, so a
+    // deadline that has gone by is still in front of somebody, and that is
+    // precisely the row H8 asks the horizon to keep showing.
+    const list = await this.todoList()
+    for (const item of await this.todoItems(list, this.today)) {
+      if (item.due === null || !isLive(item.status)) continue
+      if (!inHorizon(item.due, window)) continue
+      rows.push({
+        on: item.due,
+        // **The short version** (`shortLine`): no tags, no due date, no link
+        // markup. The row has already put the date in its own column, so
+        // `DUE 2026-09-15` under a heading that says *15 Sep* is the same fact
+        // twice in two notations — and a raw markdown link is a URL sprawling
+        // across three lines of a strip that is supposed to be glanced at.
+        text: shortLine(item),
+        doc: list,
+        kind: 'due',
+        matter: null,
+        instance: null,
+        item: item.id,
+        id: null,
+      })
+    }
+
+    // The order is the horizon's own rule, not this method's (`horizon-api.ts`).
+    return orderHorizon(rows)
   }
 
   async resolveAnchor(name: string): Promise<DocumentPosition | null> {

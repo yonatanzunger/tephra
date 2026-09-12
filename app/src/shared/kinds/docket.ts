@@ -39,7 +39,8 @@
 // kept verbatim and written back untouched, in place. A block with no marker is
 // a matter somebody typed by hand, and gets an id the first time Tephra writes.
 
-import { asDateKey } from '../dates.ts'
+import { addDays, asDateKey } from '../dates.ts'
+import { inHorizon, type HorizonKind, type HorizonWindow } from '../horizon-api.ts'
 import { subjectKey, tagMark } from '../tags.ts'
 import type { DateKey } from '../document-api.ts'
 
@@ -1100,6 +1101,44 @@ export function dueOn(step: Step, matter: Matter, add: (from: DateKey, days: num
   return when.offset === undefined ? was : add(was, offsetDays(when.offset))
 }
 
+/**
+ * One instance on to the next, keeping the day somebody meant.
+ *
+ * **Days and weeks are arithmetic; months and years are a calendar.** Adding a
+ * month is not adding thirty days — it is the same day number in the next
+ * month, and where that day does not exist it clamps to the month's end. The
+ * clamp is what would otherwise lose the intent: the 31st becomes the 28th in
+ * February, and a roll computed *from* that 28th gives the 28th of March and
+ * every month after, permanently.
+ *
+ * So the roll is computed from the **intended** day, which the interval carries
+ * whenever it differs from the stored date — and which is set here, the first
+ * time a clamp hides it, rather than being asked for.
+ */
+export function addInterval(
+  start: DateKey,
+  every: Interval,
+): { date: DateKey; every: Interval } {
+  if (every.unit === 'd') return { date: addDays(start, every.n), every }
+  if (every.unit === 'w') return { date: addDays(start, every.n * 7), every }
+  const [y, m, d] = (start as string).split('-').map(Number) as [number, number, number]
+  // The day this is really anchored on: what was carried, or what is there now.
+  const meant = every.day ?? d
+  const months = every.unit === 'y' ? every.n * 12 : every.n
+  const at = (y * 12 + (m - 1)) + months
+  const year = Math.floor(at / 12)
+  const month = (at % 12) + 1
+  const room = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const day = Math.min(meant, room)
+  const date = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` as DateKey
+  return {
+    date,
+    // Carried from the moment a clamp first hides it, and dropped again once
+    // the stored day says the same thing — a field that is only ever true.
+    every: day === meant ? { n: every.n, unit: every.unit } : { ...every, day: meant },
+  }
+}
+
 /** An offset in whole days. Months are thirty here; see `PER` in the document. */
 function offsetDays(offset: string): number {
   const found = OFFSET.exec(offset)
@@ -1124,3 +1163,109 @@ export function unusedMatterId(taken: ReadonlySet<string>, random: () => number 
   }
   throw new Error('could not find an unused matter id')
 }
+
+// ── the docket as a horizon source (MH2, H8, D74) ────────────
+//
+// **The docket implements the horizon; it does not define it.** What a row is,
+// what window it spans and what order rows come in belong to `horizon-api.ts`.
+// What belongs *here* is the only part no other source could supply: how a
+// matter's steps and instances turn into dates, which is `dueOn`, interval
+// arithmetic and the anchor rule.
+
+/**
+ * One dated thing this docket is contributing.
+ *
+ * **A contribution is a step occurrence, not a matter**, which is what D76 made
+ * of the problem: the step is the thing that carries a date, and a matter is a
+ * name for a sequence of them. It says *which instance*, because two occurrences
+ * of one recurrence can land in the same window and an unlabelled pair of them is
+ * worse than either alone.
+ *
+ * It stops short of a `HorizonRow`: the document it belongs to is not something a
+ * matter knows, so whoever holds the docket completes it.
+ */
+export interface MatterHorizon {
+  readonly on: DateKey
+  readonly text: string
+  readonly kind: HorizonKind
+  /** The critical date of the occurrence this belongs to — the row's label. */
+  readonly instance: DateKey
+  readonly step: string | null
+}
+
+/**
+ * The instances of a matter whose dates could put something in a window.
+ *
+ * **A sweep for calendar recurrence, and the next one only for the other kind**,
+ * which is not a simplification but the honest answer. A matter that recurs on
+ * the calendar has a *sequence* of instances, computable as far ahead as anyone
+ * cares to look. A matter that recurs from its own completion has exactly one
+ * knowable instance — the next one depends on a day that has not happened, and a
+ * horizon that guessed at it would be inventing a commitment.
+ *
+ * Swept from `start` rather than from `from`, because the anchored day travels
+ * with the interval (`every.day`) and picking it up mid-sequence would lose the
+ * clamp: the 31st would become the 28th and stay there.
+ */
+export function instancesIn(
+  matter: Matter,
+  to: DateKey,
+  cap = 500,
+): readonly DateKey[] {
+  const { start, every, after } = matter.when
+  if (start === null) return []
+  if (every === null || after !== null) return [start]
+  const out: DateKey[] = []
+  let at = start
+  let step = every
+  for (let n = 0; n < cap && compareKeys(at, to) <= 0; n += 1) {
+    out.push(at)
+    const next = addInterval(at, step)
+    at = next.date
+    step = next.every
+    // An interval this cannot make progress on would otherwise spin.
+    if (compareKeys(at, out[out.length - 1] as DateKey) <= 0) break
+  }
+  return out
+}
+
+/**
+ * What a matter contributes to the horizon.
+ *
+ * **A step already on the task list is not here.** That is the rule that keeps
+ * the horizon's two sources disjoint: once a task step has generated, the item
+ * *is* the thing in front of you, and a horizon row beside it would be the same
+ * commitment counted twice. The horizon is what is coming; the list is what is
+ * here.
+ *
+ * **And a step whose antecedent is unfinished has no date at all**, so it is not
+ * on the horizon — not shown as undated, not guessed at. `dueOn` already says
+ * *not yet* for three different reasons and they all mean the same thing here.
+ *
+ * Completion and provenance are read **only for the current instance**, since
+ * that is the only one they are about: a future occurrence of a recurrence is
+ * fresh by construction, whatever the stored step says about the last one.
+ */
+export function matterHorizon(
+  matter: Matter,
+  window: HorizonWindow,
+  add: (day: DateKey, days: number) => DateKey = addDays,
+): readonly MatterHorizon[] {
+  const out: MatterHorizon[] = []
+  const current = matter.when.start
+  for (const instance of instancesIn(matter, window.to)) {
+    const here = instance === current
+    const at: Matter = { ...matter, when: { ...matter.when, start: instance } }
+    for (const step of matter.steps) {
+      if (here && (step.done !== null || step.made !== null)) continue
+      const on = dueOn(step, at, add)
+      if (on === null) continue
+      if (!inHorizon(on, window)) continue
+      out.push({ on, text: step.text, kind: step.kind, instance, step: step.id })
+    }
+  }
+  return out
+}
+
+/** Local, so this module needs nothing from `dates.ts` but arithmetic. */
+const compareKeys = (a: DateKey, b: DateKey): number => (a < b ? -1 : a > b ? 1 : 0)

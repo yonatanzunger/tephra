@@ -17,6 +17,7 @@
 // statuses carry forward, what a due date does to the order, when an id is
 // minted. That is the document's, in `main/x/documents/kinds/todo.ts`.
 
+import { flattenLinks } from '../links.ts'
 import type { DateKey } from '../document-api.ts'
 import { addDays, nowSeconds, weekdayOf } from '../dates.ts'
 import { tagMark } from '../tags.ts'
@@ -165,6 +166,52 @@ const MARK = /\s*<!--tephra:item\s+([0-9a-z]+)(?:\s+(\d+))?(?:\s+(\d+))?\s*-->\s
 
 /** A tag, in both spellings. One notation, shared with the query field (T16). */
 const TAG = tagMark()
+
+/**
+ * An item as one short line: no tags, no due date, no link markup.
+ *
+ * **The top of the ladder `plain.ts` describes**, and the one every summarising
+ * surface had been building for itself. `plainLine` takes off what
+ * the app wrote; `flattenLinks` takes off what a caller cannot draw; this takes
+ * off what a caller has already said *somewhere else on the row*. The rail
+ * beside the task list, the horizon, a menu label — each shows the date in its
+ * own column and has no room for a chip, so each was stripping spans by hand,
+ * and the horizon's first cut simply forgot the link half and rendered a Google
+ * Docs URL across three lines.
+ *
+ * **Here, because the grammar is here** (T16). It is done with the item's own
+ * `tagSpans` and `dueSpan` rather than by re-matching, so there is exactly one
+ * definition of where a tag ends — and a caller that only has a string is asking
+ * a different question and should compose `flattenLinks(plainLine(text))`.
+ *
+ * **Not for a surface somebody edits.** The task list draws chips over the
+ * markers where they sit, and must: they are part of what the line says, and a
+ * row that hid them would be lying about the text underneath the caret.
+ */
+export function shortLine(item: TodoItem): string {
+  return flattenLinks(withoutMarks(item))
+}
+
+/**
+ * The words, with the tags and the due date cut out and the links left alone.
+ *
+ * **The rung between**, and it exists because the task list needs exactly this:
+ * the row draws `#house` and `DUE 2026-09-14` as chips of its own, positioned,
+ * so the text under them must not contain them — but links inside that text are
+ * still drawn live, in the sentence, where they were written.
+ *
+ * By spans rather than by re-matching, which is the whole reason this is here
+ * and not in a module that only has a string: `tagSpans` and `dueSpan` are where
+ * the grammar already said what it found, and a second regex would be a second
+ * opinion about it.
+ */
+export function withoutMarks(item: TodoItem): string {
+  const spans = [...item.tagSpans, ...(item.dueSpan === null ? [] : [item.dueSpan])]
+    .sort((a, b) => b.from - a.from)
+  let text = item.text
+  for (const span of spans) text = text.slice(0, span.from) + text.slice(span.to)
+  return text.replace(/\s{2,}/g, ' ').trim()
+}
 
 /** `DUE <date>`, uppercase, because era 1 drew it in large letters (T9). */
 const DUE = /\bDUE\s+(\d{4}-\d{2}-\d{2})\b/

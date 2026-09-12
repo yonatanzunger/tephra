@@ -25,13 +25,17 @@ import type { SurfaceProps, TextTarget } from '../surface.ts'
 import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { Prose } from '../../frame/Prose'
-import { flattenLinks } from '../../../../shared/links.ts'
+// The two rungs this surface needs, from the module that owns the grammar: the
+// row draws its own chips, so it wants the text without them and with the links
+// still live; the rail has no room for either and wants the short line.
+import { shortLine, withoutMarks as prose } from '../../../../shared/kinds/todo.ts'
 import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import {
   groupByTag, isLive, resolveDue,
   type ResolvedItem, type TodoItem, type TodoStatus, type WalkState,
 } from '../../../../shared/kinds/todo.ts'
-import { daysBetween } from '../../../../shared/dates.ts'
+import { addDays, daysBetween } from '../../../../shared/dates.ts'
+import type { HorizonRow } from '../../../../shared/horizon-api.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 
 /**
@@ -393,6 +397,47 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   const soon = today === null ? [] : dueSoon(items, today)
 
   /**
+   * The docket half of the compact horizon (MH2, H8, D74).
+   *
+   * **The band becomes the compact horizon by gaining a second source**, which
+   * is what D74 means by *reusing the space the due-soon band already occupies*.
+   * What it holds is now *everything bearing down* rather than *dated tasks* —
+   * and the cut H8 draws is not between the two sources but between imposition
+   * and volition, which both of these are on the same side of.
+   *
+   * **Only the docket half comes from main; the task half stays local**, and
+   * the split is principled rather than incidental. A due date typed into the
+   * list has to move the band on the keystroke — it is this surface's own state,
+   * and a round trip would make it lag the caret. A matter on a docket is
+   * somebody else's document, arrives through the corpus, and announces itself
+   * (`documentsChanged`) when it changes.
+   */
+  const [ahead, setAhead] = useState<readonly HorizonRow[]>([])
+  useEffect(() => {
+    if (today === null) return undefined
+    let alive = true
+    const read = (): void => {
+      void window.tephra
+        .horizon(addDays(today, -SOON_DAYS), addDays(today, SOON_DAYS))
+        .then(rows => {
+          // The `due` rows are the local half, computed above from what is on
+          // screen. Taking them from here as well would be one commitment twice.
+          if (alive) setAhead(rows.filter(row => row.kind !== 'due'))
+        })
+        .catch(() => undefined)
+    }
+    read()
+    // **Because a docket writing is not a thing this surface would otherwise
+    // hear**: generation and the clock tick both rewrite dockets while nobody is
+    // looking at them, and a band that missed it would be stale until a reload.
+    const stop = window.tephra.nav.onDocumentsChanged(read)
+    return () => {
+      alive = false
+      stop()
+    }
+  }, [today])
+
+  /**
    * The tags that currently have live items (T6).
    *
    * **Derived from what is on screen, not from an index.** The live set is
@@ -538,7 +583,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
         const id = item.id
         setMenu({
           at: { x: e.clientX, y: e.clientY },
-          about: flattenLinks(prose(item)),
+          about: shortLine(item),
           items: statusItems(status => {
             // Blocked asks WHY, because a block without the thing it is
             // waiting on is the one status that says nothing (T4).
@@ -765,17 +810,17 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
           as dates do moves every row under it — the reflow this project has
           ruled out everywhere else (D42). In the gutter it grows into space
           that belongs to nobody, and can be set in a size somebody can read. */}
-      {soon.length > 0 && (
-        <aside className="todo-soon" aria-label="Due soon">
-          {soon.map(item => (
+      {(soon.length > 0 || ahead.length > 0) && (
+        <aside className="todo-soon" aria-label="Coming up">
+          {compactHorizon(soon, ahead, today as DateKey).map(row => (
             <button
-              key={`soon:${item.id ?? item.text}`}
+              key={row.key}
               type="button"
-              className={`todo-soon-item${overdue(item, today as DateKey) ? ' overdue' : ''}`}
-              onClick={() => document.getElementById(`todo-${item.id ?? ''}`)?.scrollIntoView({ block: 'center' })}
+              className={`todo-soon-item${row.past ? ' overdue' : ''}${row.docket ? ' from-docket' : ''}`}
+              onClick={row.go}
             >
-              <span className="todo-when">{when(item.due as DateKey, today as DateKey)}</span>
-              <span className="todo-soon-text">{flattenLinks(prose(item))}</span>
+              <span className="todo-when">{when(row.on, today as DateKey)}</span>
+              <span className="todo-soon-text">{row.what}</span>
             </button>
           ))}
         </aside>
@@ -1518,15 +1563,6 @@ const written = (name: string): string => (/\s/.test(name) ? `#'${name}'` : `#${
  * and a row that reads like a sentence. Cut from the end backwards, so each
  * span's offsets are still true when it is reached.
  */
-function prose(item: TodoItem): string {
-  const spans = [...item.tagSpans, ...(item.dueSpan === null ? [] : [item.dueSpan])].sort(
-    (a, b) => b.from - a.from,
-  )
-  let text = item.text
-  for (const span of spans) text = text.slice(0, span.from) + text.slice(span.to)
-  return text.replace(/\s{2,}/g, ' ').trim()
-}
-
 const overdue = (item: TodoItem, today: DateKey): boolean =>
   item.due !== null && daysBetween(today, item.due) < 0
 
@@ -1541,6 +1577,46 @@ function dueSoon(items: readonly TodoItem[], today: DateKey): readonly TodoItem[
   return items
     .filter(item => isLive(item.status) && item.due !== null && daysBetween(today, item.due) <= SOON_DAYS)
     .sort((a, b) => daysBetween(today, a.due as DateKey) - daysBetween(today, b.due as DateKey))
+}
+
+/**
+ * The two halves of the compact horizon, merged into one date-ordered strip.
+ *
+ * **One region, one meaning** — which is the shape MT5a rejected the alternative
+ * of: a band whose members mean different things depending on what put them
+ * there. These do not. *A due date approaching has more in common with a talk
+ * approaching than with anything you chose* (H8), and both are the world bearing
+ * down, so they are one list sorted by one thing.
+ *
+ * Where they differ is only where following one goes: a task is on this list, so
+ * it scrolls; a matter is on a docket, so it opens it.
+ */
+function compactHorizon(
+  soon: readonly TodoItem[],
+  ahead: readonly HorizonRow[],
+  today: DateKey,
+): readonly { key: string; on: DateKey; what: React.ReactNode; past: boolean; docket: boolean; go: () => void }[] {
+  const rows = [
+    ...soon.map(item => ({
+      key: `soon:${item.id ?? item.text}`,
+      on: item.due as DateKey,
+      what: shortLine(item) as React.ReactNode,
+      past: overdue(item, today),
+      docket: false,
+      go: (): void => {
+        document.getElementById(`todo-${item.id ?? ''}`)?.scrollIntoView({ block: 'center' })
+      },
+    })),
+    ...ahead.map((row, at) => ({
+      key: `hz:${row.doc}:${row.id ?? at}:${row.on}`,
+      on: row.on,
+      what: row.text as React.ReactNode,
+      past: daysBetween(today, row.on) < 0,
+      docket: true,
+      go: (): void => void window.tephra.win.create({ kind: 'document', id: row.doc }),
+    })),
+  ]
+  return rows.sort((a, b) => daysBetween(today, a.on) - daysBetween(today, b.on))
 }
 
 /** How a date reads when it is close: in days, because that is the question. */

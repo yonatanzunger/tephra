@@ -1129,3 +1129,69 @@ under a clock the test had frozen. Both bugs were *one clock too many*, and both
 were found by the same act: making time a thing the test controls rather than a
 thing it waits for.
 
+## 52. The first cut inverted the abstraction, and it typechecked
+
+The horizon's query was written inside the docket module: `horizonOf(matter, …)`
+beside `dueOn`, returning a `HorizonStep` whose `kind` was the docket's `StepKind`
+plus a fourth member. It compiled, the twelve integration tests passed, and it
+was wrong in a way none of that could see.
+
+**The horizon is a logical object that several things implement.** Written the
+other way round, the docket owns it: the second source (dated tasks) is a special
+case grafted on, and the third (H7's ICS feed) is a rewrite rather than an
+addition. Nothing is *incorrect* — every row it produced was right — but every
+later source has to be shaped like a docket to get in.
+
+**The tell was in the type.** `StepKind | 'due'` is a vocabulary bolted onto one
+implementation's, and a union written that way is almost always a sign that the
+thing doing the uniting has no name yet. Once the horizon declared its own three
+kinds, the docket's job shrank to the only part no other source could supply —
+turning steps and instances into dates — and the module stopped importing
+anything docket-shaped.
+
+**It was caught by being told, not by a test**, and probably could not have been
+caught by one: the failure is about what the *next* source will cost, and no
+assertion available today can observe a cost that has not been paid yet. What is
+available is the shape of the names, which was saying it plainly the whole time.
+
+**The same session shipped the inverse mistake and caught it in a comment.** The
+compact strip gave docket rows an accent tell, under a comment arguing they are
+the same kind of thing as a dated task. Writing the justification down was what
+exposed it — the sentence and the code contradicted each other in adjacent lines.
+Prose next to a decision is not documentation of the decision; it is a place the
+decision can be checked.
+
+## 53. Four surfaces, four hand-built copies of the same sentence
+
+The horizon shipped rows reading `Review Steve's [bio draft](https://docs.google
+.com/document/d/1t8me…/edit) #career`, a URL sprawling across three lines of a
+surface meant to be glanced at. Reported from use, within minutes.
+
+**The fix was one line; the finding was that four callers had built it
+separately.** The rail beside the task list did `flattenLinks(prose(item))`. The
+row menu's label did `flattenLinks(prose(item))`. The horizon's task rows did
+`withoutDue(item.text)` — written an hour earlier, in this same session, to fix
+the *due marker* half of exactly this bug, and stopping there because the due
+marker was the half then on screen. The horizon's docket rows did nothing at all.
+
+**`plain.ts` had already described the ladder and stopped one rung short.** Its
+comment says plainly that markers come off, that tags and dates stay because a
+person typed them, and that a caller which cannot draw links composes
+`flattenLinks` — *"and the two compose in that order"*. What it does not say is
+that there is a third rung: a surface which has already put the date in its own
+column and has no room for a chip wants those off too. Every such surface then
+discovered the rung privately, and each stopped wherever its own screen looked
+right.
+
+**The rung belongs with the grammar, not with the ladder.** It has to cut tags
+and due dates by the item's own `tagSpans` and `dueSpan` rather than by
+re-matching, or it is a second opinion about where a tag ends — so `shortLine`
+lives in `kinds/todo.ts` and `plain.ts` points at it. A caller holding only a
+string is asking a different question and composes the two rungs it does have.
+
+**The generalisable shape: a partially-documented ladder is worse than an
+undocumented one.** Three rungs existed; two were written down. The missing one
+was reinvented every time, and because it was reinvented from whatever was on
+screen, each copy was subtly different — which is why the due marker got fixed
+and the URL did not.
+

@@ -114,6 +114,8 @@ export interface MenuActions {
   tasks: () => void
   /** The link directory (ML3): a window's location that is not a document. */
   links: () => void
+  /** The full horizon (D74): the other one, and the one meant to stay open. */
+  horizon: () => void
   /**
    * Ask for a file, the way every other application asks for one.
    *
@@ -151,6 +153,7 @@ let actions: MenuActions = {
   notebook: () => undefined,
   tasks: () => undefined,
   links: () => undefined,
+  horizon: () => undefined,
   open: () => undefined,
   import: () => undefined,
   newFile: () => undefined,
@@ -393,6 +396,15 @@ export function installMenu(next?: MenuActions): void {
           label: 'Links',
           accelerator: 'CmdOrCtrl+2',
           click: () => actions.links(),
+        },
+        {
+          // **The one that is MEANT to be left open** (D74, H8): everything
+          // bearing down, in date order, across every docket and the task list.
+          // A window of its own is how the compact strip's job gets done before
+          // MH4 exists — present whatever the *other* window is doing.
+          label: 'Horizon',
+          accelerator: 'CmdOrCtrl+3',
+          click: () => actions.horizon(),
         },
         { type: 'separator' },
         // **Minimize without ⌘M.** The role carries the system accelerator, and

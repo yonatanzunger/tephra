@@ -1,6 +1,6 @@
 # The Horizon and Dockets — Design
 
-**Requirements: `goal/horizon.md` (H1–H15). Decisions: D68–D75.** Written to be
+**Requirements: `goal/horizon.md` (H1–H15). Decisions: D68–D78.** Written to be
 read on its own: the problem, how the parts combine to solve it, the experiences
 that follow, and the architecture those experiences force. Rationale for the
 requirements lives in `goal/horizon.md`; what is here is the thing to build.
@@ -106,6 +106,15 @@ spreadsheet restored, and it is read-only.
 **It is a list, not a grid, and that is deliberate.** A calendar answers *what am
 I doing on Tuesday* and is full of meetings. This answers *what is coming*.
 
+> **Built 2026-09-12 (MH2, D78), and one thing this section did not anticipate.**
+> *How far ahead* had to become a control rather than a constant. The noise risk
+> named under **Risks** below arrives through the lookahead: a monthly bill put
+> seven of nine rows in a six-month window and drowned the two things that needed
+> thinking about — while shortening the window loses the birthday whose
+> preparation starts in three months, which is the case this view exists for.
+> Both are right at different moments, and only the reader knows which moment it
+> is. A month · three months · a year, shortest first.
+
 ### 3. Working a docket
 
 **Open `House` and see everything true about the house:** the recurring
@@ -154,6 +163,30 @@ it is a few gestures; after three weeks the middle is long and the choosing is a
 real reduction. **Dockets are not walked here** — they are reviewed on their own
 rhythm — but reorient reports when one has gone stale: *"household — not reviewed
 since June."*
+
+### The horizon is its own object, which several things implement
+
+**Added 2026-09-12 (D78), because the first build of it got this backwards.** The
+two flows above read as *views over dockets that also happen to read the task
+list*, and implemented that way they typecheck, pass their tests, and quietly
+make one source the owner of the abstraction — so the second source is a special
+case and the third is a rewrite.
+
+**What the horizon owns:** what a row is, what window it spans, what order rows
+come in, and the three kinds of pressure a row can be (`coming up`, `to do`,
+`due`). **What a source owns:** translating its own world into that vocabulary. A
+docket's contribution is the only part no other source could supply — how a
+matter's steps and instances turn into dates, which is `dueOn`, interval
+arithmetic and the anchor rule. The task list's is its due dates. H7's deferred
+ICS feed is a third, and costs a function rather than a redesign.
+
+**Sources must be disjoint, and that is a source's own job to enforce.** A docket
+step that has already generated a task item belongs to the task list's source and
+not the docket's, or one commitment is counted twice — once as *coming* and once
+as *here*. Only the docket knows what it generated.
+
+**And the horizon is computed, never stored**, so it is the one kind of derived
+state D77's reconciler does not apply to: there is no persisted copy to drift.
 
 ## What the flows demand, and what that forces
 

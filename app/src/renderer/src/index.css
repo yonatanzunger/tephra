@@ -2201,3 +2201,88 @@ body {
   border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .3rem .45rem;
 }
 .docket-note-field:focus { outline: none; border-color: rgb(var(--accent) / .6); }
+
+/* ── the horizon (MH2, H8, D74) ─────────────────────────────────────────────
+   A plain date-ordered list, which is the one thing R19 got right. The day is
+   the structure: a heading per day and rows under it, so the eye lands on
+   "when" first and never has to scan a column of repeated dates. */
+.horizon {
+  min-width: 0; padding-top: .4rem;
+  font-size: calc(var(--reading-size, 20px) * var(--quoted, 1));
+  /* Its own scroller, for the reason the task list needs one. */
+  min-height: 0; overflow-y: auto;
+}
+.hz-head { display: flex; align-items: baseline; gap: .6rem; padding-bottom: .6rem; }
+.hz-count { font-family: var(--font-ui); font-size: .72em; color: rgb(var(--text-muted)); }
+.hz-span { font-family: var(--font-ui); font-size: .72em; color: rgb(var(--text-muted) / .7); }
+.hz-empty {
+  font-family: var(--font-ui); font-size: .85em; color: rgb(var(--text-muted));
+  max-width: var(--measure); line-height: 1.5;
+}
+.hz-empty code { font-family: var(--font-mono); font-size: .92em; }
+
+.hz-list, .hz-rows { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
+.hz-day { padding-bottom: .7rem; }
+
+/* **The day is a label, not a heading in the document sense** — it is apparatus,
+   so it takes the UI face while the rows take the reading face. Sticky, because
+   scrolling a long horizon without knowing which day you are in is the one way
+   a date-ordered list can still fail to answer "when". */
+.hz-date {
+  position: sticky; top: 0; z-index: 1;
+  margin: 0 0 .25rem; padding: .2rem 0;
+  font-family: var(--font-ui); font-size: .72em; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: rgb(var(--text-muted));
+  background: rgb(var(--surface));
+}
+/* Behind you, and marked as such: the window runs backwards on purpose (H8). */
+.hz-date.hz-past { color: rgb(var(--status-error)); }
+
+.hz-row { padding: .25rem 0 .45rem; }
+
+/* What it says leads, in the reading face, at reading size. */
+.hz-what {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  font-family: var(--reading-face, inherit); font-size: 1em; line-height: 1.4;
+  color: rgb(var(--text)); background: none; border: 0; padding: 0;
+}
+.hz-what:hover { color: rgb(var(--text-heading)); }
+.hz-what:focus-visible { outline: 1px solid rgb(var(--accent) / .6); outline-offset: 2px; }
+
+/* The apparatus under it: what kind of pressure, whose, and which occurrence. */
+.hz-about {
+  display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
+  margin-top: .1rem;
+  font-family: var(--font-ui); font-size: .72em; color: rgb(var(--text-muted));
+}
+/* **The kind reads as a label and not as prose**, because it is the same three
+   words on every row and the eye should be able to skip them. */
+.hz-kind {
+  letter-spacing: .03em; text-transform: uppercase; font-size: .92em;
+  color: rgb(var(--text-muted) / .8);
+}
+.hz-status .hz-kind { color: rgb(var(--accent) / .85); }
+.hz-matter { color: rgb(var(--text)); }
+.hz-instance { color: rgb(var(--text-muted) / .75); }
+.hz-span { display: inline-flex; align-items: baseline; gap: .3rem; }
+/* **The native control, boxed like the docket's** rather than stripped bare: the
+   arrow IS the affordance here, and a select with no arrow is the mistake this
+   project has now made three times — a control that only looks like one once you
+   already know it is there. */
+.hz-spans {
+  font: inherit; font-size: 1em; cursor: pointer;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: 0 .1rem;
+}
+.hz-spans:hover { border-color: rgb(var(--accent) / .6); }
+.hz-spans:focus-visible { outline: 1px solid rgb(var(--accent) / .6); outline-offset: 2px; }
+
+/* **`.from-docket` carries no appearance, deliberately.** A docket row in the
+   strip is the same kind of thing as a dated task — H8's cut is between
+   imposition and volition, and both of these are imposed — so marking one would
+   make this a region with two kinds of member told apart by a tell, which is
+   precisely the shape MT5a rejected and which H8 cites in rejecting it. The
+   class stays because the acceptance scene has to tell the two sources apart to
+   prove they INTERLEAVE; it is a hook and not a style, and adding a colour here
+   would be undoing the decision rather than completing it. */

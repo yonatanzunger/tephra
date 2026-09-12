@@ -3639,3 +3639,65 @@ side of midnight that D62 exists to keep coherent.
 > fires — so the tests move the clock rather than waiting for a holiday to
 > produce one.
 
+---
+
+## D78: The horizon is its own object, which several things implement
+
+**Date:** 2026-09-12
+**Status:** decided
+**Design:** `solution/horizon.md`. **Applies:** D74's location; H8, H6, H1.
+**Source:** built as MH2.
+
+**The horizon owns what a row is, what window it spans and what order rows come
+in; a *source* is anything that can say *here is something dated*.** It is not a
+view of dockets that also reads the task list. `shared/horizon-api.ts` holds the
+window, the three kinds and the ordering; the docket holds only the part no other
+source could supply — how a matter's steps and instances turn into dates, which
+is `dueOn`, interval arithmetic and the anchor rule.
+
+**The first cut had this inverted**, with the query living in the docket module
+and the horizon as its return type. It typechecked and passed its tests, and it
+was still wrong: it makes one source the owner of the abstraction, so the second
+source is a special case and the third (H7's deferred ICS feed) is a rewrite. The
+tell was that `HorizonKind` would have been the docket's `StepKind` plus a
+member — a vocabulary bolted onto one implementation's.
+
+**So the kinds are declared by the horizon even though two of the three names
+match a step kind.** A source translates *into* them. The day an ICS feed
+arrives, nothing about the docket's step kinds should be what decides how its
+rows read.
+
+**Sources must be disjoint, and keeping them so is a source's own job.** A docket
+step that has already generated an item belongs to the task list's source and not
+the docket's — otherwise one commitment is counted twice, once as *coming* and
+once as *here*. Only the docket knows what it generated, so only the docket can
+enforce it.
+
+**Computed, never stored**, which is the one kind of derived state D77's
+reconciler does *not* apply to: there is no persisted copy to drift. Worth saying
+explicitly, because the temptation with a reconciler in hand is to persist
+everything.
+
+**Next-occurrence only wherever a date depends on a completion.** A calendar
+recurrence is a sequence and can be swept as far ahead as anyone looks; a
+completion-driven one has exactly one knowable instance, because the next depends
+on a day that has not happened. Sweeping it would be asserting when somebody is
+going to get round to something.
+
+**How far ahead is the reader's choice, not a constant.** *The horizon fills,
+stops being read, and blindness returns through the front door* is this design's
+named risk, and a fixed lookahead is where it arrives: a monthly bill puts six
+rows in six months and drowns the two things that needed thinking about. But
+shortening the window loses the birthday whose preparation starts in three
+months, which is the case the full view exists for. Both are right at different
+moments, and only the person reading knows which moment it is.
+
+> **The compact strip gained a source and NOT a distinction.** The first cut gave
+> docket rows an accent tell, with a comment arguing they are the same kind of
+> thing as a dated task — marking as different the very thing it had just argued
+> was the same. H8's cut is between imposition and volition and both of these are
+> imposed, so a tell would make the strip a region with two kinds of member told
+> apart by a mark: the shape MT5a rejected, cited in H8 itself. The class remains
+> as a test hook with no appearance, which is recorded in the stylesheet so the
+> absence reads as a decision rather than an omission.
+

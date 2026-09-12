@@ -102,6 +102,10 @@ export function registerDocumentIpc(service: DocumentService): void {
   ipcMain.handle(CHANNEL.navBookmarks, () => service.index.bookmarks())
   ipcMain.handle(CHANNEL.navTimeline, () => service.index.timeline())
   ipcMain.handle(CHANNEL.navLinks, () => service.links())
+  // **A window of days, asked for by the caller.** The full view wants months
+  // and the compact strip wants a fortnight; what counts as *bearing down* is
+  // the same computation either way, so only the window differs (D74).
+  ipcMain.handle(CHANNEL.horizon, (_e, from: DateKey, to: DateKey) => service.horizon(from, to))
   ipcMain.handle(CHANNEL.navThreads, () => service.index.threads())
   ipcMain.handle(CHANNEL.navOccurrences, (_e, reference: Reference) =>
     service.index.occurrences(reference),

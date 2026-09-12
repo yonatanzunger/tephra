@@ -50,6 +50,21 @@ export type NavTarget =
    * the list.**
    */
   | { readonly kind: 'links' }
+  /**
+   * The full horizon (H8, D74) — the second location that is not a document.
+   *
+   * **A place rather than a panel**, by the test D66 set and MS4 had to discover:
+   * *does following an entry mean you are done with the list?* The horizon looks
+   * like search at first glance, since you consult it while doing something
+   * else — but the way it is kept beside you is **a second window**, not a panel
+   * over the first, and a window left open needs no panel.
+   *
+   * The link directory said a shared `{kind:'query'}` was what the second one
+   * would decide. The second one is here, and it says **still not yet**: two
+   * concrete queries with nothing in common but *having no document* is a
+   * coincidence, and the abstraction would be a name with one member's shape.
+   */
+  | { readonly kind: 'horizon' }
   | { readonly kind: 'url'; readonly href: string } // browser
   | { readonly kind: 'external'; readonly path: string } // OS intent
 

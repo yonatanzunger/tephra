@@ -547,6 +547,7 @@ app.whenReady().then(async () => {
     notebook: () => windows?.reveal({ kind: 'today' }),
     tasks: () => void showTasks(),
     links: () => windows?.reveal({ kind: 'links' }),
+    horizon: () => windows?.reveal({ kind: 'horizon' }),
   })
   // The renderer owns the caret; main owns the menus. Each tells the other the
   // one thing it knows, which is what keeps a greyed-out item honest.

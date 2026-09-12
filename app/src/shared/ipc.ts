@@ -103,6 +103,8 @@ export const CHANNEL = {
   navBookmarks: 'tephra:nav:bookmarks',
   navTimeline: 'tephra:nav:timeline',
   navLinks: 'tephra:nav:links',
+  /** The horizon: everything bearing down in a window of days (MH2, H8). */
+  horizon: 'tephra:horizon',
   navThreads: 'tephra:nav:threads',
   navOccurrences: 'tephra:nav:occurrences',
   navStatus: 'tephra:nav:status',

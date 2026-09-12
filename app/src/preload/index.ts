@@ -17,6 +17,7 @@ import type {
 } from '../shared/nav-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Theme } from '../shared/theme.ts'
+import type { HorizonRow } from '../shared/horizon-api.ts'
 import { CHANNEL } from '../shared/ipc.ts'
 import type {
   ChangeAck, DocumentInfo, EditAck, EditRequest, ExtendRequest, ReadRequest,
@@ -94,6 +95,16 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.searchNext, id, count),
     close: (id: QueryId): Promise<void> => ipcRenderer.invoke(CHANNEL.searchClose, id),
   },
+
+  /**
+   * The horizon (MH2, H8, D74) — **its own thing, not a corner of `nav`.**
+   *
+   * It is not navigation and it is not a docket verb: it is a query over
+   * everything dated, which dockets and the task list both implement. Nesting it
+   * under either would make one of its sources look like its owner.
+   */
+  horizon: (from: DateKey, to: DateKey): Promise<readonly HorizonRow[]> =>
+    ipcRenderer.invoke(CHANNEL.horizon, from, to),
 
   nav: {
     subjects: (): Promise<readonly Subject[]> => ipcRenderer.invoke(CHANNEL.navSubjects),

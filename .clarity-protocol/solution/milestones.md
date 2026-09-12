@@ -771,7 +771,7 @@ the answers were guesses.
 
 **Which means v1 is complete.** Everything the ordered plan held is built.
 
-## MH — the horizon and dockets *(MH1, MH3a and MH3b built; MH2 next)*
+## MH — the horizon and dockets *(MH1, MH3a, MH3b and MH2 built; MH4 next)*
 
 **Roadmap: `solution/horizon-roadmap.md`. Design: `solution/horizon.md`.
 Requirements: `goal/horizon.md`. Decisions: D68–D76.**
@@ -933,6 +933,54 @@ next derived thing — MH2's horizon, an index, anything cached from a file
 somebody can edit behind our back — adds a clause rather than a private sweep.
 `#advanceDocket` and `#setStepMade` are named the other way round to match: the
 pass is generic, its clauses are not.
+
+### MH2 — the horizon ✓ *(built 2026-09-12)*
+
+**End condition, met:** every major commitment across every docket and the task
+list, in one date-ordered list, in a window of its own on ⌘3. **This is where the
+spreadsheet is restored** — a single docket's view cannot give *soonest first*,
+because the commitments are spread across several dockets and the list as well.
+
+**And the reminders MH3a authored finally land.** A status step was *authored and
+inert* for a whole phase, on the same bargain MH1 made with triggers. H6's
+*awareness with no task* is now a row and nothing else — it still generates
+nothing, ever.
+
+**The horizon is its own object** (D78), not a view of dockets that also reads
+the task list. It owns the window, the three kinds and the ordering; a **source**
+is anything that can say *here is something dated*, and the docket supplies only
+what no other source could — how steps and instances turn into dates. The first
+cut had this inverted, typechecked, and passed its tests; the tell was that the
+row kinds would have been the docket's step kinds plus a member.
+
+**Both sources from the start**, which is the failure `notes.md` records six
+times over: a view built against one source and fitted to the second afterwards.
+And they are **disjoint** — a step that has generated belongs to the task list,
+not the horizon, or one commitment is counted twice.
+
+**How far ahead is a control, because the noise risk is this design's own.** *The
+horizon fills, stops being read, and blindness returns through the front door*
+is what H4 exists to prevent, and a fixed lookahead is where it arrives: a monthly
+bill filled seven of nine rows in the first build. A month · three months · a
+year, with the short answer first.
+
+**The compact strip gained a source and not a distinction.** The due-soon band
+now holds matters beside dated tasks, in one date order, interleaved — and
+deliberately without a tell for which source a row came from, since both are the
+world bearing down. **H8 stays narrowed** to *present when you are in the task
+list*: MH4 is owed and is not made optional by this looking like it delivered.
+
+**A row is the short line** (`shortLine`): no link markup, no tag, no due date.
+Reported from use the moment the view existed, with a Google Docs URL across
+three lines of a surface meant to be glanced at. The fix was one line; what it
+found was **four surfaces hand-building the same sentence**, one of them written
+an hour earlier in the same session and stopping at the half then on screen.
+`plain.ts` had documented two rungs of a three-rung ladder, so the third was
+reinvented privately by everything that needed it (note 53).
+
+**Read-only, and following a row goes where the thing lives** — the docket that
+authored it, or the list it is on. A horizon that could be edited would be a
+third place a commitment is remembered, and H1 allows one.
 
 ### MH1 — docket files *(built 2026-09-10)*
 

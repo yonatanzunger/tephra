@@ -17,7 +17,7 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocketDocument } from '../../src/main/x/documents/kinds/docket.ts'
 import { UNSCHEDULED } from '../../src/shared/kinds/docket.ts'
 import { kindOf, type RelPath } from '../../src/main/w/layout.ts'
-import type { DocumentId } from '../../src/shared/document-api.ts'
+import type { DateKey, DocumentId } from '../../src/shared/document-api.ts'
 
 const REL = 'house.docket.md' as RelPath
 const ID = REL as string as DocumentId
