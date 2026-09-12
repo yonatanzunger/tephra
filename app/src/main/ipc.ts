@@ -259,6 +259,8 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.todoBacklog()
       case 'walk':
         return service.todoWalk(command.list, command.date)
+      case 'bulk':
+        return service.todoBulk(command.list, command.items, command.action)
       case 'chosen':
         return service.todoChosen(command.list, command.date)
       case 'choose':

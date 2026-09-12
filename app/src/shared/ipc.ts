@@ -768,6 +768,19 @@ export type TodoCommand =
    * carries forward and a tag goes with the item; the thing you decided you were
    * doing on Tuesday must do neither.
    */
+  /**
+   * One act on many items (MH4) — a status, or `remove`.
+   *
+   * **One command rather than a loop in the renderer**, because it is one act:
+   * it wants one undo step, one flow-back to the dockets, and one answer about
+   * how many it actually changed.
+   */
+  | {
+      readonly kind: 'bulk'
+      readonly list: DocumentId
+      readonly items: readonly string[]
+      readonly action: TodoStatus | 'remove'
+    }
   | { readonly kind: 'chosen'; readonly list: DocumentId; readonly date: DateKey }
   | {
       readonly kind: 'choose'

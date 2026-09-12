@@ -759,13 +759,30 @@ body {
 
    Still at the FOOT and not the head, which keeps the walk's own guarantee:
    finishing is never the same target you just clicked to start. */
+/* **Pinned to the foot of the list's half, and outside the scroller.** It was
+   `sticky` inside the scrolling column, which floats it over rows mid-scroll —
+   reported from use as illegible, and rightly: a bar with a pale background
+   lying across the middle of a list reads as a rendering fault.
+
+   **And it is the accent at full strength**, not a surface with a hairline.
+   This bar exists only while a mode is active; the one thing it must never be
+   is quiet enough to miss, and the accent already means *the active thing*
+   everywhere else in this surface (the selection tint, the Today section). */
 .todo-walkbar {
-  position: sticky; bottom: 0; z-index: 2;
+  flex: none; z-index: 2;
   display: flex; align-items: center; gap: .5rem;
-  margin-top: .8rem; padding: .7rem 0;
-  border-top: 1px solid rgb(var(--border));
-  background: rgb(var(--surface));
+  margin: 0 -0.3in; padding: .6rem calc(0.3in + 2.25rem);
+  background: rgb(var(--accent));
+  color: rgb(var(--surface));
 }
+.todo-walkbar .todo-movement { color: rgb(var(--surface)); }
+.todo-walkbar .todo-bulk,
+.todo-walkbar .todo-walk-cancel,
+.todo-walkbar .todo-walk-finish {
+  background: rgb(var(--surface)); color: rgb(var(--text));
+  border-color: rgb(var(--surface) / .5);
+}
+.todo-walkbar .todo-walk-cancel { background: none; color: rgb(var(--surface)); }
 .todo-walk-finish {
   cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 500;
   color: rgb(var(--surface)); background: rgb(var(--text-heading));
@@ -2408,3 +2425,34 @@ body {
   cursor: row-resize; background: none;
 }
 .todo-divider:hover { background: rgb(var(--accent) / .18); }
+
+/* ── bulk acts (MH4) ────────────────────────────────────────────────────────
+   **Selection is a thing the list can do**, not something a mode lends it. It
+   replaced the walk's staged *drop*, which was this mechanism wearing one
+   verb's name — and once it is a selection, the confirmation belongs to the
+   bulk act rather than to the mode it happened inside. */
+/* **The tint reaches past the checkbox, rather than starting on it.** Its left
+   edge landed exactly on the glyph, which read as a highlight clipping the
+   control rather than containing the row. Negative margin and matching padding,
+   so the tint moves and the content does not — a row that shifted when selected
+   would be D42 broken by a mark. */
+.todo-row.selected {
+  margin-left: -.55rem; padding-left: .55rem;
+  border-radius: 3px;
+  background: rgb(var(--accent) / .10);
+  box-shadow: inset 2px 0 0 rgb(var(--accent));
+}
+.todo-bulk {
+  flex: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 500;
+  color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .15rem .5rem;
+}
+.todo-bulk:hover { border-color: rgb(var(--accent) / .6); }
+/* **Marked, not gated.** Every other verb here can be taken back by pressing a
+   different one; this one cannot, so it says so rather than asking again. */
+.todo-bulk[data-destructive='true'] { color: rgb(var(--status-error)); }
+.todo-bulk[data-destructive='true']:hover {
+  border-color: rgb(var(--status-error) / .6);
+  background: rgb(var(--status-error) / .08);
+}

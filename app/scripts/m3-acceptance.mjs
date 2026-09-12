@@ -1125,7 +1125,7 @@ console.log('\n\u2014 the task list \u2014')
   check('tags are lifted out of the prose and shown as their own thing', Array.isArray(r.tags) && r.tags.length === 3, JSON.stringify(r.tags))
   check('links in an item are live', Array.isArray(r.links) && r.links[0] === 'the covenants', JSON.stringify(r.links))
   check(
-    'the due-soon band surfaces what is close, most urgent first (T9)',
+    'what is close is surfaced, soonest first (T9) — now in the horizon pane',
     // Relative, not literal: what is being tested is the ORDER — overdue
     // first — and a literal reads differently every morning.
     Array.isArray(r.band) && r.band.length === 2 &&
@@ -1219,10 +1219,12 @@ console.log('\n\u2014 the task list \u2014')
     JSON.stringify(r.addRow),
   )
   check(
-    'the due-soon rail is beside the list rather than above it (D42)',
-    // A band that comes and goes as dates do moves every row under it. In the
-    // gutter it grows into space that belongs to nobody.
-    r.railRight === true,
+    'what is coming sits BELOW the list, not above it (D42, amended by MH4)',
+    // The rule was *a band that comes and goes as dates do moves every row
+    // under it*, and the answer was the gutter. MH4 gave it a pane of its own
+    // instead — which obeys the same rule better, since a fixed pane never
+    // comes and goes at all, and frees the gutter for annotations.
+    r.railBelow === true,
   )
   check(
     // **Three moments, asserted separately.** This used to tie `picked` to
@@ -1403,7 +1405,7 @@ console.log('\n— a link in a task —')
     // to the item, and an anchor inside a button is both invalid and a second
     // thing to hit — so it shows what the sentence SAYS and leaves following it
     // to the row.
-    'the due-soon rail shows a link\'s words, not its markup',
+    'and it shows a link\'s words, not its markup',
     k.railText === 'call the surveyor about the boundary' && k.railHasAnchor === false,
     JSON.stringify(k.railText),
   )
@@ -2087,38 +2089,42 @@ console.log('\n— the walk —')
     `${w.carriedRows} of ${w.allRows} marked during the pass`,
   )
   check(
-    // Marking done already has a control and it is the glyph. A control that
-    // changed meaning inside a mode would be the surprise this was rearranged
-    // to avoid, so the pass adds exactly one button and it is the destructive one.
-    'a pass adds ONE control per row, and only inside the pass',
-    w.noDropButtons === 0 && w.dropButtons === 6,
-    `${w.noDropButtons} before \u00b7 ${w.dropButtons} during`,
+    // **Amended by MH4.** The pass used to add exactly one control — a staged
+    // *Drop* — and the claim was that a mode must not change what an existing
+    // control means. That still holds, and is now satisfied more simply: the
+    // pass adds NO controls at all. Selecting is a gesture the list always has,
+    // and every verb in the bar is one you could perform at any time.
+    'A PASS ADDS NO VERBS: the bar is what the selection summons, not the mode',
+    w.noBarYet === 0 && Array.isArray(w.verbs) && w.verbs.length === 4,
+    `${w.noBarYet} before \u00b7 ${JSON.stringify(w.verbs)}`,
   )
   check(
-    // The whole reason staging exists: mark a swathe, look at what is about to
-    // happen, and only then commit.
-    'THE POINT: marking is a SELECTION \u2014 nothing is written until you finish',
-    w.staged === 2 && w.nothingWrittenYet === 6,
-    `${w.staged} staged \u00b7 ${w.nothingWrittenYet} rows still there`,
-  )
-  check('and un-marking one puts it back', w.afterKeeping === 1, String(w.afterKeeping))
-  check(
-    // A walk that drops nothing is the common one and still has to record that
-    // you looked \u2014 so this is not "apply", it is "I have looked", which
-    // sometimes also deletes. The count is there because the count is the risk.
-    'finishing says what it will do, and says it only when there is a risk',
-    w.finishSays === 'Finish' && w.finishCounts === 'Finish, dropping 2',
-    `${JSON.stringify(w.finishSays)} then ${JSON.stringify(w.finishCounts)}`,
+    // The whole reason staging existed: mark a swathe, look at what is about to
+    // happen, and only then commit. It survives as selection, which is the
+    // general form — and the confirmation moved to the bulk act, where the
+    // consequence is, rather than sitting on the mode it happened inside.
+    'THE POINT: selecting writes NOTHING, and says how many it would touch',
+    w.selected === 2 && w.nothingWrittenYet === 6 && w.barSays === '2 selected',
+    `${w.selected} selected \u00b7 ${w.nothingWrittenYet} rows \u00b7 ${JSON.stringify(w.barSays)}`,
   )
   check(
-    'finishing drops what was marked, and the motion carries on to the choosing',
-    w.rowsAfterFinish === 5 && w.highlightGone === 0 && /today/i.test(w.stillInPass ?? ''),
-    `${w.rowsAfterFinish} rows \u00b7 ${w.highlightGone} still marked \u00b7 then ${JSON.stringify(w.stillInPass)}`,
+    'and shift extends a range over what is on the SCREEN',
+    // The only order that means anything when the list is grouped by tag.
+    w.afterRange === 4,
+    `${w.afterRange} after extending from 2 to 4`,
+  )
+  check('and un-picking one puts it back', w.afterUnpicking === 3, String(w.afterUnpicking))
+  check(
+    'ONE ACT ON MANY: the bulk verb changes them all and takes the bar down',
+    w.rowsAfterBulk === 3 && w.barAfterBulk === 0,
+    `${w.rowsAfterBulk} rows left \u00b7 ${w.barAfterBulk} bar`,
   )
   check(
-    'and the offer comes down when the whole pass ends, not when the walk does',
-    w.startSaysAfter === 'reorient again',
-    JSON.stringify(w.startSaysAfter),
+    // A pass that changes nothing is the common one and still has to record
+    // that you looked — so finishing is not "apply", it is "I have looked".
+    'and the pass still ends by recording that you looked',
+    w.highlightGone === 0 && w.startSaysAfter === 'reorient again',
+    `${w.highlightGone} still marked \u00b7 ${JSON.stringify(w.startSaysAfter)}`,
   )
   check('nothing errored on the way', w.appError === 'none', String(w.appError))
 
@@ -2126,7 +2132,7 @@ console.log('\n— the walk —')
   check(
     // Nothing to undo: a selection was never a change. And the day is still
     // unreviewed, because you did not say you had looked.
-    'cancelling forgets the marks and leaves every item where it was',
+    'cancelling forgets the selection and leaves every item where it was',
     c.rowsAfterCancel === 6 && c.barGone === true && c.stillOffered === 'true',
     `${c.rowsAfterCancel} rows \u00b7 still offered ${c.stillOffered}`,
   )

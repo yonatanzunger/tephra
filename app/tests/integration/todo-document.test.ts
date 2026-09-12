@@ -718,3 +718,67 @@ test('and a chosen item that is deleted stops being chosen, rather than dangling
   await doc.remove(bank as string)
   assert.deepEqual(await doc.chosenOn(MON), [form])
 })
+
+// ── bulk acts (MH4) ─────────────────────────────────────────
+//
+// **One write, and therefore one undo step**, which is the rule `finishWalk`
+// already followed. That argument was made about deleting and is not about
+// deleting: it is about *bulk*. Eleven edits would let an undo leave the list
+// half-changed and cost eleven gestures to change your mind about one act.
+
+test('THE POINT: one act changes many items, and is ONE edit', async t => {
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] ring the bank', '- [ ] post the form', '- [ ] read the survey'],
+  })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const ids = (await doc.itemsOn(MON)).map(one => one.id as string)
+
+  assert.equal(await doc.bulk([ids[0] as string, ids[2] as string], 'backlog'), 2)
+  const after = await doc.itemsOn(MON)
+  assert.deepEqual(after.map(one => one.status), ['backlog', 'todo', 'backlog'])
+
+  // One undo brings the whole act back, not a third of it.
+  await doc.undo()
+  assert.deepEqual((await doc.itemsOn(MON)).map(one => one.status), ['todo', 'todo', 'todo'])
+})
+
+test('and removing many is the same act, which is why it is one verb', async t => {
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] ring the bank', '- [ ] post the form', '- [ ] read the survey'],
+  })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const ids = (await doc.itemsOn(MON)).map(one => one.id as string)
+  assert.equal(await doc.bulk([ids[0] as string, ids[1] as string], 'remove'), 2)
+  assert.deepEqual((await doc.itemsOn(MON)).map(one => one.text), ['read the survey'])
+})
+
+test('it says how many it CHANGED, not how many it was asked about', async t => {
+  // Asked of five and changed three is a true thing worth saying, and the
+  // surface reports it back rather than the count it sent.
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const bank = (await doc.itemsOn(MON))[0]?.id as string
+  assert.equal(await doc.bulk([bank, 'notanitem', 'alsonot'], 'done'), 1)
+})
+
+test('and it reaches across days, because the list is carried and one item is not one day', async t => {
+  const { doc } = await list(t, {
+    [MON]: ['- [ ] ring the bank'],
+    [TUE]: ['- [ ] post the form'],
+  })
+  await doc.adopt(MON as unknown as SegmentKey)
+  await doc.adopt(TUE as unknown as SegmentKey)
+  const mon = (await doc.itemsOn(MON))[0]?.id as string
+  const tue = (await doc.itemsOn(TUE))[0]?.id as string
+  assert.equal(await doc.bulk([mon, tue], 'dropped'), 2)
+  assert.equal((await doc.itemsOn(MON))[0]?.status, 'dropped')
+  assert.equal((await doc.itemsOn(TUE))[0]?.status, 'dropped')
+})
+
+test('an empty selection does nothing at all, and writes nothing', async t => {
+  const { doc, fileOn } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const was = await fileOn(MON)
+  assert.equal(await doc.bulk([], 'done'), 0)
+  assert.equal(await fileOn(MON), was)
+})

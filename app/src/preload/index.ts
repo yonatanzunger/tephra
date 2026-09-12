@@ -349,6 +349,9 @@ const tephra = {
     /** Whether the day has been reviewed, and what arrived from before it (T11). */
     walk: (list: DocumentId, date: DateKey): Promise<WalkState> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'walk', list, date }),
+    /** One act on many items: a status, or `remove`. Returns how many changed. */
+    bulk: (list: DocumentId, items: readonly string[], action: TodoStatus | 'remove'): Promise<number> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'bulk', list, items, action }),
     /** The day's selection, in the order it was chosen (H9). */
     chosen: (list: DocumentId, date: DateKey): Promise<readonly string[]> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'chosen', list, date }),

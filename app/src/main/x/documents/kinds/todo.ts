@@ -33,7 +33,7 @@ import {
 } from '../../../../shared/kinds/todo.ts'
 import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import type {
-  DateKey, DocumentId, DocumentMeta, DocumentText, SegmentKey, Span,
+  DateKey, DocumentId, DocumentMeta, DocumentPosition, DocumentText, SegmentKey, Span,
 } from '../../../../shared/document-api.ts'
 
 /** An item, and which day's file it was read from. */
@@ -604,6 +604,60 @@ export class TodoDocument extends SegmentedDocument {
    * **The newest instance**, because that is what the item IS now (D56); the
    * older ones are its history and are never edited in place.
    */
+  /**
+   * Do one thing to many items at once (MH4).
+   *
+   * **One write, and therefore one undo step**, which is the rule `finishWalk`
+   * already follows and for the same reason: a bulk act that came back as
+   * eleven edits would let an undo leave the list half-changed, and would cost
+   * eleven gestures to change your mind about one act. That argument was made
+   * about deleting; it is not about deleting, it is about *bulk*.
+   *
+   * `'remove'` cuts the lines; anything else is a status. Both shapes are here
+   * rather than in two verbs because the caller has one gesture — *do this to
+   * these* — and a surface that had to know which of two calls to make would be
+   * knowing something about the file format.
+   *
+   * Returns how many were actually changed, which is what the surface reports
+   * back: asked of five and changed three is a true thing worth saying.
+   */
+  async bulk(ids: readonly string[], action: TodoStatus | 'remove'): Promise<number> {
+    const wanted = new Set(ids)
+    if (wanted.size === 0) return 0
+    const edits: { span: { begin: DocumentPosition; end: DocumentPosition }; payload: DocumentText }[] = []
+    let touched = 0
+    for (const key of [...(await this.keys())].reverse()) {
+      const date = key as DateKey
+      for (const found of await this.#scan(date)) {
+        const id = found.item.id
+        if (id === null || !wanted.has(id)) continue
+        wanted.delete(id)
+        touched += 1
+        if (action === 'remove') {
+          edits.push({
+            span: { begin: this.at(date, found.from), end: this.at(date, found.end) },
+            payload: '' as DocumentText,
+          })
+          continue
+        }
+        const line = itemLine({
+          ...found.item,
+          status: action,
+          // Same rule the single verb reads by: a reason is kept only where it
+          // means something (T4), and a bulk gesture has no room to ask for one.
+          reason: action === 'blocked' ? found.item.reason : null,
+          mtime: nowSeconds(),
+        })
+        edits.push({
+          span: { begin: this.at(date, found.from), end: this.at(date, found.to) },
+          payload: line as DocumentText,
+        })
+      }
+    }
+    if (edits.length > 0) await this.replace(edits, 'operation')
+    return touched
+  }
+
   async #rewrite(id: string, change: (item: TodoItem, date: DateKey) => TodoItem): Promise<boolean> {
     for (const key of [...(await this.keys())].reverse()) {
       const date = key as DateKey

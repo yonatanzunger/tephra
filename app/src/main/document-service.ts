@@ -1415,6 +1415,30 @@ export class DocumentService {
     }
   }
 
+  /**
+   * Do one thing to many items (MH4).
+   *
+   * **One write below, and the same flow-back above.** Whatever a bulk gesture
+   * resolves, the dockets have to hear it: a generated task put down in a batch
+   * of nine is as resolved as one put down on its own, and a matter that missed
+   * it would go quiet exactly as D79 describes. So this finishes the way the
+   * single verb does — tell the steps, then reconcile.
+   */
+  async todoBulk(
+    id: DocumentId,
+    items: readonly string[],
+    action: TodoStatus | 'remove',
+  ): Promise<number> {
+    const many = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as TodoDocument).bulk(items, action)))
+    this.#touched()
+    if (action === 'done') for (const item of items) await this.#finished(item)
+    // **Removal resolves too, and is the case a status-shaped test would miss**:
+    // a deleted item is not live, so anything waiting on it is waiting for ever.
+    if (action === 'remove' || !isLive(action)) await this.reconcile()
+    return many
+  }
+
   async todoRemove(id: DocumentId, item: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).remove(item)))
     this.#touched()

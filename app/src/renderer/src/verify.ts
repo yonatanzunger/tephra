@@ -603,8 +603,8 @@ export async function runVerify(request: string): Promise<void> {
         listFace: getComputedStyle(surface as Element).fontFamily,
         prose: prose2 === null ? null : getComputedStyle(prose2).fontSize,
       })
-      say('band', [...document.querySelectorAll('.todo-soon-item')].map(
-        b => b.querySelector('.todo-when')?.textContent ?? '',
+      say('band', [...document.querySelectorAll('.hz-row')].map(
+        b => b.querySelector('.hz-on')?.textContent ?? '',
       ))
       say('tags', [...document.querySelectorAll('.todo-tag')].map(t => t.textContent ?? ''))
       say('dues', [...document.querySelectorAll('.todo-due')].map(d => d.textContent ?? ''))
@@ -772,7 +772,12 @@ export async function runVerify(request: string): Promise<void> {
           rowMark: Math.round(document.querySelector('.todo-row:not(.todo-adding) .todo-glyph')?.getBoundingClientRect().left ?? -1),
           addMark: Math.round(document.querySelector('.todo-adding .todo-glyph')?.getBoundingClientRect().left ?? -1),
         })
-        say('railRight', (rail?.left ?? 0) >= (col?.right ?? 0))
+        // **Below now, not beside** (MH4 amending D42's placement): the band
+        // moved out of the gutter into a pane of its own, which is what freed
+        // the gutter for annotations. The no-reflow rule it was obeying is
+        // satisfied better by a fixed pane than by a rail that came and went.
+        say('railBelow', (document.querySelector('.todo-horizon')?.getBoundingClientRect().top ?? 0)
+          >= (document.querySelector('.todo-list')?.getBoundingClientRect().top ?? 0))
       }
       document.querySelector('.todo-field')?.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
@@ -1026,8 +1031,8 @@ export async function runVerify(request: string): Promise<void> {
       // invalid and a second thing to hit. So it shows the label — and it was
       // showing the raw `[text](https://…)`, which is the file being honest in
       // a place nobody asked it to be.
-      say('railText', document.querySelector('.todo-soon-text')?.textContent ?? '')
-      say('railHasAnchor', document.querySelector('.todo-soon a') !== null)
+      say('railText', document.querySelector('.hz-what')?.textContent ?? '')
+      say('railHasAnchor', document.querySelector('.todo-horizon a') !== null)
 
       // **Emphasis works in a row too, and it is the same gesture** — three
       // cases, the second press taking it off again.
@@ -1794,52 +1799,61 @@ export async function runVerify(request: string): Promise<void> {
       // For the picture: the list as it greets you, offering and not asking.
       if (arg !== 'offer') {
       start?.click()
-      await settle(400)
-      // **The walk is movement 2 of reorient now** (MH4, H11 superseding T11),
-      // so the pass opens on *what's coming* and this steps through to the one
-      // under test. Every claim below is unchanged — what moved is the path to
-      // it, which is what superseding a flow means.
-      ;([...document.querySelectorAll('.todo-walkbar button')].find(
-        b => (b.textContent ?? '').trim() === 'Next') as HTMLElement | null)?.click()
-      await settle(600)
-      say('dropButtons', document.querySelectorAll('.todo-drop').length)
+      await settle(500)
       // And NOW they are marked: the pass says what it is putting in front of you.
       say('carriedRows', rows().filter(r => r.classList.contains('carried')).length)
-      say('finishSays', document.querySelector('.todo-walk-finish')?.textContent?.trim() ?? '')
 
-      // Stage two, look at the preview, then change your mind about one.
-      const drops = [...document.querySelectorAll('.todo-drop')] as HTMLElement[]
-      drops[0]?.click()
-      await settle(200)
-      drops[2]?.click()
-      await settle(300)
-      say('staged', rows().filter(r => r.classList.contains('dropping')).length)
-      say('finishCounts', document.querySelector('.todo-walk-finish')?.textContent?.trim() ?? '')
+      /**
+       * **Selection, which is what the staged *drop* became** (MH4).
+       *
+       * The pass adds no verbs of its own: ⌘-click selects, and every act in the
+       * bar is one you could have performed at any time. What changed is not
+       * which acts exist but who they apply to — and the confirmation moved with
+       * them, from the mode to the bulk act, where the consequence actually is.
+       */
+      const pick = async (at: number, how: 'meta' | 'shift' = 'meta'): Promise<void> => {
+        rows()[at]?.dispatchEvent(new MouseEvent('click', {
+          bubbles: true, cancelable: true,
+          ...(how === 'shift' ? { shiftKey: true } : { metaKey: true }),
+        }))
+        await settle(250)
+      }
+      say('noBarYet', document.querySelectorAll('.todo-walkbar .todo-bulk').length)
+      await pick(0)
+      await pick(2)
+      say('selected', rows().filter(r => r.classList.contains('selected')).length)
+      say('barSays', document.querySelector('.todo-walkbar .todo-movement')?.textContent?.trim() ?? '')
+      say('verbs', [...document.querySelectorAll('.todo-walkbar .todo-bulk')]
+        .map(b => (b.textContent ?? '').trim()))
       say('nothingWrittenYet', texts().length)
-      drops[2]?.click()
-      await settle(300)
-      say('afterKeeping', rows().filter(r => r.classList.contains('dropping')).length)
+
+      // **Shift extends a range over what is on the SCREEN**, which is the only
+      // order that means anything when the list is grouped by tag.
+      await pick(4, 'shift')
+      say('afterRange', rows().filter(r => r.classList.contains('selected')).length)
+
+      // Un-picking one puts it back, a selection being nothing until acted on.
+      await pick(0)
+      say('afterUnpicking', rows().filter(r => r.classList.contains('selected')).length)
 
       if (arg === 'cancel') {
         ;(document.querySelector('.todo-walk-cancel') as HTMLElement | null)?.click()
         await settle(700)
         say('rowsAfterCancel', texts().length)
         say('stillOffered', (document.querySelector('.todo-walk-start') as HTMLElement | null)?.dataset['offered'] ?? '')
-        say('barGone', document.querySelector('.todo-walkbar') === null)
-      } else if (arg === 'stay') {
-        // For the picture, mid-pass with a fate staged.
+        say('barGone', document.querySelector('.todo-walkbar .todo-bulk') === null)
       } else {
-        // **Finishing movement 2 applies the drops and records the pass** — the
-        // walk's own act, unchanged — and then movement 3 begins. The offer
-        // comes down when the whole motion ends, which is one click further on
-        // than it used to be and is what *superseded by reorient* means (H11).
-        ;(document.querySelector('.todo-walk-finish') as HTMLElement | null)?.click()
+        // **One act on many, and one undo step** — pressed here as Delete,
+        // which is the one verb that cannot be taken back by pressing another.
+        ;([...document.querySelectorAll('.todo-walkbar .todo-bulk')].find(
+          b => (b.textContent ?? '').trim() === 'Delete') as HTMLElement | null)?.click()
         await settle(1200)
-        say('rowsAfterFinish', texts().length)
-        say('highlightGone', rows().filter(r => r.classList.contains('carried')).length)
-        say('stillInPass', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
+        say('rowsAfterBulk', texts().length)
+        say('barAfterBulk', document.querySelectorAll('.todo-walkbar .todo-bulk').length)
+        // The pass itself still ends by recording that you looked.
         ;(document.querySelector('.todo-walk-finish') as HTMLElement | null)?.click()
         await settle(900)
+        say('highlightGone', rows().filter(r => r.classList.contains('carried')).length)
         say('startSaysAfter', document.querySelector('.todo-walk-start')?.textContent?.trim() ?? '')
         await window.tephra.doc.flush()
       }

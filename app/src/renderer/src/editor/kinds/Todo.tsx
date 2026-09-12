@@ -49,6 +49,25 @@ import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 const SOON_DAYS = 7
 
 /**
+ * The verbs a bulk act offers, in the order somebody reaches for them (MH4).
+ *
+ * **The four that resolve, and then delete.** Done, today, backlog and
+ * nevermind all say something true about the item and leave it saying it;
+ * delete leaves nothing, which is why it is last, marked, and the only one that
+ * cannot be taken back by pressing something else.
+ *
+ * *Blocked* is not here on purpose: it asks WHY (T4), and a block without the
+ * thing it is waiting on is the one status that says nothing — which a gesture
+ * with no room to ask is guaranteed to produce.
+ */
+const BULK: readonly { label: string; action: TodoStatus | 'remove' }[] = [
+  { label: 'Done', action: 'done' },
+  { label: 'Backlog', action: 'backlog' },
+  { label: 'Nevermind', action: 'dropped' },
+  { label: 'Delete', action: 'remove' },
+]
+
+/**
  * What each movement of reorient is asking (H11, MH4).
  *
  * **Named rather than numbered**, because *step 2 of 3* tells you where you are
@@ -56,11 +75,6 @@ const SOON_DAYS = 7
  * questions, and knowing which one is being asked is the whole of knowing what
  * to do with the list in front of you.
  */
-const MOVEMENTS: Readonly<Record<number, string>> = {
-  1: "What's coming",
-  2: "What's live",
-  3: "What's today",
-}
 
 /**
  * The status, drawn rather than typed.
@@ -280,6 +294,18 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * drag source is not a gesture, and a `draggable` attribute that never lifts
    * is a control that looks like one and is not.
    */
+  /**
+   * What a bulk act would act on (MH4).
+   *
+   * **Selection is a thing the list can do, not a thing a mode lends it.** It
+   * replaced the walk's staged *drop*, which was a selection wearing one verb's
+   * name — and once it is a selection, the confirmation belongs to the bulk act
+   * (N times the consequence) rather than to the mode it happened inside.
+   */
+  const [selected, setSelected] = useState<readonly string[]>([])
+  /** Where a shift-click measures from: the last one touched, as everywhere. */
+  const [anchor, setAnchor] = useState<string | null>(null)
+
   const [horizonHeight, setHorizonHeight] = useState(220)
   const onDividerDown = (down: React.PointerEvent): void => {
     down.preventDefault()
@@ -305,7 +331,6 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * under its own tags, and the section above is a second view of it.
    */
   const [chosen, setChosen] = useState<readonly string[]>([])
-  const [dropping, setDropping] = useState<ReadonlySet<string>>(new Set())
 
   /**
    * Reorient asked for from the menu (H11, ⌘R).
@@ -317,7 +342,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    */
   useEffect(() => window.tephra.doc.onMenuCommand(command => {
     if (command === 'reorient') {
-      setDropping(new Set())
+
       setWalking(true)
     }
   }), [])
@@ -585,12 +610,19 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    */
   const carriedNow = new Set(walking && walk !== null ? walk.carried : [])
 
-  const toggleDrop = (id: string): void =>
-    setDropping(before => {
-      const next = new Set(before)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
+  /**
+   * The ids on the screen, in the order they are drawn.
+   *
+   * **Asked of the DOM, because that is the question.** A shift-click means
+   * *these, between the two I pointed at*, and what is between them depends on
+   * the grouping, the scrub and the pivot — all of which the rendered order
+   * already knows and none of which the item list does.
+   */
+  const onScreen = (): readonly string[] =>
+    [...document.querySelectorAll('.todo-row[id^="todo-"]')]
+      .map(one => one.id.slice('todo-'.length))
+      .filter(one => one !== '')
+
 
   /**
    * The row being typed into, wherever it was asked for.
@@ -659,8 +691,25 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       under={under}
       carried={carriedNow.has(item.id ?? '')}
       {...(onTextTarget === undefined ? {} : { onTextTarget })}
-      dropping={dropping.has(item.id ?? '')}
-      {...(walking && item.id !== null ? { onDrop: () => toggleDrop(item.id as string) } : {})}
+      selected={selected.includes(item.id ?? '')}
+      {...(item.id === null || past ? {} : {
+        onSelect: ({ range }: { range: boolean }) => {
+          const id = item.id as string
+          // **A range runs over what is on the screen**, not over the file: the
+          // list is grouped by tag half the time, and shift-click means *these,
+          // between the two I pointed at* — which is a fact about the view.
+          const shown = onScreen()
+          const from = anchor === null ? -1 : shown.indexOf(anchor)
+          const to = shown.indexOf(id)
+          if (range && from >= 0 && to >= 0) {
+            const span = shown.slice(Math.min(from, to), Math.max(from, to) + 1)
+            setSelected(was => [...was, ...span.filter(one => !was.includes(one))])
+            return
+          }
+          setAnchor(id)
+          setSelected(was => (was.includes(id) ? was.filter(one => one !== id) : [...was, id]))
+        },
+      })}
       {...(daily && item.id !== null && !past
         ? {
           picked: chosen.includes(item.id),
@@ -799,7 +848,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               className="todo-walk-start"
               data-offered={!walk.walked}
               onClick={() => {
-                setDropping(new Set())
+
                 setWalking(true)
               }}
             >
@@ -923,47 +972,6 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
           <p className="todo-empty">Nothing on the list. That is allowed.</p>
         )}
 
-        {/* **Finishing carries the count, because the count is the risk.** A
-            walk that drops nothing is the common one and it still has to record
-            that you looked — so this is not "apply", it is "I have looked",
-            which sometimes also deletes. Saying how many keeps a stray click
-            from being the expensive kind. */}
-        {walking && (
-          <div className="todo-walkbar" role="group" aria-label="Reorient">
-            <span className="todo-movement">Reorienting</span>
-            <button
-              type="button"
-              className="todo-walk-finish"
-              data-dropping={dropping.size > 0}
-              onClick={() => {
-                // **Movement 2 ends by recording that you looked** — the walk's
-                // own act, unchanged — and then movement 3 begins. Choosing is
-                // never mandatory (H10), so this is also a fine place to stop:
-                // the pass is recorded whether or not anything is picked.
-                const drop = [...dropping]
-                setWalking(false)
-                setDropping(new Set())
-                act(window.tephra.todo.finishWalk(list, today as DateKey, drop))
-              }}
-            >
-              {dropping.size === 0 ? 'Finish' : `Finish, dropping ${dropping.size}`}
-            </button>
-            {/* Nothing to undo: a selection was never a change. */}
-            <button
-              type="button"
-              className="todo-walk-cancel"
-              onClick={() => {
-                setWalking(false)
-                setDropping(new Set())
-              }}
-            >
-              Cancel
-            </button>
-            <span className="todo-walkbar-note">
-              Anything still on the list stays on it.
-            </span>
-          </div>
-        )}
       </div>
 
       {menu !== null && <RowMenu request={menu} onClose={() => setMenu(null)} />}
@@ -984,6 +992,60 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
 
         **And it frees the gutter**, which the layout has always called the
         annotation column and which the due-soon strip had been borrowing. */}
+      {/* **The bulk bar, and the two-step gesture IS the confirmation.** You
+          pointed at these and then pressed a verb that says how many it will
+          touch; a dialog on top of that would be asking the same question
+          twice. Delete is the exception and only because it cannot be undone
+          by pressing something else — so it is marked, not gated.
+
+          It replaced the walk's staged *drop*, which was this mechanism
+          wearing one verb's name: bulk is the general act, and deleting is
+          one of the things you can do in bulk. */}
+      {selected.length > 0 && (
+        <div className="todo-walkbar" role="group" aria-label="Do this to the selected">
+          <span className="todo-movement">{selected.length} selected</span>
+          {BULK.map(one => (
+            <button
+              key={one.action}
+              type="button"
+              className="todo-bulk"
+              data-destructive={one.action === 'remove'}
+              onClick={() => {
+                const ids = selected
+                setSelected([])
+                setAnchor(null)
+                act(window.tephra.todo.bulk(list, ids, one.action))
+              }}
+            >
+              {one.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="todo-walk-cancel"
+            onClick={() => { setSelected([]); setAnchor(null) }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {walking && (
+        <div className="todo-walkbar" role="group" aria-label="Reorient">
+          <span className="todo-movement">Reorienting</span>
+          <button
+            type="button"
+            className="todo-walk-finish"
+            onClick={() => {
+              setWalking(false)
+              act(window.tephra.todo.finishWalk(list, today as DateKey, []))
+            }}
+          >
+            Done
+          </button>
+        </div>
+      )}
+
     {daily && (
       <>
         <div
@@ -1063,9 +1125,9 @@ function Row({
   onMenu,
   under = null,
   carried = false,
-  dropping = false,
+  selected = false,
   readOnly = false,
-  onDrop,
+  onSelect,
   onChoose,
   picked = false,
   onTextTarget,
@@ -1092,7 +1154,6 @@ function Row({
   /** Arrived from an earlier day and the day has not been reviewed (T11). */
   carried?: boolean
   /** Marked for deletion in an open pass. A selection, not an edit. */
-  dropping?: boolean
   /**
    * A day that has gone past, which is READ (T7's flow 7).
    *
@@ -1103,8 +1164,10 @@ function Row({
    */
   readOnly?: boolean
   /** Present only during a pass, which is the only time a row can be dropped. */
-  onDrop?: () => void
-  /** Movement 3: choose this one for today, or take it back off (H9). */
+  /** Selected for a bulk act, and how the gesture reached it (MH4). */
+  selected?: boolean
+  onSelect?: (how: { range: boolean }) => void
+  /** Choose this one for today, or take it back off (H9). */
   onChoose?: () => void
   picked?: boolean
   /** Passed to whichever field this row opens, so ⌘K can reach it. */
@@ -1118,13 +1181,23 @@ function Row({
       id={`todo-${item.id ?? ''}`}
       className={
         `todo-row status-${item.status}${done ? ' finished' : ''}` +
-        `${carried ? ' carried' : ''}${dropping ? ' dropping' : ''}`
+        `${carried ? ' carried' : ''}${selected ? ' selected' : ''}`
       }
       {...(readOnly ? {} : { onContextMenu: onMenu })}
       // **The whole row**, because an item whose text is empty had nothing to
       // click: the text button collapsed to nothing and the only way back into
       // it was to delete the file. A row is one thing and clicking it edits it.
-      onClick={() => {
+      onClick={e => {
+        // **⌘-click selects, shift-click extends**, which is what every list in
+        // every application means by those keys — and neither collides with
+        // anything a row already does, since a plain click edits it and the
+        // glyph and the menu have their own targets.
+        if (onSelect !== undefined && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+          e.preventDefault()
+          e.stopPropagation()
+          onSelect({ range: e.shiftKey })
+          return
+        }
         if (!readOnly && !editing && !blocking) onEdit()
       }}
     >
@@ -1199,15 +1272,6 @@ function Row({
         </span>
       )}
 
-      {/* **The only control a pass adds.** Marking done already has a control
-          and it is the glyph, in the place it is on every other day — a
-          control that changed meaning inside a mode would be the surprise this
-          design was rearranged to avoid. Deleting is the one act that wants
-          looking at before it happens, so it is the one that is staged. */}
-      {/* **Movement 3's mark, and the same shape as movement 2's**: one control
-          that appears for the length of a movement and says what it will do.
-          Never both at once — each movement asks one question, which is what
-          keeps a pass from becoming a form. */}
       {onChoose !== undefined && (
         <button
           type="button"
@@ -1223,20 +1287,6 @@ function Row({
         </button>
       )}
 
-      {onDrop !== undefined && (
-        <button
-          type="button"
-          className="todo-drop"
-          aria-pressed={dropping}
-          title={dropping ? 'Keep this one after all' : 'Drop this when the pass ends'}
-          onClick={e => {
-            e.stopPropagation()
-            onDrop()
-          }}
-        >
-          {dropping ? 'Keep' : 'Drop'}
-        </button>
-      )}
     </li>
   )
 }
