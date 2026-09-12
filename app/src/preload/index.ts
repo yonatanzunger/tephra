@@ -349,6 +349,12 @@ const tephra = {
     /** Whether the day has been reviewed, and what arrived from before it (T11). */
     walk: (list: DocumentId, date: DateKey): Promise<WalkState> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'walk', list, date }),
+    /** The day's selection, in the order it was chosen (H9). */
+    chosen: (list: DocumentId, date: DateKey): Promise<readonly string[]> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'chosen', list, date }),
+    /** Choose an item for the day, or unchoose it. A mark, never a move. */
+    choose: (list: DocumentId, date: DateKey, item: string, chosen: boolean): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'choose', list, date, item, chosen }),
     /** End a pass: delete what was marked and record the review, as one act. */
     finishWalk: (list: DocumentId, date: DateKey, drop: readonly string[]): Promise<number> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'finishWalk', list, date, drop }),

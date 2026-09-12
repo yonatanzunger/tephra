@@ -1337,6 +1337,24 @@ export class DocumentService {
   }
 
   /** Serialised with every other write, for the reason D37 gives. */
+  /**
+   * What was chosen for a day, and choosing (H9, MH4).
+   *
+   * **A mark on the day, not a status and not a tag** — see `CHOSEN` in the
+   * document for why both of those are wrong. Nothing about this is contingent
+   * on reorient: the ritual is offered and never required (H10), so choosing has
+   * to be a thing you can simply do.
+   */
+  async todoChosen(id: DocumentId, date: DateKey): Promise<readonly string[]> {
+    return this.#corpus.use(id, doc => (doc as TodoDocument).chosenOn(date), { mode: 'read' })
+  }
+
+  async todoChoose(id: DocumentId, date: DateKey, item: string, chosen: boolean): Promise<void> {
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as TodoDocument).choose(date, item, chosen)))
+    this.#touched()
+  }
+
   async todoAdd(id: DocumentId, text: string): Promise<string> {
     const made = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as TodoDocument).add(text, this.today, this.#takenIds)),

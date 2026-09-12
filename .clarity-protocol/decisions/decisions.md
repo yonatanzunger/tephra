@@ -3238,6 +3238,32 @@ inside the task surface — narrowing H8 to *present when you are in the task li
 owed**, and the narrowing is recorded in the roadmap so it is not mistaken for
 done.
 
+> **Amended 2026-09-12 (MH4), and the location is withdrawn.** The full horizon
+> is no longer a `NavTarget` and has no ⌘-number; it is the **lower half of the
+> task list's view**, below a resizable divider. The compact strip in the gutter
+> is withdrawn with it, being the same content in a worse place.
+>
+> **The test above was answered correctly and was the wrong test.** *Does
+> following an entry mean you are done with the list?* is a question about one
+> surface at a time, and it made the horizon a place. The question that wins is
+> about two: **what you are doing and what is coming are two halves of one
+> question** — whether a task matters today depends on there being a talk in ten
+> days — so somebody consulting both was keeping two windows open to do what one
+> should. Reported from use as *this feels strictly better*.
+>
+> **Below rather than beside, to keep the measure.** The list is set in the
+> notebook's own type at the notebook's own width (D41); a vertical split halves
+> the reading width of the half actually worked in, while the horizon is short
+> read-only lines that take a wide shape happily.
+>
+> **And it frees the gutter**, which the layout has always called the annotation
+> column and which the strip had been borrowing — which is where MH4's
+> annotations go.
+>
+> What D74 got right survives: the horizon is still *kept beside you*, and the
+> window you leave open is still what discharges H8 early. It is one window now
+> instead of two.
+
 ## D75: A docket is divided by sections, told apart by content rather than depth
 
 **Date:** 2026-09-10

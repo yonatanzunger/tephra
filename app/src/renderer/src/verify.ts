@@ -1425,11 +1425,18 @@ export async function runVerify(request: string): Promise<void> {
         `Review Steve's [bio draft](https://docs.google.com/document/d/1t8me/edit) #career DUE ${from(3)}`)
       await window.tephra.doc.flush()
 
-      await pane.goTo({ kind: 'horizon' })
-      await settle(1400)
+      // **The horizon is the lower half of the task list's view** (MH4, amending
+      // D74), so this is where it is read — there is no window of its own to go
+      // to any more, and the strip in the gutter that preceded it is gone too.
+      await pane.goTo({ kind: 'document', id: list })
+      await settle(1800)
       say('title', document.querySelector('.titlebar .title')?.textContent ?? '')
-      say('surface', document.querySelector('.horizon') !== null)
-      say('days', [...document.querySelectorAll('.hz-date')].map(n => n.textContent ?? ''))
+      say('surface', document.querySelector('.todo-horizon .horizon') !== null)
+      say('bothHalves', {
+        list: document.querySelectorAll('.todo-list > .todo-row').length,
+        horizon: document.querySelectorAll('.hz-row').length,
+      })
+      say('days', [...document.querySelectorAll('.hz-on')].map(n => n.textContent ?? ''))
       say('rows', [...document.querySelectorAll('.hz-row')].map(n => ({
         what: (n.querySelector('.hz-what') as HTMLElement | null)?.textContent ?? '',
         kind: (n.querySelector('.hz-kind') as HTMLElement | null)?.textContent ?? '',
@@ -1455,26 +1462,21 @@ export async function runVerify(request: string): Promise<void> {
       // the stylesheet whether a rule exists, rather than guessing from a
       // computed value that looks plausible at browser defaults.
       say('styled', unstyled(/\.(hz-[a-z-]+|horizon)\b/g, [
-        'horizon', 'hz-head', 'hz-count', 'hz-span', 'hz-empty', 'hz-list', 'hz-day',
-        'hz-date', 'hz-row', 'hz-what', 'hz-about', 'hz-kind', 'hz-matter', 'hz-instance',
+        'horizon', 'hz-head', 'hz-count', 'hz-span', 'hz-empty', 'hz-list',
+        'hz-on', 'hz-row', 'hz-what', 'hz-about', 'hz-kind', 'hz-matter', 'hz-instance',
         'hz-spans',
       ]))
       const what = document.querySelector('.hz-what') as HTMLElement | null
       const face = what === null ? null : getComputedStyle(what)
       say('reading', { size: face?.fontSize, family: face?.fontFamily?.slice(0, 24) })
-      // **And the compact half, which is the same content in the other place**
-      // (H8, D74). Narrowed to *present when you are in the task list* until MH4
-      // moves it — recorded in the roadmap so it is not mistaken for done.
-      await pane.goTo({ kind: 'document', id: list })
-      await settle(1600)
-      say('strip', [...document.querySelectorAll('.todo-soon-item')].map(n => ({
-        when: (n.querySelector('.todo-when') as HTMLElement | null)?.textContent ?? '',
-        what: (n.querySelector('.todo-soon-text') as HTMLElement | null)?.textContent ?? '',
-        docket: n.classList.contains('from-docket'),
+      // **Both sources, interleaved by date in the one pane.** This was a strip
+      // in the gutter with its own markup; it is the same claim about the same
+      // content, asked of the surface that replaced it.
+      say('strip', [...document.querySelectorAll('.hz-row')].map(n => ({
+        when: (n.querySelector('.hz-on') as HTMLElement | null)?.textContent ?? '',
+        what: (n.querySelector('.hz-what') as HTMLElement | null)?.textContent ?? '',
+        docket: (n.querySelector('.hz-kind') as HTMLElement | null)?.textContent !== 'due',
       })))
-      // One region, one meaning: sorted by date, not clustered by source.
-      say('stripOrder', [...document.querySelectorAll('.todo-soon-item .todo-when')]
-        .map(n => n.textContent ?? ''))
 
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
@@ -1612,6 +1614,163 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'today') {
+      // The day's selection (H9, MH4) — **a mark on the day, and a view over it**.
+      const list = await window.tephra.todo.which()
+      await pane.goTo({ kind: 'document', id: list })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 2) {
+        await settle(200)
+        waited += 200
+      }
+      const texts = (sel: string): string[] =>
+        [...document.querySelectorAll(sel)].map(n => (n.textContent ?? '').trim())
+
+      say('todayBefore', document.querySelectorAll('.todo-today').length)
+
+      /**
+       * **Driven through the real gesture**, not through the verb underneath it.
+       * The first cut of this scene called `todo.choose` directly, saw nothing
+       * happen, and was measuring the right thing in the wrong place: choosing
+       * from the menu is what a person does, and it is also the only path that
+       * proves the surface hears its own act.
+       */
+      const chooseRow = async (words: string, say2: string): Promise<void> => {
+        const row = [...document.querySelectorAll('.todo-list > .todo-row')].find(
+          one => (one.querySelector('.todo-text')?.textContent ?? '').includes(words))
+        row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+        await settle(400)
+        // **Read while it is open.** The first cut sampled this after clicking,
+        // which is after the menu closed — an empty list that says nothing about
+        // whether the entry was ever there.
+        say('menuSaid', [...document.querySelectorAll('.row-menu button')].map(b => b.textContent ?? ''))
+        ;([...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '').trim() === say2) as HTMLElement | null)?.click()
+        await settle(900)
+      }
+
+      // Chosen in the OPPOSITE order to the list, so *order of choosing* is a
+      // claim the picture can actually fail.
+      await chooseRow('post the form', 'Do this today')
+      await chooseRow('ring the bank', 'Do this today')
+
+      say('section', document.querySelectorAll('.todo-today').length)
+      say('heading', document.querySelector('.todo-today-name')?.textContent?.trim() ?? '')
+      say('inToday', texts('.todo-today .todo-text'))
+      // **And still below**: a selection, never a relocation (H9). The section
+      // is a second view of the same rows, not somewhere they went.
+      say('wholeList', texts('.todo-list:not(.todo-today .todo-list) > .todo-row .todo-text'))
+      say('topmost',
+        document.querySelector('.todo-today, .todo-list')?.classList.contains('todo-today') ?? false)
+      say('styled', unstyled(/\.(todo-today[a-z-]*)\b/g, ['todo-today', 'todo-today-name']))
+      // **Measured, because a section that reads as its own region is the whole
+      // claim** and *there is a rule* does not say it looks like anything. Set
+      // against a tag heading, which is the thing it must be legible beside and
+      // must not be mistaken for.
+      {
+        const box = (sel: string): Record<string, string> | null => {
+          const el = document.querySelector(sel) as HTMLElement | null
+          if (el === null) return null
+          const css = getComputedStyle(el)
+          return {
+            size: css.fontSize, weight: css.fontWeight, colour: css.color,
+            family: (css.fontFamily.split(',')[0] ?? '').replace(/["']/g, ''),
+            case: css.textTransform, border: css.borderBottomColor,
+          }
+        }
+        say('todayHead', box('.todo-today-name'))
+        say('tagHead', box('.todo-group-name'))
+        const rows = [...document.querySelectorAll('.todo-today .todo-row, .todo-list > .todo-row')]
+        say('rowLefts', [...new Set(rows.map(r => Math.round(r.getBoundingClientRect().left)))])
+      }
+
+      // Unchoosing takes it back off, and the section goes when it empties.
+      // **Unless the picture is what is wanted**: the shot is taken when the
+      // scene ends, so a scene that tidies up photographs an empty list.
+      if (arg !== 'keep') {
+        await chooseRow('post the form', 'Not today')
+        await chooseRow('ring the bank', 'Not today')
+      }
+      say('todayAfter', document.querySelectorAll('.todo-today').length)
+      // **Where is this window actually pointing?** The shot kept photographing
+      // the stream while every DOM claim passed, which means one of the two is
+      // lying about which window it is talking about.
+      say('endLocation', JSON.stringify(pane.location))
+      say('endTitle', document.querySelector('.titlebar .title')?.textContent ?? '')
+      say('splitThere', document.querySelectorAll('.todo-split').length)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
+    if (scene === 'reorient') {
+      // **The whole motion, end to end** (H11, MH4). What this can say that no
+      // unit test can: that there is a way IN, that the three movements are
+      // three different questions, and that the pass leaves an artifact.
+      const list = await window.tephra.todo.which()
+      await pane.goTo({ kind: 'document', id: list })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 2) {
+        await settle(200)
+        waited += 200
+      }
+      const words = (sel: string): string[] =>
+        [...document.querySelectorAll(sel)].map(n => (n.textContent ?? '').trim())
+
+      // **The offer is the list looking different, and this is only the way in.**
+      const start = document.querySelector('.todo-walk-start') as HTMLElement | null
+      say('entrance', start?.textContent?.trim() ?? '')
+      say('offered', start?.dataset['offered'] ?? '')
+
+      // ── in from the menu, which is the entrance that works from anywhere ──
+      say('menuItemFound', await window.tephra.clickMenu('Reorient'))
+      await settle(1200)
+      say('movement1', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
+      say('coming', words('.todo-coming-row .todo-soon-text'))
+      // Movement 1 reads; it must not be asking anything of the rows yet.
+      say('noMarksYet', {
+        drop: document.querySelectorAll('.todo-drop').length,
+        pick: document.querySelectorAll('.todo-pick').length,
+      })
+
+      const step = async (label: string): Promise<void> => {
+        ;([...document.querySelectorAll('.todo-walkbar button')].find(
+          b => (b.textContent ?? '').trim().startsWith(label)) as HTMLElement | null)?.click()
+        await settle(900)
+      }
+
+      await step('Next')
+      say('movement2', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
+      say('walkMarks', {
+        drop: document.querySelectorAll('.todo-drop').length,
+        pick: document.querySelectorAll('.todo-pick').length,
+      })
+
+      await step('Finish')
+      say('movement3', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
+      say('chooseMarks', {
+        drop: document.querySelectorAll('.todo-drop').length,
+        pick: document.querySelectorAll('.todo-pick').length,
+      })
+
+      // Choose one, which is the movement's whole output.
+      ;(document.querySelectorAll('.todo-pick')[2] as HTMLElement | null)?.click()
+      await settle(900)
+      say('doneSays', [...document.querySelectorAll('.todo-walkbar button')]
+        .map(b => (b.textContent ?? '').trim()))
+      say('chosen', words('.todo-today .todo-text'))
+
+      await step('Done')
+      say('movementAfter', document.querySelectorAll('.todo-movement').length)
+      // **The artifact outlives the pass**, which is what separates reorient
+      // from the walk: the walk's product was attention and nothing else.
+      say('kept', words('.todo-today .todo-text'))
+      say('stillBelow', words('.todo-list:not(.todo-today .todo-list) > .todo-row .todo-text'))
+      say('walkedNow', (document.querySelector('.todo-walk-start') as HTMLElement | null)
+        ?.textContent?.trim() ?? '')
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'walk') {
       await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
       let waited = 0
@@ -1622,9 +1781,10 @@ export async function runVerify(request: string): Promise<void> {
       const rows = () => [...document.querySelectorAll('.todo-row')]
       const texts = () => rows().map(r => (r.querySelector('.todo-text')?.textContent ?? '').trim())
 
-      // **The list looking different IS the offer**, so what is checked first is
-      // that it looks different — and that the day's own items do not.
-      say('carriedRows', rows().filter(r => r.classList.contains('carried')).length)
+      // **The resting list is a list** (MH4's correction to T11): nothing is
+      // tinted until a pass asks about it, because a list where nearly every row
+      // has carried is one where tinting them all says nothing.
+      say('carriedAtRest', rows().filter(r => r.classList.contains('carried')).length)
       say('allRows', rows().length)
       const start = document.querySelector('.todo-walk-start') as HTMLElement | null
       say('offered', start?.dataset['offered'] ?? '')
@@ -1635,7 +1795,16 @@ export async function runVerify(request: string): Promise<void> {
       if (arg !== 'offer') {
       start?.click()
       await settle(400)
+      // **The walk is movement 2 of reorient now** (MH4, H11 superseding T11),
+      // so the pass opens on *what's coming* and this steps through to the one
+      // under test. Every claim below is unchanged — what moved is the path to
+      // it, which is what superseding a flow means.
+      ;([...document.querySelectorAll('.todo-walkbar button')].find(
+        b => (b.textContent ?? '').trim() === 'Next') as HTMLElement | null)?.click()
+      await settle(600)
       say('dropButtons', document.querySelectorAll('.todo-drop').length)
+      // And NOW they are marked: the pass says what it is putting in front of you.
+      say('carriedRows', rows().filter(r => r.classList.contains('carried')).length)
       say('finishSays', document.querySelector('.todo-walk-finish')?.textContent?.trim() ?? '')
 
       // Stage two, look at the preview, then change your mind about one.
@@ -1660,10 +1829,17 @@ export async function runVerify(request: string): Promise<void> {
       } else if (arg === 'stay') {
         // For the picture, mid-pass with a fate staged.
       } else {
+        // **Finishing movement 2 applies the drops and records the pass** — the
+        // walk's own act, unchanged — and then movement 3 begins. The offer
+        // comes down when the whole motion ends, which is one click further on
+        // than it used to be and is what *superseded by reorient* means (H11).
         ;(document.querySelector('.todo-walk-finish') as HTMLElement | null)?.click()
         await settle(1200)
         say('rowsAfterFinish', texts().length)
         say('highlightGone', rows().filter(r => r.classList.contains('carried')).length)
+        say('stillInPass', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
+        ;(document.querySelector('.todo-walk-finish') as HTMLElement | null)?.click()
+        await settle(900)
         say('startSaysAfter', document.querySelector('.todo-walk-start')?.textContent?.trim() ?? '')
         await window.tephra.doc.flush()
       }
@@ -4593,5 +4769,5 @@ interface PaneLike {
    *
    * A window's location is a document **or a query** (ML3), so this takes both.
    */
-  goTo(target: { kind: 'document'; id: unknown } | { kind: 'links' } | { kind: 'horizon' }): Promise<void>
+  goTo(target: { kind: 'document'; id: unknown } | { kind: 'links' }): Promise<void>
 }

@@ -25,6 +25,7 @@ import type { SurfaceProps, TextTarget } from '../surface.ts'
 import { NO_SELECTION } from '../../../../shared/commands.ts'
 import { RowMenu, type MenuEntry, type RowMenuRequest } from '../../frame/RowMenu'
 import { Prose } from '../../frame/Prose'
+import { Horizon } from '../../frame/Horizon'
 // The two rungs this surface needs, from the module that owns the grammar: the
 // row draws its own chips, so it wants the text without them and with the links
 // still live; the rail has no room for either and wants the short line.
@@ -46,6 +47,20 @@ import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
  * a number with no evidence behind it yet and is expected to move.
  */
 const SOON_DAYS = 7
+
+/**
+ * What each movement of reorient is asking (H11, MH4).
+ *
+ * **Named rather than numbered**, because *step 2 of 3* tells you where you are
+ * in a form and these are not steps of a form — they are three different
+ * questions, and knowing which one is being asked is the whole of knowing what
+ * to do with the list in front of you.
+ */
+const MOVEMENTS: Readonly<Record<number, string>> = {
+  1: "What's coming",
+  2: "What's live",
+  3: "What's today",
+}
 
 /**
  * The status, drawn rather than typed.
@@ -243,8 +258,69 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
     return days[here + by] ?? null
   }
   const [walk, setWalk] = useState<WalkState | null>(null)
+  /**
+   * Which movement of reorient is open, or 0 for none (H11, MH4).
+   *
+   * **One pass with three movements, not three screens.** Reorient is the
+   * walk's superset and inherits its shape: *the offer is the list looking
+   * different*, so this changes what the rows offer rather than covering them
+   * with a wizard. Each movement asks exactly one question — read this, prune
+   * this, pick from this — and the bar at the foot says which.
+   *
+   * **In order, because the order is the argument** (H11): what is coming is
+   * context for what is live, and what is live is what you are choosing from.
+   * Read the list first and discover the talk in ten days afterwards, and the
+   * choosing has to be done again.
+   */
   const [walking, setWalking] = useState(false)
+  /**
+   * How tall the horizon half is.
+   *
+   * **Dragged with pointer events**, which MH1 learned the hard way: an HTML5
+   * drag source is not a gesture, and a `draggable` attribute that never lifts
+   * is a control that looks like one and is not.
+   */
+  const [horizonHeight, setHorizonHeight] = useState(220)
+  const onDividerDown = (down: React.PointerEvent): void => {
+    down.preventDefault()
+    const from = down.clientY
+    const was = horizonHeight
+    const move = (at: PointerEvent): void =>
+      // Bounded, because a pane dragged to nothing is a pane somebody cannot
+      // get back — and one dragged past the window takes the list with it.
+      setHorizonHeight(Math.max(64, Math.min(was + (from - at.clientY), globalThis.innerHeight - 160)))
+    const up = (): void => {
+      globalThis.removeEventListener('pointermove', move)
+      globalThis.removeEventListener('pointerup', up)
+    }
+    globalThis.addEventListener('pointermove', move)
+    globalThis.addEventListener('pointerup', up)
+  }
+  /**
+   * The day's selection (H9, MH4) — what you decided you are actually doing.
+   *
+   * **Ids, not items**, because it is a mark on the day and the items are read
+   * from the day as usual. That is what makes it *a selection, never a
+   * relocation*: a chosen item is still in the list below, in creation order,
+   * under its own tags, and the section above is a second view of it.
+   */
+  const [chosen, setChosen] = useState<readonly string[]>([])
   const [dropping, setDropping] = useState<ReadonlySet<string>>(new Set())
+
+  /**
+   * Reorient asked for from the menu (H11, ⌘R).
+   *
+   * **Heard by the surface rather than by the frame**, because the state it
+   * starts is the surface's. Main brings this window forward and then sends;
+   * the reveal is what makes *from anywhere* true, and this is only the half
+   * that knows what to do about it.
+   */
+  useEffect(() => window.tephra.doc.onMenuCommand(command => {
+    if (command === 'reorient') {
+      setDropping(new Set())
+      setWalking(true)
+    }
+  }), [])
 
   const fail = useCallback(
     (err: unknown) => onError?.(err instanceof Error ? err : new Error(String(err))),
@@ -253,9 +329,10 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
 
   const refresh = useCallback(
     async (date: DateKey) => {
-      const [got, state, everyTag, tail, put, had] = await Promise.all([
+      const [got, state, picked, everyTag, tail, put, had] = await Promise.all([
         window.tephra.todo.items(list, date),
         window.tephra.todo.walk(list, date),
+        window.tephra.todo.chosen(list, date),
         window.tephra.todo.tags(),
         window.tephra.todo.resolved(),
         window.tephra.todo.backlog(),
@@ -264,6 +341,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       setItems(got)
       setDays(had)
       setWalk(state)
+      setChosen(picked)
       setKnown(everyTag)
       setResolved(tail)
       setBacklog(put)
@@ -394,6 +472,18 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  /**
+   * The chosen items, in the order they were chosen.
+   *
+   * **From the marks and the list together**, so an item that is resolved or
+   * deleted leaves the section on its own — the mark is about the day and the
+   * items are read from the day, and this is where the two meet.
+   */
+  const picked = chosen.flatMap(id => {
+    const found = items.find(one => one.id === id)
+    return found === undefined || !isLive(found.status) ? [] : [found]
+  })
+
   const soon = today === null ? [] : dueSoon(items, today)
 
   /**
@@ -478,7 +568,22 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * wants a prominent affordance and not a modal), and it stops looking
    * different the moment you have looked.
    */
-  const carriedNow = new Set(walk !== null && !walk.walked ? walk.carried : [])
+  /**
+   * Which rows movement 2 is asking about (T11 as amended by MH4).
+   *
+   * **During the pass, and not at rest** — which is a correction, reported from
+   * real use. T11's rule was *the offer is the list looking different*, and it
+   * held while a few rows had carried; on a list where nearly everything has,
+   * tinting nearly everything says nothing at all. The signal was inversely
+   * proportional to how much there was to do, which is exactly backwards.
+   *
+   * **And it turns out to be what the tint always meant.** It marks *what is
+   * under review*, which is a true and useful thing to say while a review is
+   * happening and an alarm about nothing when none is. So the resting list is a
+   * list, the entrance carries the offer, and this marks what movement 2 is
+   * putting in front of you.
+   */
+  const carriedNow = new Set(walking && walk !== null ? walk.carried : [])
 
   const toggleDrop = (id: string): void =>
     setDropping(before => {
@@ -556,6 +661,17 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       {...(onTextTarget === undefined ? {} : { onTextTarget })}
       dropping={dropping.has(item.id ?? '')}
       {...(walking && item.id !== null ? { onDrop: () => toggleDrop(item.id as string) } : {})}
+      {...(daily && item.id !== null && !past
+        ? {
+          picked: chosen.includes(item.id),
+          onChoose: () => {
+            const id = item.id as string
+            const now = !chosen.includes(id)
+            setChosen(was => (now ? [...was, id] : was.filter(one => one !== id)))
+            act(window.tephra.todo.choose(list, today as DateKey, id, now))
+          },
+        }
+        : {})}
       item={item}
       today={today}
       tags={live}
@@ -584,12 +700,27 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
         setMenu({
           at: { x: e.clientX, y: e.clientY },
           about: shortLine(item),
-          items: statusItems(status => {
-            // Blocked asks WHY, because a block without the thing it is
-            // waiting on is the one status that says nothing (T4).
-            if (status === 'blocked') setBlocking(id)
-            else act(window.tephra.todo.setStatus(list, id, status))
-          }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id)),
+          items: [
+            // **Choosing is first, because on a working day it is the commonest
+            // deliberate thing you do to a row** — and it is not a status, so it
+            // sits above the rule rather than among them.
+            ...(daily && !past && item.id !== null
+              ? [{
+                label: chosen.includes(item.id) ? 'Not today' : 'Do this today',
+                onChoose: () => {
+                  const now = !chosen.includes(id)
+                  setChosen(was => (now ? [...was, id] : was.filter(one => one !== id)))
+                  act(window.tephra.todo.choose(list, today as DateKey, id, now))
+                },
+              }, 'rule' as const]
+              : []),
+            ...statusItems(status => {
+              // Blocked asks WHY, because a block without the thing it is
+              // waiting on is the one status that says nothing (T4).
+              if (status === 'blocked') setBlocking(id)
+              else act(window.tephra.todo.setStatus(list, id, status))
+            }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id)),
+          ],
         })
       }}
     />
@@ -606,7 +737,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   )
 
   return (
-    <div className="todo" role="region" aria-label="Task list" style={type} data-past={past}>
+    <div className="todo-split" style={type}>
+    <div className="todo" role="region" aria-label="Task list" data-past={past}>
       {/* **The list keeps the notebook's own two columns** — a measure, and a
           gutter beside it — so a task list and a page of prose are the same
           page laid out the same way (D42, R27). */}
@@ -671,10 +803,34 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                 setWalking(true)
               }}
             >
-              {walk.walked ? 'walk again' : 'walk the list'}
+              {walk.walked ? 'reorient again' : 'reorient'}
             </button>
           )}
         </div>
+
+        {/* **The day's selection, and it is the topmost thing there is** (H9,
+            MH4). Purely volitional: nothing ever arrives here automatically,
+            because what the world is doing to you goes to the horizon instead —
+            which is the cut that keeps this region meaning exactly one thing.
+
+            **A view over a mark, not a second list.** Every item here is also
+            below, in creation order, under its own tags. That duplication is
+            the point: an earlier era kept a separate *today* list and had the
+            choice of syncing two lists by hand or losing the tagging.
+
+            It is marked as its own region rather than blending in, which is
+            allowed for the same reason the strip's two sources were NOT marked
+            apart: MT5a objected to a region with mixed membership told apart by
+            a tell, and this region has one kind of member. */}
+        {picked.length > 0 && (
+          <section className="todo-today" aria-label="Today">
+            <h2 className="todo-today-name">
+              Today
+              <span className="todo-group-count">{picked.length}</span>
+            </h2>
+            <ol className="todo-list">{picked.map(item => row(item))}</ol>
+          </section>
+        )}
 
         <ol className="todo-list">
           {by === 'time'
@@ -773,12 +929,17 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
             which sometimes also deletes. Saying how many keeps a stray click
             from being the expensive kind. */}
         {walking && (
-          <div className="todo-walkbar" role="group" aria-label="Finish the walk">
+          <div className="todo-walkbar" role="group" aria-label="Reorient">
+            <span className="todo-movement">Reorienting</span>
             <button
               type="button"
               className="todo-walk-finish"
               data-dropping={dropping.size > 0}
               onClick={() => {
+                // **Movement 2 ends by recording that you looked** — the walk's
+                // own act, unchanged — and then movement 3 begins. Choosing is
+                // never mandatory (H10), so this is also a fine place to stop:
+                // the pass is recorded whether or not anything is picked.
                 const drop = [...dropping]
                 setWalking(false)
                 setDropping(new Set())
@@ -805,28 +966,43 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
         )}
       </div>
 
-      {/* **In the rail, where the notebook already puts what sits beside the
-          text.** It was a band above the list, and a band that comes and goes
-          as dates do moves every row under it — the reflow this project has
-          ruled out everywhere else (D42). In the gutter it grows into space
-          that belongs to nobody, and can be set in a size somebody can read. */}
-      {(soon.length > 0 || ahead.length > 0) && (
-        <aside className="todo-soon" aria-label="Coming up">
-          {compactHorizon(soon, ahead, today as DateKey).map(row => (
-            <button
-              key={row.key}
-              type="button"
-              className={`todo-soon-item${row.past ? ' overdue' : ''}${row.docket ? ' from-docket' : ''}`}
-              onClick={row.go}
-            >
-              <span className="todo-when">{when(row.on, today as DateKey)}</span>
-              <span className="todo-soon-text">{row.what}</span>
-            </button>
-          ))}
-        </aside>
-      )}
-
       {menu !== null && <RowMenu request={menu} onClose={() => setMenu(null)} />}
+    </div>
+
+    {/* **The horizon is not a second view; it is the other half of this one.**
+        What you are doing and what is coming are two halves of one question —
+        whether a task matters today depends on there being a talk in ten days —
+        and somebody consulting both had been made to keep two windows open to
+        do what one should (amends D74).
+
+        **Below rather than beside, to keep the measure.** This app sets the
+        list in the notebook's own type at the notebook's own width (D41); a
+        vertical split would halve the reading width of the surface actually
+        worked in, while the horizon is short read-only lines that take a wide
+        shape happily. The same reason the notebook has a gutter rather than two
+        equal columns.
+
+        **And it frees the gutter**, which the layout has always called the
+        annotation column and which the due-soon strip had been borrowing. */}
+    {daily && (
+      <>
+        <div
+          className="todo-divider"
+          role="separator"
+          aria-label="Resize the horizon"
+          aria-orientation="horizontal"
+          onPointerDown={onDividerDown}
+        />
+        <div className="todo-horizon" style={{ height: `${horizonHeight}px` }}>
+          <Horizon
+            typography={settings.typography}
+            today={today}
+            onError={err => onError?.(new Error(err))}
+            onOpenDocument={id => void window.tephra.win.create({ kind: 'document', id })}
+          />
+        </div>
+      </>
+    )}
     </div>
   )
 }
@@ -890,6 +1066,8 @@ function Row({
   dropping = false,
   readOnly = false,
   onDrop,
+  onChoose,
+  picked = false,
   onTextTarget,
 }: {
   item: TodoItem
@@ -926,6 +1104,9 @@ function Row({
   readOnly?: boolean
   /** Present only during a pass, which is the only time a row can be dropped. */
   onDrop?: () => void
+  /** Movement 3: choose this one for today, or take it back off (H9). */
+  onChoose?: () => void
+  picked?: boolean
   /** Passed to whichever field this row opens, so ⌘K can reach it. */
   onTextTarget?: (target: TextTarget | null) => void
 }): React.JSX.Element {
@@ -1023,6 +1204,25 @@ function Row({
           control that changed meaning inside a mode would be the surprise this
           design was rearranged to avoid. Deleting is the one act that wants
           looking at before it happens, so it is the one that is staged. */}
+      {/* **Movement 3's mark, and the same shape as movement 2's**: one control
+          that appears for the length of a movement and says what it will do.
+          Never both at once — each movement asks one question, which is what
+          keeps a pass from becoming a form. */}
+      {onChoose !== undefined && (
+        <button
+          type="button"
+          className="todo-pick"
+          aria-pressed={picked}
+          title={picked ? 'Take it off today' : 'Do this one today'}
+          onClick={e => {
+            e.stopPropagation()
+            onChoose()
+          }}
+        >
+          {picked ? 'Not today' : 'Today'}
+        </button>
+      )}
+
       {onDrop !== undefined && (
         <button
           type="button"

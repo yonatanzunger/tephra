@@ -260,8 +260,6 @@ function documentOf(target: NavTarget): string | null {
     // second filtered view would otherwise have to add again.
     case 'links':
       return 'links'
-    case 'horizon':
-      return 'horizon'
     default:
       return null // a URL and an OS file are not windows of ours
   }

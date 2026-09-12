@@ -762,6 +762,21 @@ export type TodoCommand =
   | { readonly kind: 'tags' }
   | { readonly kind: 'walk'; readonly list: DocumentId; readonly date: DateKey }
   /**
+   * The day's selection (H9, MH4) — read it, and choose or unchoose one item.
+   *
+   * **A mark on the day, which is what keeps it from travelling.** A status
+   * carries forward and a tag goes with the item; the thing you decided you were
+   * doing on Tuesday must do neither.
+   */
+  | { readonly kind: 'chosen'; readonly list: DocumentId; readonly date: DateKey }
+  | {
+      readonly kind: 'choose'
+      readonly list: DocumentId
+      readonly date: DateKey
+      readonly item: string
+      readonly chosen: boolean
+    }
+  /**
    * End a pass: delete what was marked, and record that the day was reviewed.
    *
    * **One command, because it is one act.** Two — drop these, then mark walked

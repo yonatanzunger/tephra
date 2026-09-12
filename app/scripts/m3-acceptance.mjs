@@ -2069,12 +2069,22 @@ console.log('\n— the walk —')
 
   const w = report(await launch('walk', await walkbook()))
   check(
-    // T11 wants a prominent affordance and not a modal. A tint across the rows
-    // that came from yesterday is exactly that: it says what there is to review
-    // without asking anything.
-    'THE OFFER IS THE LIST LOOKING DIFFERENT: yesterday\'s rows are marked',
-    w.carriedRows === 6 && w.allRows === 6 && w.offered === 'true',
-    `${w.carriedRows} of ${w.allRows} carried \u00b7 offered ${w.offered}`,
+    // **Amended by MH4, from use.** T11 wanted a prominent affordance and not a
+    // modal, and a tint across yesterday's rows was it — while only a few rows
+    // had carried. On a real list nearly all of them have, and a list where
+    // everything is highlighted is one where nothing is: the signal was
+    // inversely proportional to how much there was to do. So the offer at rest
+    // is the entrance, emphasised while the day is unreviewed, and the tint
+    // means what it always really meant — *this is what the pass is asking
+    // about* — which is only true while a pass is open.
+    'THE RESTING LIST IS A LIST, and the entrance carries the offer',
+    w.carriedAtRest === 0 && w.allRows === 6 && w.offered === 'true',
+    `${w.carriedAtRest} of ${w.allRows} tinted at rest \u00b7 offered ${w.offered}`,
+  )
+  check(
+    'and the pass marks what it is putting in front of you',
+    w.carriedRows === 6,
+    `${w.carriedRows} of ${w.allRows} marked during the pass`,
   )
   check(
     // Marking done already has a control and it is the glyph. A control that
@@ -2101,9 +2111,14 @@ console.log('\n— the walk —')
     `${JSON.stringify(w.finishSays)} then ${JSON.stringify(w.finishCounts)}`,
   )
   check(
-    'finishing drops what was marked and takes the offer down',
-    w.rowsAfterFinish === 5 && w.highlightGone === 0 && w.startSaysAfter === 'walk again',
-    `${w.rowsAfterFinish} rows \u00b7 ${w.highlightGone} still marked \u00b7 ${JSON.stringify(w.startSaysAfter)}`,
+    'finishing drops what was marked, and the motion carries on to the choosing',
+    w.rowsAfterFinish === 5 && w.highlightGone === 0 && /today/i.test(w.stillInPass ?? ''),
+    `${w.rowsAfterFinish} rows \u00b7 ${w.highlightGone} still marked \u00b7 then ${JSON.stringify(w.stillInPass)}`,
+  )
+  check(
+    'and the offer comes down when the whole pass ends, not when the walk does',
+    w.startSaysAfter === 'reorient again',
+    JSON.stringify(w.startSaysAfter),
   )
   check('nothing errored on the way', w.appError === 'none', String(w.appError))
 

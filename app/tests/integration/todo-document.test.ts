@@ -15,7 +15,7 @@ import { Corpus } from '../../src/main/x/documents/corpus.ts'
 import { TodoDocument } from '../../src/main/x/documents/kinds/todo.ts'
 import { parseItem } from '../../src/shared/kinds/todo.ts'
 import { ONLY_SEGMENT } from '../../src/shared/document-api.ts'
-import type { DateKey, DocumentId } from '../../src/shared/document-api.ts'
+import type { DateKey, DocumentId, SegmentKey } from '../../src/shared/document-api.ts'
 
 const LIST = 'main.todo' as DocumentId
 const MON = '2026-09-07' as DateKey
@@ -661,4 +661,60 @@ test('THE TRAP: a day and the one segment name the SAME segment here', async t =
   assert.equal((await doc.itemsOn(ONLY_SEGMENT as unknown as DateKey)).length, 1)
   assert.equal((await doc.itemsOn(MON)).length, 1, 'and any day answers the same')
   assert.equal((await doc.itemsOn(THU)).length, 1)
+})
+
+// ── the day's selection (H9, MH4) ───────────────────────────
+//
+// **A mark on the day, and the claims are all about what it is NOT.** A status
+// carries forward; a tag travels with the item. The thing you decided you were
+// doing on Tuesday must do neither, or it silently becomes a permanent label —
+// which is what an earlier era did, and why the alternative there was a second
+// list that had to be kept in sync by hand.
+
+test('THE POINT: choosing marks the DAY, and the item does not move', async t => {
+  const { doc, fileOn } = await list(t, { [MON]: ['- [ ] ring the bank', '- [ ] post the form'] })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const [bank, form] = (await doc.itemsOn(MON)).map(one => one.id as string)
+  await doc.choose(MON, form as string, true)
+  await doc.choose(MON, bank as string, true)
+
+  assert.deepEqual(await doc.chosenOn(MON), [form, bank], 'in the order chosen, not the list order')
+  const text = await fileOn(MON)
+  assert.match(text, new RegExp(`^today: ${form} ${bank}$`, 'm'))
+  // **And the lines are untouched**: a selection, never a relocation (H9).
+  assert.deepEqual((await doc.itemsOn(MON)).map(one => one.id), [bank, form])
+  assert.match(text, /^- \[ \] ring the bank/m)
+})
+
+test('AND IT DOES NOT CARRY, which is the whole reason it is not a status', async t => {
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const bank = (await doc.itemsOn(MON))[0]?.id as string
+  await doc.choose(MON, bank, true)
+  await doc.carry(TUE)
+  assert.deepEqual(await doc.chosenOn(TUE), [], 'Tuesday has its own answer, and it is none')
+  assert.deepEqual(await doc.chosenOn(MON), [bank], 'and Monday still remembers Monday')
+})
+
+test('unchoosing takes it back off, and choosing twice is once', async t => {
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank'] })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const bank = (await doc.itemsOn(MON))[0]?.id as string
+  await doc.choose(MON, bank, true)
+  await doc.choose(MON, bank, true)
+  assert.deepEqual(await doc.chosenOn(MON), [bank])
+  await doc.choose(MON, bank, false)
+  assert.deepEqual(await doc.chosenOn(MON), [])
+})
+
+test('and a chosen item that is deleted stops being chosen, rather than dangling', async t => {
+  // The same intersection `walkOf` does with the carry: a selection cannot point
+  // at a line that is not there.
+  const { doc } = await list(t, { [MON]: ['- [ ] ring the bank', '- [ ] post the form'] })
+  await doc.adopt(MON as unknown as SegmentKey)
+  const [bank, form] = (await doc.itemsOn(MON)).map(one => one.id as string)
+  await doc.choose(MON, bank as string, true)
+  await doc.choose(MON, form as string, true)
+  await doc.remove(bank as string)
+  assert.deepEqual(await doc.chosenOn(MON), [form])
 })

@@ -197,6 +197,18 @@ function createWindow(): BrowserWindow {
       if (!message.startsWith('VERIFY')) return
       forward(message)
       if (message === 'VERIFY done' && primary) {
+        // **Do NOT show it to take the picture.** Tried, and it was wrong twice
+        // over: it did not fix the stale frame (see below), and it made windows
+        // flash onto the desktop of whoever happened to be working while a suite
+        // ran — which is the exact thing verify mode hides them to avoid.
+        //
+        // **The stale frame is a known limitation of this harness.** A hidden
+        // window never composites, so `capturePage` returns whatever was last
+        // painted — for a scened run, the startup view, however far the scene
+        // has since driven the app. The tell is that every shot across a whole
+        // session is byte-identical. DOM assertions are unaffected and remain
+        // the real evidence; a picture of a surface a scene navigated TO cannot
+        // be trusted until this is solved.
         setTimeout(() => {
           void win.webContents
             .capturePage()
@@ -296,6 +308,21 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
 async function showTasks(): Promise<void> {
   if (service === null) return
   windows?.reveal({ kind: 'document', id: await service.todoList() })
+}
+
+/**
+ * Reorient, from anywhere (H11).
+ *
+ * **Main's, because the list may not be the window you are in.** The offer at
+ * the day boundary is the list looking different, which only helps somebody
+ * already looking at it; the whole point of an on-demand entrance is that it
+ * works while you are writing — so this brings the list forward and then asks it
+ * to begin, in that order, because the window has to exist before it can hear.
+ */
+async function reorient(): Promise<void> {
+  if (service === null) return
+  const win = windows?.reveal({ kind: 'document', id: await service.todoList() })
+  win?.webContents.send(CHANNEL.menuCommand, 'reorient')
 }
 
 async function newDocument(kind: 'markdown' | 'todo' | 'docket' = 'markdown'): Promise<void> {
@@ -546,8 +573,8 @@ app.whenReady().then(async () => {
     newTaskList: () => void newDocument('todo'),
     notebook: () => windows?.reveal({ kind: 'today' }),
     tasks: () => void showTasks(),
+    reorient: () => void reorient(),
     links: () => windows?.reveal({ kind: 'links' }),
-    horizon: () => windows?.reveal({ kind: 'horizon' }),
   })
   // The renderer owns the caret; main owns the menus. Each tells the other the
   // one thing it knows, which is what keeps a greyed-out item honest.

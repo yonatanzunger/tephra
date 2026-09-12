@@ -111,9 +111,16 @@ if (r.appError === undefined) {
 }
 
 // ── 1. it is a place ────────────────────────────────────────────────────────
-check('IT IS A PLACE (D74): a location that is not a document, with its own name',
-  r.title === 'Horizon' && r.surface === true,
-  `title ${JSON.stringify(r.title)}, surface ${r.surface}`)
+check(
+  // **Amended by MH4.** D74 made the full horizon a location with a ⌘-number of
+  // its own, on the test *does following an entry mean you are done with the
+  // list?* A different question turned out to win: what you are doing and what
+  // is coming are two halves of ONE question, and a person consulting both was
+  // keeping two windows open to do what one should.
+  'IT IS HALF OF THE WORKING VIEW: the list and the horizon, in one place',
+  r.surface === true && r.bothHalves?.list > 0 && r.bothHalves?.horizon > 0,
+  `${JSON.stringify(r.bothHalves)} \u00b7 surface ${r.surface}`,
+)
 check('and nothing went wrong getting there', r.appError === 'none', String(r.appError))
 
 // ── 2. both sources, in one list ────────────────────────────────────────────
@@ -179,14 +186,14 @@ check(
 )
 
 // ── 5. the compact strip ────────────────────────────────────────────────────
-console.log('\n— the compact horizon (H8, narrowed until MH4) —')
+console.log('\n— one view, both halves (H8; MH4 amends D74) —')
 check(
-  'and the strip shows the short line too, it having least room of anywhere',
+  'and it shows the short line, it having least room of anywhere',
   (r.strip ?? []).every(one => !/https?:|\[|#career/.test(one.what ?? '')),
   JSON.stringify((r.strip ?? []).map(one => one.what)),
 )
 check(
-  'THE STRIP GAINED THE SECOND SOURCE: a matter shows beside a dated task',
+  'IT HOLDS BOTH SOURCES: a matter shows beside a dated task',
   Array.isArray(r.strip) && r.strip.some(one => one.docket) && r.strip.some(one => !one.docket),
   JSON.stringify(r.strip),
 )
@@ -203,7 +210,7 @@ check(
     const partitioned = ends => flags.every((f, at) => (at === 0 || f === flags[at - 1] || ends--) && ends >= 0)
     return flags.length > 2 && !partitioned(1)
   })(),
-  JSON.stringify({ order: r.stripOrder, sources: (r.strip ?? []).map(one => one.docket) }),
+  JSON.stringify((r.strip ?? []).map(one => [one.when, one.docket])),
 )
 
 // ── 6. legibility ───────────────────────────────────────────────────────────

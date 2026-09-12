@@ -51,6 +51,27 @@ const WALKED = 'walked'
 const CARRIED_FROM = 'carriedFrom'
 
 /**
+ * The day's selection (H9, MH4) — what you decided you are actually doing.
+ *
+ * **The same place and for the same reason as `walked`.** *These are the ones I
+ * chose on Tuesday* is a fact about Tuesday: it belongs to the day, not to the
+ * items, and so it cannot travel when they do.
+ *
+ * **Which rules out the two tempting implementations.** Not a status — statuses
+ * carry forward, and a selection that carried would silently become a
+ * permanent label. Not a tag either, for exactly the same reason: `#today`
+ * would travel with the item into tomorrow and mean nothing there. Reported
+ * from use in an earlier era, where the alternative — a separate *today* list —
+ * meant either keeping two lists in sync or losing the tagging.
+ *
+ * So it is a **mark**, and the section that shows it is a view over the mark
+ * rather than a second list. An item that is chosen still sits where it always
+ * sat, in creation order, under its own tags: *a selection, never a relocation*
+ * (H9).
+ */
+const CHOSEN = 'today'
+
+/**
  * Ids taken somewhere this document cannot see (MT5b, D56).
  *
  * **A thunk, because the answer is expensive and almost never needed.** An id
@@ -300,6 +321,42 @@ export class TodoDocument extends SegmentedDocument {
             s.item.id !== null && here.has(s.item.id) ? [s.item.id] : [],
           )
     return { walked: extra(WALKED) === 'true', carried, carriedFrom: (from ?? null) as DateKey | null }
+  }
+
+  /**
+   * What was chosen for this day, in the order it was chosen.
+   *
+   * **Intersected with what is actually there**, the way `walkOf` intersects
+   * the carry: an item chosen this morning and deleted since is not in the day
+   * any more, and a selection cannot point at a line that is gone.
+   */
+  async chosenOn(date: DateKey): Promise<readonly string[]> {
+    if (!this.#daily) return []
+    const segment = await this.segment(date)
+    const said = segment.extra.find(([k]) => k.toLowerCase() === CHOSEN)?.[1]?.trim()
+    if (said === undefined || said === '') return []
+    const here = new Set((await this.#scan(date)).flatMap(s => (s.item.id === null ? [] : [s.item.id])))
+    return said.split(/\s+/).filter(one => here.has(one))
+  }
+
+  /**
+   * Choose an item for a day, or unchoose it.
+   *
+   * **Order of choosing is kept**, because it is the only order the selection
+   * has that means anything — the list beneath stays in creation order, so if
+   * this sorted as well there would be nothing left saying *this is the one I
+   * picked first*.
+   */
+  async choose(date: DateKey, item: string, chosen: boolean): Promise<void> {
+    if (!this.#daily) return
+    const was = await this.chosenOn(date)
+    const now = chosen ? (was.includes(item) ? was : [...was, item]) : was.filter(one => one !== item)
+    if (now.length === was.length && now.every((one, at) => one === was[at])) return
+    ;(await this.segment(date)).setExtra(CHOSEN, now.join(' '))
+    // **An operation and not an edit**, for `walked`'s reason: it is a fact
+    // about the day rather than text somebody typed, so it is kept where the
+    // title and the source are kept and written the way they are.
+    this.touch('operation')
   }
 
   /**

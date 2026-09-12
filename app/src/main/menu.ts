@@ -112,10 +112,10 @@ export interface MenuActions {
    * question a renderer cannot answer about windows it is not (MC6).
    */
   tasks: () => void
+  /** Reorient (H11): bring the list forward and begin the pass. */
+  reorient: () => void
   /** The link directory (ML3): a window's location that is not a document. */
   links: () => void
-  /** The full horizon (D74): the other one, and the one meant to stay open. */
-  horizon: () => void
   /**
    * Ask for a file, the way every other application asks for one.
    *
@@ -152,8 +152,8 @@ let actions: MenuActions = {
   newWindow: () => undefined,
   notebook: () => undefined,
   tasks: () => undefined,
+  reorient: () => undefined,
   links: () => undefined,
-  horizon: () => undefined,
   open: () => undefined,
   import: () => undefined,
   newFile: () => undefined,
@@ -380,6 +380,17 @@ export function installMenu(next?: MenuActions): void {
           click: () => actions.notebook(),
         },
         {
+          // **The one ritual with a key of its own** (H11). Offered at the day
+          // boundary by the list looking different, which only reaches somebody
+          // already looking at it — so this is the entrance that works while you
+          // are writing, which is where you usually are when the state has got
+          // away from you.
+          label: 'Reorient',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => actions.reorient(),
+        },
+        { type: 'separator' },
+        {
           // **The other place you are always going**, and it opens in a window
           // of its own: the list is something you keep beside your writing, so
           // navigating the current window would take away what you were
@@ -396,15 +407,6 @@ export function installMenu(next?: MenuActions): void {
           label: 'Links',
           accelerator: 'CmdOrCtrl+2',
           click: () => actions.links(),
-        },
-        {
-          // **The one that is MEANT to be left open** (D74, H8): everything
-          // bearing down, in date order, across every docket and the task list.
-          // A window of its own is how the compact strip's job gets done before
-          // MH4 exists — present whatever the *other* window is doing.
-          label: 'Horizon',
-          accelerator: 'CmdOrCtrl+3',
-          click: () => actions.horizon(),
         },
         { type: 'separator' },
         // **Minimize without ⌘M.** The role carries the system accelerator, and

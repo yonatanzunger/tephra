@@ -166,7 +166,6 @@ export class Pane {
       // renderer draws the view; there is no document behind it and no window
       // to read (ML3).
       case 'links':
-      case 'horizon':
         return null
       case 'today': {
         const stream = await this.#documents.stream()

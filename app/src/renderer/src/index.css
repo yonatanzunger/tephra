@@ -750,10 +750,21 @@ body {
 
 /* At the bottom, where reading down a list puts you — and structurally never
    the same target as the button that started the pass. */
+/* **Pinned to the foot of the scroller, because it is the only thing that says
+   what is happening.** It was an ordinary block at the end of the list, which
+   was right when it held one button at the end of one pass — and wrong the
+   moment it became the frame for a three-movement motion: reported from use as
+   *I have genuinely no idea what's going on here*, on a list long enough that
+   the bar naming the movement and offering the way forward was below the fold.
+
+   Still at the FOOT and not the head, which keeps the walk's own guarantee:
+   finishing is never the same target you just clicked to start. */
 .todo-walkbar {
+  position: sticky; bottom: 0; z-index: 2;
   display: flex; align-items: center; gap: .5rem;
-  margin-top: .8rem; padding-top: .7rem;
+  margin-top: .8rem; padding: .7rem 0;
   border-top: 1px solid rgb(var(--border));
+  background: rgb(var(--surface));
 }
 .todo-walk-finish {
   cursor: pointer; font-family: var(--font-ui); font-size: 12px; font-weight: 500;
@@ -2221,29 +2232,40 @@ body {
 }
 .hz-empty code { font-family: var(--font-mono); font-size: .92em; }
 
-.hz-list, .hz-rows { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
-.hz-day { padding-bottom: .7rem; }
+.hz-list { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
 
-/* **The day is a label, not a heading in the document sense** — it is apparatus,
-   so it takes the UI face while the rows take the reading face. Sticky, because
-   scrolling a long horizon without knowing which day you are in is the one way
-   a date-ordered list can still fail to answer "when". */
-.hz-date {
-  position: sticky; top: 0; z-index: 1;
-  margin: 0 0 .25rem; padding: .2rem 0;
+/* **A fixed column, so the titles line up.** The date is repeated on every row
+   rather than heading a group of them: a heading says each date once, which
+   reads worse going down — the eye has to carry *which day am I in* while
+   scanning titles. Fixed width and tabular figures are what stop the repetition
+   from looking ragged, and a ragged date column would cost more than it saved.
+
+   **In the notebook's ink**, not the muted grey: the date is half of what the
+   row says, not apparatus beside it. */
+.hz-on {
+  flex: none; width: 6.5rem;
   font-family: var(--font-ui); font-size: .72em; font-weight: 600;
   letter-spacing: .04em; text-transform: uppercase;
-  color: rgb(var(--text-muted));
-  background: rgb(var(--surface));
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--text));
 }
-/* Behind you, and marked as such: the window runs backwards on purpose (H8). */
-.hz-date.hz-past { color: rgb(var(--status-error)); }
+/* Behind you, and the loudest thing on the line: the window runs backwards on
+   purpose (H8), and an overdue date is the one case where *when* leads. */
+.hz-on.hz-past { color: rgb(var(--status-error)); }
 
-.hz-row { padding: .25rem 0 .45rem; }
+/* **One line, with the apparatus flushed right.** It was three stacked lines —
+   text, then kind, then matter — which is legible and costs three times the
+   height, and the horizon's whole job is to be short enough to keep reading. The
+   left edge is what it says; the right edge is what sort of pressure it is. */
+.hz-row {
+  display: flex; align-items: baseline; gap: .8rem;
+  padding: .1rem 0;
+}
 
 /* What it says leads, in the reading face, at reading size. */
 .hz-what {
-  display: block; width: 100%; text-align: left; cursor: pointer;
+  flex: 0 1 auto; min-width: 0; text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-family: var(--reading-face, inherit); font-size: 1em; line-height: 1.4;
   color: rgb(var(--text)); background: none; border: 0; padding: 0;
 }
@@ -2252,8 +2274,8 @@ body {
 
 /* The apparatus under it: what kind of pressure, whose, and which occurrence. */
 .hz-about {
-  display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
-  margin-top: .1rem;
+  flex: none; margin-left: auto;
+  display: flex; align-items: baseline; gap: .5rem; white-space: nowrap;
   font-family: var(--font-ui); font-size: .72em; color: rgb(var(--text-muted));
 }
 /* **The kind reads as a label and not as prose**, because it is the same three
@@ -2286,3 +2308,103 @@ body {
    class stays because the acceptance scene has to tell the two sources apart to
    prove they INTERLEAVE; it is a hook and not a style, and adding a colour here
    would be undoing the decision rather than completing it. */
+
+/* ── the day's selection (H9, MH4) ──────────────────────────────────────────
+   **Marked as its own region, which is allowed here and was not in the strip.**
+   MT5a objected to a region with two kinds of member told apart by a tell; this
+   one has a single kind — things you chose — so marking it marks a meaning.
+
+   The accent rather than a box: it is the same list of the same rows, read in a
+   different light, and a container would say it was somewhere else. */
+.todo-today { margin-bottom: 1.2em; }
+.todo-today-name {
+  display: flex; align-items: baseline; gap: .4rem;
+  margin: .9em 0 0; padding-bottom: .15em;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: rgb(var(--accent));
+  border-bottom: 1px solid rgb(var(--accent) / .45);
+}
+.todo-today .todo-group-count { color: rgb(var(--accent) / .7); }
+
+/* ── reorient (H11, MH4) ────────────────────────────────────────────────────
+   **The bar says which question is being asked**, because the three movements
+   look alike from the outside — the same list, different marks on the rows —
+   and *step 2 of 3* would say where you are in a form rather than what to do. */
+.todo-movement {
+  flex: 1; font-family: var(--font-ui); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--text-muted));
+}
+
+/* Movement 1: what is coming, in the column rather than the rail, because for
+   the length of this movement it is the thing being read and not context. */
+.todo-coming { margin-bottom: 1.2em; }
+/* **Headed, because an unlabelled block of dates at the top of a task list is
+   a mystery** — reported from use as *what does the "5 days ago" mean?* The
+   rows are not tasks and the heading is what says so. */
+.todo-coming-name {
+  display: flex; align-items: baseline; gap: .4rem;
+  margin: 0 0 .35em; padding-bottom: .15em;
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: rgb(var(--text-muted));
+  border-bottom: 1px solid rgb(var(--border));
+}
+.todo-coming-list { list-style: none; margin: 0; padding: 0; }
+.todo-coming-row {
+  display: flex; align-items: baseline; gap: .6rem; padding: .15em 0;
+}
+
+/* Movement 3's mark. Same size and place as movement 2's, because they are the
+   same kind of thing: one control, for the length of one movement. */
+.todo-pick {
+  flex: none; font-family: var(--font-ui); font-size: 11px; cursor: pointer;
+  color: rgb(var(--text-muted)); background: none;
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .05rem .35rem;
+}
+.todo-pick:hover { border-color: rgb(var(--accent) / .6); color: rgb(var(--text)); }
+.todo-pick[aria-pressed='true'] {
+  color: rgb(var(--accent)); border-color: rgb(var(--accent) / .6);
+}
+
+/* ── the working view: what you are doing, and what is coming (MH4) ─────────
+   **One surface, two halves.** Amends D74: the horizon was a location of its
+   own, which meant somebody consulting both kept two windows open to do what
+   one should. They are two halves of one question.
+
+   **Below rather than beside, to keep the measure.** The list is set in the
+   notebook's own type at the notebook's own width (D41); a vertical split would
+   halve the reading width of the half actually worked in, while the horizon is
+   short read-only lines that take a wide shape happily. */
+.todo-split {
+  display: flex; flex-direction: column;
+  min-height: 0; height: 100%;
+}
+.todo-split > .todo { flex: 1; min-height: 0; }
+/* **The shading runs edge to edge, to the nav and to the window.** `.frame-reading`
+   insets its children by 0.3in so the nav's edge and the first character never
+   touch — right for a page of prose, wrong for a band that is a different
+   surface: the inset left a pale stripe down the left of the shading and the
+   band read as floating rather than as the other half of the view. So it is
+   pulled back out to the frame's own edges and pays the inset back as padding. */
+.todo-horizon {
+  flex: none; min-height: 0; overflow-y: auto;
+  margin-inline: -0.3in;
+  padding: 0 calc(0.3in + 2.25rem) .5rem calc(0.3in + 2.25rem);
+  /* **Vivid enough to read as an edge.** At one hairline of `--border` the two
+     halves simply ran together and rows appeared to vanish into nothing — a
+     divider you cannot see is a divider that makes the layout look broken. */
+  border-top: 2px solid rgb(var(--border));
+  box-shadow: inset 0 3px 6px -4px rgb(var(--text) / .18);
+  background: rgb(var(--surface-ground));
+}
+.todo-horizon .horizon { padding-top: .6rem; }
+
+/* **A grab area wider than the line it draws**, which is the rule every drag
+   handle in this app arrived at the hard way: a one-pixel target is a control
+   that exists and cannot be used. */
+.todo-divider {
+  flex: none; height: 9px; margin: 0 -0.3in -9px; z-index: 3;
+  cursor: row-resize; background: none;
+}
+.todo-divider:hover { background: rgb(var(--accent) / .18); }

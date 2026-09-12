@@ -37,9 +37,9 @@ import type { Typography } from '../editor/typography.ts'
  * question people answer in months.
  */
 const SPANS = [
-  { label: 'a month', days: 31 },
+  { label: 'month', days: 31 },
   { label: 'three months', days: 92 },
-  { label: 'a year', days: 366 },
+  { label: 'year', days: 366 },
 ] as const
 
 /**
@@ -91,7 +91,6 @@ export function Horizon({
     )
   }
 
-  const days = groupByDay(rows)
 
   return (
     <main className="horizon" aria-label="Horizon" style={type}>
@@ -99,11 +98,12 @@ export function Horizon({
         <span className="hz-count">
           {rows.length === 0 ? 'nothing coming' : `${rows.length} ${rows.length === 1 ? 'thing' : 'things'} coming`}
         </span>
-        {/* **Labelled *in*, because the control sets a span and not a date.**
-            A bare list of months beside a count reads as a filter on what is
-            already there, which is the opposite of what it does. */}
+        {/* **"In the next", because the control sets an interval and not a
+            date.** Read as *in three months* it says what is happening on one
+            day a quarter away, which is the opposite of what the list holds —
+            and the options lose their articles so the sentence stays one. */}
         <label className="hz-span">
-          in
+          in the next
           <select
             className="hz-spans"
             value={span}
@@ -117,7 +117,7 @@ export function Horizon({
         </label>
       </div>
 
-      {days.length === 0 ? (
+      {rows.length === 0 ? (
         // Absence that explains itself, as every empty state in this app does —
         // and which says where rows come from, since nothing here is authored.
         <p className="hz-empty">
@@ -125,18 +125,20 @@ export function Horizon({
           and from tasks with a <code>DUE</code> date.
         </p>
       ) : (
+        /* **A date on every row, not a heading over a group of them.** Day
+           headings said each date once, which is tidier on the page and worse
+           to read down: the eye has to hold *which day am I in* while scanning
+           titles, and a row seen on its own says nothing about when. Repeating
+           it in a fixed column costs a little ink and makes the whole thing
+           answerable at a glance — which is the only thing this surface is for. */
         <ol className="hz-list">
-          {days.map(day => (
-            <li className="hz-day" key={day.on}>
-              <h2 className={`hz-date${compareDateKeys(day.on, today) < 0 ? ' hz-past' : ''}`}>
-                {dayLabel(day.on, today)}
-              </h2>
-              <ol className="hz-rows">
-                {day.rows.map((row, at) => (
-                  <Row key={`${row.on}:${row.item ?? row.id ?? at}:${at}`} row={row} today={today} onOpen={onOpenDocument} />
-                ))}
-              </ol>
-            </li>
+          {rows.map((row, at) => (
+            <Row
+              key={`${row.on}:${row.item ?? row.id ?? at}:${at}`}
+              row={row}
+              today={today}
+              onOpen={onOpenDocument}
+            />
           ))}
         </ol>
       )}
@@ -155,6 +157,16 @@ function Row({
 }): React.JSX.Element {
   return (
     <li className={`hz-row hz-${row.kind}`}>
+      {/* **In the notebook's ink, not the muted grey.** The date is not
+          apparatus here — it is half of what the row says, and a horizon whose
+          dates whisper is one you read the titles of and then have to look
+          twice to place. Overdue keeps the error colour, which is the one case
+          where the date is the loudest thing on the line. */}
+      <span
+        className={`hz-on${today !== null && compareDateKeys(row.on, today) < 0 ? ' hz-past' : ''}`}
+      >
+        {dayLabel(row.on, today ?? undefined)}
+      </span>
       {/* **What it says leads**, in the reading face, because that is the line
           somebody wrote and the only part they will recognise.
 
@@ -195,15 +207,4 @@ const KIND: Record<HorizonRow['kind'], string> = {
   status: 'coming up',
   task: 'to do',
   due: 'due',
-}
-
-/** Rows are already in order (`orderHorizon`); this only cuts them into days. */
-function groupByDay(rows: readonly HorizonRow[]): readonly { on: DateKey; rows: readonly HorizonRow[] }[] {
-  const out: { on: DateKey; rows: HorizonRow[] }[] = []
-  for (const row of rows) {
-    const last = out[out.length - 1]
-    if (last !== undefined && last.on === row.on) last.rows.push(row)
-    else out.push({ on: row.on, rows: [row] })
-  }
-  return out
 }
