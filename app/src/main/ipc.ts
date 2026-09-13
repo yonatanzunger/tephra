@@ -166,6 +166,8 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.docketSetMode(command.docket, command.matter, command.mode)
       case 'start':
         return service.docketSetStart(command.docket, command.matter, command.start)
+      case 'moveTo':
+        return service.docketMoveTo(command.docket, command.matter, command.to)
       case 'dates':
         return service.docketSetDates(command.docket, command.matter, command.dates)
       case 'every':

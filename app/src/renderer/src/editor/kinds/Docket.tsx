@@ -90,6 +90,17 @@ export function DocketSurface({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   /** The context menu, which is where everything a matter needs rarely lives. */
   const [menu, setMenu] = useState<RowMenuRequest | null>(null)
+  /** The other dockets, for filing a matter into one of them (MH5). */
+  const [elsewhere, setElsewhere] = useState<readonly { id: DocumentId; title: string }[]>([])
+  useEffect(() => {
+    const read = (): void => {
+      void window.tephra.docket.list()
+        .then(all => setElsewhere(all.filter(one => one.id !== id)))
+        .catch(() => undefined)
+    }
+    read()
+    return window.tephra.nav.onDocumentsChanged(read)
+  }, [id])
   const show = useCallback((matter: string, want: boolean): void => {
     // **Folding a matter puts away everything about its steps**, the half-typed
     // new one included. Without this the add row kept them on screen after a
@@ -461,6 +472,16 @@ export function DocketSurface({
                           onChoose: () => { void act(window.tephra.docket.suspend(id, who)) },
                         }]
                         : []),
+                      // **Filing, which is what the backlog is regathered by**
+                      // (MH5). A thing put down with zero decisions has to be
+                      // movable later, from the side that owns it — and this is
+                      // also how a matter that turns out to belong elsewhere
+                      // gets there.
+                      ...(elsewhere.length === 0 ? [] : ['rule' as const]),
+                      ...elsewhere.map(one => ({
+                        label: `Move to ${one.title}`,
+                        onChoose: () => { void act(window.tephra.docket.moveTo(id, who, one.id)) },
+                      })),
                       'rule',
                       {
                         label: 'Remove this matter',

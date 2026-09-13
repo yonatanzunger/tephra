@@ -651,16 +651,14 @@ export interface Matter {
   /**
    * The task this matter was moved from, if it was moved from one (MH5).
    *
-   * **Provenance, so an undo can be noticed.** Moving a task to a docket writes
-   * two documents — the line becomes `[>]` and a matter appears — and undo is
-   * per-document, so undoing the first leaves the second: the thing is then on
-   * the list *and* on a docket, which is one commitment in two places and
-   * exactly what this design is careful about everywhere else.
+   * **A record, and nothing depends on it.** It was briefly load-bearing: while
+   * a move could be half-undone, the reconciler used this to notice and repair
+   * the damage, with a rule about provenance surviving only until the matter was
+   * touched. Writing the move as a `transfer` — a change of ownership, which
+   * undo has no business reaching — removed the damage and with it all of that.
    *
-   * With this, the reconciler can state the rule instead: **a matter moved from
-   * a task that is live again should not exist.** Derived state brought back
-   * into agreement with a source of truth that changed underneath it, which is
-   * what D77 is for and what an undo is.
+   * What it is good for now is saying where something came from, which is worth
+   * keeping and worth nothing more.
    */
   readonly from: string | null
   readonly occurrence: DateKey | null

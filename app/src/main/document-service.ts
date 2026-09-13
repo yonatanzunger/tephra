@@ -36,7 +36,7 @@ import { flattenLinks } from '../shared/links.ts'
 import { plainLine } from '../shared/plain.ts'
 import { DocketDocument } from './x/documents/kinds/docket.ts'
 import {
-  dueOn, matterHorizon, MODES, parseInterval, UNSCHEDULED,
+  dueOn, matterHorizon, MODES, parseInterval, spellInterval, spellStepWhen, UNSCHEDULED,
   type Matter, type Mode, type NewMatter, type Schedule, type Section, type StepKind,
 } from '../shared/kinds/docket.ts'
 import { outsideExists, readOutside } from './w/outside.ts'
@@ -541,12 +541,10 @@ export class DocumentService {
         return { change, generation: doc.generation }
       }),
     )
-    // **An undo is a change to a source of truth, so the derived side has to
-    // catch up.** Undo is per-document by construction; moving a task to a
-    // docket writes two, so undoing one of them leaves the other saying
-    // something that is no longer so. Rather than teach undo to span documents —
-    // which it cannot, and which would be a large thing to get subtly wrong —
-    // the pass that already knows what should be true is asked to look (D77).
+    // **Still reconciles**, because an undo IS a change to a source of truth and
+    // the derived side has to catch up — a step's completion put back, a date
+    // restored. What it no longer has to repair is a half-undone *move*: that is
+    // written as a `transfer` and undo does not reach it at all (MH5).
     await this.reconcile().catch(() => undefined)
     return ack
   }
@@ -1958,6 +1956,51 @@ export class DocumentService {
     await this.#wrote(id)
   }
 
+  /**
+   * Move a matter to another docket (MH5).
+   *
+   * **Written whole and then removed**, which is the same shape the move from
+   * the task list has: the thing exists in the new place before it stops
+   * existing in the old one, so a failure between the two leaves a duplicate
+   * rather than a hole. A duplicate is visible and correctable; a hole is not.
+   *
+   * **A new id in the new docket**, because a matter's id is unique across the
+   * corpus and the old block is going away — what travels is the matter, not its
+   * name in a file. What it was moved from travels too, so the trail survives.
+   */
+  async docketMoveTo(from: DocumentId, matter: string, to: DocumentId): Promise<string | null> {
+    if (from === to) return matter
+    const found = (await this.docketMatters(from)).find(one => one.id === matter)
+    if (found === undefined) return null
+
+    const made = await this.docketAdd(to, found.name, { mode: found.mode })
+    for (const tag of found.tags) await this.docketTag(to, made, tag)
+    if (found.owner !== null) await this.docketSetOwner(to, made, found.owner)
+    if (found.link !== null) await this.docketSetLink(to, made, found.link)
+    if (found.notes.length > 0) await this.docketSetNotes(to, made, found.notes)
+    // **By index, not by id**, since every step is being made afresh: an `after`
+    // pointing at the old docket's id would point at nothing. `spellStepWhen`
+    // already renders the index when given one, and `addStep` reads it back.
+    const place = (id: string): number | null => {
+      const at = found.steps.findIndex(one => one.id === id)
+      return at < 0 ? null : at + 1
+    }
+    for (const step of found.steps.slice(1)) {
+      await this.docketAddStep(to, made, spellStepWhen(step.when, place), step.text, step.kind)
+    }
+    if (found.when.start !== null) await this.docketSetStart(to, made, found.when.start)
+    if (found.when.every !== null) await this.docketSetEvery(to, made, spellInterval(found.when.every))
+    if (found.when.dates !== null) await this.docketSetDates(to, made, found.when.dates)
+    if (found.from !== null) {
+      await this.#serial(async () =>
+        this.#corpus.use(to, doc => (doc as DocketDocument).cameFrom(made, found.from as string)))
+    }
+
+    await this.docketRemove(from, matter)
+    await this.#wrote(to)
+    return made
+  }
+
   /** Into a section — `''` is the undivided run — optionally above one matter. */
   async docketMoveMatter(
     id: DocumentId,
@@ -2105,8 +2148,10 @@ export class DocumentService {
     // sort of thing a repeated keystroke does by accident.
     if (found === undefined || found.status === 'backlog') return null
     const already = await this.matterFor(item)
-    await this.todoSetStatus(list, item, 'backlog')
-    if (already !== null) return null
+    if (already !== null) {
+      await this.todoSetStatus(list, item, 'backlog')
+      return null
+    }
     const where = docket ?? BACKLOG_DOCKET
     // **Named on first use**, so the sidebar has something to call it other than
     // a slug. A docket nobody named is one nobody recognises tomorrow (MH1's
@@ -2120,12 +2165,18 @@ export class DocumentService {
     // rather than about the list it was on; the due date does not, because a
     // deadline you have just declined is not one.
     const made = await this.docketAdd(where, withoutMarks(found), { mode: 'task' })
-    for (const tag of found.tags) await this.docketTag(where, made, tag)
-    if (found.owner !== null) await this.docketSetOwner(where, made, found.owner)
-    // **Last**, because every write above forgets the provenance — which is what
-    // keeps an undo from deleting a matter somebody has since worked on.
     await this.#serial(async () =>
       this.#corpus.use(where, doc => (doc as DocketDocument).cameFrom(made, item)))
+    for (const tag of found.tags) await this.docketTag(where, made, tag)
+    if (found.owner !== null) await this.docketSetOwner(where, made, found.owner)
+    // **And the line is handed over**, last, so it names a docket that exists.
+    // One direction, one instant: from here the matter is the docket's, the line
+    // is a record of what happened, and nothing on the task list can act on it.
+    const title = (await this.#corpus.use(where, doc => doc.titleOf(ONLY_SEGMENT)))
+      ?? nameOf(where as string)
+    await this.#serial(async () =>
+      this.#corpus.use(list, doc => (doc as TodoDocument).handOver(item, title)))
+    this.#touched()
     await this.#wrote(where)
     return made
   }
@@ -2322,18 +2373,6 @@ export class DocumentService {
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
       for (const id of (await this.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
-        // **A matter moved from a task that is live again should not exist.**
-        // Moving writes two documents and undo is per-document, so undoing the
-        // line's `[>]` used to leave the matter behind — the thing on the list
-        // *and* on a docket, one commitment in two places. An undo is a change
-        // to a source of truth; this is the derived side catching up (D77).
-        const moved = (await this.docketMatters(docket)).find(one => one.id === id)
-        if (moved?.from != null && live.has(moved.from)) {
-          await this.#serial(async () =>
-            this.#corpus.use(docket, doc => (doc as DocketDocument).remove(id)))
-          touched = true
-          continue
-        }
         if (await this.#advanceDocket(docket, id, today, live)) touched = true
         const matter = (await this.docketMatters(docket)).find(one => one.id === id)
         if (matter === undefined) continue

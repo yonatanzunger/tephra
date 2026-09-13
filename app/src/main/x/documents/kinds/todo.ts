@@ -29,12 +29,14 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  isLive, itemBlock, itemLine, nowSeconds, parseItem, resolveDue, scanItems, unusedItemId, type WalkState,
+  isLive, itemBlock, itemLine, nowSeconds, parseItem, resolveDue, scanItems, spellMoved,
+  unusedItemId, type WalkState,
   type ScannedItem, type TodoItem, type TodoStatus,
 } from '../../../../shared/kinds/todo.ts'
 import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import type {
-  DateKey, DocumentId, DocumentMeta, DocumentPosition, DocumentText, SegmentKey, Span,
+  DateKey, DocumentId, DocumentMeta, DocumentPosition, DocumentText, EditOrigin, SegmentKey,
+  Span,
 } from '../../../../shared/document-api.ts'
 
 /** An item, and which day's file it was read from. */
@@ -474,6 +476,29 @@ export class TodoDocument extends SegmentedDocument {
   }
 
   /** Check it off, start it, block it, put it down. One line, one edit. */
+  /**
+   * Hand a task over to a docket: `[>]`, and where it went (MH5).
+   *
+   * **Written as a `transfer`, so undo cannot reach it.** A move changes who
+   * owns the thing, and ownership is not text somebody typed — an undoable move
+   * left the line live while the matter stood, which is one commitment in two
+   * places and a revertible cross-store transaction to fix. What reverses this
+   * is another move, from the side that now owns it.
+   */
+  async handOver(id: string, docket: string): Promise<boolean> {
+    const mark = spellMoved(docket)
+    return this.#rewrite(
+      id,
+      item => ({
+        ...item,
+        status: 'backlog',
+        reason: null,
+        text: mark === null ? item.text : `${item.text} ${mark}`.trim(),
+      }),
+      'transfer',
+    )
+  }
+
   async setStatus(id: string, status: TodoStatus, reason?: string): Promise<boolean> {
     return this.#rewrite(id, item => ({
       ...item,
@@ -659,7 +684,11 @@ export class TodoDocument extends SegmentedDocument {
     return touched
   }
 
-  async #rewrite(id: string, change: (item: TodoItem, date: DateKey) => TodoItem): Promise<boolean> {
+  async #rewrite(
+    id: string,
+    change: (item: TodoItem, date: DateKey) => TodoItem,
+    origin: EditOrigin = 'operation',
+  ): Promise<boolean> {
     for (const key of [...(await this.keys())].reverse()) {
       const date = key as DateKey
       const found = (await this.#scan(date)).find(s => s.item.id === id)
@@ -672,7 +701,7 @@ export class TodoDocument extends SegmentedDocument {
 
       await this.replace(
         [{ span: { begin: this.at(date, found.from), end: this.at(date, found.to) }, payload: line as DocumentText }],
-        'operation',
+        origin,
       )
       return true
     }
@@ -701,7 +730,7 @@ export class TodoDocument extends SegmentedDocument {
 }
 
 const EMPTY_ITEM: TodoItem = {
-  id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null,
+  id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null, moved: null, movedSpan: null,
   text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
 }
 

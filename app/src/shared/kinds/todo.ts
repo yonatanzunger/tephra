@@ -93,6 +93,8 @@ export interface TodoItem {
   readonly due: DateKey | null
   /** Who has this, or null. `OWNER Sam` where you can see it (T16). */
   readonly owner: string | null
+  /** Where it went, for a line that has been transferred to a docket (MH5). */
+  readonly moved: string | null
   /**
    * Why it is blocked, and **only when it is blocked** (T4).
    *
@@ -136,6 +138,7 @@ export interface TodoItem {
   readonly dueSpan: TextSpan | null
   /** Where `OWNER <name>` sits, for the same reason. */
   readonly ownerSpan: TextSpan | null
+  readonly movedSpan: TextSpan | null
 }
 
 /** One item, and where its line is in the body. */
@@ -219,6 +222,7 @@ export function withoutMarks(item: TodoItem): string {
     // taken off for a summary, and every surface would carry it whether it had
     // room or not.
     ...(item.ownerSpan === null ? [] : [item.ownerSpan]),
+    ...(item.movedSpan === null ? [] : [item.movedSpan]),
   ].sort((a, b) => b.from - a.from)
   let text = item.text
   for (const span of spans) text = text.slice(0, span.from) + text.slice(span.to)
@@ -253,6 +257,27 @@ const OWNER = new RegExp(`\\bOWNER\\s+${NAME_BODY}`)
 export function spellOwner(name: string): string | null {
   const body = spellName(name)
   return body === null ? null : `OWNER ${body}`
+}
+
+/**
+ * `MOVED <docket>` — where this went, on a line that is no longer yours (MH5).
+ *
+ * **Terminal, and the only marker that is.** `DUE` and `OWNER` are facts about a
+ * task you still have; this is the record of a task you no longer do, and it
+ * appears only beside `[>]`. The line stays because it is what happened — the
+ * same reason a finished one stays until tomorrow's carry leaves it behind.
+ *
+ * **In the line rather than looked up**, because the file is what it appears to
+ * be (R26, D20): a day file reading `[>] fix the tap` without saying where it
+ * went is a worse record than one that says. It also means the row can draw it
+ * without asking the dockets, which is a scan per line.
+ */
+const MOVED = new RegExp(`\\bMOVED\\s+${NAME_BODY}`)
+
+/** `MOVED <docket>` as this grammar writes it, or null if it cannot be said. */
+export function spellMoved(name: string): string | null {
+  const body = spellName(name)
+  return body === null ? null : `MOVED ${body}`
 }
 
 /** `DUE <date>`, uppercase, because era 1 drew it in large letters (T9). */
@@ -367,6 +392,7 @@ export function parseItem(line: string): TodoItem | null {
 
   const d = DUE.exec(text)
   const o = OWNER.exec(text)
+  const v = MOVED.exec(text)
   return {
     id,
     status,
@@ -376,6 +402,7 @@ export function parseItem(line: string): TodoItem | null {
     tags,
     due: d === null ? null : ((d[1] as string) as DateKey),
     owner: o === null ? null : readName(o).trim(),
+    moved: v === null ? null : readName(v).trim(),
     reason,
     // **The line is a line.** Notes live under it and are gathered by
     // `scanItems`, which is the only caller that can see them.
@@ -383,6 +410,7 @@ export function parseItem(line: string): TodoItem | null {
     tagSpans,
     dueSpan: d === null ? null : { from: d.index, to: d.index + d[0].length },
     ownerSpan: o === null ? null : { from: o.index, to: o.index + o[0].length },
+    movedSpan: v === null ? null : { from: v.index, to: v.index + v[0].length },
   }
 }
 

@@ -196,7 +196,7 @@ test('ids are eight characters and avoid what is taken', () => {
 
 test('an item with no text is still a line', () => {
   const empty: TodoItem = {
-    id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null,
+    id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null, moved: null, movedSpan: null,
     text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
   }
   assert.equal(itemLine(empty), '- [ ]')

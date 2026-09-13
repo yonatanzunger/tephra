@@ -804,14 +804,22 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                 }),
               }, 'rule' as const]
               : []),
-            ...statusItems(status => {
+            // **A handed-over line offers two things and no more** (MH5): the
+            // way to follow it, and the way to undo a mis-typed line. Everything
+            // else would be acting on something this list no longer owns.
+            ...(item.moved !== null ? [{
+              label: 'Delete',
+              destructive: true,
+              onChoose: () => act(window.tephra.todo.remove(list, id)),
+            }] : []),
+            ...(item.moved !== null ? [] : statusItems(status => {
               // Blocked asks WHY, because a block without the thing it is
               // waiting on is the one status that says nothing (T4).
               if (status === 'blocked') setBlocking(id)
               else act(window.tephra.todo.setStatus(list, id, status))
             }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id),
               dockets,
-              where => act(window.tephra.todo.putDown(list, id, where))),
+              where => act(window.tephra.todo.putDown(list, id, where)))),
           ],
         })
       }}
@@ -1260,6 +1268,7 @@ function Row({
       id={`todo-${item.id ?? ''}`}
       className={
         `todo-row status-${item.status}${done ? ' finished' : ''}` +
+        `${item.moved === null ? '' : ' handed-over'}` +
         `${carried ? ' carried' : ''}${selected ? ' selected' : ''}`
       }
       {...(readOnly ? {} : { onContextMenu: onMenu })}
@@ -1267,6 +1276,9 @@ function Row({
       // click: the text button collapsed to nothing and the only way back into
       // it was to delete the file. A row is one thing and clicking it edits it.
       onClick={e => {
+        // **A handed-over line is not editable here.** It belongs to a docket
+        // now; what is left on the list is the record that it went (MH5).
+        if (item.moved !== null) return
         // **⌘-click selects, shift-click extends**, which is what every list in
         // every application means by those keys — and neither collides with
         // anything a row already does, since a plain click edits it and the
@@ -1350,6 +1362,13 @@ function Row({
           about the task and comes off cleanly wherever there is no room for it
           (`withoutMarks`). Distinct from a tag, because a person is not a
           subject — T5 scopes those to things that turn over weekly. */}
+      {/* **Where it went**, on a line this list no longer owns (MH5). The record
+          of what happened, the way a finished row is — and the only thing left
+          to read on it, since everything that could act on it is gone. */}
+      {item.moved !== null && (
+        <span className="todo-moved">moved to {item.moved}</span>
+      )}
+
       {item.owner !== null && (
         <span className="todo-owner" title={`${item.owner} has this`}>{item.owner}</span>
       )}

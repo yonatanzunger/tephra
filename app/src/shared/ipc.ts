@@ -587,6 +587,13 @@ export type DocketCommand =
       readonly matter: string
       readonly start: string | null
     }
+  /** Move a matter to another docket (MH5) — what the review does when filing. */
+  | {
+      readonly kind: 'moveTo'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly to: DocumentId
+    }
   /** The instances, listed outright (H7) — the alternative to an interval. */
   | {
       readonly kind: 'dates'

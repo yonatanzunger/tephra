@@ -353,7 +353,22 @@ export interface Edit {
  *   and undoing it would put a day back to ending mid-line, which is a control
  *   with no meaning.
  */
-export type EditOrigin = 'user' | 'operation' | 'external' | 'boundary'
+/**
+ * Why a change happened, which decides whether undo can reach it.
+ *
+ * **`transfer` is a change of OWNERSHIP, not of text** (MH5). Moving a task to a
+ * docket writes both, and undo is per-document — so an undoable move left the
+ * line live and the matter standing, one commitment in two places. Every fix for
+ * that is a revertible cross-store transaction, and those are as messy here as
+ * anywhere else.
+ *
+ * Naming the write instead dissolves it: undo is for words somebody typed, and
+ * nobody typed a transfer. The precedent is already here — `external` and
+ * `boundary` are excluded for the same reason, since neither is anybody's
+ * keystroke. What reverses a transfer is another transfer, from the side that
+ * now owns the thing.
+ */
+export type EditOrigin = 'user' | 'operation' | 'external' | 'boundary' | 'transfer'
 
 /** The journal record. Serialisable; this is what durability appends. */
 export interface DocumentChange {

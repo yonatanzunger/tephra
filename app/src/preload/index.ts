@@ -225,6 +225,9 @@ const tephra = {
     /** The next instance, or none. No start date is the whole of *inactive*. */
     setStart: (docket: DocumentId, matter: string, start: string | null): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'start', docket, matter, start }),
+    /** Move a matter to another docket (MH5). Returns its id in the new one. */
+    moveTo: (docket: DocumentId, matter: string, to: DocumentId): Promise<string | null> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'moveTo', docket, matter, to }),
     /** The instances, listed outright (H7). Setting them clears any interval. */
     setDates: (docket: DocumentId, matter: string, dates: readonly DateKey[]): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'dates', docket, matter, dates }),

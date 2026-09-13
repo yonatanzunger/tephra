@@ -2550,3 +2550,17 @@ body {
   letter-spacing: .02em;
   color: rgb(var(--text-muted) / .9);
 }
+
+/* **A line that has been handed to a docket** (MH5). Greyed and inert: it is the
+   record that the thing went, the way a finished row is the record that it was
+   done — and nothing on this list can act on it, because this list does not own
+   it any more. */
+.todo-row.handed-over { opacity: .55; cursor: default; }
+.todo-row.handed-over .todo-glyph { pointer-events: none; }
+.todo-moved {
+  flex: 0 0 auto; white-space: nowrap;
+  display: inline-block; line-height: 1.5; padding: .1em 0;
+  border: 1px solid transparent;
+  font-family: var(--font-ui); font-size: var(--row-note); font-style: italic;
+  color: rgb(var(--text-muted) / .9);
+}
