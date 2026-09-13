@@ -193,38 +193,53 @@ function createWindow(): BrowserWindow {
     // Counted, not measured: `win` is already in `getAllWindows()` by the time
     // this runs, so asking how many there are always said "not the first".
     const primary = ++windowsMade === 1
+    /** A scene that asked for its picture has had it; `done` must not retake. */
+    let shotTaken = false
+    /**
+     * Photograph this window.
+     *
+     * **`stayHidden` is what makes a hidden window composite at all.** Electron
+     * says it plainly: *the page is considered visible when its browser window
+     * is hidden and the capturer count is non-zero*. Without it a hidden window
+     * hands back whatever it last painted. `stayAwake` for the same reason one
+     * step up — a throttled renderer can be asleep when the shutter opens.
+     */
+    const take = (): Promise<void> =>
+      win.webContents
+        .capturePage(undefined, { stayHidden: true, stayAwake: true })
+        .then(img => writeFileSync(verifyEnv('TEPHRA_SHOT') ?? '/tmp/tephra-shot.png', img.toPNG()))
+        .catch(() => undefined)
     win.webContents.on('console-message', (_e, _level, message) => {
       if (!message.startsWith('VERIFY')) return
       forward(message)
+      // **The scene says when the picture is worth taking.** Capturing after
+      // `done` looked right and was not: a scene ends, and then the app goes on
+      // being an app — in one case navigating the pane away a second later, so
+      // every shot was of a surface the scene had left. `VERIFY shot` is the
+      // scene pointing at the moment it means, which is the only moment anybody
+      // wants; `done` still captures if a scene never asked, so old scenes are
+      // unaffected.
+      if (message === 'VERIFY shot' && primary && !shotTaken) {
+        shotTaken = true
+        void take()
+      }
       if (message === 'VERIFY done' && primary) {
-        // **Do NOT show it to take the picture.** Tried, and it was wrong twice
-        // over: it did not fix the stale frame (see below), and it made windows
-        // flash onto the desktop of whoever happened to be working while a suite
-        // ran — which is the exact thing verify mode hides them to avoid.
-        //
-        // **The stale frame is a known limitation of this harness.** A hidden
-        // window never composites, so `capturePage` returns whatever was last
-        // painted — for a scened run, the startup view, however far the scene
-        // has since driven the app. The tell is that every shot across a whole
-        // session is byte-identical. DOM assertions are unaffected and remain
-        // the real evidence; a picture of a surface a scene navigated TO cannot
-        // be trusted until this is solved.
         setTimeout(() => {
-          void win.webContents
-            .capturePage()
-            .then(img => writeFileSync(verifyEnv('TEPHRA_SHOT') ?? '/tmp/tephra-shot.png', img.toPNG()))
-            .finally(() => {
-              // GRACEFUL by default, so the harness exercises the real
-              // shutdown — `before-quit` flushes and commits (D32), and a
-              // harness that skipped it could never see session-end work.
-              //
-              // `TEPHRA_EXIT=abrupt` is the other half: app.exit() terminates
-              // without running any of that, which is the closest thing to a
-              // crash that can be arranged on purpose. The WAL exists for
-              // exactly that case and will be tested through this lever.
-              if (verifyEnv('TEPHRA_EXIT') === 'abrupt') app.exit(0)
-              else app.quit()
-            })
+          // A scene that pointed at its moment has had its picture; this is the
+          // fallback for one that never asked.
+          const shot = shotTaken ? Promise.resolve() : take()
+          void shot.finally(() => {
+            // GRACEFUL by default, so the harness exercises the real shutdown —
+            // `before-quit` flushes and commits (D32), and a harness that
+            // skipped it could never see session-end work.
+            //
+            // `TEPHRA_EXIT=abrupt` is the other half: app.exit() terminates
+            // without running any of that, which is the closest thing to a
+            // crash that can be arranged on purpose. The WAL exists for exactly
+            // that case and will be tested through this lever.
+            if (verifyEnv('TEPHRA_EXIT') === 'abrupt') app.exit(0)
+            else app.quit()
+          })
         }, 400)
       }
     })

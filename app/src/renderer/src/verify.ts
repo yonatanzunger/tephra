@@ -20,6 +20,23 @@ export async function runVerify(request: string): Promise<void> {
   const settle = (ms = 200): Promise<void> => new Promise(r => setTimeout(r, ms))
 
   /**
+   * Photograph the app *now*, because now is the moment this scene means.
+   *
+   * **The picture used to be taken after the scene ended**, which looked right
+   * and was not: a scene finishes and the app goes on being an app. One of them
+   * navigated the pane away a second later, so every shot was of a surface the
+   * scene had already left — and since the frame never varied, nine identical
+   * files read as a broken capture rather than as a moving target.
+   *
+   * A scene that never calls this still gets one at the end, as before.
+   */
+  const shot = async (): Promise<void> => {
+    await settle(250)
+    console.log('VERIFY shot')
+    await settle(450)
+  }
+
+  /**
    * Which of these class names no stylesheet rule mentions.
    *
    * **Asked of the stylesheet, not of a computed value**, which is the lesson
@@ -1707,6 +1724,11 @@ export async function runVerify(request: string): Promise<void> {
       say('endLocation', JSON.stringify(pane.location))
       say('endTitle', document.querySelector('.titlebar .title')?.textContent ?? '')
       say('splitThere', document.querySelectorAll('.todo-split').length)
+      // **Does it stay where it was put?** The captured frame showed the stream
+      // while every DOM claim said the task list — either a stale frame or a
+      // pane that wanders off a second later, and only one of those is a
+      // harness fault.
+      if (arg === 'keep') await shot()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
     }
