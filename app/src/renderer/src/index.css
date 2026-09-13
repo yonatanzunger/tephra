@@ -2019,7 +2019,13 @@ body {
    short cases sit against the disclosure they belong to. */
 .docket-when {
   flex: 0 0 13rem; text-align: right; cursor: text;
-  font-variant-numeric: tabular-nums; font-size: 14px;
+  /* **The UI face, not the notebook's.** A date is apparatus — it is not
+     something anybody wrote — and the reading serif was inherited by default
+     rather than chosen. At 14px its figures antialias badly beside the crisp
+     sans of every other control on the row, which is what the eye objects to
+     long before it works out why. Tabular figures so the column stays a column. */
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums; font-size: 12.5px;
   color: rgb(var(--text)); background: none;
   border: 0; border-radius: 5px; padding: .05rem .3rem;
 }

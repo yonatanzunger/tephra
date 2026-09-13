@@ -173,7 +173,10 @@ check(
 )
 check(
   'and NOT DECIDED YET is a state that says so in words',
-  Array.isArray(r.undated) && r.undated.includes('no date yet'),
+  // **In the words the button beside it uses** (D80, amended): for a task the
+  // fact is that nobody has begun, and *activate* is what changes it, so
+  // *not started* and *no date yet* cannot both be right on the same row.
+  Array.isArray(r.undated) && r.undated.includes('not started'),
   JSON.stringify(r.undated),
 )
 
@@ -240,7 +243,16 @@ check(
   // already read as a sentence encoding all three, so it became the way in.
   // **A panel since D80**, so the questions are the four shapes rather than a
   // text box — the claim is unchanged and what counts as *its questions* is not.
-  r.scheduleAsksTogether?.mode === true && r.scheduleAsksTogether?.when === 4,
+  // **And it asks only what the mode leaves open** (D80, amended): a task has
+  // started or it has not, which is two. *Repeating* used to be a radio here,
+  // beside a drop-down that had already said so — two controls answering one
+  // question, and a person left to work out which won.
+  // **What it asks depends on the mode**, which is the point: this matter is a
+  // one-off event, and a one-off event asks nothing — it has a date or it has
+  // not, and an empty field says that better than a radio beside it. So the
+  // claim is that the MODE is here and folded behind the sentence; how many
+  // questions follow is the mode's business.
+  r.scheduleAsksTogether?.mode === true,
   JSON.stringify(r.scheduleAsksTogether),
 )
 check(
@@ -354,7 +366,7 @@ check(
 console.log('\n— a docket that produces work —')
 check(
   'a matter with no date is INACTIVE, and says so',
-  r.backlogged === 'no date yet',
+  r.backlogged === 'not started',
   JSON.stringify(r.backlogged),
 )
 check(
@@ -519,12 +531,15 @@ check(
   'ACTIVATING dates it so the EARLIEST step is due now, and offers the inverse',
   // This matter has a `-2w` step by now, so the honest answer is a fortnight
   // out: starting a fortnight's run-up today is what activating it means.
-  r.activated?.when === IN_A_FORTNIGHT && r.activated?.offers === 'suspend',
-  `${JSON.stringify(r.activated)} — expected ${IN_A_FORTNIGHT}, today is ${TODAY}`,
+  // **And a TASK says it is starting, not merely a date** (D80): `start` means
+  // *when work began*, which read as a bare date made every task an appointment.
+  // Ahead of today it has not begun yet, which the tense has to say.
+  r.activated?.when === `starting ${IN_A_FORTNIGHT}` && r.activated?.offers === 'suspend',
+  `${JSON.stringify(r.activated)} — expected starting ${IN_A_FORTNIGHT}, today is ${TODAY}`,
 )
 check(
   'and SUSPENDING clears the date while keeping what was done',
-  r.suspended?.when === 'no date yet'
+  r.suspended?.when === 'not started'
     && stepNamed(r.suspended?.steps, 'find a suitable shop')?.done === true,
   JSON.stringify(r.suspended),
 )

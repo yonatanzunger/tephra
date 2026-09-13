@@ -49,7 +49,7 @@ import {
   type Matter, type Mode, type NewMatter as NewMatterShape, type Section, type StepKind,
 } from '../../../../shared/kinds/docket.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
-import { addDays } from '../../../../shared/dates.ts'
+import { addDays, dateKeyAt, DEFAULT_ZONE } from '../../../../shared/dates.ts'
 
 export function DocketSurface({
   window: docWindow,
@@ -120,8 +120,20 @@ export function DocketSurface({
    * a notebook whose zone is not the machine's, which is the ordinary case here.
    */
   const [today, setToday] = useState<DateKey | null>(null)
+  /**
+   * The zone both dates are computed in (D63), for turning a completion stamp
+   * into the day it fell on.
+   *
+   * **Asked of main rather than assumed**, which `dueOn` had to learn the hard
+   * way: a stamp is an instant, the day it fell on is a question about *where*,
+   * and answering it for Greenwich put a task finished at 17:42 on tomorrow.
+   */
+  const [zone, setZone] = useState<string>(DEFAULT_ZONE)
   useEffect(() => {
-    void window.tephra.doc.open().then(info => setToday(info.today as DateKey)).catch(() => undefined)
+    void window.tephra.doc.open().then(info => {
+      setToday(info.today as DateKey)
+      setZone(info.zone)
+    }).catch(() => undefined)
   }, [])
   const [problem, setProblem] = useState<string | null>(null)
   /**
@@ -492,6 +504,7 @@ export function DocketSurface({
                   if (matter.id !== null) void act(window.tephra.docket.setDates(id, matter.id, dates))
                 }}
                 today={today}
+                zone={zone}
                 onActivate={() => {
                   if (matter.id !== null) void act(window.tephra.docket.activate(id, matter.id))
                 }}
@@ -693,6 +706,7 @@ function Row({
   onSetMode,
   onSetDates,
   today,
+  zone,
   open,
   onShow,
   onMenu,
@@ -721,6 +735,8 @@ function Row({
   /** The instances, listed outright — the alternative to an interval (H7). */
   onSetDates: (dates: readonly DateKey[]) => void
   today: DateKey | null
+  /** The zone dates are computed in (D63), for reading completion stamps. */
+  zone: string
   onRemove: () => void
   onAddStep: (when: string, text: string, kind: StepKind) => Promise<unknown>
   onDropStep: (step: string) => void
@@ -1060,11 +1076,21 @@ function Row({
                 />
               ) : (
                 <button
-                  className="docket-step-when"
-                  title="When this step happens — right away · 2 weeks · +3 days · then · after #1"
+                  className={`docket-step-when${step.done === null ? '' : ' finished'}`}
+                  title={step.done === null
+                    ? 'When this step happens — right away · 2 weeks · +3 days · then · after #1'
+                    : 'When this step was finished'}
                   onClick={() => { if (step.id !== null) setFixing({ step: step.id, part: 'when' }) }}
                 >
-                  {readStepWhen(step.when, one => indexOfStep(matter, one))}
+                  {/* **A finished step says WHEN it was finished**, not when it
+                      was due. *Right away* on something already done describes a
+                      plan nobody needs any more, and the useful fact — the one
+                      that answers *where is this up to* — was nowhere on the
+                      page. It is also what makes a matter's last action legible
+                      by reading its steps. */}
+                  {step.done === null
+                    ? readStepWhen(step.when, one => indexOfStep(matter, one))
+                    : `completed ${dateKeyAt(new Date(step.done * 1000), zone)}`}
                 </button>
               )}
 
@@ -1325,6 +1351,24 @@ function SchedulePanel({
           : 'none',
   )
   const [adding, setAdding] = useState('')
+  /**
+   * **The shape follows the mode when the mode changes.** Switching *one-off
+   * task* to *recurring event* left the old answer selected, so the panel
+   * offered a rule and a list while holding *started on* — a state the mode says
+   * is impossible. Changing what a thing IS is allowed to change what is being
+   * asked about it.
+   */
+  useEffect(() => {
+    setShape(
+      when.dates !== null ? 'listed'
+        : when.every !== null ? 'repeating'
+          : shapeOf(matter.mode).repeating ? 'repeating'
+            : when.start !== null ? 'once'
+              : 'none',
+    )
+    // Only when the MODE moves: everything else is the panel's own doing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matter.mode])
 
   /**
    * What the next few instances actually are.
@@ -1350,17 +1394,31 @@ function SchedulePanel({
     onDates(when.start === null ? [] : [when.start])
   }
 
-  const option = (key: Shape, label: string): React.JSX.Element => (
+  const option = (key: Shape, label: string, group = 'sched'): React.JSX.Element => (
     <label className="sched-option">
-      <input type="radio" name="sched" checked={shape === key} onChange={() => pick(key)} />
+      <input type="radio" name={group} checked={shape === key} onChange={() => pick(key)} />
       {label}
     </label>
   )
 
+  /**
+   * What a matter *does* is the mode's to say; this only asks what is left.
+   *
+   * **The four shapes were asking a question the drop-down had already
+   * answered.** *Repeating* sat beside a mode called *Recurring event*, and
+   * *On these dates* was offered on a one-off — two controls contradicting each
+   * other by construction, and a person left to work out which one won.
+   *
+   * So the panel asks only what the mode leaves open, and it is different in
+   * each case: a **task** has started or it has not; an **event** has a date or
+   * it has not, which is just whether the field is filled; and a **recurring
+   * event** still has to choose between a rule and a list.
+   */
+  const doing = shapeOf(matter.mode).kind === 'task'
+  const repeats = shapeOf(matter.mode).repeating
+
   return (
     <div className="sched" role="group" aria-label="When this happens">
-      {/* **The same drop-down the add button offers**, because a mistake made at
-          creation has to be correctable the way it was made. */}
       <label className="sched-row">
         <span className="sched-label">This is</span>
         <select
@@ -1372,16 +1430,30 @@ function SchedulePanel({
         </select>
       </label>
 
-      <div className="sched-shapes">
-        {option('none', 'No date yet')}
-        {option('once', 'On a date')}
-        {option('repeating', 'Repeating')}
-        {option('listed', 'On these dates')}
-      </div>
+      {/* A task: started, or not. The date is *when work began* (D80). */}
+      {doing && (
+        <div className="sched-shapes">
+          {option('none', 'Not started')}
+          {option('once', 'Started on')}
+        </div>
+      )}
 
-      {(shape === 'once' || shape === 'repeating') && (
+      {/* A recurring event: a rule, or a list of dates. */}
+      {!doing && repeats && (
+        <div className="sched-shapes">
+          {option('repeating', 'Every so often')}
+          {option('listed', 'On these dates')}
+        </div>
+      )}
+
+      {/* **A one-off event asks nothing**: it has a date or it has not, and an
+          empty field says that better than a radio button beside it. */}
+      {/* **A one-off event always has the field**, whether or not it has a date:
+          it asks nothing above, so without this there would be no way to give it
+          one — the panel would open on a matter it could not schedule. */}
+      {(shape === 'once' || shape === 'repeating' || (!doing && !repeats)) && (
         <label className="sched-row">
-          <span className="sched-label">{shape === 'repeating' ? 'Starting' : 'On'}</span>
+          <span className="sched-label">{doing ? 'Started' : shape === 'repeating' ? 'Starting' : 'On'}</span>
           <input
             type="date"
             className="sched-date"
@@ -1391,7 +1463,7 @@ function SchedulePanel({
         </label>
       )}
 
-      {shape === 'repeating' && (
+      {repeats && shape !== 'listed' && (
         <>
           <label className="sched-row">
             <span className="sched-label">Every</span>

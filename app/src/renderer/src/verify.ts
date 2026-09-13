@@ -1677,7 +1677,10 @@ export async function runVerify(request: string): Promise<void> {
       ;(row()?.querySelector('.docket-when') as HTMLElement | null)?.click()
       await settle(600)
       say('panelOpen', document.querySelectorAll('.sched').length)
-      say('shapes', [...document.querySelectorAll('.sched-option')]
+      // **The panel asks only what the MODE leaves open.** A recurring event
+      // still has to choose a rule or a list; a task has started or it has not.
+      // Two controls answering one question was the fault this replaced.
+      say('shapesForRecurringEvent', [...document.querySelectorAll('.sched-option')]
         .map(n => (n.textContent ?? '').trim()))
       // The mode drop-down is here as well as on *add a matter*, because a
       // mistake made at creation has to be correctable the way it was made.
@@ -1718,6 +1721,23 @@ export async function runVerify(request: string): Promise<void> {
       // The picture worth having is the panel OPEN; the slug at rest is checked
       // below and is one line of text.
       await shot()
+      // And the same panel on a TASK asks a different question entirely.
+      {
+        const mode = document.querySelector('.sched .docket-mode') as HTMLSelectElement | null
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+        setter?.call(mode, 'task')
+        mode?.dispatchEvent(new Event('change', { bubbles: true }))
+        await settle(1000)
+        say('shapesForTask', [...document.querySelectorAll('.sched-option')]
+          .map(n => (n.textContent ?? '').trim()))
+        setter?.call(mode, 'event')
+        mode?.dispatchEvent(new Event('change', { bubbles: true }))
+        await settle(1000)
+        say('shapesForOneOffEvent', [...document.querySelectorAll('.sched-option')]
+          .map(n => (n.textContent ?? '').trim()))
+        say('oneOffEventHasField', document.querySelectorAll('.sched-row .sched-date').length)
+      }
+
       ;(document.querySelector('.sched-done button') as HTMLElement | null)?.click()
       await settle(900)
       say('slugAfter', row()?.querySelector('.docket-when')?.textContent?.trim() ?? '')
