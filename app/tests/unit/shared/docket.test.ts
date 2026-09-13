@@ -22,7 +22,7 @@ const MARK = '<!--tephra:matter 7f3a1b2c 1757462400 0-->'
 
 const bare = (over: Partial<Matter> = {}): Matter => ({
   id: '7f3a1b2c', name: 'The oven is broken', when: STANDING, tags: [], owner: null,
-  mode: 'task', link: null, steps: [], notes: [], arrived: 1757462400, declines: 0,
+  mode: 'task', link: null, steps: [], notes: [], arrived: 1757462400, declines: 0, from: null,
   occurrence: null, extra: [],
   ...over,
 })

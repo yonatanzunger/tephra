@@ -399,6 +399,36 @@ export const STREAM_ID = 'notebook.stream' as DocumentId
 export const TASKS_ID = 'tasks.todo' as DocumentId
 
 /**
+ * The backlog docket — where *not now* goes (MH5, T14, H2).
+ *
+ * **Called the backlog, because that is what people call it.** The design named
+ * it *miscellaneous*, which describes its contents honestly and is not what
+ * anybody would look for: the word in everyone's head for *things I am not doing
+ * yet* is already there, and a menu offering to move something to
+ * *Miscellaneous* reads as filing rather than as deferring.
+ *
+ * **Distinguished the way the task list is**, and named rather than searched
+ * for: it is *the* place a deferred task lands, so it answers by name and cannot
+ * be shadowed by whichever docket happens to sort first.
+ *
+ * **In `dockets/` with the others, though.** The first cut put it at the root,
+ * reasoning that a distinguished document belongs beside `tasks.todo` — and it
+ * was invisible, because that is not where anything looks for a docket. Being
+ * *the* miscellaneous one is a fact about its name, not about where it lives;
+ * a person opening their notebook should find all their dockets in one place.
+ * Reported from use as *it doesn't seem to do anything to any dockets*.
+ *
+ * **It is bounded by nothing, and that is its known weakness.** Every topical
+ * docket is bounded by its domain — there are only so many things true about a
+ * house, which is what makes that one reviewable in a sitting. This one takes
+ * every deferred task from ordinary life with no organising principle, and
+ * reviewing a long undifferentiated list is era 2. Items migrate *out* of it
+ * into topical dockets during review, so what remains is what never found a
+ * home — which is why the graveyard (MH6) is aimed here first.
+ */
+export const BACKLOG_DOCKET = 'dockets/backlog.docket.md' as DocumentId
+
+/**
  * A document from OUTSIDE the notebook, named by its absolute path.
  *
  * Every other id is a path inside the corpus, so absoluteness is what tells the

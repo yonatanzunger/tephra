@@ -154,7 +154,7 @@ export class DocketDocument extends SegmentedDocument {
     ]))
     const matter: Matter = {
       id, name: said, when, mode, tags: [], owner: null, link: null, steps: [], notes: [],
-      arrived: nowSeconds(), declines: 0, occurrence: null, extra: [],
+      arrived: nowSeconds(), declines: 0, occurrence: null, extra: [], from: null,
     }
     // **Where it goes is said, never guessed.** Appending to the end of the file
     // was right while a docket was one flat list and became wrong the moment it
@@ -186,12 +186,41 @@ export class DocketDocument extends SegmentedDocument {
    * section is a heading level deeper, and a verb that reset that would flatten
    * the file's outline as a side effect of editing an owner.
    */
+  /**
+   * Rewrite one matter's block, leaving everything around it untouched.
+   *
+   * **And forget where it came from, because it has been worked on.** `from`
+   * records that a matter was moved here from a task, so that undoing the move
+   * can take it away again (MH5). That is only true while it is still an echo of
+   * the keystroke: once somebody has renamed it, dated it or given it a step, it
+   * is their plan, and an undo of something else entirely must not delete it.
+   * **Provenance survives until the thing is touched**, which is exactly as long
+   * as it means anything.
+   */
   async #write(id: string, change: (was: Matter) => Matter): Promise<void> {
     const found = await this.#find(id)
+    const next = change(found.matter)
+    // **Unless this write is the one SETTING it.** Creating a moved matter is
+    // itself several writes — the block, its seeded step, its tags — so clearing
+    // unconditionally would forget the provenance before anybody had touched
+    // anything. A transform that changes `from` means it; one that leaves it
+    // alone has just worked on the matter.
+    const kept = next.from === found.matter.from ? null : next.from
     await this.replace([{
       span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, found.to) },
-      payload: matterBlock(change(found.matter), found.level) as DocumentText,
+      payload: matterBlock({ ...next, from: kept }, found.level) as DocumentText,
     }], 'operation')
+  }
+
+  /**
+   * Say which task this matter was moved from (MH5).
+   *
+   * **Set last, after the matter is fully made**, because making one is several
+   * writes and each of them forgets the provenance — which is the rule that
+   * keeps an undo from deleting somebody's plan.
+   */
+  async cameFrom(id: string, item: string): Promise<void> {
+    await this.#write(id, was => ({ ...was, from: item }))
   }
 
   async rename(id: string, name: string): Promise<void> {

@@ -30,7 +30,7 @@ import { Horizon } from '../../frame/Horizon'
 // row draws its own chips, so it wants the text without them and with the links
 // still live; the rail has no room for either and wants the short line.
 import { shortLine, withoutMarks as prose } from '../../../../shared/kinds/todo.ts'
-import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
+import { BACKLOG_DOCKET, ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import {
   groupByTag, isLive, resolveDue,
   type ResolvedItem, type TodoItem, type TodoStatus, type WalkState,
@@ -306,6 +306,22 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   const [fromMatter, setFromMatter] = useState<
     { docket: DocumentId; matter: string; item: string } | null
   >(null)
+
+  /**
+   * The dockets, for the *put down in…* entries (MH5).
+   *
+   * **Read once and kept**, because the menu needs them the instant it opens and
+   * a right-click cannot wait on a scan. Refreshed when a docket is written,
+   * which is how a newly made one appears without a reload.
+   */
+  const [dockets, setDockets] = useState<readonly { id: DocumentId; title: string }[]>([])
+  useEffect(() => {
+    const read = (): void => {
+      void window.tephra.docket.list().then(setDockets).catch(() => undefined)
+    }
+    read()
+    return window.tephra.nav.onDocumentsChanged(read)
+  }, [])
 
   const [selected, setSelected] = useState<readonly string[]>([])
   /** Where a shift-click measures from: the last one touched, as everywhere. */
@@ -793,7 +809,9 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               // waiting on is the one status that says nothing (T4).
               if (status === 'blocked') setBlocking(id)
               else act(window.tephra.todo.setStatus(list, id, status))
-            }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id)),
+            }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id),
+              dockets,
+              where => act(window.tephra.todo.putDown(list, id, where))),
           ],
         })
       }}
@@ -1039,7 +1057,15 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                 const ids = selected
                 setSelected([])
                 setAnchor(null)
-                act(window.tephra.todo.bulk(list, ids, one.action))
+                // **Putting down in bulk is putting down, N times.** It has to
+                // house each of them, which one `bulk` call cannot — and nine
+                // items backlogged without homes would be nine things quietly
+                // lost, which is what this phase exists to stop.
+                if (one.action === 'backlog') {
+                  act(Promise.all(ids.map(id => window.tephra.todo.putDown(list, id))))
+                } else {
+                  act(window.tephra.todo.bulk(list, ids, one.action))
+                }
               }}
             >
               {one.label}
@@ -1105,14 +1131,42 @@ function statusItems(
   onStatus: (status: TodoStatus) => void,
   onRemove: () => void,
   onNote: () => void,
+  dockets: readonly { id: DocumentId; title: string }[] = [],
+  onPutDown?: (docket?: DocumentId) => void,
 ): readonly MenuEntry[] {
-  const statuses: readonly TodoStatus[] = ['todo', 'doing', 'blocked', 'done', 'backlog', 'dropped']
+  // **Backlogged is not among them any more** (MH5). `[>]` means *transferred to
+  // a docket*, so it is the consequence of a move rather than a state you set —
+  // and setting it without giving the thing a home is how items used to be lost.
+  const statuses: readonly TodoStatus[] = ['todo', 'doing', 'blocked', 'done', 'dropped']
   return [
     ...statuses.map(status => ({
       label: status === 'blocked' ? `${TITLE[status]}\u2026` : TITLE[status],
       destructive: status === 'dropped',
       onChoose: () => onStatus(status),
     })),
+    /**
+     * **Where it goes, offered but never required.**
+     *
+     * The rule this gesture lives by is *one keystroke and zero decisions*, and
+     * the first entry keeps it: **Move to backlog** asks nothing. What the rest add is a refinement of the rule rather than a
+     * breach of it — the friction that sank the system before this one was
+     * *mandatory* routing at the moment of capture, and this is *optional*
+     * routing at the moment of deferral, which is already a reflective one.
+     * Deciding a thing is not-now and deciding where it belongs are the same
+     * thought; merging them is cheaper than splitting them across two sittings.
+     *
+     * The backlog is not listed twice, being what the first entry means.
+     */
+    ...(onPutDown === undefined ? [] : [
+      'rule' as const,
+      // **"Move to X", because that is what it does.** *Put down* is this
+      // design's own word for deferring and reads as jargon in a menu; what
+      // somebody sees is a thing going somewhere.
+      { label: 'Move to backlog', onChoose: () => onPutDown() },
+      ...dockets
+        .filter(one => one.id !== BACKLOG_DOCKET)
+        .map(one => ({ label: `Move to ${one.title}`, onChoose: () => onPutDown(one.id) })),
+    ]),
     'rule' as const,
     {
       // **Where adding a note lives, and why it is not on the row.** A control

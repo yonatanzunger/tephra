@@ -14,7 +14,7 @@
 import type { Anomaly } from '../shared/anomalies.ts'
 import type { LinkRow } from '../shared/nav-api.ts'
 import { inHorizon, orderHorizon, type HorizonRow, type HorizonWindow } from '../shared/horizon-api.ts'
-import { isOutside, isStream, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../shared/document-api.ts'
+import { isOutside, isStream, BACKLOG_DOCKET, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL, type Attached, type Base, type DayProse, type DocketRow, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
@@ -45,7 +45,7 @@ import { systemZone } from './system-zone.ts'
 import { isKnownZone } from '../shared/dates.ts'
 import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
-import { isLive, RESOLVED_DAYS, shortLine, spellOwner } from '../shared/kinds/todo.ts'
+import { isLive, RESOLVED_DAYS, shortLine, spellOwner, withoutMarks } from '../shared/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
@@ -534,13 +534,21 @@ export class DocumentService {
    * It defaults to the stream, which is what the only focusable surface holds.
    */
   async undo(id: DocumentId = STREAM_ID): Promise<ChangeAck> {
-    return this.#serial(() =>
+    const ack = await this.#serial(() =>
       this.#corpus.use(id, async doc => {
         const change = await doc.undo()
         this.#scheduleFlush()
         return { change, generation: doc.generation }
       }),
     )
+    // **An undo is a change to a source of truth, so the derived side has to
+    // catch up.** Undo is per-document by construction; moving a task to a
+    // docket writes two, so undoing one of them leaves the other saying
+    // something that is no longer so. Rather than teach undo to span documents —
+    // which it cannot, and which would be a large thing to get subtly wrong —
+    // the pass that already knows what should be true is asked to look (D77).
+    await this.reconcile().catch(() => undefined)
+    return ack
   }
 
   async redo(id: DocumentId = STREAM_ID): Promise<ChangeAck> {
@@ -1185,6 +1193,13 @@ export class DocumentService {
         wanted === '' ? nameOf(id) : wanted, section)
     }
     this.#touched()
+    // **A new document announces itself**, which it did not: `#touched` marks
+    // the corpus dirty for the write tiers and tells no surface anything. Any
+    // view holding a list of documents — the row menu's *put down in…*, a
+    // sidebar — could not know a docket had just been made, so the first thing
+    // somebody did with a new docket was find it missing from the one place
+    // they would look for it.
+    this.#changed(id)
     return id
   }
 
@@ -2061,6 +2076,60 @@ export class DocumentService {
     await this.#wrote(id)
   }
 
+  /**
+   * Put a task down: mark it transferred, and give it a home (MH5, T14).
+   *
+   * **One keystroke and zero decisions**, which is the rule this whole design is
+   * named against breaking. *"Which container does this go in?"* is precisely the
+   * friction that sank the system before this one, so it goes to the backlog
+   * docket unless the caller already knows better. The review is
+   * where filing happens, because that is the moment routing is cheap: the
+   * backlog is regathered **from**, never routed **into**.
+   *
+   * **The item stays and says what happened to it.** `[>]` means *transferred to
+   * a docket* — resolved rather than waiting — and the line keeps its id, so its
+   * history stays continuous and `tephra:todo/<id>` still resolves. Nothing is
+   * deleted and no day file is rewritten, which is what makes this a move rather
+   * than a migration.
+   *
+   * **A task a docket already made is not given a second home.** It has a matter
+   * — putting it down is that matter's business (D79), and a misc entry beside it
+   * would be the same commitment in two places, which is the failure the
+   * horizon's two sources are kept disjoint to avoid.
+   */
+  async todoPutDown(list: DocumentId, item: string, docket?: DocumentId): Promise<string | null> {
+    const found = (await this.todoItems(list, this.today)).find(one => one.id === item)
+    // **Already put down is already housed.** The provenance check below only
+    // catches a task a docket MADE; one that was put down has a matter nothing
+    // points at, so asking twice would make a second copy of it — which is the
+    // sort of thing a repeated keystroke does by accident.
+    if (found === undefined || found.status === 'backlog') return null
+    const already = await this.matterFor(item)
+    await this.todoSetStatus(list, item, 'backlog')
+    if (already !== null) return null
+    const where = docket ?? BACKLOG_DOCKET
+    // **Named on first use**, so the sidebar has something to call it other than
+    // a slug. A docket nobody named is one nobody recognises tomorrow (MH1's
+    // first reported fault, in a different place).
+    if (where === BACKLOG_DOCKET) {
+      await this.#serial(async () => this.#corpus.use(where, async doc => {
+        if ((await doc.titleOf(ONLY_SEGMENT)) === null) await doc.setTitleOf(ONLY_SEGMENT, 'Backlog')
+      }))
+    }
+    // **Its subjects and its owner come with it**, being facts about the thing
+    // rather than about the list it was on; the due date does not, because a
+    // deadline you have just declined is not one.
+    const made = await this.docketAdd(where, withoutMarks(found), { mode: 'task' })
+    for (const tag of found.tags) await this.docketTag(where, made, tag)
+    if (found.owner !== null) await this.docketSetOwner(where, made, found.owner)
+    // **Last**, because every write above forgets the provenance — which is what
+    // keeps an undo from deleting a matter somebody has since worked on.
+    await this.#serial(async () =>
+      this.#corpus.use(where, doc => (doc as DocketDocument).cameFrom(made, item)))
+    await this.#wrote(where)
+    return made
+  }
+
   /** Stop work on it, keeping what it has already done (D76). */
   async docketSuspend(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () =>
@@ -2253,6 +2322,18 @@ export class DocumentService {
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
       for (const id of (await this.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
+        // **A matter moved from a task that is live again should not exist.**
+        // Moving writes two documents and undo is per-document, so undoing the
+        // line's `[>]` used to leave the matter behind — the thing on the list
+        // *and* on a docket, one commitment in two places. An undo is a change
+        // to a source of truth; this is the derived side catching up (D77).
+        const moved = (await this.docketMatters(docket)).find(one => one.id === id)
+        if (moved?.from != null && live.has(moved.from)) {
+          await this.#serial(async () =>
+            this.#corpus.use(docket, doc => (doc as DocketDocument).remove(id)))
+          touched = true
+          continue
+        }
         if (await this.#advanceDocket(docket, id, today, live)) touched = true
         const matter = (await this.docketMatters(docket)).find(one => one.id === id)
         if (matter === undefined) continue

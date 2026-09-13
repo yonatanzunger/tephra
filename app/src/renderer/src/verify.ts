@@ -656,8 +656,10 @@ export async function runVerify(request: string): Promise<void> {
       rows()[2]?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
       await settle(400)
       say('statusMenu', [...document.querySelectorAll('.row-menu button')].map(b => b.textContent ?? ''))
+      // **Put down**, which is what setting `[>]` became (MH5): the glyph is the
+      // consequence of giving the thing a home, not a state you set on its own.
       ;([...document.querySelectorAll('.row-menu button')].find(
-        b => (b.textContent ?? '').startsWith('Backlogged'),
+        b => (b.textContent ?? '').trim() === 'Move to backlog',
       ) as HTMLElement | null)?.click()
       await settle(1200)
       say('afterBacklog', rows()[2]?.className.replace(/.*status-(\w+).*/, '$1') ?? '')
@@ -1825,7 +1827,6 @@ export async function runVerify(request: string): Promise<void> {
         }
         say('ownerVsTag', { owner: shape('.todo-owner'), tag: shape('.todo-tag') })
         say('pickSays', document.querySelector('.todo-pick')?.textContent?.trim() ?? '')
-      }
 
       /**
        * **Driven through the real gesture**, not through the verb underneath it.
@@ -1892,6 +1893,31 @@ export async function runVerify(request: string): Promise<void> {
       }
       say('todayAfter', document.querySelectorAll('.todo-today').length)
       say('splitThere', document.querySelectorAll('.todo-split').length)
+
+      // **Putting down offers a home, and never insists on one** (MH5). The
+      // rule is *one keystroke and zero decisions*, kept by the bare entry; the
+      // rest are a refinement of it, since deferral is already a reflective
+      // moment and *where does this belong* is the same thought.
+      {
+        await window.tephra.doc.newDocument('The house', undefined, 'docket')
+        await settle(1200)
+        const row = document.querySelector('.todo-list > .todo-row')
+        row?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+        await settle(500)
+        say('putDownMenu', [...document.querySelectorAll('.row-menu button')]
+          .map(b => (b.textContent ?? '').trim())
+          .filter(one => one.startsWith('Move to')))
+        ;([...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '').trim().startsWith('Move to The house')) as HTMLElement | null)?.click()
+        await settle(1400)
+        say('housed', (await window.tephra.docket.list()).map(one => one.title))
+        const house = (await window.tephra.docket.list()).find(one => one.title === 'The house')
+        say('filedThere', house === undefined
+          ? null
+          : (await window.tephra.docket.matters(house.id)).map(one => one.name))
+      }
+      }
+
       if (arg === 'keep') await shot()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)

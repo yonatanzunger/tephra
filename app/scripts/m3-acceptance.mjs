@@ -1146,13 +1146,17 @@ console.log('\n\u2014 the task list \u2014')
     `${JSON.stringify(r.afterCheck?.[0])} \u00b7 ${JSON.stringify(r.finished)}`,
   )
   check(
-    // **The six statuses**, three of which the click cycle cannot reach — and
-    // the acts that are not statuses at all, which is where the menu earns its
-    // keep: it is where everything outside the daily rhythm lives, which is now
-    // Delete and Add Note as well.
+    // **The statuses the click cycle cannot reach** — and the acts that are not
+    // statuses at all, which is where the menu earns its keep: everything
+    // outside the daily rhythm lives here.
+    //
+    // **Backlogged left the status list in MH5** and became *Move to backlog*: `[>]`
+    // means *transferred to a docket*, so it is the consequence of a move rather
+    // than a state you set, and setting it without giving the thing a home is
+    // how items used to be lost.
     'and the three that are not part of the daily rhythm are a right-click away',
     Array.isArray(r.statusMenu) &&
-      ['Not started', 'In progress', 'Blocked\u2026', 'Done', 'Backlogged', 'Nevermind'].every(l =>
+      ['Not started', 'In progress', 'Blocked\u2026', 'Done', 'Nevermind', 'Move to backlog'].every(l =>
         r.statusMenu.includes(l),
       ) && r.afterBacklog === 'backlog',
     `${JSON.stringify(r.statusMenu)} \u00b7 ${r.afterBacklog}`,

@@ -17,6 +17,7 @@ import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocketDocument } from '../../src/main/x/documents/kinds/docket.ts'
 import { UNSCHEDULED } from '../../src/shared/kinds/docket.ts'
 import { kindOf, type RelPath } from '../../src/main/w/layout.ts'
+import { BACKLOG_DOCKET } from '../../src/shared/document-api.ts'
 import type { DateKey, DocumentId } from '../../src/shared/document-api.ts'
 // **The prose, without the chips.** A generated item carries its matter as a
 // tag now, so raw `text` includes the mark — and what these claims are about is
@@ -2315,4 +2316,155 @@ test('and a matter with no owner generates a task with none, not an empty one', 
   await service.docketActivate(id, tap)
   const list = await service.todoList()
   assert.equal((await service.todoItems(list, service.today))[0]?.owner, null)
+})
+
+// ── the backlog becomes a docket (MH5, T14) ─────────────────
+//
+// **Regathered FROM, never routed INTO.** Deciding at three in the afternoon
+// that a task is not-now must cost one keystroke and zero decisions — *which
+// container does this go in?* is the friction that sank the system before this
+// one. So it goes to the miscellaneous docket, and the review is where filing
+// happens, because that is the moment routing is cheap.
+
+test('THE POINT: putting a task down gives it a home and leaves its line alone', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'repaint the shed #house OWNER Sam')
+
+  const made = await service.todoPutDown(list, item)
+  assert.notEqual(made, null)
+
+  // The line stays, saying what happened to it: `[>]` is *transferred*, which
+  // counts as resolved — so its history is continuous and its id still resolves.
+  const line = (await service.todoItems(list, service.today)).find(one => one.id === item)
+  assert.equal(line?.status, 'backlog')
+  assert.equal(withoutMarks(line as never), 'repaint the shed')
+
+  // And it is a matter on the miscellaneous docket, undated and not started.
+  const matters = await service.docketMatters(BACKLOG_DOCKET)
+  assert.deepEqual(matters.map(one => one.name), ['repaint the shed'])
+  assert.equal(matters[0]?.when.start, null, 'not started: dating it is the review\'s job')
+})
+
+test('and its subjects and its owner come with it, being facts about the THING', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'repaint the shed #house OWNER Sam DUE 2026-03-20')
+  await service.todoPutDown(list, item)
+
+  const matter = (await service.docketMatters(BACKLOG_DOCKET))[0]
+  assert.deepEqual(matter?.tags, ['house'])
+  assert.equal(matter?.owner, 'Sam')
+  // The due date does NOT: a deadline you have just declined is not one.
+  assert.equal(matter?.when.start, null)
+})
+
+test('and a task a DOCKET made is not given a second home', async t => {
+  // It has a matter already; putting it down is that matter's business (D79),
+  // and a misc entry beside it would be one commitment in two places.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const tap = await service.docketAdd(id, 'Fix the tap', { mode: 'task' })
+  await service.docketActivate(id, tap)
+  const list = await service.todoList()
+  const made = (await service.docketMatters(id))[0]?.steps[0]?.made as string
+
+  assert.equal(await service.todoPutDown(list, made), null, 'nowhere new to go')
+  assert.deepEqual(await service.docketMatters(BACKLOG_DOCKET), [])
+})
+
+test('and putting down twice does not make two of it', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'repaint the shed')
+  await service.todoPutDown(list, item)
+  await service.todoPutDown(list, item)
+  assert.equal((await service.docketMatters(BACKLOG_DOCKET)).length, 1)
+})
+
+test('and somewhere else, when the answer is already known', async t => {
+  // Naming a docket at the moment of backlogging stays available for when you
+  // do know; it is never required.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const house = await service.newDocument('The house', undefined, 'docket')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'repaint the shed')
+  await service.todoPutDown(list, item, house)
+  assert.deepEqual((await service.docketMatters(house)).map(one => one.name), ['repaint the shed'])
+  assert.deepEqual(await service.docketMatters(BACKLOG_DOCKET), [])
+})
+
+test('THE BUG: putting down a CARRIED item marks the line it is on now', async t => {
+  // Reported from use: the matter appeared on the miscellaneous docket and the
+  // task stayed `[ ]`, so the list looked untouched and the gesture looked
+  // broken — and pressing it again made a second matter. The item had been
+  // carried for days, which every item on a real list has been and none in the
+  // first tests had.
+  const { service, on } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'Build the checklist #peru')
+  await on('2026-03-11')
+  await on('2026-03-12')
+  await service.todoList()
+
+  await service.todoPutDown(list, item)
+  const now = (await service.todoItems(list, service.today)).find(one => one.id === item)
+  assert.equal(now?.status, 'backlog', 'the line says it was transferred')
+  assert.equal((await service.docketMatters(BACKLOG_DOCKET)).length, 1)
+
+  // And pressing again is a no-op, which is what a repeated keystroke needs.
+  await service.todoPutDown(list, item)
+  assert.equal((await service.docketMatters(BACKLOG_DOCKET)).length, 1)
+})
+
+test('and the backlog docket lives with the others, and is NAMED', async t => {
+  // The first cut put it at the notebook root, reasoning that a distinguished
+  // document belongs beside `tasks.todo`. It was invisible: that is not where
+  // anything looks for a docket, so putting a task down appeared to do nothing.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  await service.todoPutDown(list, await service.todoAdd(list, 'repaint the shed'))
+
+  const rows = await service.dockets()
+  assert.deepEqual(rows.map(one => [one.id, one.title]),
+    [['dockets/backlog.docket.md', 'Backlog']])
+})
+
+test('UNDOING A MOVE takes the matter back with it, though undo is per-document', async t => {
+  // **Reported from use.** Moving a task to a docket writes two documents — the
+  // line becomes `[>]` and a matter appears — and undo works on one document at
+  // a time, so undoing the line left the matter behind: the thing on the list
+  // *and* on a docket, which is one commitment in two places.
+  //
+  // Undo is not taught to span documents, which it cannot. The matter records
+  // where it came from, and the reconciler states the rule instead: a matter
+  // moved from a task that is live again should not exist (D77).
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'repaint the shed')
+  await service.todoPutDown(list, item)
+  assert.equal((await service.docketMatters(BACKLOG_DOCKET)).length, 1)
+
+  await service.undo(list)
+  const back = (await service.todoItems(list, service.today)).find(one => one.id === item)
+  assert.equal(back?.status, 'todo', 'the line is live again')
+  assert.deepEqual(await service.docketMatters(BACKLOG_DOCKET), [],
+    'and the matter went with it, rather than becoming a duplicate')
+})
+
+test('and a matter somebody has since worked on is NOT taken away', async t => {
+  // The rule is about an undone move, not about anything that came from a task:
+  // once it has been dated, it is somebody's plan and not an echo of a keystroke.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const list = await service.todoList()
+  const item = await service.todoAdd(list, 'repaint the shed')
+  const made = await service.todoPutDown(list, item) as string
+  await service.docketRename(BACKLOG_DOCKET, made, 'Repaint the shed properly')
+  await service.docketSetStart(BACKLOG_DOCKET, made, '2026-04-01')
+
+  await service.undo(list)
+  const kept = await service.docketMatters(BACKLOG_DOCKET)
+  assert.deepEqual(kept.map(one => one.name), ['Repaint the shed properly'],
+    'somebody worked on it, so it is theirs and not an echo of a keystroke')
+  assert.equal(kept[0]?.from, null, 'and it has forgotten where it came from')
 })

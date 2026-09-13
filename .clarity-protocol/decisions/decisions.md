@@ -3902,3 +3902,53 @@ next instances.
 > commit and done — which for a four-control panel is indistinguishable from the
 > control not working.
 
+---
+
+## D81: Who has it is a marker, not words in the sentence
+
+**Date:** 2026-09-13
+**Status:** decided
+**Extends:** the task-item grammar (D55, D56, T16). **Source:** asked from use,
+after the matter's name became a tag in D80.
+
+**`OWNER <name>` sits in the line beside `DUE <date>`**, uppercase, quoted and
+escaped by the same rules a tag uses. A matter's owner travels to every task it
+generates, and a task somebody typed can carry one too — which is why it belongs
+to the **task** grammar and not the docket's.
+
+**Not `(owner: Sam)` in the title**, which was the first proposal and is the
+shape a tag had just replaced for the matter's name. Text in the sentence cannot
+be filtered on, cannot be taken off for a summary, and reads as part of what
+somebody wrote when it is a fact *about* what they wrote. *What does Sam have?*
+is a question the list should be able to answer.
+
+**And not a tag.** T5 scopes tags to subjects that turn over on the timescale of
+a week; people do not, and a household's names mixed into the subject namespace
+would make every tag list a directory.
+
+**One set of quoting rules, because there is now more than one marker using
+them.** `NAME_BODY`, `spellName` and `readName` are shared by tags and owners, so
+`Mary Jane` and `Bill O'Brien` need no new thought and the two cannot drift into
+dialects.
+
+> **A bug the shared grammar exposed, and it had been latent.** The name pattern
+> was a **string literal**, which needed three layers of backslash to say one —
+> and `[^'\\\n]` came out meaning *not a quote and not an actual newline
+> character*, so it matched a backslash happily and broke every escaped name:
+> `OWNER 'Bill O\'Brien'` parsed as `Bill O\`. It is a regex literal now, which
+> has one layer and can be read. **A pattern you cannot read is a pattern you
+> cannot check**, and this one had been wrong since the escape was added.
+
+> **Three visual faults, all reported from one screenshot.** The owner was drawn
+> as a chip, so two different kinds of fact had the same shape and had to be read
+> to be told apart. The row's right-hand group has a shared nudge that tags and
+> due dates already used and the two newer elements had missed, so it came out
+> ragged — now measured rather than eyed. And the pick control said **Today**
+> beside a due date reading *today*: the prose was right, so the button moved,
+> and it says **do today** because what it does is choose.
+>
+> **A person's name is spelled the way they spell it.** Uppercasing made the
+> shape unmistakable and turned *Sam* into *SAM*, which is a typographic decision
+> overriding somebody's own about their name. The sans face and the absence of a
+> chip are difference enough.
+

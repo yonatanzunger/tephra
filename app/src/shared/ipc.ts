@@ -788,6 +788,19 @@ export type TodoCommand =
       readonly items: readonly string[]
       readonly action: TodoStatus | 'remove'
     }
+  /**
+   * Put a task down (MH5, T14): mark it transferred, and give it a home.
+   *
+   * **`docket` is optional and usually absent** — naming one at the moment of
+   * backlogging stays available for when the answer is already known, and is
+   * never required. Zero decisions is the rule the gesture lives by.
+   */
+  | {
+      readonly kind: 'putDown'
+      readonly list: DocumentId
+      readonly item: string
+      readonly docket?: DocumentId
+    }
   /** Which matter made this item, so a row can offer to go there (MH4). */
   | { readonly kind: 'matterFor'; readonly item: string }
   | { readonly kind: 'chosen'; readonly list: DocumentId; readonly date: DateKey }

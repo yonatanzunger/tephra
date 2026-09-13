@@ -355,6 +355,9 @@ const tephra = {
     /** One act on many items: a status, or `remove`. Returns how many changed. */
     bulk: (list: DocumentId, items: readonly string[], action: TodoStatus | 'remove'): Promise<number> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'bulk', list, items, action }),
+    /** Put it down: transferred, and housed on a docket (MH5). */
+    putDown: (list: DocumentId, item: string, docket?: DocumentId): Promise<string | null> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'putDown', list, item, docket }),
     /** Which matter made this item, or null if nobody did. */
     matterFor: (item: string): Promise<{ docket: DocumentId; matter: string } | null> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'matterFor', item }),

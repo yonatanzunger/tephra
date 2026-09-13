@@ -648,6 +648,21 @@ export interface Matter {
    */
   readonly arrived: number
   readonly declines: number
+  /**
+   * The task this matter was moved from, if it was moved from one (MH5).
+   *
+   * **Provenance, so an undo can be noticed.** Moving a task to a docket writes
+   * two documents — the line becomes `[>]` and a matter appears — and undo is
+   * per-document, so undoing the first leaves the second: the thing is then on
+   * the list *and* on a docket, which is one commitment in two places and
+   * exactly what this design is careful about everywhere else.
+   *
+   * With this, the reconciler can state the rule instead: **a matter moved from
+   * a task that is live again should not exist.** Derived state brought back
+   * into agreement with a source of truth that changed underneath it, which is
+   * what D77 is for and what an undo is.
+   */
+  readonly from: string | null
   readonly occurrence: DateKey | null
   /** Keys this grammar does not know, kept in order and written back verbatim. */
   readonly extra: readonly string[]
@@ -874,6 +889,7 @@ export function parseMatter(block: string): Matter | null {
   let when: Schedule = UNSCHEDULED
   let owner: string | null = null
   let link: string | null = null
+  let from: string | null = null
   let id: string | null = null
   let arrived = 0
   let declines = 0
@@ -976,6 +992,8 @@ export function parseMatter(block: string): Matter | null {
       owner = value === '' ? null : value
     } else if (key === 'link') {
       link = value === '' ? null : value
+    } else if (key === 'from') {
+      from = value.trim() === '' ? null : value.trim()
     } else if (key === 'tags') {
       const found = tagMark()
       found.lastIndex = 0
@@ -1019,6 +1037,7 @@ export function parseMatter(block: string): Matter | null {
     notes,
     arrived,
     declines,
+    from,
     occurrence,
     extra,
   }
@@ -1059,6 +1078,8 @@ export function matterBlock(matter: Matter, level = MATTER_LEVEL): string {
   if (matter.tags.length > 0) lines.push(`tags: ${matter.tags.map(spellTag).join(' ')}`)
   if (matter.owner !== null) lines.push(`owner: ${matter.owner}`)
   if (matter.link !== null) lines.push(`link: ${matter.link}`)
+  // **Where it came from**, so an undo of the move can be noticed (MH5).
+  if (matter.from !== null) lines.push(`from: ${matter.from}`)
   if (matter.steps.length > 0) {
     lines.push('steps:')
     for (const step of matter.steps) lines.push(stepLine(step))
