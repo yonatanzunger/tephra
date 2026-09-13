@@ -5,9 +5,24 @@ rules that keep them honest; this says where each of those things actually lives
 and what the contract between them is, so that "where does X happen" has a
 one-line answer.
 
-**Current as of v1 complete (2026-09-10).** Everything below exists and runs;
-the ordered plan in `milestones.md` is finished and what remains there is
-wanted-on-demand.
+**Current as of MH4 in progress (2026-09-12).** Everything below exists and
+runs. v1's ordered plan (`milestones.md`) is finished; the MH phases — dockets,
+the horizon, reorientation — are building on top of it and are tracked in
+`horizon-roadmap.md`.
+
+> **What the MH phases added to this map**, in one place, since each of the
+> tables below carries its own row:
+>
+> - **A fourth document kind, `docket`** (MH1, D68, D72) with a surface of its
+>   own, and a grammar in `shared/kinds/docket.ts` beside the task-item one.
+> - **A reconciler** (MH3b, D77). `DocumentService.reconcile()` brings *all*
+>   derived state into agreement with what it derives from — dockets are its
+>   first clause, not its subject. It is deliberately named for the whole job.
+> - **A fourth contract, the horizon** (MH2, D78) — `shared/horizon-api.ts`. Its
+>   own logical object, which the docket and the task list *implement*; it is
+>   computed and never stored, which is why the reconciler does not touch it.
+> - **One fewer location.** The horizon had a `NavTarget` of its own and gave it
+>   up (D74 as amended): it is the lower half of the task list's view.
 
 ---
 
@@ -114,6 +129,8 @@ where a character is.
 | anywhere | Extent policy, screens→chars | `shared/extent.ts` |
 | anywhere | Positions, dates | `shared/positions.ts`, `shared/dates.ts` |
 | anywhere | The task-item grammar | `shared/kinds/todo.ts` (D55, D56) |
+| anywhere | The matter-and-step grammar | `shared/kinds/docket.ts` (D68, D72, D76) |
+| Z ↔ X | The horizon: rows, window, order | `shared/horizon-api.ts` (D78) |
 | anywhere | The query notation | `shared/query-text.ts` |
 | anywhere | What a link is, and its key | `shared/links.ts`, `shared/link-index.ts` (D61) |
 | anywhere | A tag's spelling and identity | `shared/tags.ts` (T16) |
@@ -149,8 +166,14 @@ both projects, for that reason.
 | **A document is opened by id** | `Corpus.use` in `main/x/documents/corpus.ts`; the kind comes from the name (D59, `kindOf`) |
 | **What the sidebar knows about the whole corpus** | `CorpusIndex` — subjects, bookmarks, timeline, links, threads, task items. A cache of a scan, keyed by file and stamped; deleting `.tephra/index` costs only time (D52) |
 | **A task item's grammar** | `shared/kinds/todo.ts` — one line carries text, status, tags, due date, notes and identity (D55, D56) |
-| **The walk, and what a day carried** | `main/x/documents/kinds/todo.ts` — `carry`, `walkOf`, `finishWalk` (T11) |
+| **The walk, and what a day carried** | `main/x/documents/kinds/todo.ts` — `carry`, `walkOf`, `finishWalk` (T11, superseded by reorient in MH4) |
 | **Every link in the corpus** | `CorpusIndex.links()` → `frame/Links.tsx` (R10a, D60) |
+| **A matter's grammar, and when a step is due** | `shared/kinds/docket.ts` — `parseMatter`, `dueOn`, `addInterval`; four modes over `start`/`every`/`after` (D68, D72, D76) |
+| **A docket rewritten one matter at a time** | `main/x/documents/kinds/docket.ts` — block-scoped edits, so a verb disturbs nothing around it |
+| **Derived state made true again** | `DocumentService.reconcile()` — one idempotent pass, run at startup, at the day boundary, and whenever an item resolves. Named for the whole job; dockets are its first clause (D77) |
+| **What is bearing down** | `DocumentService.horizon()` over `shared/horizon-api.ts`; the docket contributes through `matterHorizon`, the task list through its due dates (D78) |
+| **The day's selection** | `TodoDocument.chosenOn` / `choose` — a mark in the day's frontmatter beside `walked`, so it cannot travel (H9) |
+| **One act on many items** | `TodoDocument.bulk` — a single `replace`, therefore a single undo step |
 | **A search** | `shared/query-text.ts` parses; `Scanner` in `main/x/documents/search.ts` narrows, orders and scans; `main/searches.ts` holds the cursors; `frame/Find.tsx` walks and `frame/Results.tsx` lists (D65, D66) |
 | **An image arrives** | the editor's paste/drop handler → `DocumentService.attachImage` → `x/documents/attachments.ts`; the link is inserted by the ordinary edit path (R7) |
 | **An image is displayed** | `shared/scheme.ts`'s `imageSrc` → `tephra://notebook/…`, served by `main/scheme.ts` |

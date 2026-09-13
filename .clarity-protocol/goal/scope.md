@@ -8,9 +8,26 @@ The concrete answer to "smaller than a high-powered notebook app." It is a count
 
 > **Amended by D46.** The app may open more than one notebook directory, and a second one — the *shreddable* notebook (`solution/shreddable-notebook.md`, M6) — stores its files encrypted so that deletion is real. **The counting rule is unaffected**: still three view types, still plain files inside, and the second notebook is a different *storage* choice rather than a fourth type. What it relaxes is the departer's exit, and only for itself: R26 protects the archive, and that notebook is definitionally not the archive.
 
+> **Amended 2026-09-12 (MH1–MH2, Qb). Three becomes four, and the increment is
+> paid for rather than waived.** The **docket** is a native type with its own UX
+> — a complete record of a domain, mostly dormant, reviewed on its own rhythm
+> (`goal/horizon.md`). The counting rule survives the addition because it was
+> made to: the number is a *constraint*, not a defence, and Qb required the new
+> type to argue why it could not be a mode of an existing one. It could not — a
+> docket is authored, dated and reviewed unlike anything here.
+>
+> **And the horizon is deliberately NOT a fifth**, which is the more important
+> half. It is a *query over everything dated*, spanning dockets and the task
+> list, which is D9's filtered-view pattern and exactly the shape the link
+> directory already took corpus-wide. As of MH4 it is not even a view of its own:
+> it is the lower half of the task list's surface (D74 as amended). Reorient
+> spans types, so it is a flow rather than a type.
+>
+> **The next candidate must make the same argument this one did.**
+
 ## The types
 
-Three native types, each with its own UX. Everything else in the directory is either **external** (PDFs and other documents, opened by the OS) or **embedded** (PNGs and images, referenced from markdown and rendered inline).
+Four native types, each with its own UX. Everything else in the directory is either **external** (PDFs and other documents, opened by the OS) or **embedded** (PNGs and images, referenced from markdown and rendered inline).
 
 > **As built (2026-09-10):** the count held. The kinds in code are `stream`, `markdown`, `todo` and `fileset` — the first two being one type with two shapes, as this table intends — plus `external`, which is the one addition: a markdown file *outside* the notebook, which MC6 taught Tephra to open **read-only** rather than hand to the OS, with import as the gesture that brings it in. Images are embedded and, since R7, actually render: they are served to the renderer over `tephra://notebook/`, which had no route before.
 
@@ -19,9 +36,16 @@ Three native types, each with its own UX. Everything else in the directory is ei
 | **Markdown** (`.md`) | The reading and editing surface. The notebook stream, branched documents, and pinned lists are all this type. Possible later export to docx and similar. |
 | **TODO** | Seen *only* through the TODO experience — the live list, a tag pivot, an urgency pivot, a link directory (`goal/todo.md`). Never edited as raw text in normal use. A notebook may hold several; one at the top level is distinguished, as one stream is. |
 | **Fileset** | A directory with a master index. Entries are URLs, file pointers, and **bookmarks into markdown files**. Browse, open individually or en masse, annotate, snapshot. |
+| **Docket** (`.docket.md`) | *Added 2026-09-10 (MH1).* The complete record of a domain — the house, birthdays, speaking. Matters carry a schedule and an ordered list of steps; it generates TODO items and horizon rows rather than being worked in directly. Mostly dormant by design, which is what distinguishes it from the working list. |
 
-**One syntax family.** All three types are markdown, leniently parsed — a TODO file stays sensible to a plain reader even though it is only ever *seen* through the TODO UX. A bespoke syntax (YAML is the likely candidate for TODO) remains available at promotion time, when the UX's real requirements are known; converting a markdown TODO to YAML is a script, so nothing is foreclosed. Until then there is one parser and one merge story.
+**One syntax family.** All four types are markdown, leniently parsed — a TODO file stays sensible to a plain reader even though it is only ever *seen* through the TODO UX. A bespoke syntax (YAML is the likely candidate for TODO) remains available at promotion time, when the UX's real requirements are known; converting a markdown TODO to YAML is a script, so nothing is foreclosed. Until then there is one parser and one merge story.
 
+> **The claim is bought out rather than merely true** (D72, 2026-09-10). A docket
+> is markdown a plain reader can follow — headings for matters, list items for
+> steps, ids in HTML comments — and that is a *purchase*, not a coincidence: the
+> alternative was a bespoke block format, and what it would have cost is the one
+> thing this section is about. One parser and one merge story still.
+>
 > **The TODO promotion is now live** (`goal/todo.md`), so this is no longer hypothetical: the wire format is explicitly an implementation detail for `solution/todo.md` to settle, constrained only by R26 and by T2 — the user-perceived model is one ever-growing list, and the storage need not mirror it.
 
 **Type is declared by name, not inferred.** Portal found the failure this prevents: a mutable list mistyped as append-only notebook content merges with append-union semantics and *silently duplicates edited lines* — no error, the file quietly fills with near-duplicate paragraphs. Explicit typing is what makes merge safe.

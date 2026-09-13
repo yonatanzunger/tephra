@@ -4,7 +4,26 @@
 D68–D76.** Feature-level; the architectural design happens per phase, at the
 keyboard.
 
-**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 ✓ → MH4 → MH5 → MH6.** The numbers are
+**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 ✓ → MH4 (part) → MH5 → MH4 (rest)
+→ MH6.**
+
+> **Rescheduled 2026-09-12, from living on it.** MH4's foundation is built — the
+> unified view, the day's selection, selection and bulk verbs, the entrances —
+> and its remaining piece is the annotation layer. **MH5 jumps ahead of it**,
+> because use produced the want directly: *I want MH5 even more urgently than the
+> rest of MH4.* Nothing in MH5 depends on the annotations, and the review flow it
+> ships is what makes MH6's threshold real rather than guessed, so moving it
+> earlier shortens the chain to the only phase that is currently blocked on data.
+>
+> Four things come before both, in this order: **the stale documents** (healthy
+> practice, and four phases of drift is already too much), **the screenshot
+> harness** (broken, and it is what the visual loop runs on), **the explicit list
+> of instances** (wanted immediately, and it is H7's withdrawn requirement
+> returning with evidence), and then MH5. The remaining docket-backlog items and
+> the rest of MH4 follow.
+>
+> **And H8's narrowing is accepted rather than owed** — see the amendment in
+> `goal/horizon.md`. The strip at frame level is dropped, not deferred. The numbers are
 **identities, not sequence** — they are cited across the decisions and the notes,
 and renumbering to restore the coincidence would break every reference to buy a
 tidiness that would last until the next reorder. It was the numbers doubling as
@@ -359,13 +378,22 @@ today.
 
 ## Documents that go stale when this ships
 
-- **`goal/scope.md`** — the counting rule goes to four types, and the "one syntax
-  family" claim is bought out by D72. Amend when MH2 lands, not before; it
-  describes what is built.
-- **`solution/features.md`** — the events-calendar row reads *"✓ v1 (a pinned
-  markdown file — no feature, per the requirement)"*, which stops being true.
-- **`solution/architecture-as-built.md`** — a new kind, a new surface, a new
-  query source. **Already stale for MH1**, which shipped the kind and the
-  surface.
-- **`goal/todo.md`** — T9 satisfied elsewhere (MH4), T11 superseded (MH4), T4's
-  status set shortened (MH5).
+> **Cleared 2026-09-12**, all four. Kept below as the record of what was amended
+> and why, since the list itself was right about every one of them — and the one
+> marked *already stale* had been so for four phases, which is three too many.
+
+- ~~**`goal/scope.md`**~~ ✓ — four types now, the docket among them, and the
+  horizon explicitly **not** a fifth: it is a query, and since MH4 not even a view
+  of its own. The *one syntax family* claim is recorded as **bought** rather than
+  merely true (D72).
+- ~~**`solution/features.md`**~~ ✓ — the events-calendar row now records that
+  **R19 was promoted against the evidence its own gate demanded**, and what it
+  asked for arrived as three things, none of them a calendar. A *Dockets and the
+  horizon* table was added beside it.
+- ~~**`solution/architecture-as-built.md`**~~ ✓ — a fourth kind, a fourth
+  contract (`horizon-api.ts`), a reconciler, and **one fewer location**, which is
+  the change a map is most likely to get wrong by omission.
+- ~~**`goal/todo.md`**~~ ✓ (two of three) — **T9** is satisfied by the horizon
+  rather than by a pivot on this list, and **T11** is superseded by reorient,
+  with the tint's narrowing recorded. **T4's status set is still open**: it
+  shortens in MH5, not before, so the amendment waits for the change.

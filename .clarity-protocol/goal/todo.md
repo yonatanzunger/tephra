@@ -149,7 +149,30 @@ Three things above go past the evidence and should be treated as proposals: **sp
 
 **T9. Pivot by urgency.** Surface impending due dates so the eye never has to scan for them. Era 2 stored due dates and still missed them; ordering by them, not storing them, is the requirement. (This is the surviving core of R16.)
 
+> **Satisfied elsewhere, 2026-09-12 (MH2, MH4).** Not by a pivot on this list at
+> all: due dates are one of the **horizon**'s two sources, and the horizon is the
+> lower half of the task view (`goal/horizon.md` H8, D74 as amended). The
+> requirement is met better there than a pivot could — *a due date approaching
+> has more in common with a talk approaching than with anything you chose*, so
+> ordering them together is the ordering this asked for, and it holds whatever
+> the list beneath is pivoted by.
+
 **T10. A link directory.** Every link that has appeared in the list, reverse-chronological by last appearance, searchable, each with the context it appeared in and a link back to its item. This serves interaction 2 and is therefore core.
+
+> **Superseded 2026-09-12 (MH4) by reorient** (`goal/horizon.md` H11), which is
+> this flow widened from one document to the whole situation. What survives
+> unchanged: it is **offered and never compelled**, it is offered at the day
+> boundary, the carry is automatic so a skipped pass costs grooming and never
+> integrity, and it still records that you looked. What changed: it spans the
+> horizon and the list rather than the list alone, and it **ends with an
+> artifact** — the day's selection — where the walk's product was attention and
+> nothing else.
+>
+> **And the tint was narrowed by use.** *The offer is the list looking different*
+> held while a few rows had carried; on a real list nearly all of them have, and
+> highlighting nearly everything says nothing. The marking now means *this is
+> what the pass is asking about* and appears only while a pass is open; the
+> resting offer is the entrance.
 
 **T11. A daily walk** that presents the whole live list, runs regardless of length, and exists to load the list into the head. It is offered, never compelled, and **offered on the day boundary rather than on a trigger of its own** (D62): the carry already happens when the list is fetched and the writing day has moved past the day it has open, and that is the moment there is something new to walk. **It reviews the day's working set rather than producing it** — the carry is automatic (T7), so a skipped walk costs the day's grooming and never the list's integrity. What the walk guarantees is that every live item is *seen* at least daily, whatever T12 does to the view. That guarantee is the reason T12 cannot ship without it.
 

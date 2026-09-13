@@ -160,6 +160,22 @@ This also settles a category the first reading dismissed. *"The most important t
 
 **H8. The compact horizon is always present** in the ordinary working view, short by construction, and holds **everything bearing down, whatever its source** — matters inside their ramp-up window, holidays and trips, and TODO items whose due dates are approaching or already past. It runs from a little behind you to some distance ahead, because something overdue is as much a thing to have in mind as something coming.
 
+> **Amended 2026-09-12 (MH4), and the ubiquity is withdrawn.** *Always present in
+> the ordinary working view* is narrowed to **present in the working view** — the
+> unified task-and-horizon surface, which is one window you leave open rather
+> than a strip that follows you. The roadmap had recorded the narrowing as a debt
+> MH4 still owed; from use it is not one. What made the broader claim seem
+> necessary was a horizon you had to *go* to; a horizon that is permanently half
+> of the surface you work in covers the case, and nothing in use has produced the
+> failure the wider version was insurance against.
+>
+> **What survives is the argument, not the mechanism.** A deadline is missed by
+> not looking, so the horizon must not be somewhere you choose to look — and it
+> is not: it is beside the list, always, without being asked for. The frame-level
+> strip is dropped rather than deferred (D66: a decision not to use something is
+> a decision to remove it), and if the failure it guarded against ever appears,
+> it appears as evidence rather than as an unbuilt promise.
+
 **This is what satisfies T9**, and it satisfies it better than a band above the task list would, because the way a deadline is missed is by not looking at the list. **It is also what makes a skipped reorient safe:** generation being automatic protects the data, but the awareness H6 exists for would otherwise be one line in a long list and never reach anyone's head. Exactly as the walk is what makes the soft cap safe, this is what makes an optional ritual affordable.
 
 **H9. One band above the task list, holding the day's selection, and nothing else.** Purely volitional — only what you chose at reorient is in it, and nothing ever arrives automatically, because imposed things go to the horizon (H8). It is a **selection, never a relocation**: the list beneath stays in creation order.

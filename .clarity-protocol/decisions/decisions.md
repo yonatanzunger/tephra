@@ -3263,6 +3263,12 @@ done.
 > What D74 got right survives: the horizon is still *kept beside you*, and the
 > window you leave open is still what discharges H8 early. It is one window now
 > instead of two.
+>
+> **And it discharges H8 outright, rather than early.** This note said *MH4 is
+> still owed*; from use it is not. H8's ubiquity is withdrawn (amended in
+> `goal/horizon.md`): a horizon that is permanently half of the surface you work
+> in covers what a strip following you everywhere was insurance against, and the
+> failure it guarded has not appeared. Dropped rather than deferred, by D66.
 
 ## D75: A docket is divided by sections, told apart by content rather than depth
 

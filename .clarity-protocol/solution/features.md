@@ -141,7 +141,31 @@ argument.
 | The soft cap on the working view | T12 | backlog — the requirement with the least evidence behind it, still waiting for some |
 | Backlog resurfacing | Q3a | **deferred, and says so** — the design has no answer yet |
 | Pinned lists | R18 | ✓ v1 (a markdown file in a section) |
-| Events calendar | R19 | ✓ v1 (a pinned markdown file — no feature, per the requirement) |
+| Events calendar | R19, H1–H11 | ✓ v1 — **and no longer a pinned file** (MH1–MH4). R19 said the need was real and the feature was not, so a markdown file in a section would do; use said otherwise, and R19 was **promoted against the evidence its own gate demanded**. What it asked for arrived as three things, none of them a calendar: the **docket** (a domain's complete record), the **horizon** (a date-ordered query over everything dated, now the lower half of the task view), and **generation** (a docket putting work on the list). What R19 got right survives intact: the full horizon is a plain date-ordered list, not a month grid. |
+
+## Dockets and the horizon
+
+The domain records, what they produce, and the surface that reads them. Designed
+in `goal/horizon.md` and `solution/horizon.md`; scheduled in
+`solution/horizon-roadmap.md`.
+
+| Feature | Ref | Stage |
+|---|---|---|
+| Dockets as a document kind, with their own surface | H2, D68, D72 | ✓ v1 (MH1) — `dockets/<name>.docket.md`, sections, drag to reorder |
+| A matter as a schedule and an ordered list of steps | H4, H7, D76 | ✓ v1 (MH1, amended) — four modes over three fields (`start`, `every`, `after`); ranges and seasons shipped and were then **withdrawn** as a premature optimisation |
+| Generation: a docket puts work on the task list | H5, H7a | ✓ v1 (MH3a) — provenance on the step, so it generates once, withdraws what it made, and hears the task being finished |
+| The clock tick: derived state reconciled, never notified | D77 | ✓ v1 (MH3b) — one idempotent pass; advancing, generating and withdrawing are one operation |
+| Putting a generated task down means three different things | D79, Qa | ✓ engine (MH3b) — advance · skip · suspend; the three-way offer at the moment of the gesture is the rest of MH4 |
+| The horizon: everything bearing down, whatever its source | H8, D74, D78 | ✓ v1 (MH2, MH4) — its own object, implemented by dockets and the task list; **the lower half of the task view**, not a place of its own |
+| Awareness with no task | H6 | ✓ v1 (MH2) — a **status** step, which is a horizon row and generates nothing, ever |
+| The day's selection | H9 | ✓ v1 (MH4) — a per-day mark, not a status and not a tag, so it cannot travel |
+| Bulk acts on the list | MH4 | ✓ v1 — ⌘-click to select, shift to extend; one write and one undo step |
+| Reorient | H11 | **in progress** (MH4) — the pass and its entrances exist; the annotation layer is what remains |
+| The backlog as the miscellaneous docket, and the review flow | H2, T14 | **next** (MH5) |
+| The graveyard | H3 | scheduled (MH6) — its threshold waits on MH5's real decline counts |
+| An explicit list of instances | H7 | **promoted from the backlog 2026-09-12** — withdrawn by D76 for want of evidence, and the evidence arrived |
+| ICS import | H12 | deferred, and not decided against — the placeholder stays |
+| Calendar-rule recurrence | H7 | out of scope for now (D76) |
 
 ## Filesets as document collections
 
