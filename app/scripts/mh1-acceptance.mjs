@@ -238,7 +238,9 @@ check(
   'and the schedule asks its questions together, behind the sentence',
   // Mode, date and interval were three controls on the resting row; the column
   // already read as a sentence encoding all three, so it became the way in.
-  r.scheduleAsksTogether?.mode === true && r.scheduleAsksTogether?.when >= 1,
+  // **A panel since D80**, so the questions are the four shapes rather than a
+  // text box — the claim is unchanged and what counts as *its questions* is not.
+  r.scheduleAsksTogether?.mode === true && r.scheduleAsksTogether?.when === 4,
   JSON.stringify(r.scheduleAsksTogether),
 )
 check(

@@ -3179,13 +3179,18 @@ export async function runVerify(request: string): Promise<void> {
         // text that already described them.
         ;(rowOf('boiler')?.querySelector('.docket-when') as HTMLElement | null)?.click()
         await settle(250)
+        await settle(350)
         say('modesOnRow', [...(rowOf('boiler')?.querySelectorAll('.docket-mode option') ?? [])]
           .map(o => o.textContent))
+        // **Asked of the panel now** (D80). The sentence in the date column is
+        // still the way in and the mode is still folded behind it; what changed
+        // is that the questions are radios and fields rather than a text box, so
+        // *the schedule asks its questions together* is counted differently.
         say('scheduleAsksTogether', {
-          when: rowOf('boiler')?.querySelectorAll('.docket-schedule .docket-field').length ?? 0,
-          mode: rowOf('boiler')?.querySelector('.docket-schedule .docket-mode') !== null,
+          when: rowOf('boiler')?.querySelectorAll('.sched .sched-option').length ?? 0,
+          mode: rowOf('boiler')?.querySelector('.sched .docket-mode') !== null,
         })
-        ;([...(rowOf('boiler')?.querySelectorAll('.docket-schedule .docket-quiet') ?? [])]
+        ;([...(rowOf('boiler')?.querySelectorAll('.sched .docket-quiet') ?? [])]
           .find(b => b.textContent === 'done') as HTMLElement | null)?.click()
         await settle(250)
 
