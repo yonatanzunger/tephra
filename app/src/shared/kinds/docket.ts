@@ -39,9 +39,9 @@
 // kept verbatim and written back untouched, in place. A block with no marker is
 // a matter somebody typed by hand, and gets an id the first time Tephra writes.
 
-import { addDays, asDateKey } from '../dates.ts'
+import { addDays, asDateKey, dateKeyAt, DEFAULT_ZONE } from '../dates.ts'
 import { inHorizon, type HorizonKind, type HorizonWindow } from '../horizon-api.ts'
-import { subjectKey, tagMark } from '../tags.ts'
+import { readTag, subjectKey, tagMark } from '../tags.ts'
 import type { DateKey } from '../document-api.ts'
 
 /** `<!--tephra:matter <id> <arrived> <declines> [<occurrence>]-->`, ending the block. */
@@ -913,7 +913,7 @@ export function parseMatter(block: string): Matter | null {
       const found = tagMark()
       found.lastIndex = 0
       for (let t = found.exec(value); t !== null; t = found.exec(value)) {
-        const subject = subjectKey(((t[1] ?? t[2]) as string).trim())
+        const subject = subjectKey(readTag(t).trim())
         if (subject !== '' && !tags.includes(subject)) tags.push(subject)
       }
     } else {
@@ -1088,7 +1088,12 @@ export function outline(body: string): readonly Section[] {
  * all. All three mean *not now*, and the difference matters to whoever is
  * explaining why nothing happened.
  */
-export function dueOn(step: Step, matter: Matter, add: (from: DateKey, days: number) => DateKey): DateKey | null {
+export function dueOn(
+  step: Step,
+  matter: Matter,
+  add: (from: DateKey, days: number) => DateKey,
+  zone: string = DEFAULT_ZONE,
+): DateKey | null {
   const start = matter.when.start
   if (start === null) return null
   const when = step.when
@@ -1097,7 +1102,14 @@ export function dueOn(step: Step, matter: Matter, add: (from: DateKey, days: num
   if (waits === undefined || waits.done === null) return null
   // **Measured from the day it was finished**, not from the matter's date: that
   // is the whole meaning of one step following another.
-  const was = new Date(waits.done * 1000).toISOString().slice(0, 10) as DateKey
+  //
+  // **In the notebook's zone, and this was UTC.** A stamp is an instant; the day
+  // it fell on is a question about *where*, and `toISOString` answers it for
+  // Greenwich. Finish a task at 17:42 Pacific and UTC has already turned over,
+  // so the step waiting on it came due *tomorrow* and generated nothing today —
+  // reported from use as a second missing activation, and the same one-clock-too-
+  // many that put wall-clock stamps on completions in MH3b.
+  const was = dateKeyAt(new Date(waits.done * 1000), zone)
   return when.offset === undefined ? was : add(was, offsetDays(when.offset))
 }
 
@@ -1250,6 +1262,7 @@ export function matterHorizon(
   matter: Matter,
   window: HorizonWindow,
   add: (day: DateKey, days: number) => DateKey = addDays,
+  zone: string = DEFAULT_ZONE,
 ): readonly MatterHorizon[] {
   const out: MatterHorizon[] = []
   const current = matter.when.start
@@ -1258,7 +1271,7 @@ export function matterHorizon(
     const at: Matter = { ...matter, when: { ...matter.when, start: instance } }
     for (const step of matter.steps) {
       if (here && (step.done !== null || step.made !== null)) continue
-      const on = dueOn(step, at, add)
+      const on = dueOn(step, at, add, zone)
       if (on === null) continue
       if (!inHorizon(on, window)) continue
       out.push({ on, text: step.text, kind: step.kind, instance, step: step.id })

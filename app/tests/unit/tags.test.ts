@@ -2,7 +2,7 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { stack, subjectKey, tagSlot, TAG_HUES } from '../../src/shared/tags.ts'
+import { readTag, spellTag, stack, subjectKey, tagMark, tagSlot, TAG_HUES } from '../../src/shared/tags.ts'
 
 test('one tag sits on the first rule, closest to its text', () => {
   assert.deepEqual(stack([{ from: 0, to: 10, name: 'a' }]).map(e => e.depth), [0])
@@ -79,4 +79,57 @@ test('the eight hues are all reachable, and none hoards the subjects', () => {
   assert.equal(counts.filter(n => n === 0).length, 0, `unreachable hues: ${counts.join(' ')}`)
   assert.ok(Math.min(...counts) > expected / 2, `a hue is starved: ${counts.join(' ')}`)
   assert.ok(Math.max(...counts) < expected * 2, `a hue hoards: ${counts.join(' ')}`)
+})
+
+// ── spelling a subject as a tag, and reading it back (MH4) ──
+//
+// **`spellTag(readTag(x)) === x` is the claim**, and it is the one the docket
+// needed: a generated item is tagged with the matter that made it, and matters
+// are named by people — *Ada's birthday*, *the house*, *SA-512*.
+
+test('a plain word takes the bare form, which is what people type', () => {
+  assert.equal(spellTag('house'), '#house')
+  assert.equal(spellTag('SA-512'), '#SA-512')
+})
+
+test('and anything else takes the quoted one', () => {
+  assert.equal(spellTag('the house'), "#'the house'")
+})
+
+test("AN APOSTROPHE IS ESCAPED, not refused", () => {
+  // The first cut returned null here, on the grounds that the quoted form had
+  // no way to say one — a fair reading of the grammar and an absurd thing to do
+  // to a name as ordinary as this. The grammar grew the escape instead.
+  assert.equal(spellTag("Ada's birthday"), "#'Ada\\'s birthday'")
+  const found = tagMark().exec(spellTag("Ada's birthday") as string)
+  assert.equal(readTag(found as RegExpMatchArray), "Ada's birthday")
+})
+
+test('and a backslash too, or the escape could not be written literally', () => {
+  const said = 'a \\ b'
+  const found = tagMark().exec(spellTag(said) as string)
+  assert.equal(readTag(found as RegExpMatchArray), said)
+})
+
+test('A NEWLINE BECOMES A SPACE rather than an escape', () => {
+  // A tag mark lives inside one line of a file people read and edit by hand; an
+  // escape for a newline would mean a tag spanning lines in the bytes and not on
+  // the page, which is the kind of cleverness that costs somebody an afternoon.
+  assert.equal(spellTag('two\nlines'), "#'two lines'")
+  assert.equal(spellTag('  spaced   out  '), "#'spaced out'")
+})
+
+test('and a name of nothing cannot be a tag, which is the only refusal left', () => {
+  assert.equal(spellTag(''), null)
+  assert.equal(spellTag('   '), null)
+})
+
+test('ROUND TRIP: every one of these survives being written and read', () => {
+  for (const said of ['house', 'the house', "Ada's birthday", 'a \\ b', "it's a 'quote'", 'SA-512']) {
+    const mark = spellTag(said)
+    assert.notEqual(mark, null, said)
+    const found = tagMark().exec(mark as string)
+    assert.notEqual(found, null, `${said} did not match its own spelling`)
+    assert.equal(readTag(found as RegExpMatchArray), said, said)
+  }
 })

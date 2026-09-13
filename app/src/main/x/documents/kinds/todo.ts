@@ -23,6 +23,7 @@
 
 import type { Notebook } from '../../../w/notebook.ts'
 import { compareDateKeys, dateKeyAt } from '../../../../shared/dates.ts'
+import { spellTag } from '../../../../shared/tags.ts'
 import { dayFile, parseDayFile, type RelPath } from '../../../w/layout.ts'
 import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
@@ -705,7 +706,8 @@ const EMPTY_ITEM: TodoItem = {
 }
 
 /** How a tag is written down. The inverse of the grammar's two spellings. */
-const written = (name: string): string => (/\s/.test(name) ? `#'${name}'` : `#${name}`)
+/** Kept as a name here; the grammar's own answer lives in `shared/tags.ts`. */
+const written = (name: string): string => spellTag(name) ?? `#'${name}'`
 
 /**
  * Take a piece out of a line's text, and close the gap it leaves.

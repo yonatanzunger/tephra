@@ -31,6 +31,7 @@ import {
 } from './w/layout.ts'
 import { attach } from './x/documents/attachments.ts'
 import { nameOf } from '../shared/slug.ts'
+import { spellTag } from '../shared/tags.ts'
 import { flattenLinks } from '../shared/links.ts'
 import { plainLine } from '../shared/plain.ts'
 import { DocketDocument } from './x/documents/kinds/docket.ts'
@@ -172,8 +173,17 @@ export class DocumentService {
   readonly #windows = new Map<WindowId, { window: LocalWindow; release: Unsubscribe }>()
   #nextId: WindowId = 1
 
-  /** The serial queue. Every mutation chains onto it; reads do not need to. */
-  #queue: Promise<unknown> = Promise.resolve()
+  /**
+   * Every mutation of a document chains onto this; reads do not.
+   *
+   * **Named for what it orders, because this class holds more than one queue.**
+   * It is not *the* queue: `#reconciliationPassQueue` is the other, and they
+   * order different things at different grains — this one puts individual edits
+   * in sequence, that one keeps whole reconciliation passes from overlapping.
+   * A single pass makes many mutations and they interleave with everybody
+   * else's through here quite happily.
+   */
+  #documentMutationQueue: Promise<unknown> = Promise.resolve()
 
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #dirtySince: number | null = null
@@ -388,10 +398,10 @@ export class DocumentService {
 
   /** Run `work` after everything already queued, and before anything queued later. */
   #serial<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.#queue.then(work, work)
+    const next = this.#documentMutationQueue.then(work, work)
     // Keep the chain alive even when a link rejects, or one failed edit would
     // wedge every edit after it.
-    this.#queue = next.then(
+    this.#documentMutationQueue = next.then(
       () => undefined,
       () => undefined,
     )
@@ -1409,7 +1419,7 @@ export class DocumentService {
         await this.#serial(async () =>
           this.#corpus.use(docket, doc =>
             (doc as DocketDocument).completeStep(matter.id as string, step.id as string, this.#moment)))
-        this.#wrote(docket)
+        await this.#wrote(docket)
         return
       }
     }
@@ -1437,6 +1447,25 @@ export class DocumentService {
     // a deleted item is not live, so anything waiting on it is waiting for ever.
     if (action === 'remove' || !isLive(action)) await this.reconcile()
     return many
+  }
+
+  /**
+   * Which matter made this item, if any (MH4).
+   *
+   * **The link is one-directional in the file and traversable both ways here**,
+   * which is the split D79 settled: the step records what it made, and the
+   * reverse is a question rather than a second stored copy that could drift.
+   * By scanning, because a handful of dockets is a handful — `CorpusIndex` is
+   * where this goes if that day comes.
+   */
+  async matterFor(item: string): Promise<{ docket: DocumentId; matter: string } | null> {
+    for (const docket of await this.#corpus.list('docket')) {
+      for (const one of await this.docketMatters(docket)) {
+        if (one.id === null) continue
+        if (one.steps.some(step => step.made === item)) return { docket, matter: one.id }
+      }
+    }
+    return null
   }
 
   async todoRemove(id: DocumentId, item: string): Promise<void> {
@@ -1800,7 +1829,7 @@ export class DocumentService {
           this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(made, first)))
       }
     }
-    this.#wrote(id)
+    await this.#wrote(id)
     return made
   }
 
@@ -1811,7 +1840,7 @@ export class DocumentService {
     }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setMode(matter, mode)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** The date of the next instance, or none — which is the whole of *inactive*. */
@@ -1822,7 +1851,7 @@ export class DocumentService {
     }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setStart(matter, said)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** How often it comes round. `every` as typed: `90d`, `1m on 31`, or nothing. */
@@ -1833,14 +1862,14 @@ export class DocumentService {
     }
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setEvery(matter, said)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Which step's completion starts the next instance, or none (D76, Qa). */
   async docketSetAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(matter, after)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Move a recurring matter on to its next instance. */
@@ -1853,38 +1882,38 @@ export class DocumentService {
 
   async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).rename(matter, name)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
 
 
   async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   async docketSetLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   async docketTag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).tagMatter(matter, subject)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   async docketUntag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** The prose under a matter. Nothing in it is parsed (D56's rule, carried). */
   async docketSetNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setNotes(matter, notes)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   // ── sections on a docket (MH1) ──────────────────────────────
@@ -1897,21 +1926,21 @@ export class DocumentService {
   async docketAddSection(id: DocumentId, name: string): Promise<string> {
     const made = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).addSection(name)))
-    this.#wrote(id)
+    await this.#wrote(id)
     return made
   }
 
   async docketRenameSection(id: DocumentId, name: string, to: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).renameSection(name, to)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Take the heading away and keep everything that was under it. */
   async docketRemoveSection(id: DocumentId, name: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).removeSection(name)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Into a section — `''` is the undivided run — optionally above one matter. */
@@ -1923,7 +1952,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).moveMatter(matter, section, before)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** One place up or down inside its own section. False at the ends. */
@@ -1951,7 +1980,7 @@ export class DocumentService {
   ): Promise<string> {
     const made = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).addStep(matter, when, text, kind)))
-    this.#wrote(id)
+    await this.#wrote(id)
     return made
   }
 
@@ -1964,7 +1993,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).editStep(matter, step, text)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Reschedule one step. `when` as typed, parsed here. */
@@ -1976,7 +2005,7 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setStepWhen(matter, step, when)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Change a step's kind — the only way to author a `reschedule` (D76). */
@@ -1988,13 +2017,13 @@ export class DocumentService {
   ): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).setStepKind(matter, step, kind)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   async docketRemoveStep(id: DocumentId, matter: string, step: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).removeStep(matter, step)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /** Stamp a step done, or undo that. What a dependency reads (D76). */
@@ -2007,7 +2036,7 @@ export class DocumentService {
     await this.#serial(async () =>
       this.#corpus.use(id, doc =>
         (doc as DocketDocument).completeStep(matter, step, done ? this.#moment : null)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /**
@@ -2020,7 +2049,7 @@ export class DocumentService {
   async docketActivate(id: DocumentId, matter: string): Promise<DateKey> {
     const when = await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).activate(matter, this.today)))
-    this.#wrote(id)
+    await this.#wrote(id)
     return when
   }
 
@@ -2028,7 +2057,7 @@ export class DocumentService {
   async docketSuspend(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
-    this.#wrote(id)
+    await this.#wrote(id)
     // **And then reconcile, rather than withdrawing by hand.** Suspending is
     // only *clear the start date*; what follows from that — the task it put on
     // the list no longer being wanted — is something the tick already knows how
@@ -2040,7 +2069,7 @@ export class DocumentService {
 
   async docketRemove(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /**
@@ -2056,7 +2085,7 @@ export class DocumentService {
       const taken = await this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter))
       await this.#corpus.use(to, doc => (doc as DocketDocument).adopt(taken))
     })
-    this.#wrote(id)
+    await this.#wrote(id)
   }
 
   /**
@@ -2132,13 +2161,38 @@ export class DocumentService {
     // triggered. The reconciler's whole claim is that running it more cannot do
     // more; that has to hold for *concurrently* as well as *again*, and
     // read-then-write is only atomic if the passes are queued.
-    const mine = this.#reconciling.then(() => this.#reconcileOnce(),
-      () => this.#reconcileOnce())
-    this.#reconciling = mine.then(() => undefined, () => undefined)
+    const mine = this.#reconciliationPassQueue.then(() => this.#reconcileOnce(), () => this.#reconcileOnce())
+    this.#reconciliationPassQueue = mine.then(() => undefined, () => undefined)
     return mine
   }
 
-  #reconciling: Promise<void> = Promise.resolve()
+  /**
+   * The tail of the queue of passes, so that two never run at once.
+   *
+   * **Not `#documentMutationQueue`**, which orders individual edits. Two queues,
+   * two grains: that one keeps edits in sequence, this one keeps whole passes
+   * from overlapping. A pass makes many writes and they interleave with
+   * everybody else's quite happily; what must not interleave is one pass's
+   * read-then-write with another's.
+   *
+   * **A promise, and it is a queue rather than a lock**: a caller that asks for
+   * a pass gets one, after whatever is already running. It exists because a pass
+   * is a read-modify-write — *this step has made nothing, so make one* — and two
+   * of those interleaved both read before either writes, which is how the day
+   * boundary's pass and a person's ended up generating the same task twice.
+   */
+  #reconciliationPassQueue: Promise<void> = Promise.resolve()
+
+  /**
+   * Whether a pass is running right now, so that its own writes are ignored.
+   *
+   * **A different question from `#reconciliationPassQueue`, which is why it is
+   * a different thing.** That decides *when* a pass may run; this decides
+   * *whether a docket write should ask for one at all*. A pass writes to the dockets it
+   * reconciles — recording what each step made — and since every other docket
+   * write now summons a pass, its own writes would summon one too.
+   */
+  #reconciliationActive = false
 
   async #reconcileOnce(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
     // One clause per kind of derived state. Today there is one; the shape is
@@ -2148,6 +2202,15 @@ export class DocumentService {
 
   /** What the dockets imply, made true: instances advanced, items in step. */
   async #reconcileDockets(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
+    this.#reconciliationActive = true
+    try {
+      return await this.#reconcileDocketsOnce()
+    } finally {
+      this.#reconciliationActive = false
+    }
+  }
+
+  async #reconcileDocketsOnce(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
     const today = this.today
     const list = await this.todoList()
     const made: string[] = []
@@ -2182,10 +2245,28 @@ export class DocumentService {
         if (matter === undefined) continue
         for (const step of matter.steps) {
           if (step.id === null || step.kind !== 'task') continue
-          const due = dueOn(step, matter, addDays)
+          const due = dueOn(step, matter, addDays, this.zone)
           const wanted = step.done === null && due !== null && compareDateKeys(due, today) <= 0
           if (wanted && step.made === null) {
-            const item = await this.todoAdd(list, step.text)
+            // **Composed once, rather than added and then tagged.** Two writes
+            // would be two undo steps for one act, which is the rule `bulk` and
+            // `finishWalk` already keep.
+            const mark = spellTag(matter.name)
+            const item = await this.todoAdd(list, mark === null ? step.text : `${step.text} ${mark}`)
+            // **The matter is a TAG, not a prefix.** On the list a step's text
+            // stands alone — *find a general mechanic* says nothing about which
+            // car — and the first cut solved that by writing the matter's name
+            // into the title. That was the wrong shape: *which matter this
+            // belongs to* is exactly what a tag says, and as a tag it is drawn
+            // as a chip, it groups the by-tag view by matter, and it can be
+            // taken off without editing the sentence. A prefix is a tag with no
+            // machinery and no way out of it.
+            //
+            // The seeded first step is tagged too, even though its text IS the
+            // matter's name (D76): a chip beside it is redundant to read and
+            // still correct to group by, which is the opposite trade from the
+            // prefix, where the redundancy was in the sentence itself.
+
             await this.#setStepMade(docket, id, step.id, item)
             made.push(item)
             touched = true
@@ -2204,7 +2285,7 @@ export class DocumentService {
           }
         }
       }
-      if (touched) this.#wrote(docket)
+      if (touched) await this.#wrote(docket)
     }
     return { made, withdrawn }
   }
@@ -2312,7 +2393,7 @@ export class DocumentService {
     // source's business, which `horizonOf` is what enforces.
     for (const docket of await this.#corpus.list('docket')) {
       for (const matter of await this.docketMatters(docket)) {
-        for (const step of matterHorizon(matter, window, addDays)) {
+        for (const step of matterHorizon(matter, window, addDays, this.zone)) {
           rows.push({
             on: step.on,
             // **The same treatment, by the rung that fits**: a step is free
@@ -2396,10 +2477,39 @@ export class DocumentService {
    * marks the notebook dirty without naming what it wrote leaves any surface
    * holding that document showing yesterday's answer, with nothing to say so.
    */
-  #wrote(id: DocumentId): void {
+  /**
+   * A docket was written to, so what derives from dockets may now be wrong.
+   *
+   * **Reconcile on every docket write, rather than on a list of the writes that
+   * count.** The list was the bug: `suspend` reconciled and `activate` did not,
+   * so activating a matter put nothing on the task list until the next startup
+   * or midnight — while the horizon, which is computed live, showed the step as
+   * still coming. Reported from use as *I see it in the horizon but not in the
+   * list*, which is exactly what that asymmetry looks like from outside.
+   *
+   * **Suspend got one only because it had a bespoke withdrawal loop to delete.**
+   * Nothing prompted the same thought for the twenty-six verbs that never had
+   * one — which is the argument for asking *what should be true?* after any
+   * write, instead of deciding per verb whether this one could have changed it
+   * (D77). A verb that cannot is merely paying for a pass that finds nothing.
+   */
+  async #wrote(id: DocumentId): Promise<void> {
     this.#touched()
     this.#changed(id)
+    // **Except the reconciler's own writes**, or it would ask itself to run
+    // again for every step it generated. It converges either way — the second
+    // pass finds nothing and stops — but relying on that is relying on an
+    // accident, and the flag says the rule instead.
+    //
+    // **Awaited, so the verb's promise means what it says.** Fired and
+    // forgotten, `docketActivate` resolved before the task existed — which is
+    // the bug this method was written to fix, merely made harder to see: the
+    // list was empty for however long the pass took. A verb that has returned
+    // has finished, derived state included.
+    if (!this.#reconciliationActive) await this.reconcile().catch(() => undefined)
   }
+
+
 
   /**
    * Say that a document was written to, so surfaces holding it can re-read.

@@ -31,9 +31,58 @@ export function subjectKey(name: string): string {
  * `lastIndex`, so one instance shared between two scanners is a bug that only
  * appears when both run.
  */
-export const TAG_MARK = "(?<![\\w#])#(?:'([^'\\n]+)'|([A-Za-z0-9][\\w-]*))"
+export const TAG_MARK =
+  "(?<![\\w#])#(?:'((?:[^'\\\\\\n]|\\\\.)+)'|([A-Za-z0-9][\\w-]*))"
 
 export const tagMark = (flags = 'g'): RegExp => new RegExp(TAG_MARK, flags)
+
+/**
+ * A subject written as a tag, or null if this grammar cannot say it.
+ *
+ * **Two forms, and which one is decided by the grammar above rather than by a
+ * guess at it.** A bare `#house` where the name is one plain word; `#'the
+ * house'` where it is not. The document module had this as `/\s/.test(name)`,
+ * which asks the wrong question — a name can need quoting for reasons other
+ * than a space, and the only authority on that is `TAG_MARK` itself.
+ *
+ * **And some names simply cannot be spelled.** The quoted form is `'[^']+'`,
+ * with no escape, so a subject containing an apostrophe has no representation
+ * at all: *Ada's birthday* would be written `#'Ada's birthday'` and read back as
+ * `#'Ada'` followed by wreckage. Null rather than a mangling, so a caller
+ * chooses what to do instead of silently writing something that means something
+ * else. Extending the grammar to admit them is a real change and belongs in one.
+ */
+export function spellTag(name: string): string | null {
+  // **A newline becomes a space rather than an escape.** A tag mark lives inside
+  // one line of a file people read and edit by hand; a `\n` escape in it would
+  // mean a tag that spans lines in the bytes and not on the page, which is the
+  // kind of cleverness that costs somebody an afternoon later. A subject named
+  // across two lines is a subject named with a space in it.
+  const said = name.replace(/\s+/g, ' ').trim()
+  if (said === '') return null
+  if (/^[A-Za-z0-9][\w-]*$/.test(said)) return `#${said}`
+  // **Escaped, not refused.** The first cut returned null for a name holding an
+  // apostrophe, on the grounds that the quoted form had no way to say one —
+  // which is a fair reading of the grammar and an absurd thing to do to *Ada's
+  // birthday*. The grammar grew the escape instead; it is the same one
+  // `query-text.ts` already uses for quoted phrases, so the notation gained
+  // nothing new, only a second place that speaks it.
+  return `#'${said.replace(/[\\']/g, m => `\\${m}`)}'`
+}
+
+/**
+ * What a tag match actually names.
+ *
+ * **One place unescapes, because three places match.** The item grammar, the
+ * matter grammar and the query field all run `tagMark` and all took
+ * `m[1] ?? m[2]`, which was right while the quoted form was literal. With an
+ * escape in it, a raw group 1 reads `Ada\'s birthday` — backslash and all — and
+ * three copies of the fix would be three chances to write two of them.
+ */
+export const readTag = (found: RegExpMatchArray): string =>
+  found[1] === undefined
+    ? (found[2] ?? '')
+    : found[1].replace(/\\(.)/g, (_m, ch: string) => ch)
 
 /**
  * The hues a tag may take, in order.

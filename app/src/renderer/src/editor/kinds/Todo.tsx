@@ -302,6 +302,11 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * name — and once it is a selection, the confirmation belongs to the bulk act
    * (N times the consequence) rather than to the mode it happened inside.
    */
+  /** Which matter made the item the open menu is about, if any (MH4). */
+  const [fromMatter, setFromMatter] = useState<
+    { docket: DocumentId; matter: string; item: string } | null
+  >(null)
+
   const [selected, setSelected] = useState<readonly string[]>([])
   /** Where a shift-click measures from: the last one touched, as everywhere. */
   const [anchor, setAnchor] = useState<string | null>(null)
@@ -746,6 +751,13 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
         e.stopPropagation()
         if (item.id === null) return
         const id = item.id
+        // **Asked when the menu opens, not held for every row.** It is a scan
+        // over the dockets; doing it for thirty rows to answer it for one is
+        // the kind of cost that only shows up on somebody else's machine.
+        setFromMatter(null)
+        void window.tephra.todo.matterFor(id)
+          .then(found => setFromMatter(found === null ? null : { ...found, item: id }))
+          .catch(() => undefined)
         setMenu({
           at: { x: e.clientX, y: e.clientY },
           about: shortLine(item),
@@ -761,6 +773,19 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                   setChosen(was => (now ? [...was, id] : was.filter(one => one !== id)))
                   act(window.tephra.todo.choose(list, today as DateKey, id, now))
                 },
+              }, 'rule' as const]
+              : []),
+            // **The way back to where it came from.** A generated item says
+            // *Kia Repairs: find general mechanic* and that is enough to read,
+            // but the matter is where the rest of the story is — the other
+            // steps, the schedule, the note. Offered only when there IS one,
+            // since most items are typed by hand and have nowhere to go.
+            ...(fromMatter !== null && fromMatter.item === item.id
+              ? [{
+                label: 'Go to the docket',
+                onChoose: () => void window.tephra.win.create({
+                  kind: 'document', id: fromMatter.docket,
+                }),
               }, 'rule' as const]
               : []),
             ...statusItems(status => {

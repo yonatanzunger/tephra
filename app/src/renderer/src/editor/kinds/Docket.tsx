@@ -807,10 +807,29 @@ function Row({
             the list the moment a drag began. Clicking may reflow; hovering may
             not, because the thing that moved is then the thing you asked to
             move. */}
+        {/* **Only where it means something**, and **left of the disclosure**.
+            Adding a step to a matter whose steps are folded away offers to make
+            something you cannot see, so it appears on unfolding. It used to
+            appear to the RIGHT of the disclosure: the row flushes right, so a
+            control arriving there widened that group and shoved the disclosure
+            leftwards — expand and immediately collapse, and the second click
+            landed on `+ step` and silently added one. Reported from use. On this
+            side it grows into the name's slack and nothing that was already
+            there moves (D42).
+
+            The `⋯` that used to sit beside it has gone entirely: it opened a row
+            *below* this line, so the steps jumped down — the no-jumping rule
+            broken by the very thing meant to obey it — and a row of buttons
+            forces every name down to one word. Right-click anywhere on a matter
+            instead, where the items can be sentences. */}
+        {open && (
+          <span className="docket-tools">
+            <button className="docket-quiet" onClick={() => onAdding(!adding)}>+ step</button>
+          </span>
+        )}
         {/* **Structure, not a control** — always visible, quiet, and carrying
             the count, so it does not repeat the mistake of a bare number that
-            looked like a label. It sits left of the reserved slack, so the
-            tools appearing under the pointer never shift it. */}
+            looked like a label. */}
         <button
           className="docket-open"
           aria-expanded={open}
@@ -820,19 +839,6 @@ function Row({
           <span className="docket-open-mark" aria-hidden="true" />
           {matter.steps.length}
         </button>
-        {/* **Only where it means something.** Adding a step to a matter whose
-            steps are folded away offers to make something you cannot see. And
-            the `⋯` that used to sit beside it has gone entirely: it opened a
-            row *below* this line, so the steps jumped down — the no-jumping
-            rule broken by the very thing meant to obey it — and a row of
-            buttons forces every name down to one word. Right-click anywhere on
-            a matter instead, where the items can be sentences. */}
-        {open && (
-          <span className="docket-tools">
-            <button className="docket-quiet" onClick={() => onAdding(!adding)}>+ step</button>
-          </span>
-        )}
-
         {/* **One thing to click for the whole schedule.** The column already
             read as a sentence that encodes the mode — *no date yet*, *every 90
             days after it is done* — so it is the obvious place to change it,

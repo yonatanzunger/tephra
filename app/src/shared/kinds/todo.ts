@@ -20,7 +20,7 @@
 import { flattenLinks } from '../links.ts'
 import type { DateKey } from '../document-api.ts'
 import { addDays, nowSeconds, weekdayOf } from '../dates.ts'
-import { tagMark } from '../tags.ts'
+import { readTag, tagMark } from '../tags.ts'
 
 /**
  * What an item is, in the order era 1 wrote them on paper (T4).
@@ -319,7 +319,7 @@ export function parseItem(line: string): TodoItem | null {
   TAG.lastIndex = 0
   let t: RegExpExecArray | null
   while ((t = TAG.exec(text)) !== null) {
-    tags.push(((t[1] ?? t[2]) as string).trim())
+    tags.push(readTag(t).trim())
     tagSpans.push({ from: t.index, to: t.index + t[0].length })
   }
 

@@ -25,7 +25,7 @@
 // and a `Problem` is text that could not become part of the query at all.
 
 import { addDays, asDateKey, compareDateKeys } from './dates.ts'
-import { subjectKey, tagMark } from './tags.ts'
+import { readTag, subjectKey, tagMark } from './tags.ts'
 import type { DateKey } from './document-api.ts'
 import type { Query, QueryParams, Scope, Term } from './search-api.ts'
 
@@ -204,7 +204,7 @@ function tokenize(text: string): readonly Token[] {
       TAG_AT.lastIndex = i
       const t = TAG_AT.exec(text)
       if (t !== null) {
-        out.push({ kind: 'tag', name: ((t[1] ?? t[2]) as string).trim(), from: i, to: i + t[0].length })
+        out.push({ kind: 'tag', name: readTag(t).trim(), from: i, to: i + t[0].length })
         i += t[0].length
         continue
       }

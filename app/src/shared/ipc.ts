@@ -781,6 +781,8 @@ export type TodoCommand =
       readonly items: readonly string[]
       readonly action: TodoStatus | 'remove'
     }
+  /** Which matter made this item, so a row can offer to go there (MH4). */
+  | { readonly kind: 'matterFor'; readonly item: string }
   | { readonly kind: 'chosen'; readonly list: DocumentId; readonly date: DateKey }
   | {
       readonly kind: 'choose'

@@ -18,6 +18,10 @@ import { DocketDocument } from '../../src/main/x/documents/kinds/docket.ts'
 import { UNSCHEDULED } from '../../src/shared/kinds/docket.ts'
 import { kindOf, type RelPath } from '../../src/main/w/layout.ts'
 import type { DateKey, DocumentId } from '../../src/shared/document-api.ts'
+// **The prose, without the chips.** A generated item carries its matter as a
+// tag now, so raw `text` includes the mark — and what these claims are about is
+// what the line says.
+import { withoutMarks } from '../../src/shared/kinds/todo.ts'
 
 const REL = 'house.docket.md' as RelPath
 const ID = REL as string as DocumentId
@@ -319,6 +323,26 @@ async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
       await service.crossTheDay()
     },
   }
+}
+
+/**
+ * The live items on today's list, by id.
+ *
+ * **Asked of the list rather than of what a pass returned.** Many of these tests
+ * used `reconcile()`'s `made` as a handle on the item it generated, which worked
+ * while a pass was the only thing that generated. Since MH4 a docket write asks
+ * for its own pass, so by the time a test calls `reconcile()` the work is
+ * already done and `made` is empty — correctly. What the tests were ever about
+ * is what is on the list.
+ */
+async function onList(service: {
+  todoList(): Promise<DocumentId>
+  todoItems(id: DocumentId, day: DateKey): Promise<readonly { id: string | null }[]>
+  readonly today: DateKey
+}): Promise<readonly string[]> {
+  const list = await service.todoList()
+  return (await service.todoItems(list, service.today))
+    .flatMap(one => (one.id === null ? [] : [one.id]))
 }
 
 // ── renaming ───────────────────────────────────────────────
@@ -1434,12 +1458,14 @@ test('THE POINT OF THE PHASE: a docket puts work on the list', async t => {
   const { service } = await serviced(t)
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+  // **Activating is enough**: the pass it asks for is part of the act, and a
+  // second one afterwards finds nothing left to do (MH4's fix).
   await service.docketActivate(id, car)
-  const { made } = await service.reconcile()
-  assert.equal(made.length, 1)
   const list = await service.todoList()
   const items = await service.todoItems(list, service.today)
-  assert.deepEqual(items.map(one => one.text), ['The car needs fixing'])
+  assert.deepEqual(items.map(withoutMarks), ['The car needs fixing'])
+  assert.deepEqual(items.flatMap(one => one.tags), ['The car needs fixing'], 'and tagged with it')
+  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
 })
 
 test('IDEMPOTENCE: running it again makes nothing', async t => {
@@ -1450,7 +1476,6 @@ test('IDEMPOTENCE: running it again makes nothing', async t => {
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketActivate(id, car)
-  assert.equal((await service.reconcile()).made.length, 1)
   assert.equal((await service.reconcile()).made.length, 0)
   assert.equal((await service.reconcile()).made.length, 0)
   const list = await service.todoList()
@@ -1483,10 +1508,8 @@ test('and a step still waiting on another does not come due', async t => {
   const first = (await service.docketMatters(id))[0]?.steps[0]?.id ?? ''
   await service.docketAddStep(id, car, 'then', 'have the car fixed')
   await service.docketActivate(id, car)
-  const { made } = await service.reconcile()
-  assert.equal(made.length, 1, 'only the one whose moment has come')
   const list = await service.todoList()
-  assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['The car needs fixing'])
   void first
 })
@@ -1502,10 +1525,8 @@ test('THE CHAIN FIRES: finishing one brings the next', async t => {
   await service.docketActivate(id, car)
   await service.reconcile()
   await service.docketCompleteStep(id, car, shop, true)
-  const { made: more } = await service.reconcile()
-  assert.equal(more.length, 1)
   const list = await service.todoList()
-  assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['The car needs fixing', 'have the car fixed'])
 })
 
@@ -1514,7 +1535,7 @@ test('a step records what it made, which is how it knows not to again', async t 
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketActivate(id, car)
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   const step = (await service.docketMatters(id))[0]?.steps[0]
   assert.equal(step?.made, made[0])
 })
@@ -1538,7 +1559,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketAddStep(id, car, 'then', 'have the car fixed')
   await service.docketActivate(id, car)
-  const { made: [first] } = await service.reconcile()
+  const [first] = await onList(service)
   const list = await service.todoList()
 
   await service.todoSetStatus(list, first as string, 'done')
@@ -1549,7 +1570,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   // Resolving an item now asks the reconciler to look, so *tick it and the next
   // step appears* is one gesture — which is what the chain firing is supposed to
   // feel like, and what the explicit pass here used to be standing in for.
-  assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['The car needs fixing', 'have the car fixed'])
   assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
 })
@@ -1585,7 +1606,7 @@ test('and it leaves a finished one alone, because finishing it was true', async 
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketActivate(id, car)
-  const { made: [made] } = await service.reconcile()
+  const [made] = await onList(service)
   const list = await service.todoList()
   await service.todoSetStatus(list, made as string, 'done')
 
@@ -1603,9 +1624,9 @@ test('and re-activating generates afresh, having withdrawn the last lot', async 
   await service.reconcile()
   await service.docketSuspend(id, car)
   await service.docketActivate(id, car)
-  assert.equal((await service.reconcile()).made.length, 1, 'one again, not none and not two')
   const list = await service.todoList()
-  assert.equal((await service.todoItems(list, service.today)).length, 1)
+  assert.equal((await service.todoItems(list, service.today)).length, 1,
+    'one again, not none and not two')
 })
 
 // ── reconciliation: the clock tick (MH3b, D76) ──────────────
@@ -1623,7 +1644,7 @@ test('A RECURRING TASK ADVANCES when the step its clock reads is finished', asyn
   const filter = await service.docketAdd(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: service.today })
   const step = (await service.docketMatters(id))[0]?.steps[0]?.id ?? ''
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   assert.equal(made.length, 1)
 
   const list = await service.todoList()
@@ -1646,7 +1667,7 @@ test('and does NOT generate the next one until its day comes round', async t => 
   await service.docketAdd(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: service.today })
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   await service.todoSetStatus(list, made[0] as string, 'done')
   const second = await service.reconcile()
   assert.deepEqual(second.made, [], 'June is not today')
@@ -1673,7 +1694,7 @@ test('THE LONG ABSENCE, calendar-driven: a year away yields ONE birthday', async
   const matter = (await service.docketMatters(id))[0]
   assert.equal(matter?.when.start, '2026-03-14', 'the next one, not the thirtieth one')
   const list = await service.todoList()
-  assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['buy a present'])
   void first
 })
@@ -1691,7 +1712,7 @@ test('THE LONG ABSENCE, completion-driven: a year away yields ONE, not none', as
   await on('2026-03-10')
   await service.reconcile()
   const list = await service.todoList()
-  assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['Sharpen the mower blade'], 'still owed, and said so')
   const matter = (await service.docketMatters(id))[0]
   assert.equal(matter?.when.start, '2020-04-01',
@@ -1718,7 +1739,7 @@ test('AN OUTSTANDING INSTANCE IS OVERDUE, not reissued (H7a)', async t => {
   // undone item forward of its own accord, so *shown as overdue* is already
   // what happens — the rule above is only about not putting a second one
   // beside it. That is the whole of H7a, and the count is where it would fail.
-  assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.text),
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['write it'])
 })
 
@@ -1728,7 +1749,7 @@ test('and once it is settled it catches up in one step, to the CURRENT instance'
   const day = await service.docketAdd(id, 'The quarterly report',
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docketAddStep(id, day, '3d', 'write it')
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   assert.equal(made.length, 1)
   const list = await service.todoList()
 
@@ -1791,7 +1812,7 @@ test('IDEMPOTENCE OVER THE WHOLE PASS: thirty runs leave one answer', async t =>
   await on('2026-03-03')
   for (let run = 0; run < 30; run += 1) await service.reconcile()
   const list = await service.todoList()
-  const texts = (await service.todoItems(list, service.today)).map(one => one.text).sort()
+  const texts = (await service.todoItems(list, service.today)).map(withoutMarks).sort()
   assert.deepEqual(texts, ['Fix the skylight', 'write it'])
   const after = await service.reconcile()
   assert.deepEqual(after, { made: [], withdrawn: [] }, 'and the thirty-first says nothing')
@@ -1810,10 +1831,11 @@ test('AND IT WITHDRAWS, because a reconciler that only adds is an event handler'
   const list = await service.todoList()
   assert.equal((await service.todoItems(list, service.today)).length, 1)
 
-  // Straight at the document, so nothing but the pass can be doing the work.
+  // **Clearing the date is the whole act**, and the pass that follows it is
+  // part of the verb now (MH4) — so the withdrawal has already happened by the
+  // time this returns, and a second pass finds nothing left to take back.
   await service.docketSetStart(id, car, null)
-  const { withdrawn } = await service.reconcile()
-  assert.equal(withdrawn.length, 1)
+  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
   assert.equal((await service.todoItems(list, service.today)).length, 0)
   assert.equal((await service.docketMatters(id))[0]?.steps[0]?.made, null)
 })
@@ -1823,7 +1845,7 @@ test('and withdrawing does not touch what a person typed, or what is done', asyn
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketActivate(id, car)
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   const list = await service.todoList()
   const mine = await service.todoAdd(list, 'something I typed myself')
   await service.todoSetStatus(list, made[0] as string, 'done')
@@ -1842,7 +1864,7 @@ test('AND A MATTER WITH NO INTERVAL NEVER ADVANCES, however long it sits', async
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'Fix the skylight',
     { mode: 'task', start: '2026-03-01' })
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   const list = await service.todoList()
   await service.todoSetStatus(list, made[0] as string, 'done')
 
@@ -1866,7 +1888,7 @@ test('THE WEDGE: nevermind on a generated task must not silence the matter', asy
   await service.docketAdd(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   assert.equal(made.length, 1)
 
   await service.todoSetStatus(list, made[0] as string, 'dropped')
@@ -1883,7 +1905,7 @@ test('and SKIPPING counts from the day it was SCHEDULED, not from today', async 
   await service.docketAdd(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
 
   // A fortnight of ignoring it, and then *nevermind*.
   await on('2026-03-24')
@@ -1898,7 +1920,7 @@ test('whereas DOING it counts from the day it was done, which is the other verb'
   await service.docketAdd(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
 
   await on('2026-03-24')
   await service.todoSetStatus(list, made[0] as string, 'done')
@@ -1912,7 +1934,7 @@ test('and BACKLOG resolves it too, an item nobody can see being owed by nobody',
   await service.docketAdd(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
   await service.todoSetStatus(list, made[0] as string, 'backlog')
   assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-06-10')
 })
@@ -1927,7 +1949,7 @@ test('A RECURRING EVENT IS NOT WEDGED BY IT EITHER, owed meaning STILL asked', a
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docketAddStep(id, day, '3d', 'write it')
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
 
   await service.todoSetStatus(list, made[0] as string, 'dropped')
   await on('2026-07-01')
@@ -1945,11 +1967,157 @@ test('AND A DROPPED ITEM IS LEFT ALONE, dropping it being their decision too', a
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketActivate(id, car)
   const list = await service.todoList()
-  const { made } = await service.reconcile()
+  const made = await onList(service)
 
   await service.todoSetStatus(list, made[0] as string, 'dropped')
   await service.docketSuspend(id, car)
   const items = await service.todoItems(list, service.today)
   assert.equal(items.find(one => one.id === made[0])?.status, 'dropped',
     'still there, still their decision')
+})
+
+// ── activation generates, without waiting for a boundary (MH4 fix) ──
+
+test('THE BUG: activating a matter puts its first step on the list NOW', async t => {
+  // **Reported from use**, in the form the asymmetry actually takes: *I see the
+  // task in the horizon but not in the TODO list.* The horizon is computed live
+  // so it showed the step as still coming; the list is generated, and nothing
+  // had asked for a pass since the start date was written. Until the next
+  // startup or midnight, activating a matter did nothing at all.
+  //
+  // **Suspend reconciled and activate did not**, and the reason is instructive:
+  // suspend got its pass because it had a bespoke withdrawal loop to delete, and
+  // nothing prompted the same thought for the twenty-six verbs that never had
+  // one. A list of *the writes that count* is the wrong shape (D77).
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
+  await service.docketAddStep(id, kia, 'then', 'repair group 1 items')
+
+  await service.docketActivate(id, kia)
+  const list = await service.todoList()
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
+    ['Kia repairs'], 'without anybody asking for a pass')
+  assert.notEqual((await service.docketMatters(id))[0]?.steps[0]?.made, null)
+})
+
+test('and every other schedule verb does the same, which is the general rule', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const talk = await service.docketAdd(id, 'The ACM talk', { mode: 'task' })
+  const list = await service.todoList()
+
+  // Setting a start date is the same act as activating, said differently.
+  await service.docketSetStart(id, talk, '2026-03-10')
+  assert.equal((await service.todoItems(list, service.today)).length, 1)
+
+  // And taking it away withdraws again, which already worked and must keep to.
+  await service.docketSetStart(id, talk, null)
+  assert.equal((await service.todoItems(list, service.today)).length, 0)
+})
+
+test('and the pass does not summon itself for every step it generates', async t => {
+  // The reconciler writes to the docket it is reconciling, so *a docket write
+  // reconciles* has to exempt its own. It converges either way — the second
+  // pass finds nothing — but a rule that relies on that is relying on luck.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  for (const name of ['One', 'Two', 'Three']) {
+    const made = await service.docketAdd(id, name, { mode: 'task' })
+    await service.docketActivate(id, made)
+  }
+  const list = await service.todoList()
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks).sort(),
+    ['One', 'Three', 'Two'], 'one each, and none twice')
+  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
+})
+
+test('THE EVENING BUG: a step done after 4pm unblocks the next one TODAY', async t => {
+  // **Reported from use, and the third of its family.** A completion stamp is an
+  // instant; the day it fell on is a question about *where*. `dueOn` answered it
+  // with `toISOString`, which answers for Greenwich — so finishing at 17:42 in a
+  // GMT+8 notebook put the dependent step's date on TOMORROW, and the chain
+  // silently stopped for the evening.
+  //
+  // The same one-clock-too-many that MH3b found putting wall-clock stamps on
+  // completions, and that D62 exists to keep coherent. Tested at an hour where
+  // the two zones disagree, because at ten in the morning they never do.
+  const { service } = await serviced(t, '2026-03-11T01:42:00Z') // 2026-03-10 17:42 in zone
+  assert.equal(service.today, '2026-03-10', 'the notebook is still on the tenth')
+
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
+  await service.docketAddStep(id, kia, 'then', 'repair group 1 items')
+  await service.docketActivate(id, kia)
+
+  const list = await service.todoList()
+  const first = (await service.docketMatters(id))[0]?.steps[0]
+  await service.todoSetStatus(list, first?.made as string, 'done')
+
+  assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks).sort(),
+    ['Kia repairs', 'repair group 1 items'],
+    'the next step is here now, not at midnight')
+})
+
+test('and the horizon reads the same clock, or it would disagree with the list', async t => {
+  const { service } = await serviced(t, '2026-03-11T01:42:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
+  await service.docketAddStep(id, kia, '+2d', 'collect it')
+  await service.docketActivate(id, kia)
+  const rows = await service.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
+  assert.deepEqual(rows.map(one => [one.on, one.text]), [['2026-03-12', 'collect it']])
+})
+
+test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', async t => {
+  // On the list a step's text stands alone, and *find a general mechanic* says
+  // nothing about which car. The first cut wrote the matter's name into the
+  // title; a tag is what that fact actually is — drawn as a chip, groupable in
+  // the by-tag view, and removable without editing the sentence.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
+  await service.docketAddStep(id, kia, '+0d', 'find a general mechanic')
+  await service.docketActivate(id, kia)
+
+  const list = await service.todoList()
+  const items = await service.todoItems(list, service.today)
+  assert.deepEqual(items.map(one => one.text).sort(), [
+    "Kia repairs #'Kia repairs'",
+    "find a general mechanic #'Kia repairs'",
+  ])
+  // And it is a real tag, not text that looks like one.
+  assert.deepEqual([...new Set(items.flatMap(one => one.tags))], ['Kia repairs'])
+})
+
+test("and a name with an apostrophe is tagged too — Ada's birthday", async t => {
+  // The quoted form had no escape, so this was briefly refused rather than
+  // mangled; refusing is an absurd thing to do to a name that ordinary, and the
+  // grammar grew the escape the query field already used for quoted phrases.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const day = await service.docketAdd(id, "Ada's birthday", { mode: 'task' })
+  await service.docketActivate(id, day)
+  const list = await service.todoList()
+  const items = await service.todoItems(list, service.today)
+  assert.deepEqual(items.map(withoutMarks), ["Ada's birthday"])
+  assert.deepEqual(items.flatMap(one => one.tags), ["Ada's birthday"],
+    'read back whole, apostrophe and all')
+})
+
+test('and the way back exists: an item says which matter made it', async t => {
+  // **One direction stored, both traversable** (D79). The step records what it
+  // made; the reverse is a question rather than a second copy that could drift.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
+  await service.docketActivate(id, kia)
+  const made = (await service.docketMatters(id))[0]?.steps[0]?.made as string
+
+  assert.deepEqual(await service.matterFor(made), { docket: id, matter: kia })
+
+  // And a task somebody typed came from nowhere, which is not an error.
+  const list = await service.todoList()
+  const mine = await service.todoAdd(list, 'something I typed myself')
+  assert.equal(await service.matterFor(mine), null)
 })
