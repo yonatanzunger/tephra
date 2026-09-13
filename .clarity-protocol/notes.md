@@ -1195,3 +1195,45 @@ was reinvented every time, and because it was reinvented from whatever was on
 screen, each copy was subtly different — which is why the due marker got fixed
 and the URL did not.
 
+## 54. Byte-identical output read as a broken capture, and was the opposite
+
+Every screenshot the acceptance harness took over an hour was the same 31,257
+bytes — nine runs, three different scenes, one file. That reads as *the capture
+is broken*, and it was chased as one for far too long: hidden windows and
+compositing, `showInactive`, capture delays, `stayHidden`.
+
+**It was the opposite.** The capture worked perfectly and kept photographing the
+same moment, because the app reliably returned to its startup state within about
+200ms of a scene finishing — and the picture was taken after that. A stale frame
+and a deterministic reset are indistinguishable from outside: both give you the
+same wrong image every time.
+
+**The distinguishing question was never asked until late**: *does the thing being
+photographed still look like that?* One `executeJavaScript` at capture time
+answered it in a single run — the DOM said the stream while the scene had
+reported the task list — and everything after that was quick.
+
+**What the wrong hypothesis cost**, specifically: `showInactive()` was added to
+force compositing. It did not fix the capture, and it made windows flash onto the
+desktop of whoever happened to be working while a suite ran — reported from use
+within minutes. A fix for a misdiagnosed problem is not neutral.
+
+**Two lessons, and the second is the general one.**
+
+*Determinism is evidence about the source, not about correctness.* An output that
+never varies is usually taken as a good sign. Here it was the strongest available
+clue that something upstream was resetting, and it was read as its opposite for
+an hour.
+
+*When two observers disagree, believe neither and instrument the gap.* The scene
+said *task list*, the picture said *stream*, and both were honest about different
+instants. Nothing was learned until something asked both at the same instant.
+
+> **And the reset itself is not root-caused**, only fenced off: no navigation, no
+> renderer crash, no day roll — all three instrumented and silent — but
+> `window.tephra` loses the pane and the surface leaves the DOM, which is a React
+> tree being replaced. It has never been seen in ordinary use, which is why it is
+> recorded here rather than chased: the harness no longer depends on it, and a
+> bug nobody can reproduce outside a test rig is a bad use of an afternoon until
+> it is.
+

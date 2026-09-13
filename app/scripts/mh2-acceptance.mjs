@@ -205,10 +205,14 @@ check(
   // the test is that the flags are NOT partitioned, rather than that some list
   // of words is in order: "in 3 days" sorts before "today" alphabetically, and
   // asserting that proved only that the checker could be fooled.
+  // **The claim is DATE order, so test date order.** An earlier cut tested that
+  // the two sources interleave, which they only do when the fixture happens to
+  // alternate — a true claim about this data rather than about the rule, and it
+  // broke the moment the data changed. What must hold is that every row's day is
+  // on or after the one before it, whatever made them.
   (() => {
-    const flags = (r.strip ?? []).map(one => Boolean(one.docket))
-    const partitioned = ends => flags.every((f, at) => (at === 0 || f === flags[at - 1] || ends--) && ends >= 0)
-    return flags.length > 2 && !partitioned(1)
+    const days = (r.strip ?? []).map(one => Date.parse(`${one.when} 2026`))
+    return days.length > 2 && days.every((d, at) => at === 0 || d >= days[at - 1])
   })(),
   JSON.stringify((r.strip ?? []).map(one => [one.when, one.docket])),
 )

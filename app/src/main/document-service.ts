@@ -764,9 +764,6 @@ export class DocumentService {
     // this design was written to avoid, made in the one place that was still an
     // event (D62).
     if (writing !== this.#announced) {
-      if (process.env['TEPHRA_WATCH'] !== undefined) {
-        console.log(`VERIFY-ROLL announcing ${String(this.#announced)} -> ${writing}`)
-      }
       this.#announced = writing
       for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
       // **Unattended, at the boundary** (H5): reconciliation is not contingent on

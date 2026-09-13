@@ -23,12 +23,21 @@ export async function runVerify(request: string): Promise<void> {
    * Photograph the app *now*, because now is the moment this scene means.
    *
    * **The picture used to be taken after the scene ended**, which looked right
-   * and was not: a scene finishes and the app goes on being an app. One of them
-   * navigated the pane away a second later, so every shot was of a surface the
-   * scene had already left — and since the frame never varied, nine identical
-   * files read as a broken capture rather than as a moving target.
+   * and was not. Within about 200ms of a scene finishing, the app's rendered
+   * state goes back to its default — the stream, on today — and `window.tephra`
+   * loses the pane the scene put there, which is what a React tree being
+   * replaced looks like from outside. No navigation, no renderer crash and no
+   * day roll: all three were instrumented and none fired. **It is not
+   * root-caused**, only fenced off.
    *
-   * A scene that never calls this still gets one at the end, as before.
+   * The tell, and it is worth writing down because it cost an hour: every shot
+   * across a whole session was *byte-identical* — the same 31,257 bytes, nine
+   * times, across three different scenes. That reads as a broken capture, and it
+   * is the opposite: the capture works perfectly and keeps photographing the
+   * same reliably-restored moment.
+   *
+   * A scene that never calls this still gets one at the end, as before — so
+   * every existing scene keeps whatever picture it had.
    */
   const shot = async (): Promise<void> => {
     await settle(250)
@@ -1498,7 +1507,8 @@ export async function runVerify(request: string): Promise<void> {
       // **Both sources, interleaved by date in the one pane.** This was a strip
       // in the gutter with its own markup; it is the same claim about the same
       // content, asked of the surface that replaced it.
-      say('strip', [...document.querySelectorAll('.hz-row')].map(n => ({
+      say('strip', [...document.querySelectorAll('.hz-row')].map((n, at) => ({
+        order: at,
         when: (n.querySelector('.hz-on') as HTMLElement | null)?.textContent ?? '',
         what: (n.querySelector('.hz-what') as HTMLElement | null)?.textContent ?? '',
         docket: (n.querySelector('.hz-kind') as HTMLElement | null)?.textContent !== 'due',
@@ -1718,16 +1728,7 @@ export async function runVerify(request: string): Promise<void> {
         await chooseRow('ring the bank', 'Not today')
       }
       say('todayAfter', document.querySelectorAll('.todo-today').length)
-      // **Where is this window actually pointing?** The shot kept photographing
-      // the stream while every DOM claim passed, which means one of the two is
-      // lying about which window it is talking about.
-      say('endLocation', JSON.stringify(pane.location))
-      say('endTitle', document.querySelector('.titlebar .title')?.textContent ?? '')
       say('splitThere', document.querySelectorAll('.todo-split').length)
-      // **Does it stay where it was put?** The captured frame showed the stream
-      // while every DOM claim said the task list — either a stale frame or a
-      // pane that wanders off a second later, and only one of those is a
-      // harness fault.
       if (arg === 'keep') await shot()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
@@ -3639,9 +3640,11 @@ export async function runVerify(request: string): Promise<void> {
           await window.tephra.docket.suspend(docketId, mower.id)
           const left = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
           say('afterSuspend', left.map(one => one.text).filter(t => t.includes('mower')))
+          // **Activating IS the pass now** (MH4), so what proves it came back is
+          // the list, not a count the verb has already spent.
           await window.tephra.docket.activate(docketId, mower.id)
-          const back = await window.tephra.docket.generate()
-          say('generatedAfresh', back.made.length)
+          const back = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
+          say('afreshOnList', back.map(one => one.text).filter(t => t.includes('mower')))
         }
       }
 

@@ -536,9 +536,13 @@ check(
 // ── 7. reconciliation (MH3a, MH3b) ──────────────────────────────────────────
 console.log('\n— a docket that produces work, and keeps it in step —')
 check(
+  // **Asked of the list, not of what a pass returned.** Activating a matter now
+  // reconciles as part of the act (MH4), so by the time anything calls the pass
+  // explicitly the work is done and it reports nothing — correctly. What this
+  // claim was ever about is whether the step is on the list.
   'THE POINT OF THE PHASE: a started matter puts its step on the task list',
-  r.generated >= 1 && Array.isArray(r.onTheList) && r.onTheList.length === 1,
-  `made ${r.generated}, on the list: ${JSON.stringify(r.onTheList)}`,
+  Array.isArray(r.onTheList) && r.onTheList.length === 1,
+  `on the list: ${JSON.stringify(r.onTheList)}`,
 )
 check(
   'and running again makes nothing, which is what stops a month away from',
@@ -557,8 +561,8 @@ check(
 )
 check(
   'and starting it again produces one afresh — not none, and not two',
-  r.generatedAfresh === 1,
-  `made ${r.generatedAfresh}`,
+  Array.isArray(r.afreshOnList) && r.afreshOnList.length === 1,
+  `on the list: ${JSON.stringify(r.afreshOnList)}`,
 )
 
 // ── 8. legibility ───────────────────────────────────────────────────────────
