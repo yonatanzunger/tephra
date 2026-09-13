@@ -271,6 +271,63 @@ check(
   JSON.stringify(r.grouped),
 )
 check('and a moved matter brings its note with it', r.keptItsNote === 2, `lines=${r.keptItsNote}`)
+
+// ── reordering the sections themselves ───────────────────────────────────────
+// Reported from use: *there's no way to reorder sections in a docket*. Until
+// this existed the only gesture was to empty one heading into another, which is
+// rebuilding the sections rather than reordering them (note 56).
+check(
+  'THE ARROWS STOP AT THE ENDS, rather than sitting there doing nothing',
+  r.sectionArrows?.firstUp === false && r.sectionArrows?.firstDown === true
+    && r.sectionArrows?.lastUp === true && r.sectionArrows?.lastDown === false,
+  JSON.stringify(r.sectionArrows),
+)
+check(
+  'and each arrow has a box big enough to be a control',
+  r.arrowBox !== null && r.arrowBox?.width >= 18 && r.arrowBox?.height >= 13,
+  JSON.stringify(r.arrowBox),
+)
+check(
+  'THE POINT: a section moves as a whole, contents and all',
+  JSON.stringify(r.sectionMoved) === JSON.stringify([
+    { name: '', matters: ['The oven is broken'] },
+    { name: 'Major projects', matters: [] },
+    { name: 'Periodic maintenance', matters: ['Service the boiler', 'Change the air filters'] },
+  ]),
+  JSON.stringify(r.sectionMoved),
+)
+check(
+  'and there and back is where it started, which is what makes it an exchange',
+  JSON.stringify(r.sectionBack) === JSON.stringify(r.grouped),
+  JSON.stringify(r.sectionBack),
+)
+
+// ── a refused matter keeps what was typed into it ────────────────────────────
+// Reported from use: an unreadable field made the whole attempt vanish — name,
+// mode and dates — and put its explanation in a banner at the top of a page long
+// enough to be scrolled away (note 55).
+check(
+  'THE ONE THAT LOST WORK: a refused matter keeps every field it was given',
+  r.refused?.open === true && r.refused?.name === 'Descale the kettle'
+    && r.refused?.every === 'every so often' && r.refused?.mode === 'recurring-task',
+  JSON.stringify(r.refused),
+)
+check(
+  'and says why, under the row rather than off the top of the page',
+  typeof r.refused?.said === 'string' && r.refused.said.length > 0
+    && r.refused.beside !== null && r.refused.beside < 40,
+  JSON.stringify(r.refused),
+)
+check(
+  'and nothing was made from what it refused',
+  r.refused?.madeAnyway === false,
+  JSON.stringify(r.refused),
+)
+check(
+  'and cancelling still cancels',
+  r.afterCancel?.closed === true && r.afterCancel?.made === false,
+  JSON.stringify(r.afterCancel),
+)
 check('and its steps', r.keptItsRunUp >= 1, `steps=${r.keptItsRunUp}`)
 check('every row carries a grip to move it by', r.gripOffered === true)
 check(

@@ -3335,6 +3335,104 @@ export async function runVerify(request: string): Promise<void> {
         say('keptItsRunUp',
           rowOf('boiler')?.querySelectorAll('.docket-step:not(.new) .docket-step-when').length ?? 0)
 
+        // ── a whole section, moved among the others ────────────────────────
+        // Reported from use: *there's no way to reorder sections in a docket*.
+        // Nudged and nudged back, so the order the rest of this scene reads is
+        // the order it was left in — and because there and back is the check
+        // that an exchange is an exchange.
+        {
+          const headOf = (name: string): Element | undefined =>
+            [...document.querySelectorAll('.docket-section-head:not(.loose)')]
+              .find(h => h.querySelector('.docket-section-name')?.textContent === name)
+          const arrow = (name: string, which: string): HTMLElement | null =>
+            ([...(headOf(name)?.querySelectorAll('.docket-quiet.step') ?? [])]
+              .find(b => b.textContent === which) as HTMLElement | undefined) ?? null
+          // Measured, not looked at: an arrow set at the word size reads as a
+          // speck beside *rename*, and a glyph check would pass either way.
+          {
+            const up = arrow('Major projects', '↑')
+            const box = up?.getBoundingClientRect()
+            say('arrowBox', box === undefined ? null : {
+              width: Math.round(box.width),
+              height: Math.round(box.height),
+            })
+          }
+          // The first section has no up arrow, because the undivided run above
+          // it is not a section but a definition: nothing goes above it.
+          say('sectionArrows', {
+            firstUp: arrow('Periodic maintenance', '↑') !== null,
+            firstDown: arrow('Periodic maintenance', '↓') !== null,
+            lastUp: arrow('Major projects', '↑') !== null,
+            lastDown: arrow('Major projects', '↓') !== null,
+          })
+          arrow('Major projects', '↑')?.click()
+          await settle(1400)
+          say('sectionMoved', groupsOf())
+          arrow('Major projects', '↓')?.click()
+          await settle(1400)
+          say('sectionBack', groupsOf())
+        }
+
+        // ── a refused matter keeps what was typed into it ──────────────────
+        // Reported from use: an unreadable field made the whole attempt vanish
+        // — name, mode and dates — and put its explanation in a banner at the
+        // top of a page long enough to be scrolled away.
+        {
+          const set = (at: HTMLInputElement | undefined, value: string): void => {
+            if (at === undefined) return
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+            setter?.call(at, value)
+            at.dispatchEvent(new Event('input', { bubbles: true }))
+          }
+          ;([...document.querySelectorAll('.docket-add.here')][0] as HTMLElement | null)?.click()
+          await settle(300)
+          const pick = document.querySelector('.docket-new .docket-shape') as HTMLSelectElement | null
+          if (pick !== null) {
+            const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+            setter?.call(pick, 'recurring-task')
+            pick.dispatchEvent(new Event('change', { bubbles: true }))
+          }
+          await settle(250)
+          const boxes = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+          set(boxes[0], 'Descale the kettle')
+          set(boxes[2], 'every so often')
+          await settle(200)
+          ;([...document.querySelectorAll('.docket-new .docket-quiet')]
+            .find(b => b.textContent === 'add') as HTMLElement | null)?.click()
+          await settle(1600)
+          const still = [...document.querySelectorAll('.docket-new .docket-field')] as HTMLInputElement[]
+          say('refused', {
+            // The row is still open, with every field as it was.
+            open: document.querySelector('.docket-new') !== null,
+            name: still[0]?.value ?? null,
+            every: still[2]?.value ?? null,
+            mode: (document.querySelector('.docket-new .docket-shape') as HTMLSelectElement | null)?.value ?? null,
+            // And the reason is under the row, not at the top of the page.
+            said: document.querySelector('.docket-refused')?.textContent ?? null,
+            beside: (() => {
+              const row = document.querySelector('.docket-new')?.getBoundingClientRect()
+              const note = document.querySelector('.docket-refused')?.getBoundingClientRect()
+              return row === undefined || note === undefined
+                ? null
+                : Math.round(note.top - row.bottom)
+            })(),
+            madeAnyway: [...document.querySelectorAll('.docket-name')]
+              .some(n => (n.textContent ?? '').includes('kettle')),
+          })
+          // **Left by the door it came in by.** The rest of this scene counts
+          // the matters on this docket, so completing the add here would move a
+          // number a later check reads — and whether `every 5 years` parses is a
+          // question about the grammar, asked of the grammar in its own test.
+          ;([...document.querySelectorAll('.docket-new .docket-quiet')]
+            .find(b => b.textContent === 'cancel') as HTMLElement | null)?.click()
+          await settle(600)
+          say('afterCancel', {
+            closed: document.querySelector('.docket-new') === null,
+            made: [...document.querySelectorAll('.docket-name')]
+              .some(n => (n.textContent ?? '').includes('kettle')),
+          })
+        }
+
       // ── moving by hand: the grip, dragged and typed on ──
       {
         const rowOf = (word: string): Element | undefined =>

@@ -766,7 +766,19 @@ const real = (text: string): DateKey | null => asDateKey(text)
  * calendar.
  */
 /** `90d`, `90 days`, `1m on 31` — an interval, with the day it means. */
-const EVERY_FIELD = new RegExp(`^${COUNT}${UNIT}(?:\\s+on\\s+(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?)?$`)
+/**
+ * The interval field's grammar.
+ *
+ * **`every` is optional and allowed**, because the field renders what it parses:
+ * the column says *every 5 years*, so *every 5 years* is what somebody types
+ * back into it — and being told that is not an interval *like 90d, 6 months, or
+ * 1m on 31* is being corrected for agreeing with the app. Reported from use, and
+ * the second time this exact asymmetry has appeared: the first was `every 90d`
+ * accepted while `every 90 days` was not.
+ *
+ * **Accept flexibly, produce strictly** — the stored form is still the short one.
+ */
+const EVERY_FIELD = new RegExp(`^(?:every\\s+)?${COUNT}${UNIT}(?:\\s+on\\s+(?:the\\s+)?(\\d{1,2})(?:st|nd|rd|th)?)?$`)
 
 /** The `every:` field: how often, and which day of the month it means. */
 export function parseInterval(text: string): Interval | null {

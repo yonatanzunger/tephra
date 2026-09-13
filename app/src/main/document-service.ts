@@ -1957,6 +1957,20 @@ export class DocumentService {
   }
 
   /**
+   * A whole section one place up or down among the others. False at the ends.
+   *
+   * **Nothing derived depends on the order of sections**, which is why this
+   * touches without reconciling: the reading changes and the generated tasks do
+   * not. Same as `docketNudgeMatter`, for the same reason.
+   */
+  async docketNudgeSection(id: DocumentId, name: string, delta: number): Promise<boolean> {
+    const moved = await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).nudgeSection(name, delta)))
+    if (moved) this.#touched()
+    return moved
+  }
+
+  /**
    * Move a matter to another docket (MH5).
    *
    * **Written whole and then removed**, which is the same shape the move from

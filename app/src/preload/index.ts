@@ -298,6 +298,9 @@ const tephra = {
     /** The heading goes; everything under it stays where it is. */
     removeSection: (docket: DocumentId, name: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'removeSection', docket, name }),
+    /** A whole section up or down among the others; false at the ends. */
+    nudgeSection: (docket: DocumentId, name: string, delta: number): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'nudgeSection', docket, name, delta }),
     /** Into a section of the same docket — `''` for the undivided run. */
     place: (docket: DocumentId, matter: string, section: string, before?: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'place', docket, matter, section, before }),

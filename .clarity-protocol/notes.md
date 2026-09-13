@@ -1237,3 +1237,57 @@ instants. Nothing was learned until something asked both at the same instant.
 > bug nobody can reproduce outside a test rig is a bad use of an afternoon until
 > it is.
 
+
+## 55. The form was corrected for agreeing with the app
+
+Two reports arrived together, and they turned out to be one fault seen from two
+angles. Adding a matter *every 5 years* made it vanish: the name, the mode, the
+dates, everything typed. What actually happened was that the interval parser
+refused the text and the add row had already closed, and the explanation went to
+a banner at the top of a page long enough to need scrolling.
+
+**The refusal was itself wrong.** `every 5 years` is what the docket *prints* in
+that column, and the interval field is the field you type it back into. The
+message said it *is not an interval like 90d, 6 months, or 1m on 31*, which is
+the app correcting somebody for repeating what it just told them. The fix is the
+old asymmetry rule — **accept flexibly, produce strictly**: `every` is now
+optional on the way in and still absent from the stored form. This is the second
+time this exact shape has appeared; the first was `every 90d` accepted while
+`every 90 days` was refused.
+
+**The data loss was a rule already written down and not applied here.** `act`
+exists precisely so a row can survive a failed verb — its comment says a row that
+closes the moment it fires a verb throws away what somebody typed — and it was
+written after a step with an unreadable `when` vanished on Enter. The add-matter
+row was the one call site that closed first and fired into the void. A rule that
+lives in one function's docstring protects only the callers that happened to be
+written after it.
+
+**Where the message goes is part of whether it exists.** The banner was the right
+instinct — a bad date typed in the middle of a conversation must not put a dialog
+between two people and the thing they are discussing — put in a place that
+guaranteed nobody would see it. It now appears under the row that earned it,
+where the fields are still filled and the correction is made where the mistake
+was. Same non-blocking form, two inches from the eye instead of two screens away.
+
+## 56. A claim in a docstring stood in for the feature
+
+`addSection` explained that it appends rather than inserting because *sections
+can be reordered by moving their matters*. Read as a sentence that is almost
+true; read as a design it says the ordering gesture is to empty one heading into
+another, one matter at a time, which is rebuilding the sections rather than
+reordering them. It went unnoticed for as long as it did because the docstring
+answered the question a reader would have asked — *can I reorder these?* — with
+something that sounded like yes.
+
+The verb is a single text exchange of two runs, which is worth recording for why
+it is that cheap: every matter under a named heading is written at the same
+depth, so swapping two whole runs leaves all of them correctly nested and nothing
+needs rewriting. `removeSection` has to walk its orphans precisely because it
+*does* change what contains them.
+
+One asymmetry falls out of the model rather than being chosen: the undivided run
+at the top is not a section but a definition — everything above the first heading
+— so it has no position to exchange and nothing can be placed above it. Nudging
+the first section up is therefore `false`, the same answer a matter at the top of
+its own section gives, and not an error.

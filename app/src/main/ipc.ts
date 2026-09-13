@@ -224,6 +224,8 @@ export function registerDocumentIpc(service: DocumentService): void {
         return service.docketRenameSection(command.docket, command.name, command.to)
       case 'removeSection':
         return service.docketRemoveSection(command.docket, command.name)
+      case 'nudgeSection':
+        return service.docketNudgeSection(command.docket, command.name, command.delta)
       case 'place':
         return service.docketMoveMatter(
           command.docket, command.matter, command.section, command.before,

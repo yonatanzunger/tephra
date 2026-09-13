@@ -716,8 +716,8 @@ export class DocketDocument extends SegmentedDocument {
    *
    * **At the end and empty, because that is the gesture**: somebody says *we
    * should have one for major projects* and then puts things in it. Inserting it
-   * anywhere else would be guessing at an order nobody has given yet, and
-   * sections can be reordered by moving their matters.
+   * anywhere else would be guessing at an order nobody has given yet. Where it
+   * belongs afterwards is `nudgeSection`, which moves the whole run.
    */
   async addSection(name: string): Promise<string> {
     const said = name.trim()
@@ -836,6 +836,65 @@ export class DocketDocument extends SegmentedDocument {
     // `wanted` is ALREADY one past `which`, so this is +1 and not +2. It was
     // +2 for one run, which moved a matter two places on every downward nudge.
     await this.#rearrange(id, delta < 0 ? wanted : wanted + 1, found.level)
+    return true
+  }
+
+  /**
+   * Move a whole section — heading and everything under it — one place up or
+   * down among the other sections.
+   *
+   * **The section is the unit, because the section is what somebody is
+   * reordering.** Until this existed the only way to change the order was to
+   * move every matter out of one heading and into another, one at a time, which
+   * is not reordering sections at all but rebuilding them — reported from use as
+   * *there's no way to reorder sections in a docket*.
+   *
+   * **The undivided run at the top does not take part.** It is not a section but
+   * a definition — everything above the first heading — so it cannot be
+   * displaced and nothing can be put above it. Nudging the first section up is
+   * therefore false rather than an error: at the end of the travel, like a
+   * matter at the top of its own section.
+   *
+   * **The text moves and the depths do not.** Every matter under a named heading
+   * is written at the same level, so exchanging two runs leaves every one of
+   * them correctly nested and nothing needs rewriting — which is why this is a
+   * single replacement and not the walk `removeSection` has to do.
+   */
+  async nudgeSection(name: string, delta: number): Promise<boolean> {
+    if (delta === 0) return false
+    const blocks = await this.#blocks()
+    const body = (await this.segment(ONLY_SEGMENT)).body
+    const heads = blocks.filter(b => b.kind === 'section')
+    const which = heads.findIndex(b => b.kind === 'section' && b.name === name)
+    if (which < 0) throw new Error(`${this.id} has no section called ${name}`)
+    const wanted = which + (delta < 0 ? -1 : 1)
+    if (wanted < 0 || wanted >= heads.length) return false
+    // A run reaches from its own heading to the next one, so it carries its
+    // matters and the blank line after them without having to name either.
+    const runs = heads.map((head, at) => {
+      const from = head.from
+      const to = at + 1 < heads.length ? (heads[at + 1] as ScannedBlock).from : body.length
+      return { from, to }
+    })
+    const [above, below] = which < wanted
+      ? [runs[which], runs[wanted]]
+      : [runs[wanted], runs[which]]
+    if (above === undefined || below === undefined) return false
+    const first = body.slice(above.from, above.to)
+    const second = body.slice(below.from, below.to)
+    // **The gap belongs to the position, not to the run.** The last run in the
+    // file ends where the file does, so it need not end in a blank line; if it
+    // is about to stop being last, one has to be there, and if it is about to
+    // become last the one it was carrying has to go. Keeping each run's own
+    // trailing whitespace would move the end of the file around.
+    const tail = /\s*$/.exec(second)?.[0] ?? ''
+    await this.replace([{
+      span: {
+        begin: this.at(ONLY_SEGMENT, above.from),
+        end: this.at(ONLY_SEGMENT, below.to),
+      },
+      payload: `${second.trimEnd()}\n\n${first.trimEnd()}${tail}` as DocumentText,
+    }], 'operation')
     return true
   }
 

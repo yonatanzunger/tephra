@@ -3281,8 +3281,15 @@ a docket is in *creation order and nothing else*, inherited from `goal/todo.md`.
 **Decision.** A docket is divided for reading by **sections** — ordinary markdown
 headings, with matters nested one level under them. A heading **with nothing
 under it is a section**; a heading **with anything under it is a matter**.
-Matters can be moved between sections and nudged up and down inside one. Nothing
-ever sorts itself.
+Matters can be moved between sections and nudged up and down inside one, and a
+**section moves as a whole** — heading and contents together — among the other
+sections. Nothing ever sorts itself.
+
+The undivided run above the first heading does not take part in that ordering: it
+is not a section but a definition, so it has no position to exchange and nothing
+can be placed above it. Reordering by emptying one heading into another was the
+only gesture available until 2026-09-13, and it is not reordering sections but
+rebuilding them (note 56).
 
 **Why sections at all.** A docket's claim is completeness — *everything true
 about the house* — which means it is long by design, and most of it is dormant.

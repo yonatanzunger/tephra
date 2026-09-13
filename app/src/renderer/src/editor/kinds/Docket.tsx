@@ -223,6 +223,15 @@ export function DocketSurface({
   )
 
   const total = sections.reduce((n, s) => n + s.matters.length, 0)
+  /**
+   * The named sections, in file order.
+   *
+   * **The undivided run is not one of them.** It is *everything above the first
+   * heading*, so it has no position to change and nothing can be put above it;
+   * leaving it out here is what keeps the first section's up arrow from
+   * appearing at all.
+   */
+  const named = sections.filter(s => s.name !== '').map(s => s.name)
   const divided = sections.some(one => one.name !== '')
 
   /**
@@ -395,6 +404,31 @@ export function DocketSurface({
                     to the matter below — reported from use — because that is
                     what is directly beneath them. Proximity is what says which
                     thing a control acts on; nothing else does. */}
+                {/* **The whole run moves, which is what reordering a section
+                    means.** Dragging matters one at a time between headings was
+                    the only way to change the order before this, and that is
+                    rebuilding the sections rather than reordering them —
+                    reported from use. The arrows are left off at the ends rather
+                    than shown dead, the rule the matter rows follow. */}
+                {named.indexOf(section.name) > 0 && (
+                  <button
+                    className="docket-quiet step"
+                    onClick={() => void act(window.tephra.docket.nudgeSection(id, section.name, -1))}
+                    title="Move this section up"
+                  >
+                    ↑
+                  </button>
+                )}
+                {named.indexOf(section.name) < named.length - 1 && (
+                  <button
+                    className="docket-quiet step"
+                    onClick={() => void act(window.tephra.docket.nudgeSection(id, section.name, 1))}
+                    title="Move this section down"
+                  >
+                    ↓
+                  </button>
+                )}
+                {named.length > 1 && <span className="docket-sep" />}
                 <button className="docket-quiet" onClick={() => setNaming(section.name)}>rename</button>
                 {/* **Not destructive, and says so.** Removing a heading keeps
                     every matter under it — they join whatever now contains
@@ -584,19 +618,40 @@ export function DocketSurface({
           {adding === section.name ? (
             <NewMatter
               onCancel={() => setAdding(null)}
-              onCommit={(name, shape) => {
+              /**
+               * **The form closes when the matter exists, and not before.**
+               *
+               * It used to close first and fire the verb into the void, so a
+               * `when` or a `how often` the parser could not read took the
+               * whole attempt with it — name, mode, dates, everything — and put
+               * its explanation in the page-top banner, by then scrolled out of
+               * sight. What that looked like from the outside was the matter
+               * vanishing. Reported from use.
+               *
+               * **The complaint the error answers is the one it must appear
+               * beside**, so the message comes back here rather than going to
+               * `problem`: the fields are still filled, the caret is still in
+               * them, and the correction is made where the mistake was.
+               */
+              onCommit={async (name, shape) => {
+                try {
+                  // **Folded on arrival.** It used to open itself, on the
+                  // reasoning that the seeded step is the first thing anybody
+                  // will want to change — but that step's text *is* the
+                  // matter's name (D76), so unfolding showed one line repeating
+                  // the heading above it. The same redundancy the horizon had
+                  // to suppress when it stopped printing a matter's name beside
+                  // a row that already said it. Reported from use.
+                  await window.tephra.docket.add(
+                    id, name, shape, section.name === '' ? undefined : section.name,
+                  )
+                } catch (err) {
+                  return (err as Error).message
+                }
+                setProblem(null)
+                await refresh()
                 setAdding(null)
-                if (name.trim() === '') return
-                // **Folded on arrival.** It used to open itself, on the
-                // reasoning that the seeded step is the first thing anybody
-                // will want to change — but that step's text *is* the matter's
-                // name (D76), so unfolding showed one line repeating the
-                // heading above it. The same redundancy the horizon had to
-                // suppress when it stopped printing a matter's name beside a
-                // row that already said it. Reported from use.
-                void act(window.tephra.docket.add(
-                  id, name, shape, section.name === '' ? undefined : section.name,
-                ))
+                return null
               }}
             />
           ) : (
@@ -1683,26 +1738,42 @@ function Field1({
  * `every` and `after`, so a job that later gets a date is not mislabelled as an
  * event — there is no label to be wrong.
  */
+/**
+ * The row that makes a matter.
+ *
+ * **It holds what it was told until the matter is real.** `onCommit` answers
+ * with the reason it could not be made, or null if it was, and a reason keeps
+ * the row on the screen with every field as it was — because the thing somebody
+ * needs after typing an unreadable date is the date they typed.
+ */
 function NewMatter({
   onCommit,
   onCancel,
 }: {
-  onCommit: (name: string, shape: NewMatterShape) => void
+  onCommit: (name: string, shape: NewMatterShape) => Promise<string | null>
   onCancel: () => void
 }): React.JSX.Element {
   const [name, setName] = useState('')
   const [mode, setMode] = useState<NewMatterShape['mode']>('task')
   const [start, setStart] = useState('')
   const [every, setEvery] = useState('')
+  const [refused, setRefused] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => input.current?.focus(), [])
   const shape = shapeOf(mode)
   const done = (): void => {
-    if (name.trim() === '') return
-    onCommit(name, {
+    if (name.trim() === '' || working) return
+    setWorking(true)
+    void onCommit(name, {
       mode,
       ...(start.trim() === '' ? {} : { start }),
       ...(shape.repeating && every.trim() !== '' ? { every } : {}),
+    }).then(said => {
+      setWorking(false)
+      setRefused(said)
+      // **Back into the flow**, at the field most likely to be wrong.
+      if (said !== null) input.current?.focus()
     })
   }
   const keys = (e: React.KeyboardEvent): void => {
@@ -1712,6 +1783,7 @@ function NewMatter({
     } else if (e.key === 'Escape') onCancel()
   }
   return (
+    <div className="docket-new-flow">
     <div className="docket-new">
       <input
         ref={input}
@@ -1748,7 +1820,7 @@ function NewMatter({
           className="docket-field narrow"
           value={every}
           placeholder="how often"
-          title="90d · 6 months · 1y · 1m on 31"
+          title="90d · 6 months · every 5 years · 1m on 31"
           spellCheck={false}
           onChange={e => setEvery(e.currentTarget.value)}
           onKeyDown={keys}
@@ -1756,6 +1828,13 @@ function NewMatter({
       )}
       <button className="docket-quiet" onClick={done}>add</button>
       <button className="docket-quiet" onClick={onCancel}>cancel</button>
+    </div>
+    {/* **Under the row it belongs to.** The banner at the top of the page was
+        the right instinct — an unreadable date is an ordinary event and must
+        not put a dialog between two people and the thing they are discussing —
+        put in the wrong place: by the time a docket is long enough to add to,
+        the top of the page is scrolled away. */}
+    {refused !== null && <p className="docket-refused" role="alert">{refused}</p>}
     </div>
   )
 }

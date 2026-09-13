@@ -709,6 +709,19 @@ export type DocketCommand =
   /** The heading goes; everything under it stays. */
   | { readonly kind: 'removeSection'; readonly docket: DocumentId; readonly name: string }
   /**
+   * A whole section, heading and contents, one place up or down.
+   *
+   * **`nudgeSection`, spelled out**, because `nudge` already means a matter and
+   * the two take the same arguments in the same order — a pair like that is how
+   * a wrong call gets made and never noticed.
+   */
+  | {
+      readonly kind: 'nudgeSection'
+      readonly docket: DocumentId
+      readonly name: string
+      readonly delta: number
+    }
+  /**
    * Put a matter in a section of THIS docket — `''` is the undivided run.
    *
    * **`place`, not `move`**: `move` below is D71's between-dockets transfer, and

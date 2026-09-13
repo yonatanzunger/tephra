@@ -53,8 +53,11 @@ plain. What MH1 shipped against what it planned:
 |---|---|
 | MH1 | the kind, the format, the surface, matters, tags, owner, the four un-backfillable fields |
 | MH3 | trigger **authoring** and editing; recurrence **setup**, with an anchor |
-| nowhere | notes on a matter; **sections**, with moving and reordering (D75) |
+| nowhere | notes on a matter; **sections**, with matters moved between them and reordered inside them (D75) |
 | MH3 — still out | anything that **fires** |
+
+(Read as *reordering the sections themselves* for a while, which they could not
+do until 2026-09-13 — note 56. What shipped was reordering *within* a section.)
 
 So MH1 absorbed the authoring half of MH3 and a feature that was in no phase at
 all, and held the line exactly where it mattered. **The line it held is the one

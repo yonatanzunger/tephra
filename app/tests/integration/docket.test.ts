@@ -2651,3 +2651,75 @@ test('and ACTIVATING is how it comes back to the list, freshly', async t => {
   // And the old line is still the record of what happened to it.
   assert.equal(items.find(one => one.id === item)?.moved, 'Backlog')
 })
+
+test('REORDERING SECTIONS: a whole section moves, contents and all', async t => {
+  // Reported from use: *there's no way to reorder sections in a docket*. The
+  // only way before this was to move every matter out of one heading and into
+  // another, which rebuilds the sections rather than reordering them.
+  const { doc, file, boiler, oven, kitchen } = await three(t)
+  await doc.addSection('Periodic')
+  await doc.addSection('Major projects')
+  await doc.moveMatter(boiler, 'Periodic')
+  await doc.moveMatter(oven, 'Major projects')
+  await doc.moveMatter(kitchen, 'Major projects')
+  assert.deepEqual(await named(doc), [
+    ['Periodic', ['Service the boiler']],
+    ['Major projects', ['The oven is broken', 'Redo the kitchen']],
+  ])
+
+  assert.equal(await doc.nudgeSection('Major projects', -1), true)
+  assert.deepEqual(await named(doc), [
+    ['Major projects', ['The oven is broken', 'Redo the kitchen']],
+    ['Periodic', ['Service the boiler']],
+  ], 'the matters travel with the heading, in their own order')
+  const text = await file()
+  assert.match(text, /^### The oven is broken$/m, 'and stay nested exactly as deep')
+  assert.match(text, /^### Service the boiler$/m)
+  // The file must still be a file: one blank line between runs, no run of them.
+  assert.doesNotMatch(text, /\n\n\n/, 'no gap opened or doubled by the exchange')
+  assert.match(text, /\n$/, 'and it still ends in a newline')
+})
+
+test('and down is the same move, seen from the other section', async t => {
+  const { doc, boiler, oven } = await three(t)
+  await doc.addSection('Periodic')
+  await doc.addSection('Major projects')
+  await doc.moveMatter(boiler, 'Periodic')
+  await doc.moveMatter(oven, 'Major projects')
+  assert.equal(await doc.nudgeSection('Periodic', 1), true)
+  assert.deepEqual((await doc.sections()).map(s => s.name), ['', 'Major projects', 'Periodic'])
+})
+
+test('AT THE ENDS IT IS FALSE, not an error — the ends are ordinary', async t => {
+  const { doc } = await three(t)
+  await doc.addSection('Periodic')
+  await doc.addSection('Major projects')
+  assert.equal(await doc.nudgeSection('Periodic', -1), false, 'already first')
+  assert.equal(await doc.nudgeSection('Major projects', 1), false, 'already last')
+  assert.equal(await doc.nudgeSection('Periodic', 0), false, 'and nowhere is nowhere')
+  assert.deepEqual((await doc.sections()).map(s => s.name), ['', 'Periodic', 'Major projects'])
+  await assert.rejects(() => doc.nudgeSection('Nonesuch', 1), /no section called Nonesuch/)
+})
+
+test('THE UNDIVIDED RUN DOES NOT TAKE PART: nothing goes above it', async t => {
+  // It is not a section but a definition — everything above the first heading —
+  // so a section nudged to the front still sits below it.
+  const { doc, boiler } = await three(t)
+  await doc.addSection('Periodic')
+  await doc.moveMatter(boiler, 'Periodic')
+  assert.equal(await doc.nudgeSection('Periodic', -1), false)
+  assert.deepEqual(await named(doc), [
+    ['', ['The oven is broken', 'Redo the kitchen']],
+    ['Periodic', ['Service the boiler']],
+  ])
+})
+
+test('and an exchange is reversible, which is what makes it an exchange', async t => {
+  const { doc, file } = await three(t)
+  await doc.addSection('Periodic')
+  await doc.addSection('Major projects')
+  const before = await file()
+  await doc.nudgeSection('Periodic', 1)
+  await doc.nudgeSection('Periodic', -1)
+  assert.equal(await file(), before, 'there and back is where it started')
+})

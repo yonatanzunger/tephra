@@ -2054,6 +2054,14 @@ body {
   border: 1px solid transparent; border-radius: 5px; padding: .05rem .3rem;
 }
 .docket-quiet:hover { color: rgb(var(--text)); background: rgb(var(--text) / .06); }
+/* An arrow is not a word and cannot be set like one: at the word size it reads
+   as a speck beside *rename*. Given a box of its own so the two arrows are the
+   same width as each other however the font draws them — note 54's lesson, that
+   a glyph is only as reliable as the face that happens to supply it. */
+.docket-quiet.step {
+  font-size: 13px; line-height: 1; min-width: 1.35rem;
+  padding: .1rem .2rem; text-align: center;
+}
 .docket-quiet.danger:hover { color: rgb(var(--bad, var(--text))); }
 
 /* **Hover fills space that is already reserved; it never adds a line.** A
@@ -2128,6 +2136,15 @@ body {
 .docket-new {
   display: flex; align-items: center; gap: .5rem;
   max-width: var(--measure); padding: .6rem 0;
+}
+/* A refusal belongs under the row that earned it, not at the top of a page
+   that by then is scrolled away. Shares the banner's colour so the two read
+   as one kind of remark. */
+.docket-refused {
+  font-family: var(--font-ui); font-size: 13px; line-height: 1.45;
+  color: rgb(var(--text)); background: rgb(234 179 8 / .22);
+  border-radius: 6px; padding: .35rem .6rem; margin: 0 0 .5rem;
+  max-width: var(--measure);
 }
 .docket-add {
   font: inherit; font-size: 13px; cursor: pointer;

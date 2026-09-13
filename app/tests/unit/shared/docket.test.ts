@@ -621,3 +621,17 @@ test('and a month-end anchor survives the trip, which is where it could not', ()
   assert.equal(backInterval('2026-01-31' as DateKey, { n: 1, unit: 'm' }), '2025-12-31')
   assert.equal(backInterval('2026-03-31' as DateKey, { n: 1, unit: 'm' }), '2026-02-28')
 })
+
+test('THE FIELD TAKES WHAT IT SHOWS: "every 5 years" parses', () => {
+  // Reported from use, and the second time this asymmetry has appeared — the
+  // first was `every 90d` accepted while `every 90 days` was not. The column
+  // renders *every 5 years*; being told that is not an interval is being
+  // corrected for agreeing with the app.
+  for (const said of ['every 5 years', '5 years', '5y', 'every 5y', 'EVERY 5 YEARS']) {
+    assert.deepEqual(parseInterval(said), { n: 5, unit: 'y' }, said)
+  }
+  assert.deepEqual(parseInterval('every 1 month on the 31st'), { n: 1, unit: 'm', day: 31 })
+  // And it still refuses what is not one.
+  assert.equal(parseInterval('every so often'), null)
+  assert.equal(parseInterval('every 0 days'), null)
+})
