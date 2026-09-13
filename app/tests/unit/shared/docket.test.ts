@@ -552,3 +552,50 @@ test('AND A LIST WITH ONE BAD DATE IN IT IS KEPT VERBATIM, not silently pruned',
   assert.equal(parsed?.when.dates, null)
   assert.ok(parsed?.extra.some(one => one.includes('notaday')))
 })
+
+// ── a task's date is not an event's (D80, amended) ──────────
+//
+// **`start` means two different things**, and the column only ever said one. For
+// an event it is *the day this happens*; for a task it is *the day work began*,
+// which is what activating writes. Read as a bare date, every task sounded like
+// an appointment.
+
+test('A TASK SAYS WHEN IT STARTED; an event says when it happens', () => {
+  const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null }
+  const today = '2026-09-13' as DateKey
+  assert.equal(readSchedule(when, 'task', today), 'started 2026-09-10')
+  assert.equal(readSchedule(when, 'event', today), '2026-09-10')
+})
+
+test('and a task dated ahead has NOT started, which the tense has to say', () => {
+  // Otherwise the row repeats a small lie every day until the date arrives.
+  const when = { start: '2026-09-20' as DateKey, every: null, after: null, dates: null }
+  assert.equal(readSchedule(when, 'task', '2026-09-13' as DateKey), 'starting 2026-09-20')
+})
+
+test('and an undated task says so in the words its button uses', () => {
+  // *No date yet* is true of a task and useful about it only if you already know
+  // that dating it is what starting it means. **Activate** is the control beside
+  // it, so the two have to agree.
+  const when = { start: null, every: null, after: null, dates: null }
+  assert.equal(readSchedule(when, 'task'), 'not started')
+  assert.equal(readSchedule(when, 'event'), '—')
+})
+
+test('a recurring task counting from a date reads as a task, not an appointment', () => {
+  const when = { start: '2026-09-10' as DateKey, every: { n: 90, unit: 'd' as const }, after: null, dates: null }
+  assert.equal(readSchedule(when, 'recurring-task', '2026-09-13' as DateKey),
+    'every 90 days, started 2026-09-10')
+  assert.equal(readSchedule(when, 'recurring-event', '2026-09-13' as DateKey),
+    'every 90 days from 2026-09-10')
+})
+
+test('and one counting from completion already said it right, so it is unchanged', () => {
+  const when = { start: '2026-09-10' as DateKey, every: { n: 90, unit: 'd' as const }, after: 'abcd1234', dates: null }
+  assert.equal(readSchedule(when, 'recurring-task'), 'every 90 days after it is done')
+})
+
+test('and with no mode given it reads as it always did, for callers that have none', () => {
+  const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null }
+  assert.equal(readSchedule(when), '2026-09-10')
+})

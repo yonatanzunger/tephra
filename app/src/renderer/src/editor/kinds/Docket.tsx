@@ -748,7 +748,7 @@ function Row({
 }): React.JSX.Element {
   // The round-trip form is what an edit starts from; the reading form is what
   // the row shows. See `readWhen`.
-  const read = readSchedule(matter.when)
+  const read = readSchedule(matter.when, matter.mode, today ?? undefined)
   /**
    * **Inactive is *no start date*, and nothing else** (D76). There is no
    * suspended flag: a matter with no date cannot compute `T±N`, so it cannot
@@ -885,7 +885,7 @@ function Row({
             onClick={() => onEdit('when')}
             title="When this happens, and what sort of thing it is"
           >
-            {inactive && matter.when.every === null ? 'no date yet' : read}
+            {read}
           </button>
         )}
 

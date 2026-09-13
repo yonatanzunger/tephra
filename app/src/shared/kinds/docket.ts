@@ -721,6 +721,16 @@ export const STANDING: Schedule = UNSCHEDULED
 export const NO_DATE = '—'
 
 /**
+ * What an undated TASK says, as against an undated event.
+ *
+ * *No date yet* is true of both and useful about neither: for a task the fact is
+ * that nobody has begun, which is what the **activate** button beside it offers
+ * to change. The two words have to agree or the row is describing one thing and
+ * the control beside it another.
+ */
+export const NOT_STARTED = 'not started'
+
+/**
  * A date that is a real one, or null.
  *
  * **Shape is not validity, and every form here got that wrong at first.** The
@@ -781,7 +791,23 @@ const ordinal = (n: number): string => {
  * which of the four kinds of thing they are looking at — and it is the only
  * place that says so, now that nothing stores a mode.
  */
-export function readSchedule(when: Schedule): string {
+export function readSchedule(when: Schedule, mode?: Mode, today?: DateKey): string {
+  /**
+   * **`start` means two different things, and the column only ever said one.**
+   * For an event it is *the day this happens*; for a task it is *the day work
+   * began*, which is what activating writes. Reading both as a bare date made
+   * every task sound like an appointment — reported from use, and it is the
+   * deeper half of a distinction that looked cosmetic when the modes were named.
+   *
+   * The tense follows the date, because a task dated ahead has not started yet
+   * and saying it has would be a small lie the row repeats every day until then.
+   */
+  const doing = mode !== undefined && shapeOf(mode).kind === 'task'
+  const began = (day: DateKey): string =>
+    !doing ? day
+      : today !== undefined && day > today ? `starting ${day}`
+        : `started ${day}`
+
   // **A list reads as its next date and a count**, because the column is one
   // line and eight of them would bury the matter they belong to. The whole list
   // is a click away, in the editor that owns it.
@@ -791,13 +817,15 @@ export function readSchedule(when: Schedule): string {
     const left = when.dates.filter(one => one > now).length
     return left === 0 ? `${now}, the last` : `${now}, ${left} more`
   }
-  if (when.every === null) return when.start ?? NO_DATE
+  if (when.every === null) return when.start === null ? (doing ? NOT_STARTED : NO_DATE) : began(when.start)
   const how = readInterval(when.every)
   if (when.start === null) return `${how}, not started`
   // **Said as *after it is done* rather than as a date**, because that is what
   // the difference between the two recurring shapes actually is: one is the
   // calendar's business and the other is yours.
-  return when.after === null ? `${how} from ${when.start}` : `${how} after it is done`
+  return when.after === null
+    ? (doing ? `${how}, ${began(when.start)}` : `${how} from ${when.start}`)
+    : `${how} after it is done`
 }
 
 /**
