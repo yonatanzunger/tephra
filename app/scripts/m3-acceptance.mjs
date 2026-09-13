@@ -1126,10 +1126,11 @@ console.log('\n\u2014 the task list \u2014')
   check('links in an item are live', Array.isArray(r.links) && r.links[0] === 'the covenants', JSON.stringify(r.links))
   check(
     'what is close is surfaced, soonest first (T9) — now in the horizon pane',
-    // Relative, not literal: what is being tested is the ORDER — overdue
-    // first — and a literal reads differently every morning.
-    Array.isArray(r.band) && r.band.length === 2 &&
-      / ago$/.test(String(r.band[0])) && !/ ago$/.test(String(r.band[1])),
+    // What is being tested is the ORDER: overdue first, because the one that
+    // has gone is the one the surface exists for. Asked of the overdue mark
+    // rather than of the words, since the pane's dates are absolute — a column
+    // that read *2 days ago* could not line up (MH4).
+    Array.isArray(r.band) && r.band.length === 2 && r.band[0] === true && r.band[1] === false,
     JSON.stringify(r.band),
   )
 
@@ -2132,9 +2133,11 @@ console.log('\n— the walk —')
   check(
     // Nothing to undo: a selection was never a change. And the day is still
     // unreviewed, because you did not say you had looked.
-    'cancelling forgets the selection and leaves every item where it was',
-    c.rowsAfterCancel === 6 && c.barGone === true && c.stillOffered === 'true',
-    `${c.rowsAfterCancel} rows \u00b7 still offered ${c.stillOffered}`,
+    'cancelling forgets the SELECTION and leaves the pass, and the items, alone',
+    // Named *Cancel* rather than *Clear*, from use: this ends the selection and
+    // not the reorientation, and the two were easy to confuse.
+    c.rowsAfterCancel === 6 && c.barGone === true && c.stillInPass === true,
+    `${c.rowsAfterCancel} rows \u00b7 bar gone ${c.barGone} \u00b7 still in the pass ${c.stillInPass}`,
   )
 }
 

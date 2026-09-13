@@ -603,8 +603,12 @@ export async function runVerify(request: string): Promise<void> {
         listFace: getComputedStyle(surface as Element).fontFamily,
         prose: prose2 === null ? null : getComputedStyle(prose2).fontSize,
       })
+      // **Which are behind you, in order.** The band said *2 days ago* and the
+      // pane says *8 Sep* — absolute, because a date column that read in
+      // relative words could not line up (MH4). So the claim about ORDER is
+      // asked of the overdue mark rather than of the wording.
       say('band', [...document.querySelectorAll('.hz-row')].map(
-        b => b.querySelector('.hz-on')?.textContent ?? '',
+        b => b.querySelector('.hz-on')?.classList.contains('hz-past') ?? false,
       ))
       say('tags', [...document.querySelectorAll('.todo-tag')].map(t => t.textContent ?? ''))
       say('dues', [...document.querySelectorAll('.todo-due')].map(d => d.textContent ?? ''))
@@ -1728,44 +1732,30 @@ export async function runVerify(request: string): Promise<void> {
 
       // ── in from the menu, which is the entrance that works from anywhere ──
       say('menuItemFound', await window.tephra.clickMenu('Reorient'))
-      await settle(1200)
-      say('movement1', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
-      say('coming', words('.todo-coming-row .todo-soon-text'))
-      // Movement 1 reads; it must not be asking anything of the rows yet.
-      say('noMarksYet', {
-        drop: document.querySelectorAll('.todo-drop').length,
-        pick: document.querySelectorAll('.todo-pick').length,
+      await settle(1400)
+      say('inPass', document.querySelector('.todo-walkbar .todo-walk-finish') !== null)
+      say('passSays', document.querySelector('.todo-walkbar .todo-movement')?.textContent?.trim() ?? '')
+      // **The pass adds no verbs.** Every act is one you could perform at any
+      // time; what it adds is the marking of what it is asking about.
+      say('marked', [...document.querySelectorAll('.todo-row')]
+        .filter(r => r.classList.contains('carried')).length)
+
+      // **Both halves are on screen for the whole of it** (amends D74): what you
+      // are doing and what is coming are two halves of one question, and the
+      // reason this was three movements was a misreading of *first* as *before*.
+      say('bothHalves', {
+        list: document.querySelectorAll('.todo-list > .todo-row').length,
+        horizon: document.querySelectorAll('.todo-horizon .hz-row').length,
       })
 
-      const step = async (label: string): Promise<void> => {
-        ;([...document.querySelectorAll('.todo-walkbar button')].find(
-          b => (b.textContent ?? '').trim().startsWith(label)) as HTMLElement | null)?.click()
-        await settle(900)
-      }
-
-      await step('Next')
-      say('movement2', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
-      say('walkMarks', {
-        drop: document.querySelectorAll('.todo-drop').length,
-        pick: document.querySelectorAll('.todo-pick').length,
-      })
-
-      await step('Finish')
-      say('movement3', document.querySelector('.todo-movement')?.textContent?.trim() ?? '')
-      say('chooseMarks', {
-        drop: document.querySelectorAll('.todo-drop').length,
-        pick: document.querySelectorAll('.todo-pick').length,
-      })
-
-      // Choose one, which is the movement's whole output.
+      // Choose one for today — a verb on the row, not a stage of the pass.
       ;(document.querySelectorAll('.todo-pick')[2] as HTMLElement | null)?.click()
       await settle(900)
-      say('doneSays', [...document.querySelectorAll('.todo-walkbar button')]
-        .map(b => (b.textContent ?? '').trim()))
       say('chosen', words('.todo-today .todo-text'))
 
-      await step('Done')
-      say('movementAfter', document.querySelectorAll('.todo-movement').length)
+      ;(document.querySelector('.todo-walkbar .todo-walk-finish') as HTMLElement | null)?.click()
+      await settle(900)
+      say('passOver', document.querySelector('.todo-walkbar .todo-walk-finish') === null)
       // **The artifact outlives the pass**, which is what separates reorient
       // from the walk: the walk's product was attention and nothing else.
       say('kept', words('.todo-today .todo-text'))
@@ -1840,7 +1830,11 @@ export async function runVerify(request: string): Promise<void> {
         ;(document.querySelector('.todo-walk-cancel') as HTMLElement | null)?.click()
         await settle(700)
         say('rowsAfterCancel', texts().length)
-        say('stillOffered', (document.querySelector('.todo-walk-start') as HTMLElement | null)?.dataset['offered'] ?? '')
+        // **The pass is still open**, which is the point of the rename: this
+        // button cancels the SELECTION, not the reorientation. Clearing one
+        // should not end the other, and calling it *Clear* had made that
+        // ambiguous enough to be reported from use.
+        say('stillInPass', document.querySelector('.todo-walk-finish') !== null)
         say('barGone', document.querySelector('.todo-walkbar .todo-bulk') === null)
       } else {
         // **One act on many, and one undo step** — pressed here as Delete,

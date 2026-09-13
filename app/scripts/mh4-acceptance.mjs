@@ -21,6 +21,8 @@ import { join } from 'node:path'
 const electron = './node_modules/.bin/electron'
 const DAY = new Date(Date.now() - 8 * 60 * 60_000).toISOString().slice(0, 10)
 const [YEAR, MONTH] = DAY.split('-')
+const from = days =>
+  new Date(Date.parse(`${DAY}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 
 async function notebook() {
   const root = await mkdtemp(join(tmpdir(), 'tephra-mh4-'))
@@ -30,12 +32,17 @@ async function notebook() {
     `---\ndate: ${DAY}\n---\n\nThe boiler is making that noise again.\n`,
   )
   await mkdir(join(root, 'tasks.todo', YEAR, MONTH), { recursive: true })
+  // **Yesterday as well as today**, or nothing has carried and the pass has
+  // nothing to mark — which reads as a broken feature and is an empty fixture.
+  const [py, pm] = from(-1).split('-')
+  await mkdir(join(root, 'tasks.todo', py, pm), { recursive: true })
   await writeFile(
-    join(root, 'tasks.todo', YEAR, MONTH, `${DAY}.md`),
-    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+    join(root, 'tasks.todo', py, pm, `${from(-1)}.md`),
+    `---\ntephra: 1\ndate: ${from(-1)}\nkind: todo\n---\n` +
       '- [ ] ring the bank #admin <!--tephra:item bbbb1111 1756600000 1756600000-->\n' +
       '- [ ] draft the copy #tephra <!--tephra:item bbbb2222 1756600001 1756600001-->\n' +
-      '- [ ] post the form #admin <!--tephra:item bbbb3333 1756600002 1756600002-->\n',
+      // Dated, so the horizon's half of the view has something in it.
+      `- [ ] post the form #admin DUE ${from(3)} <!--tephra:item bbbb3333 1756600002 1756600002-->\n`,
   )
   return root
 }
@@ -148,38 +155,37 @@ check(
 )
 check(
   'AND ONE THAT WORKS FROM ANYWHERE: the menu brings the list forward and begins',
-  e.menuItemFound === true && /coming/i.test(e.movement1 ?? ''),
-  `menu ${e.menuItemFound} \u00b7 ${JSON.stringify(e.movement1)}`,
+  e.menuItemFound === true && e.inPass === true,
+  `menu ${e.menuItemFound} \u00b7 in the pass ${e.inPass}`,
 )
 check(
-  'MOVEMENT 1 READS, and asks nothing of the rows yet',
-  // The order is the argument (H11): what is coming is context for what is
-  // live. A movement that also offered marks would be two questions at once.
-  e.noMarksYet?.drop === 0 && e.noMarksYet?.pick === 0,
-  JSON.stringify(e.noMarksYet),
+  // **Amended, and it is the amendment that matters.** This was three movements
+  // — what's coming, what's live, what's today — on the argument that the
+  // horizon is *context* for the list. It is; and context is consulted WHILE
+  // deciding, not read and put away, so sequencing it was a misreading of
+  // *first* as *before*. Both halves are simply on screen throughout.
+  'BOTH HALVES ARE ON SCREEN THROUGHOUT, rather than one movement at a time',
+  e.bothHalves?.list > 0 && e.bothHalves?.horizon > 0,
+  JSON.stringify(e.bothHalves),
 )
 check(
-  'MOVEMENT 2 IS THE WALK, unchanged: drop marks and nothing else',
-  /live/i.test(e.movement2 ?? '') && e.walkMarks?.drop > 0 && e.walkMarks?.pick === 0,
-  `${JSON.stringify(e.movement2)} \u00b7 ${JSON.stringify(e.walkMarks)}`,
+  // The pass adds no verbs: every act in it is one you could perform at any
+  // time. What it adds is the marking of what it is asking you about.
+  'THE PASS ADDS NO VERBS, only the marking of what it is asking about',
+  e.marked > 0,
+  `${e.marked} rows marked while the pass is open`,
 )
 check(
-  'MOVEMENT 3 CHOOSES, and the drop marks are gone by then',
-  // One control per movement. Two at once is a form, and this is not one.
-  /today/i.test(e.movement3 ?? '') && e.chooseMarks?.pick > 0 && e.chooseMarks?.drop === 0,
-  `${JSON.stringify(e.movement3)} \u00b7 ${JSON.stringify(e.chooseMarks)}`,
-)
-check(
-  'and the finish says what it is about to leave behind',
-  Array.isArray(e.doneSays) && e.doneSays.some(one => /Done, 1 for today/.test(one)),
-  JSON.stringify(e.doneSays),
+  'and choosing for today is a verb on the row, not a stage of the pass',
+  Array.isArray(e.chosen) && e.chosen.length === 1,
+  JSON.stringify(e.chosen),
 )
 check(
   'THE PASS LEAVES AN ARTIFACT, which is what separates it from the walk',
   // The walk's product was attention and nothing else. Reorient ends with the
   // day's selection, and it outlives the pass.
-  Array.isArray(e.kept) && e.kept.length === 1 && e.movementAfter === 0,
-  `kept ${JSON.stringify(e.kept)} \u00b7 bars after ${e.movementAfter}`,
+  Array.isArray(e.kept) && e.kept.length === 1 && e.passOver === true,
+  `kept ${JSON.stringify(e.kept)} \u00b7 pass over ${e.passOver}`,
 )
 check(
   'and the chosen row is still in the list below it (H9)',
