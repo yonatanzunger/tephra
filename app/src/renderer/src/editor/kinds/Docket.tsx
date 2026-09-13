@@ -529,13 +529,16 @@ export function DocketSurface({
               onCommit={(name, shape) => {
                 setAdding(null)
                 if (name.trim() === '') return
+                // **Folded on arrival.** It used to open itself, on the
+                // reasoning that the seeded step is the first thing anybody
+                // will want to change — but that step's text *is* the matter's
+                // name (D76), so unfolding showed one line repeating the
+                // heading above it. The same redundancy the horizon had to
+                // suppress when it stopped printing a matter's name beside a
+                // row that already said it. Reported from use.
                 void act(window.tephra.docket.add(
                   id, name, shape, section.name === '' ? undefined : section.name,
-                )).then(made => {
-                  // **Opened on arrival**, because the step it was seeded with
-                  // is the first thing anybody will want to say differently.
-                  if (typeof made === 'string') show(made, true)
-                })
+                ))
               }}
             />
           ) : (

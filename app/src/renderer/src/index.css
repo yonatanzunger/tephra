@@ -2007,8 +2007,18 @@ body {
 
 /* **The question the conversation is about.** Tabular so a column of dates
    lines up, and visibly a *state* when there is not one yet. */
+/* **A fixed slot, so the column of disclosures is straight.** The row flushes
+   right, so every element's own width decides where its neighbours land: a date
+   reading `2026-09-17` on one row and `no date yet` on the next put their
+   disclosures at different x, and a ragged column of them is the kind of thing
+   you cannot stop seeing once you have seen it. Reported from use.
+
+   **Wrapping rather than truncating**, because the slot also holds sentences —
+   *every 90 days after it is done* — and a schedule clipped to fit would be
+   hiding what the row is for to tidy its edge. Right-aligned, so the common
+   short cases sit against the disclosure they belong to. */
 .docket-when {
-  flex: 0 0 auto; cursor: text;
+  flex: 0 0 13rem; text-align: right; cursor: text;
   font-variant-numeric: tabular-nums; font-size: 14px;
   color: rgb(var(--text)); background: none;
   border: 0; border-radius: 5px; padding: .05rem .3rem;
@@ -2185,8 +2195,11 @@ body {
 /* **Activate is the loudest thing in a backlogged row**, because it is the one
    act that row is for; suspend is its quiet inverse, since stopping is rarer
    than starting and should not invite a stray click. */
+/* **Fixed too, and for the same reason**: *activate* and *suspend* are different
+   widths, so an unfixed action shifts everything left of it exactly as the date
+   did. Both slots have to be fixed or neither is. */
 .docket-start {
-  flex: none; font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  flex: 0 0 5.25rem; font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
   color: rgb(var(--text)); background: rgb(var(--surface));
   border: 1px solid rgb(var(--border)); border-radius: 5px; padding: .1rem .4rem;
   margin-left: .5rem;

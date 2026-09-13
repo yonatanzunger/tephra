@@ -2949,6 +2949,14 @@ export async function runVerify(request: string): Promise<void> {
         const row = [...document.querySelectorAll('.docket-row')].find(
           r => (r.querySelector('.docket-name')?.textContent ?? '').includes('boiler'),
         )
+        // **Unfold it first.** A new matter arrives folded now (MH4, from use):
+        // its one seeded step's text IS its name, so opening on arrival showed a
+        // line repeating the heading above it. `+ step` only exists while the
+        // steps do, which is the rule that made this necessary.
+        if (row?.querySelector('.docket-step') === null) {
+          ;(row?.querySelector('.docket-open') as HTMLElement | null)?.click()
+          await settle(300)
+        }
         const runup = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
           b => (b.textContent ?? '').trim() === '+ step',
         ) as HTMLElement | null
@@ -3325,11 +3333,20 @@ export async function runVerify(request: string): Promise<void> {
           [...document.querySelectorAll('.docket-row')].find(
             r => (r.querySelector('.docket-name')?.textContent ?? '').includes(word),
           )
-        /** Show a matter's steps, since they are folded away by default. */
-        const openUp = (word: string): void => {
+        /**
+         * Show a matter's steps, since they are folded away by default.
+         *
+         * **Awaited, or the caller looks before React has drawn.** This clicked
+         * and returned synchronously, which was invisible while a new matter
+         * opened itself — there was nothing to unfold. Once a new matter arrives
+         * folded (MH4), every later block began typing into a row that did not
+         * exist yet, and ten checks failed at the wrong end of the scene.
+         */
+        const openUp = async (word: string): Promise<void> => {
           const row = rowOf(word)
           if (row?.querySelector('.docket-steps') !== null) return
           ;(row?.querySelector('.docket-open') as HTMLElement | null)?.click()
+          await settle(350)
         }
         const stepsOf = (word: string): { when: string; what: string; done: boolean }[] =>
           [...(rowOf(word)?.querySelectorAll('.docket-step:not(.new)') ?? [])].map(one => ({
@@ -3347,7 +3364,7 @@ export async function runVerify(request: string): Promise<void> {
          * later block typed into a row that was no longer there.
          */
         const openAdd = async (word: string): Promise<void> => {
-          openUp(word)
+          await openUp(word)
           const row = rowOf(word)
           if (row?.querySelector('.docket-step.new') !== null) return
           const toggle = [...(row?.querySelectorAll('.docket-quiet') ?? [])].find(
@@ -3397,7 +3414,7 @@ export async function runVerify(request: string): Promise<void> {
         // actually typed, and which used to do nothing at all: the row returned
         // silently on an empty schedule, so the key looked broken.
         await addStep('car', '', 'find a suitable shop')
-        openUp('car')
+        await openUp('car')
         say('firstStep', stepsOf('car'))
         // **Stays open for the next step**, so a sequence is typed in one go.
         say('rowWaitsForTheNext', {
@@ -3430,7 +3447,7 @@ export async function runVerify(request: string): Promise<void> {
             .find(m => m.name === 'The car needs fixing')
             ?.steps.find(one => one.text === 'find a suitable shop')?.id ?? ''
         await addStep('car', `after ${shopId}`, 'have the car fixed')
-        openUp('car')
+        await openUp('car')
         say('chained', stepsOf('car'))
 
         // **A bad `when` must not eat the typing** — reported from use as *it
@@ -3496,6 +3513,9 @@ export async function runVerify(request: string): Promise<void> {
         if (upkeep[2] !== undefined) set(upkeep[2], '90d')
         upkeep[2]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         await settle(1800)
+        // Unfolded first: steps are put away by default now (MH4), so asking
+        // how many a matter has without opening it counts a folded list.
+        await openUp('mower')
         say('keepUp', {
           when: rowOf('mower')?.querySelector('.docket-when')?.textContent ?? null,
           steps: (rowOf('mower')?.querySelectorAll('.docket-step:not(.new)').length ?? 0),
@@ -3543,7 +3563,7 @@ export async function runVerify(request: string): Promise<void> {
             // the whole point: that write came from outside this view, the way
             // generation will. Nothing was clicked between the verb and this.
             await settle(600)
-            openUp('car')
+            await openUp('car')
             await settle(200)
             say('surfaceHeard', stepsOf('car').some(one =>
               one.what === 'find a suitable shop' && one.done))
