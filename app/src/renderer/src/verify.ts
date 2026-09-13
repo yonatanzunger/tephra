@@ -1803,6 +1803,29 @@ export async function runVerify(request: string): Promise<void> {
         [...document.querySelectorAll(sel)].map(n => (n.textContent ?? '').trim())
 
       say('todayBefore', document.querySelectorAll('.todo-today').length)
+      // **The right-hand group is one row, not four boxes at four heights.**
+      // Tags, owner, due date and the pick control were added at different
+      // times and two of them missed the row's shared nudge; the result was
+      // visibly ragged. Asked of the geometry, since that is the complaint.
+      {
+        const tops = (sel: string): number[] => [...document.querySelectorAll(sel)]
+          .map(n => Math.round(n.getBoundingClientRect().top))
+        say('rowBoxes', {
+          tag: tops('.todo-row .todo-tag')[0] ?? null,
+          owner: tops('.todo-row .todo-owner')[0] ?? null,
+          due: tops('.todo-row .todo-due')[0] ?? null,
+          pick: tops('.todo-row .todo-pick')[0] ?? null,
+        })
+        // And the owner is not drawn as a tag, which is the other half.
+        const shape = (sel: string): string | null => {
+          const el = document.querySelector(sel)
+          if (el === null) return null
+          const css = getComputedStyle(el)
+          return `${css.backgroundColor}|${css.borderRadius}`
+        }
+        say('ownerVsTag', { owner: shape('.todo-owner'), tag: shape('.todo-tag') })
+        say('pickSays', document.querySelector('.todo-pick')?.textContent?.trim() ?? '')
+      }
 
       /**
        * **Driven through the real gesture**, not through the verb underneath it.

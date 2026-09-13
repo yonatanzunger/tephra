@@ -701,7 +701,7 @@ export class TodoDocument extends SegmentedDocument {
 }
 
 const EMPTY_ITEM: TodoItem = {
-  id: null, status: 'todo', ctime: null, mtime: null,
+  id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null,
   text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
 }
 

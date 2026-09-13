@@ -7,7 +7,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  groupByTag, isLive, itemLine, parseItem, resolveDue, scanItems, unusedItemId,
+  groupByTag, isLive, itemLine, parseItem, resolveDue, scanItems, spellOwner, unusedItemId,
+  withoutMarks,
   type TodoItem, type TodoStatus,
 } from '../../../src/shared/kinds/todo.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
@@ -195,7 +196,7 @@ test('ids are eight characters and avoid what is taken', () => {
 
 test('an item with no text is still a line', () => {
   const empty: TodoItem = {
-    id: null, status: 'todo', ctime: null, mtime: null,
+    id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null,
     text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
   }
   assert.equal(itemLine(empty), '- [ ]')
@@ -274,4 +275,33 @@ test('every item reaches the view, whatever its status', () => {
     item('- [>] reroof #house'),
   ]
   assert.equal(groupByTag(items)[0]?.items.length, items.length)
+})
+
+// ── who has it (OWNER) ──────────────────────────────────────
+
+test('OWNER is read off the line, like DUE and for the same reasons', () => {
+  const item = parseItem('- [ ] ring the plumber OWNER Sam') as TodoItem
+  assert.equal(item.owner, 'Sam')
+  assert.equal(withoutMarks(item), 'ring the plumber')
+})
+
+test('and a name that needs quoting gets it, sharing the tag grammar', () => {
+  assert.equal(spellOwner('Mary Jane'), "OWNER 'Mary Jane'")
+  assert.equal((parseItem("- [ ] ring the plumber OWNER 'Mary Jane'") as TodoItem).owner, 'Mary Jane')
+  // The escape the tag grammar grew, working here for free.
+  assert.equal((parseItem("- [ ] x OWNER 'Bill O\\'Brien'") as TodoItem).owner, "Bill O'Brien")
+})
+
+test('and it comes off with the other marks, being a fact ABOUT the task', () => {
+  // Which is the whole argument for a marker over `(owner: Sam)` in the title:
+  // text in the sentence cannot be taken off for a summary.
+  const item = parseItem("- [ ] ring the plumber #house OWNER Sam DUE 2026-09-20") as TodoItem
+  assert.equal(withoutMarks(item), 'ring the plumber')
+  assert.equal(item.owner, 'Sam')
+  assert.deepEqual(item.tags, ['house'])
+  assert.equal(item.due, '2026-09-20')
+})
+
+test('and a line with no owner says so, rather than guessing one', () => {
+  assert.equal((parseItem('- [ ] ring the plumber') as TodoItem).owner, null)
 })

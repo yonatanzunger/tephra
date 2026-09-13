@@ -20,7 +20,7 @@
 import { flattenLinks } from '../links.ts'
 import type { DateKey } from '../document-api.ts'
 import { addDays, nowSeconds, weekdayOf } from '../dates.ts'
-import { readTag, tagMark } from '../tags.ts'
+import { NAME_BODY, readName, readTag, spellName, tagMark } from '../tags.ts'
 
 /**
  * What an item is, in the order era 1 wrote them on paper (T4).
@@ -91,6 +91,8 @@ export interface TodoItem {
   readonly text: string
   readonly tags: readonly string[]
   readonly due: DateKey | null
+  /** Who has this, or null. `OWNER Sam` where you can see it (T16). */
+  readonly owner: string | null
   /**
    * Why it is blocked, and **only when it is blocked** (T4).
    *
@@ -132,6 +134,8 @@ export interface TodoItem {
   readonly tagSpans: readonly TextSpan[]
   /** Where `DUE <date>` sits in `text`, for `setDue` to replace or clear. */
   readonly dueSpan: TextSpan | null
+  /** Where `OWNER <name>` sits, for the same reason. */
+  readonly ownerSpan: TextSpan | null
 }
 
 /** One item, and where its line is in the body. */
@@ -206,11 +210,49 @@ export function shortLine(item: TodoItem): string {
  * opinion about it.
  */
 export function withoutMarks(item: TodoItem): string {
-  const spans = [...item.tagSpans, ...(item.dueSpan === null ? [] : [item.dueSpan])]
-    .sort((a, b) => b.from - a.from)
+  const spans = [
+    ...item.tagSpans,
+    ...(item.dueSpan === null ? [] : [item.dueSpan]),
+    // **The owner comes off with the rest**, being the same kind of thing: a
+    // fact about the task rather than part of what somebody wrote. That is the
+    // whole argument for it being a marker — text in the sentence could not be
+    // taken off for a summary, and every surface would carry it whether it had
+    // room or not.
+    ...(item.ownerSpan === null ? [] : [item.ownerSpan]),
+  ].sort((a, b) => b.from - a.from)
   let text = item.text
   for (const span of spans) text = text.slice(0, span.from) + text.slice(span.to)
   return text.replace(/\s{2,}/g, ' ').trim()
+}
+
+/**
+ * `OWNER <name>` — who has this, in the line where you can see it (T16).
+ *
+ * **A marker rather than words in the sentence.** The first proposal was
+ * `(owner: Sam)` in the title, which is the shape a tag replaced for the matter
+ * name and for the same reasons: text in the sentence cannot be filtered on,
+ * cannot be stripped for a summary, and reads as part of what somebody wrote
+ * when it is a fact *about* what they wrote.
+ *
+ * **And not a tag either.** Tags are subjects, and T5 scopes them to things that
+ * turn over on the timescale of a week; people do not, and a household's names
+ * mixed into the subject namespace would make every tag list a directory.
+ *
+ * **Uppercase, beside `DUE`**, because those are the two facts a task line
+ * carries about itself rather than about its subject — and the vocabulary is
+ * small enough that a second convention would be worse than a second member.
+ * The name quotes and escapes exactly as a tag's does (`NAME_BODY`), so a
+ * household with a *Mary Jane* in it needs no new rule.
+ *
+ * **Useful beyond dockets**: a task somebody typed can say who has it too,
+ * which is why this is the task grammar's and not the docket's.
+ */
+const OWNER = new RegExp(`\\bOWNER\\s+${NAME_BODY}`)
+
+/** `OWNER <name>` as this grammar writes it, or null if it cannot be said. */
+export function spellOwner(name: string): string | null {
+  const body = spellName(name)
+  return body === null ? null : `OWNER ${body}`
 }
 
 /** `DUE <date>`, uppercase, because era 1 drew it in large letters (T9). */
@@ -324,6 +366,7 @@ export function parseItem(line: string): TodoItem | null {
   }
 
   const d = DUE.exec(text)
+  const o = OWNER.exec(text)
   return {
     id,
     status,
@@ -332,12 +375,14 @@ export function parseItem(line: string): TodoItem | null {
     text,
     tags,
     due: d === null ? null : ((d[1] as string) as DateKey),
+    owner: o === null ? null : readName(o).trim(),
     reason,
     // **The line is a line.** Notes live under it and are gathered by
     // `scanItems`, which is the only caller that can see them.
     notes: [],
     tagSpans,
     dueSpan: d === null ? null : { from: d.index, to: d.index + d[0].length },
+    ownerSpan: o === null ? null : { from: o.index, to: o.index + o[0].length },
   }
 }
 

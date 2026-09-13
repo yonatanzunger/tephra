@@ -1291,6 +1291,16 @@ function Row({
         </span>
       )}
 
+      {/* **Who has it, beside what it is about.** Drawn rather than left in the
+          sentence, which is the point of it being a marker: it reads as a fact
+          about the task and comes off cleanly wherever there is no room for it
+          (`withoutMarks`). Distinct from a tag, because a person is not a
+          subject — T5 scopes those to things that turn over weekly. */}
+      {item.owner !== null && (
+        <span className="todo-owner" title={`${item.owner} has this`}>{item.owner}</span>
+      )}
+
+
       {item.due !== null && (
         <span className={`todo-due${today !== null && overdue(item, today) ? ' overdue' : ''}`}>
           {today === null ? item.due : when(item.due, today)}
@@ -1300,7 +1310,7 @@ function Row({
       {onChoose !== undefined && (
         <button
           type="button"
-          className="todo-pick"
+          className="pill control todo-pick"
           aria-pressed={picked}
           title={picked ? 'Take it off today' : 'Do this one today'}
           onClick={e => {
@@ -1308,7 +1318,11 @@ function Row({
             onChoose()
           }}
         >
-          {picked ? 'Not today' : 'Today'}
+          {/* **A verb, because the adverb was taken.** The due date beside it
+              already says *today*, and a button saying the same word was a pair
+              nobody could tell apart — reported from use in those terms. What
+              this does is choose, so it says so. */}
+          {picked ? 'not today' : 'do today'}
         </button>
       )}
 

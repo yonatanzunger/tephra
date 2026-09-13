@@ -1462,7 +1462,7 @@ test('THE POINT OF THE PHASE: a docket puts work on the list', async t => {
   const list = await service.todoList()
   const items = await service.todoItems(list, service.today)
   assert.deepEqual(items.map(withoutMarks), ['The car needs fixing'])
-  assert.deepEqual(items.flatMap(one => one.tags), ['The car needs fixing'], 'and tagged with it')
+  assert.deepEqual(items.flatMap(one => one.tags), ['The house'], 'tagged with its docket')
   assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
 })
 
@@ -2088,11 +2088,15 @@ test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', as
   const list = await service.todoList()
   const items = await service.todoItems(list, service.today)
   assert.deepEqual(items.map(one => one.text).sort(), [
-    "Kia repairs #'Kia repairs' DUE 2026-03-10",
-    "find a general mechanic #'Kia repairs' DUE 2026-03-10",
+    // **The docket always; the matter only where it adds something.** The seeded
+    // step's text IS the matter's name (D76), so tagging it with that says one
+    // thing twice — a chip repeating the sentence beside it reads as a fault.
+    "Kia repairs #'The house' DUE 2026-03-10",
+    "find a general mechanic #'Kia repairs' #'The house' DUE 2026-03-10",
   ])
-  // And it is a real tag, not text that looks like one.
-  assert.deepEqual([...new Set(items.flatMap(one => one.tags))], ['Kia repairs'])
+  // And they are real tags, not text that looks like one.
+  assert.deepEqual([...new Set(items.flatMap(one => one.tags))].sort(),
+    ['Kia repairs', 'The house'])
 })
 
 test("and a name with an apostrophe is tagged too — Ada's birthday", async t => {
@@ -2106,8 +2110,8 @@ test("and a name with an apostrophe is tagged too — Ada's birthday", async t =
   const list = await service.todoList()
   const items = await service.todoItems(list, service.today)
   assert.deepEqual(items.map(withoutMarks), ["Ada's birthday"])
-  assert.deepEqual(items.flatMap(one => one.tags), ["Ada's birthday"],
-    'read back whole, apostrophe and all')
+  assert.deepEqual(items.flatMap(one => one.tags), ['The house'],
+    'the docket, the matter being what the step already says')
 })
 
 test('and the way back exists: an item says which matter made it', async t => {
@@ -2246,4 +2250,69 @@ test('and the horizon does not show it twice, the two sources staying disjoint',
   const rows = await service.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
   assert.deepEqual(rows.map(one => [one.on, one.kind, one.text]),
     [['2026-03-10', 'due', 'Change the water filter']], 'once, as a dated task')
+})
+
+test("and a matter's own tag is dropped only when the STEP already says it", async t => {
+  // The rule is about redundancy, not about single-step matters: a matter with
+  // three steps whose first repeats its name drops it on that one and keeps it
+  // on the others, because that is where the fact is and is not.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('Burrow', undefined, 'docket')
+  const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
+  await service.docketAddStep(id, kia, '+0d', 'book the garage')
+  await service.docketActivate(id, kia)
+
+  const list = await service.todoList()
+  const items = await service.todoItems(list, service.today)
+  assert.deepEqual(
+    items.map(one => [withoutMarks(one), [...one.tags].sort()]).sort(),
+    [
+      ['Kia repairs', ['Burrow']],
+      ['book the garage', ['Burrow', 'Kia repairs']],
+    ],
+  )
+})
+
+test('and every generated task carries its DOCKET, which is the link back', async t => {
+  // The docket is the durable grouping — the house, work, games — so it is the
+  // tag somebody would actually pivot the list on.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const house = await service.newDocument('The house', undefined, 'docket')
+  const work = await service.newDocument('Work', undefined, 'docket')
+  const boiler = await service.docketAdd(house, 'Service the boiler', { mode: 'task' })
+  const talk = await service.docketAdd(work, 'The ACM talk', { mode: 'task' })
+  await service.docketActivate(house, boiler)
+  await service.docketActivate(work, talk)
+
+  const list = await service.todoList()
+  assert.deepEqual(
+    (await service.todoItems(list, service.today))
+      .map(one => [withoutMarks(one), one.tags.join('')]).sort(),
+    [['Service the boiler', 'The house'], ['The ACM talk', 'Work']],
+  )
+})
+
+test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
+  // Whoever has the matter has the task it generates — and it travels as
+  // `OWNER Sam` rather than as words in the title, so the list can be asked
+  // *what does Sam have* and a summary can take it off again.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const tap = await service.docketAdd(id, 'Fix the dripping tap', { mode: 'task' })
+  await service.docketSetOwner(id, tap, 'Sam')
+  await service.docketActivate(id, tap)
+
+  const list = await service.todoList()
+  const item = (await service.todoItems(list, service.today))[0]
+  assert.equal(item?.owner, 'Sam')
+  assert.equal(withoutMarks(item as never), 'Fix the dripping tap')
+})
+
+test('and a matter with no owner generates a task with none, not an empty one', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const tap = await service.docketAdd(id, 'Fix the dripping tap', { mode: 'task' })
+  await service.docketActivate(id, tap)
+  const list = await service.todoList()
+  assert.equal((await service.todoItems(list, service.today))[0]?.owner, null)
 })

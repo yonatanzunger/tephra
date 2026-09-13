@@ -937,7 +937,10 @@ body {
 .todo-row, .todo-adding {
   --note-lift: calc((1em * var(--todo-leading, 1.5) - var(--row-note) * 1.7) / 2);
 }
-.todo-tags, .todo-due { margin-top: var(--note-lift); }
+/* **Everything in the right-hand group shares one nudge.** The row is
+   `flex-start`, so each of these sits where its own box puts it — two of them
+   were added without the lift and the group came out visibly ragged. */
+.todo-tags, .todo-due, .todo-owner, .todo-pick { margin-top: var(--note-lift); }
 .todo-tags { display: flex; flex-wrap: wrap; gap: .25rem; flex: 0 0 auto; }
 /* Shape and colour come from `.pill.label`; a tag adds nothing but its place
    in the row. It was 10.5px inside 20px prose, which is half the size of the
@@ -2017,8 +2020,10 @@ body {
    *every 90 days after it is done* — and a schedule clipped to fit would be
    hiding what the row is for to tidy its edge. Right-aligned, so the common
    short cases sit against the disclosure they belong to. */
+/* Each clause of the sentence holds together; the commas are where it breaks. */
+.docket-clause { white-space: nowrap; }
 .docket-when {
-  flex: 0 0 13rem; text-align: right; cursor: text;
+  flex: 0 0 15.5rem; text-align: right; cursor: text;
   /* **The UI face, not the notebook's.** A date is apparatus — it is not
      something anybody wrote — and the reading serif was inherited by default
      rather than chosen. At 14px its figures antialias badly beside the crisp
@@ -2393,15 +2398,10 @@ body {
 
 /* Movement 3's mark. Same size and place as movement 2's, because they are the
    same kind of thing: one control, for the length of one movement. */
-.todo-pick {
-  flex: none; font-family: var(--font-ui); font-size: 11px; cursor: pointer;
-  color: rgb(var(--text-muted)); background: none;
-  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .05rem .35rem;
-}
-.todo-pick:hover { border-color: rgb(var(--accent) / .6); color: rgb(var(--text)); }
-.todo-pick[aria-pressed='true'] {
-  color: rgb(var(--accent)); border-color: rgb(var(--accent) / .6);
-}
+/* Shape, colour and pressed state all come from `.pill.control`, which is what
+   *something you can do* already looks like everywhere else in this app — and
+   which shares the row's one box, so it lines up without a second magic number. */
+.todo-pick { flex: 0 0 auto; }
 
 /* ── the working view: what you are doing, and what is coming (MH4) ─────────
    **One surface, two halves.** Amends D74: the horizon was a location of its
@@ -2529,3 +2529,24 @@ body {
 .sched-peek { white-space: nowrap; }
 .sched-done { display: flex; justify-content: flex-end; }
 .docket-when.open { color: rgb(var(--text-muted)); }
+
+/* **Who has it** (`OWNER <name>`) — and **not a chip**, which is the correction.
+   A person is not a subject, so drawing it as one more rounded box beside the
+   tags made two different kinds of fact look like the same kind: *Yonatan* and
+   *Clean air filters* were the same shape, and the eye had to read them to tell
+   them apart. Reported from use.
+
+   Plain words, spaced and quiet, in the box the pill uses so the row stays
+   level. It says WHO, and who is not what. */
+.todo-owner {
+  flex: 0 0 auto; white-space: nowrap;
+  display: inline-block; line-height: 1.5; padding: .1em 0;
+  border: 1px solid transparent;
+  font-family: var(--font-ui); font-size: var(--row-note);
+  /* **Spelled the way they spell it.** Uppercasing read as a label and made the
+     shape unmistakable, at the cost of turning *Sam* into *SAM* — a typographic
+     decision overriding somebody's own about their name. The sans face and the
+     absence of a chip are difference enough. */
+  letter-spacing: .02em;
+  color: rgb(var(--text-muted) / .9);
+}

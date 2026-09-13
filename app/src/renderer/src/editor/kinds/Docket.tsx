@@ -40,7 +40,7 @@
 // an optional feature that clutters the surface of everyone not using it has
 // been paid for by the wrong people.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
 import { RowMenu, type RowMenuRequest } from '../../frame/RowMenu'
 import {
@@ -903,7 +903,21 @@ function Row({
             onClick={() => onEdit('when')}
             title="When this happens, and what sort of thing it is"
           >
-            {read}
+            {/* **Broken only at the commas.** *every 90 days, started 2026-09-13*
+                wrapped inside the date — `2026-09-` on one line and `13` on the
+                next — because a hyphen is a break opportunity and the column is
+                narrow. Each clause is held together and the separators are where
+                it may break, which is where a reader would break it.
+
+                Done here rather than by putting non-breaking characters in the
+                string: the slug is also read by tests and would then differ from
+                what it says. */}
+            {read.split(', ').map((part, at) => (
+              <Fragment key={part}>
+                {at > 0 && ', '}
+                <span className="docket-clause">{part}</span>
+              </Fragment>
+            ))}
           </button>
         )}
 

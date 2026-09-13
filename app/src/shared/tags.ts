@@ -14,6 +14,15 @@ export function subjectKey(name: string): string {
 }
 
 /**
+ * **Written as a regex literal, not a string.** As a string it needed three
+ * layers of backslash to say one, and `[^'\\\\\\n]` came out as *not a quote
+ * and not an actual newline character* — which matched a backslash happily and
+ * broke every escaped name. A literal has one layer and can be read.
+ */
+const NAME_PART = /(?:'((?:[^'\\\n]|\\.)+)'|([A-Za-z0-9][\w-]*))/
+export const NAME_BODY = NAME_PART.source
+
+/**
  * How a subject is written inline: `#house`, and `#'house deal'` when it has
  * spaces — the same two-form idea as a markdown link destination, and for the
  * same reason: the plain form is what anybody types and the quoted form is what
@@ -31,8 +40,7 @@ export function subjectKey(name: string): string {
  * `lastIndex`, so one instance shared between two scanners is a bug that only
  * appears when both run.
  */
-export const TAG_MARK =
-  "(?<![\\w#])#(?:'((?:[^'\\\\\\n]|\\\\.)+)'|([A-Za-z0-9][\\w-]*))"
+export const TAG_MARK = `(?<![\\w#])#${NAME_BODY}`
 
 export const tagMark = (flags = 'g'): RegExp => new RegExp(TAG_MARK, flags)
 
@@ -52,22 +60,41 @@ export const tagMark = (flags = 'g'): RegExp => new RegExp(TAG_MARK, flags)
  * chooses what to do instead of silently writing something that means something
  * else. Extending the grammar to admit them is a real change and belongs in one.
  */
-export function spellTag(name: string): string | null {
-  // **A newline becomes a space rather than an escape.** A tag mark lives inside
-  // one line of a file people read and edit by hand; a `\n` escape in it would
-  // mean a tag that spans lines in the bytes and not on the page, which is the
-  // kind of cleverness that costs somebody an afternoon later. A subject named
-  // across two lines is a subject named with a space in it.
+/**
+ * A name as this file's grammars write one: bare where it can be, quoted where
+ * it must be, escaped where the quotes would not survive.
+ *
+ * **One set of rules, because there is now more than one marker using them.** A
+ * tag is `#name`, an owner is `OWNER name`, and what may follow either is the
+ * same question — so it is answered once. The body pattern below is shared with
+ * `TAG_MARK` and `OWNER_MARK`, and if they drift the notation has two dialects.
+ */
+
+export function spellName(name: string): string | null {
+  // **A newline becomes a space rather than an escape.** These marks live inside
+  // one line of a file people read and edit by hand; a `\n` escape would mean a
+  // name that spans lines in the bytes and not on the page, which is the kind of
+  // cleverness that costs somebody an afternoon later.
   const said = name.replace(/\s+/g, ' ').trim()
   if (said === '') return null
-  if (/^[A-Za-z0-9][\w-]*$/.test(said)) return `#${said}`
+  if (/^[A-Za-z0-9][\w-]*$/.test(said)) return said
   // **Escaped, not refused.** The first cut returned null for a name holding an
   // apostrophe, on the grounds that the quoted form had no way to say one —
   // which is a fair reading of the grammar and an absurd thing to do to *Ada's
   // birthday*. The grammar grew the escape instead; it is the same one
-  // `query-text.ts` already uses for quoted phrases, so the notation gained
-  // nothing new, only a second place that speaks it.
-  return `#'${said.replace(/[\\']/g, m => `\\${m}`)}'`
+  // `query-text.ts` already uses for quoted phrases.
+  return `'${said.replace(/[\\']/g, m => `\\${m}`)}'`
+}
+
+/** What a match of either marker actually names, with its escapes undone. */
+export const readName = (found: RegExpMatchArray, at = 1): string =>
+  found[at] === undefined
+    ? (found[at + 1] ?? '')
+    : found[at].replace(/\\(.)/g, (_m, ch: string) => ch)
+
+export function spellTag(name: string): string | null {
+  const body = spellName(name)
+  return body === null ? null : `#${body}`
 }
 
 /**

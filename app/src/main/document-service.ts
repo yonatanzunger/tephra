@@ -45,7 +45,7 @@ import { systemZone } from './system-zone.ts'
 import { isKnownZone } from '../shared/dates.ts'
 import { readSettings, writeSettings } from './w/settings.ts'
 import { TodoDocument } from './x/documents/kinds/todo.ts'
-import { isLive, RESOLVED_DAYS, shortLine } from '../shared/kinds/todo.ts'
+import { isLive, RESOLVED_DAYS, shortLine, spellOwner } from '../shared/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { LOCAL } from './w/layout.ts'
@@ -2245,6 +2245,11 @@ export class DocumentService {
     )
     for (const docket of await this.#corpus.list('docket')) {
       let touched = false
+      // **What the docket is CALLED**, for the tag every task it generates
+      // carries. The same rule `dockets()` uses: the person's words, falling
+      // back to the slug of them, which is the only other name a document has.
+      const domain = (await this.#corpus.use(docket, doc => doc.titleOf(ONLY_SEGMENT)))
+        ?? nameOf(docket as string)
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
       for (const id of (await this.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
@@ -2267,8 +2272,25 @@ export class DocumentService {
             // happen, which for a run-up step is its own day and not the
             // occasion's. Being overdue afterwards is correct and is what H7a
             // asks for — outstanding is shown, never quietly reissued.
-            const mark = spellTag(matter.name)
-            const item = await this.todoAdd(list, [step.text, mark, `DUE ${due}`]
+            // **The DOCKET is always a tag; the matter only when it adds
+            // something.** The docket is the durable grouping — the house, work,
+            // games — so tagging with it is the conceptual link back to where the
+            // task came from, and it is the tag somebody would actually pivot on.
+            //
+            // The matter is dropped when its name IS the step's text, which is
+            // the common single-step case (D76 seeds exactly that): *Change the
+            // water filter #'Change the water filter'* says one thing twice, and
+            // a chip repeating the sentence beside it reads as a fault.
+            // **Whoever has the matter has the work it makes.** The owner is a
+            // fact about the task and travels as a marker rather than as words in
+            // its title, for the reason the matter's name became a tag: text in
+            // the sentence cannot be filtered on or taken off for a summary.
+            const marks = [
+              matter.name.trim() === step.text.trim() ? null : spellTag(matter.name),
+              spellTag(domain),
+              matter.owner === null ? null : spellOwner(matter.owner),
+            ]
+            const item = await this.todoAdd(list, [step.text, ...marks, `DUE ${due}`]
               .filter(one => one !== null && one !== '')
               .join(' '))
             // **The matter is a TAG, not a prefix.** On the list a step's text
