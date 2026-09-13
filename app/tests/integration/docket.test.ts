@@ -93,7 +93,7 @@ test('THE BLOCK RULE: editing one matter leaves the others byte-identical', asyn
     '',
   ].join('\n'))
 
-  await doc.setWhen('bbbb2222', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  await doc.setWhen('bbbb2222', { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
   const text = await file()
 
   assert.match(text, /^## Repaint the house\nmode: \w+\nstart: —\nevery: 90d$/m)
@@ -143,7 +143,7 @@ test('ids are unique against the corpus, not merely against this file', async t 
 
 test('the verbs each rewrite one block', async t => {
   const { doc, file } = await docket(t)
-  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null })
+  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null, dates: null })
   await doc.tagMatter(id, 'speaking')
   await doc.setOwner(id, 'me')
   await doc.setLink(id, '../notes/acm.md')
@@ -155,7 +155,7 @@ test('the verbs each rewrite one block', async t => {
   assert.deepEqual(matter.tags, ['speaking'])
   assert.equal(matter.owner, 'me')
   assert.equal(matter.link, '../notes/acm.md')
-  assert.deepEqual(matter.when, { start: '2026-11-12', every: null, after: null })
+  assert.deepEqual(matter.when, { start: '2026-11-12', every: null, after: null, dates: null })
   // And the id survived every one of them.
   assert.equal(matter.id, id)
   assert.match(await file(), new RegExp(`matter ${id} `))
@@ -391,7 +391,7 @@ test('renaming a docket keeps its matters, ids and all', async t => {
   const matters = await service.docketMatters(to)
   assert.equal(matters.length, 1)
   assert.equal(matters[0]?.id, matter, 'a rename moves the file; it does not remake the contents')
-  assert.deepEqual(matters[0]?.when, { start: '2026-10-14', every: null, after: null })
+  assert.deepEqual(matters[0]?.when, { start: '2026-10-14', every: null, after: null, dates: null })
 })
 
 // ── run-ups on a matter (MH1, H4) ──────────────────────────
@@ -402,7 +402,7 @@ test('THE RECONCILER: a matter carries its own steps', async t => {
   // setting can say both. D76 replaced the *window* with the step list, which
   // says the same thing in both directions rather than only backwards.
   const { doc, file } = await docket(t)
-  const id = await doc.add('Service the boiler', { start: '2026-10-14' as never, every: null, after: null })
+  const id = await doc.add('Service the boiler', { start: '2026-10-14' as never, every: null, after: null, dates: null })
   await doc.addStep(id, '2w', 'book the boiler service')
   const matter = (await doc.matters())[0]
   assert.equal(matter?.steps.length, 1)
@@ -419,7 +419,7 @@ test('and several are kept in the order they FIRE, not the order typed', async t
   // Two run-ups in the order they happened to be said is a list nobody can
   // scan; earliest-first is the order they are read and the order they will run.
   const { doc } = await docket(t)
-  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null })
+  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null, dates: null })
   await doc.addStep(id, '2w', 'draft the slides')
   await doc.addStep(id, '2m', 'start the outline')
   await doc.addStep(id, '3d', 'print the handout')
@@ -428,7 +428,7 @@ test('and several are kept in the order they FIRE, not the order typed', async t
 
 test('an offset after the date sorts last, because it fires last', async t => {
   const { doc } = await docket(t)
-  const id = await doc.add('A trip', { start: '2026-11-12' as never, every: null, after: null })
+  const id = await doc.add('A trip', { start: '2026-11-12' as never, every: null, after: null, dates: null })
   await doc.addStep(id, '+3d', 'file the expenses')
   await doc.addStep(id, '1w', 'pack')
   assert.deepEqual((await doc.matters())[0]?.steps.map(t => (t.when.kind === 'at' ? t.when.offset : 'after')), ['-1w', '+3d'])
@@ -445,7 +445,7 @@ test('a run-up that is not an offset is refused, and nothing is written', async 
 
 test('dropping one leaves the others and the rest of the matter alone', async t => {
   const { doc } = await docket(t)
-  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null })
+  const id = await doc.add('The ACM talk', { start: '2026-11-12' as never, every: null, after: null, dates: null })
   await doc.tagMatter(id, 'speaking')
   await doc.addStep(id, '2w', 'draft the slides')
   await doc.addStep(id, '3d', 'print the handout')
@@ -454,7 +454,7 @@ test('dropping one leaves the others and the rest of the matter alone', async t 
   const matter = (await doc.matters())[0]
   assert.deepEqual(matter?.steps.map(t => t.text), ['print the handout'])
   assert.deepEqual(matter?.tags, ['speaking'])
-  assert.deepEqual(matter?.when, { start: '2026-11-12', every: null, after: null })
+  assert.deepEqual(matter?.when, { start: '2026-11-12', every: null, after: null, dates: null })
   assert.equal(matter?.id, id)
 })
 
@@ -463,14 +463,14 @@ test('THE MEETING CASE: recurrence and its run-up, authored together', async t =
   // before* — which is the whole of what a planning conversation has to be able
   // to say. Nothing fires until MH3; saying it is what MH1 owes.
   const { doc, file } = await docket(t)
-  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
   await doc.addStep(id, '3d', 'change the air filters #house')
   const text = await file()
   assert.match(text, /^every: 90d$/m)
   assert.match(text, /^- -3d task: change the air filters #house <!--tephra:step [0-9a-z]{8}-->$/m)
   // And the whole thing survives a reread, which is what makes it a record.
   const matter = (await doc.matters())[0]
-  assert.deepEqual(matter?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
+  assert.deepEqual(matter?.when, { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.equal(matter?.steps.length, 1)
 })
 
@@ -511,7 +511,7 @@ test('and empty lines are dropped, because a note of nothing is no note', async 
 
 test('a note coexists with a run-up and neither eats the other', async t => {
   const { doc } = await docket(t)
-  const id = await doc.add('Service the boiler', { start: '2026-10-14' as never, every: null, after: null })
+  const id = await doc.add('Service the boiler', { start: '2026-10-14' as never, every: null, after: null, dates: null })
   await doc.addStep(id, '2w', 'book it')
   await doc.setNotes(id, ['The firm on the high street did the last one.'])
   const matter = (await doc.matters())[0]
@@ -525,24 +525,22 @@ test('THE ANCHOR: a recurrence records what it recurs from', async t => {
   // *Every ninety days* is not a schedule until you know ninety days from what,
   // and MH3 cannot reconstruct it — so it is recorded now or never.
   const { doc, file } = await docket(t)
-  const id = await doc.add('Change the air filters', {
-    start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null,
-  })
+  const id = await doc.add('Change the air filters', { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.match(await file(), /^start: 2026-10-01$/m)
   assert.match(await file(), /^every: 90d$/m)
   assert.deepEqual((await doc.matters())[0]?.when,
-    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
+    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null })
   void id
 })
 
 test('and setting one later is how a conversation actually goes', async t => {
   // *Every 90 days* is said first; *starting in October* is said second.
   const { doc } = await docket(t)
-  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null })
-  assert.deepEqual((await doc.matters())[0]?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
-  await doc.setWhen(id, { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null })
+  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
+  assert.deepEqual((await doc.matters())[0]?.when, { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
+  await doc.setWhen(id, { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.deepEqual((await doc.matters())[0]?.when,
-    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
+    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null })
 })
 
 test('an impossible date never reaches the file', async t => {
@@ -610,14 +608,14 @@ test('THE ID SURVIVES A MOVE, which is what makes it a move', async t => {
 
 test('and everything on it survives the move too', async t => {
   const { doc, kitchen } = await three(t)
-  await doc.setWhen(kitchen, { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null })
+  await doc.setWhen(kitchen, { start: '2026-10-01' as never, every: { n: 90, unit: 'd' }, after: null, dates: null })
   await doc.tagMatter(kitchen, 'house')
   await doc.addStep(kitchen, '2w', 'get quotes')
   await doc.setNotes(kitchen, ['Three firms quoted.'])
   await doc.addSection('Major projects')
   await doc.moveMatter(kitchen, 'Major projects')
   const moved = (await doc.matters()).find(m => m.id === kitchen)
-  assert.deepEqual(moved?.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
+  assert.deepEqual(moved?.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.deepEqual(moved?.tags, ['house'])
   assert.equal(moved?.steps.length, 1)
   assert.deepEqual(moved?.notes, ['Three firms quoted.'])
@@ -748,7 +746,7 @@ test('A HAND-WRITTEN DOCKET with sections is read as written', async t => {
   ])
   // Written in words, and read: the file is a person's to type in.
   const filters = (await doc.matters()).find(m => m.name === 'Change the air filters')
-  assert.deepEqual(filters?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
+  assert.deepEqual(filters?.when, { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
 })
 
 test('A DOCKET FROM BEFORE SECTIONS EXISTED still reads as its matters', async t => {
@@ -979,7 +977,7 @@ test('THE POINT OF MH3a: activating a backlog matter dates it TODAY', async t =>
   assert.deepEqual((await doc.matters())[0]?.when, UNSCHEDULED, 'inactive until somebody starts it')
   const started = await doc.activate(id, '2026-09-11' as never)
   assert.equal(started, '2026-09-11')
-  assert.deepEqual((await doc.matters())[0]?.when, { start: '2026-09-11', every: null, after: null })
+  assert.deepEqual((await doc.matters())[0]?.when, { start: '2026-09-11', every: null, after: null, dates: null })
   assert.match(await file(), /^start: 2026-09-11$/m)
 })
 
@@ -1012,11 +1010,11 @@ test('a matter with no steps activates to today, having nothing to lead', async 
 
 test('ACTIVATING A PERIODIC MATTER sets its anchor, not a one-off date', async t => {
   const { doc, file } = await docket(t)
-  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  const id = await doc.add('Change the air filters', { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
   await doc.addStep(id, 'right away', 'change the filters')
   await doc.activate(id, '2026-09-11' as never)
   assert.deepEqual((await doc.matters())[0]?.when,
-    { start: '2026-09-11', every: { n: 90, unit: 'd' }, after: null })
+    { start: '2026-09-11', every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.match(await file(), /^start: 2026-09-11$/m)
 })
 
@@ -1044,7 +1042,7 @@ test('and re-activating resumes rather than restarting', async t => {
   await doc.suspend(id)
   await doc.activate(id, '2026-10-01' as never)
   const matter = (await doc.matters())[0]
-  assert.deepEqual(matter?.when, { start: '2026-10-01', every: null, after: null })
+  assert.deepEqual(matter?.when, { start: '2026-10-01', every: null, after: null, dates: null })
   assert.equal(matter?.steps[0]?.done, 1789148616, 'still done: a pause is not a reset')
 })
 
@@ -1053,9 +1051,9 @@ test('SUSPENDING A PERIODIC MATTER keeps the interval and loses the anchor', asy
   // anchor is optional in the notation.
   const { doc, file } = await docket(t)
   const id = await doc.add('Change the air filters',
-    { start: '2026-09-11' as never, every: { n: 90, unit: 'd' }, after: null })
+    { start: '2026-09-11' as never, every: { n: 90, unit: 'd' }, after: null, dates: null })
   await doc.suspend(id)
-  assert.deepEqual((await doc.matters())[0]?.when, { start: null, every: { n: 90, unit: 'd' }, after: null })
+  assert.deepEqual((await doc.matters())[0]?.when, { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.match(await file(), /^every: 90d$/m)
 })
 
@@ -1065,7 +1063,7 @@ test('THE STATE IS THE DATE: there is no suspended flag anywhere', async t => {
   // same state wearing a rule.
   const { doc, file } = await docket(t)
   const a = await doc.add('Backlogged')
-  const b = await doc.add('Periodic, unstarted', { start: null, every: { n: 90, unit: 'd' }, after: null })
+  const b = await doc.add('Periodic, unstarted', { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
   await doc.activate(a, '2026-09-11' as never)
   await doc.suspend(a)
   const text = await file()
@@ -2120,4 +2118,84 @@ test('and the way back exists: an item says which matter made it', async t => {
   const list = await service.todoList()
   const mine = await service.todoAdd(list, 'something I typed myself')
   assert.equal(await service.matterFor(mine), null)
+})
+
+// ── an explicit list of instances (H7, restored) ────────────
+//
+// **Not a new idea: H7 asked for it and D76 withdrew it** for want of evidence.
+// The evidence is a game whose next few sessions are agreed in a chat thread —
+// neither one date nor a rule, so an interval would be a lie about it and a
+// matter per session would lose the identity recurrence exists to keep (H7a).
+
+test('THE POINT: a matter can have its instances listed rather than computed', async t => {
+  const { service } = await serviced(t, '2026-09-13T09:00:00Z')
+  const id = await service.newDocument('Games', undefined, 'docket')
+  const game = await service.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
+  await service.docketSetDates(id, game, ['2026-09-20', '2026-10-04', '2026-10-18'] as DateKey[])
+
+  const matter = (await service.docketMatters(id))[0]
+  assert.equal(matter?.when.start, '2026-09-20', 'the first one still ahead')
+  assert.deepEqual(matter?.when.dates, ['2026-09-20', '2026-10-04', '2026-10-18'])
+  assert.equal(matter?.when.every, null, 'a list is an ALTERNATIVE to an interval')
+})
+
+test('and they arrive out of order, because nobody agrees sessions in order', async t => {
+  const { service } = await serviced(t, '2026-09-13T09:00:00Z')
+  const id = await service.newDocument('Games', undefined, 'docket')
+  const game = await service.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
+  await service.docketSetDates(id, game,
+    ['2026-10-18', '2026-09-20', '2026-10-04', '2026-09-20'] as DateKey[])
+  assert.deepEqual((await service.docketMatters(id))[0]?.when.dates,
+    ['2026-09-20', '2026-10-04', '2026-10-18'], 'sorted, and said once each')
+})
+
+test('THE HORIZON READS THE LIST, rather than computing a sequence', async t => {
+  const { service } = await serviced(t, '2026-09-13T09:00:00Z')
+  const id = await service.newDocument('Games', undefined, 'docket')
+  const game = await service.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
+  await service.docketSetDates(id, game, ['2026-09-20', '2026-10-04', '2026-11-29'] as DateKey[])
+
+  const rows = await service.horizon('2026-09-01' as DateKey, '2026-10-31' as DateKey)
+  assert.deepEqual(rows.map(one => one.on), ['2026-09-20', '2026-10-04'],
+    'the two in the window, and not the one past its end')
+})
+
+test('AND IT ADVANCES TO THE NEXT ONE WRITTEN DOWN, not to a computed date', async t => {
+  const { service, on } = await serviced(t, '2026-09-13T09:00:00Z')
+  const id = await service.newDocument('Games', undefined, 'docket')
+  const game = await service.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
+  await service.docketSetDates(id, game, ['2026-09-20', '2026-10-04'] as DateKey[])
+
+  await on('2026-09-21')
+  await service.reconcile()
+  assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-10-04',
+    'the next session, whatever the gap was')
+})
+
+test('and running out of dates leaves it with NO DATE, which is the honest state', async t => {
+  // A campaign whose next few sessions have not been agreed yet is exactly what
+  // *no date yet* already means — and it puts the matter back in front of
+  // somebody at the moment they would know the answer.
+  const { service, on } = await serviced(t, '2026-09-13T09:00:00Z')
+  const id = await service.newDocument('Games', undefined, 'docket')
+  const game = await service.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
+  await service.docketSetDates(id, game, ['2026-09-20'] as DateKey[])
+
+  await on('2026-09-21')
+  await service.reconcile()
+  const matter = (await service.docketMatters(id))[0]
+  assert.equal(matter?.when.start, null, 'no more sessions scheduled')
+  assert.deepEqual(matter?.when.dates, ['2026-09-20'], 'and the list is kept, being what happened')
+  assert.deepEqual(await service.horizon('2026-01-01' as DateKey, '2027-01-01' as DateKey), [])
+})
+
+test('and setting an interval afterwards clears the list, both being one answer', async t => {
+  const { service } = await serviced(t, '2026-09-13T09:00:00Z')
+  const id = await service.newDocument('Games', undefined, 'docket')
+  const game = await service.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
+  await service.docketSetDates(id, game, ['2026-09-20', '2026-10-04'] as DateKey[])
+  await service.docketSetEvery(id, game, '2w')
+  const matter = (await service.docketMatters(id))[0]
+  assert.notEqual(matter?.when.every, null)
+  assert.equal(matter?.when.dates, null, 'a matter must not hold two answers')
 })

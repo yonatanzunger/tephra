@@ -34,10 +34,10 @@ test('THE FOUR SHAPES, in three variables and nothing else', () => {
   // the whole vocabulary: a thing to get done, a thing happening, a thing that
   // comes round, and a thing to keep up with.
   const shapes = [
-    { start: null, every: null, after: null },
-    { start: '2026-11-12', every: null, after: null },
-    { start: '2026-11-12', every: { n: 1, unit: 'y' }, after: null },
-    { start: '2026-11-12', every: { n: 90, unit: 'd' }, after: 'aaaa1111' },
+    { start: null, every: null, after: null, dates: null },
+    { start: '2026-11-12', every: null, after: null, dates: null },
+    { start: '2026-11-12', every: { n: 1, unit: 'y' }, after: null, dates: null },
+    { start: '2026-11-12', every: { n: 90, unit: 'd' }, after: 'aaaa1111', dates: null },
   ] as const
   assert.deepEqual(shapes.map(one => readSchedule(one as never)), [
     '—',
@@ -51,7 +51,7 @@ test('and a matter with an interval and no start is PAUSED, not broken', () => {
   // Which is what suspending a recurrence leaves: the shape stays, the date
   // goes, and restarting it is one field.
   assert.equal(
-    readSchedule({ start: null, every: { n: 90, unit: 'd' }, after: null }),
+    readSchedule({ start: null, every: { n: 90, unit: 'd' }, after: null, dates: null }),
     'every 90 days, not started',
   )
 })
@@ -88,13 +88,13 @@ test('and reads back in words for the column', () => {
 test('THE OLD `when:` IS READ, so a docket from before the split opens', () => {
   // Read and never written — which is how the format moved without anybody
   // migrating a file, the same bargain the trigger line got.
-  assert.deepEqual(parseLegacyWhen('—'), { start: null, every: null, after: null })
+  assert.deepEqual(parseLegacyWhen('—'), { start: null, every: null, after: null, dates: null })
   assert.deepEqual(parseLegacyWhen('2026-11-12'),
-    { start: '2026-11-12', every: null, after: null })
+    { start: '2026-11-12', every: null, after: null, dates: null })
   assert.deepEqual(parseLegacyWhen('every 90d from 2026-10-01'),
-    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
+    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.deepEqual(parseLegacyWhen('every 90d'),
-    { start: null, every: { n: 90, unit: 'd' }, after: null })
+    { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null })
 })
 
 test('and a form that was WITHDRAWN is not understood here either', () => {
@@ -128,7 +128,7 @@ test('a block carries everything a matter is', () => {
   ].join('\n'))
   assert.ok(matter !== null)
   assert.equal(matter.name, 'Change the air filters')
-  assert.deepEqual(matter.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null })
+  assert.deepEqual(matter.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null })
   assert.deepEqual(matter.tags, ['house', 'air quality'])
   assert.equal(matter.owner, 'me')
   assert.equal(matter.link, '../notes/hvac.md')
@@ -162,7 +162,7 @@ test('a block somebody typed by hand has no id, and is still a matter', () => {
   const matter = parseMatter('## Fix the gate\nwhen: 2026-10-01')
   assert.ok(matter !== null)
   assert.equal(matter.id, null)
-  assert.deepEqual(matter.when, { start: '2026-10-01', every: null, after: null })
+  assert.deepEqual(matter.when, { start: '2026-10-01', every: null, after: null, dates: null })
 })
 
 test('any heading level below the title opens a block', () => {
@@ -231,7 +231,7 @@ test('THE WHITESPACE RULE: a bad indent changes nothing structural', () => {
 test('THE PROPERTY: a block round-trips through parse and back', () => {
   const original = bare({
     name: 'The ACM talk',
-    when: { start: '2026-11-12' as DateKey, every: null, after: null },
+    when: { start: '2026-11-12' as DateKey, every: null, after: null, dates: null },
     tags: ['speaking'],
     owner: 'me',
     link: '../notes/acm.md',
@@ -514,4 +514,41 @@ test('and every way of writing one goes back in (accept flexibly)', () => {
       said,
     )
   }
+})
+
+// ── an explicit list of instances (H7, restored) ────────────
+
+test('a listed schedule reads as its next date and how many are left', () => {
+  const dates = ['2026-09-20', '2026-10-04', '2026-10-18'] as DateKey[]
+  assert.equal(
+    readSchedule({ start: '2026-09-20' as DateKey, every: null, after: null, dates }),
+    '2026-09-20, 2 more',
+  )
+  assert.equal(
+    readSchedule({ start: '2026-10-18' as DateKey, every: null, after: null, dates }),
+    '2026-10-18, the last',
+  )
+  assert.equal(
+    readSchedule({ start: null, every: null, after: null, dates }),
+    '3 dates, all past',
+  )
+})
+
+test('and the block round-trips a list, which is the format claim', () => {
+  const dates = ['2026-09-20', '2026-10-04'] as DateKey[]
+  const block = matterBlock(bare({
+    name: 'The campaign',
+    when: { start: '2026-09-20' as DateKey, every: null, after: null, dates },
+  }))
+  assert.match(block, /^dates: 2026-09-20, 2026-10-04$/m)
+  assert.deepEqual(parseMatter(block)?.when.dates, dates)
+})
+
+test('AND A LIST WITH ONE BAD DATE IN IT IS KEPT VERBATIM, not silently pruned', () => {
+  // The leniency rule (D72): a typo is somebody's mistake to correct, and
+  // rewriting the line without the broken one would drop a session without
+  // saying so.
+  const parsed = parseMatter('## The campaign\nstart: 2026-09-20\ndates: 2026-09-20, notaday')
+  assert.equal(parsed?.when.dates, null)
+  assert.ok(parsed?.extra.some(one => one.includes('notaday')))
 })

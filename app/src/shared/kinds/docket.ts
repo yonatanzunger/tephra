@@ -386,10 +386,32 @@ export interface Schedule {
   readonly every: Interval | null
   /** The step whose completion starts the next instance, if any. */
   readonly after: string | null
+  /**
+   * The instances, listed outright — the alternative to an interval.
+   *
+   * **H7 asked for this from the start and D76 withdrew it** for want of
+   * evidence. The evidence arrived: a game whose next few sessions are agreed in
+   * a chat thread is neither one date nor a rule, and an interval would be a lie
+   * about it while a matter per session loses the identity recurrence exists to
+   * keep (H7a).
+   *
+   * **An alternative to `every`, not a companion.** Both answer *when does it
+   * come round*, and a matter holding both would have two answers; the editor
+   * offers them as a choice and this is never set beside one.
+   *
+   * `start` still means *the instance this is on now*, so everything downstream
+   * is unchanged — `dueOn` measures from it, the horizon sweeps from it. What
+   * changes is only where the next one comes from: read, rather than computed.
+   *
+   * **Kept in order and including the past.** A session that has happened is
+   * still a fact about the campaign, and dropping it as it passes would make the
+   * list mean something different every week.
+   */
+  readonly dates: readonly DateKey[] | null
 }
 
 /** A matter nobody has dated: on the list, generating nothing. */
-export const UNSCHEDULED: Schedule = { start: null, every: null, after: null }
+export const UNSCHEDULED: Schedule = { start: null, every: null, after: null, dates: null }
 
 /**
  * What kind of thing a matter is, as a person thinks of it.
@@ -760,6 +782,15 @@ const ordinal = (n: number): string => {
  * place that says so, now that nothing stores a mode.
  */
 export function readSchedule(when: Schedule): string {
+  // **A list reads as its next date and a count**, because the column is one
+  // line and eight of them would bury the matter they belong to. The whole list
+  // is a click away, in the editor that owns it.
+  if (when.dates !== null) {
+    const now = when.start
+    if (now === null) return `${when.dates.length} dates, all past`
+    const left = when.dates.filter(one => one > now).length
+    return left === 0 ? `${now}, the last` : `${now}, ${left} more`
+  }
   if (when.every === null) return when.start ?? NO_DATE
   const how = readInterval(when.every)
   if (when.start === null) return `${how}, not started`
@@ -784,7 +815,7 @@ export function parseLegacyWhen(text: string): Schedule | null {
   }
   if (DAY.test(said)) {
     const day = real(said)
-    return day === null ? null : { start: day, every: null, after: null }
+    return day === null ? null : { start: day, every: null, after: null, dates: null }
   }
   const every = EVERY.exec(said.toLowerCase())
   if (every !== null) {
@@ -792,7 +823,7 @@ export function parseLegacyWhen(text: string): Schedule | null {
     if (every[3] !== undefined && from === null) return null
     const n = every[1] === undefined ? 1 : Number(every[1])
     if (n === 0) return null
-    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null }
+    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null, dates: null }
   }
   return null
 }
@@ -873,6 +904,14 @@ export function parseMatter(block: string): Matter | null {
       const every = parseInterval(value)
       if (every === null) extra.push(line)
       else when = { ...when, every }
+    } else if (key === 'dates') {
+      // **Kept verbatim if any of them is unreadable**, by the leniency rule: a
+      // list with one bad date in it is somebody's typo, and rewriting the line
+      // without it would silently drop a session.
+      const said = value.split(/[,\s]+/).map(one => one.trim()).filter(one => one !== '')
+      const days = said.map(one => asDateKey(one))
+      if (said.length === 0 || days.some(one => one === null)) extra.push(line)
+      else when = { ...when, dates: days as DateKey[] }
     } else if (key === 'after') {
       const said = value.trim()
       if (said === '') extra.push(line)
@@ -985,6 +1024,9 @@ export function matterBlock(matter: Matter, level = MATTER_LEVEL): string {
   lines.push(`mode: ${matter.mode}`)
   lines.push(`start: ${matter.when.start ?? NO_DATE}`)
   if (matter.when.every !== null) lines.push(`every: ${spellInterval(matter.when.every)}`)
+  // **One line, comma-separated**, because a docket is read by people and eight
+  // sessions down eight lines would bury the matter they belong to.
+  if (matter.when.dates !== null) lines.push(`dates: ${matter.when.dates.join(', ')}`)
   if (matter.when.after !== null) lines.push(`after: ${matter.when.after}`)
   if (matter.tags.length > 0) lines.push(`tags: ${matter.tags.map(spellTag).join(' ')}`)
   if (matter.owner !== null) lines.push(`owner: ${matter.owner}`)
@@ -1224,8 +1266,15 @@ export function instancesIn(
   to: DateKey,
   cap = 500,
 ): readonly DateKey[] {
-  const { start, every, after } = matter.when
+  const { start, every, after, dates } = matter.when
   if (start === null) return []
+  // **Listed instances are read, not computed** — the whole of what a list buys.
+  // From the current one onward, because what is behind it has happened and the
+  // horizon is not a history.
+  if (dates !== null) {
+    const from = dates.findIndex(one => compareKeys(one, start) >= 0)
+    return (from < 0 ? [] : dates.slice(from)).filter(one => compareKeys(one, to) <= 0)
+  }
   if (every === null || after !== null) return [start]
   const out: DateKey[] = []
   let at = start

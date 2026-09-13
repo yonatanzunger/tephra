@@ -31,7 +31,7 @@ import {
   type Matter, type ScannedBlock, type ScannedMatter, type Section, type Step,
   type Interval, type Mode, type Schedule, type StepKind, type StepWhen,
 } from '../../../../shared/kinds/docket.ts'
-import { addDays, nowSeconds } from '../../../../shared/dates.ts'
+import { addDays, compareDateKeys, nowSeconds } from '../../../../shared/dates.ts'
 import { ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import type {
   DateKey, DocumentId, DocumentMeta, DocumentText, SegmentKey, Span,
@@ -224,6 +224,8 @@ export class DocketDocument extends SegmentedDocument {
         start: was.when.start,
         every: shape.repeating ? was.when.every : null,
         after: shape.repeating && shape.fromCompletion ? was.when.after : null,
+        // A list is a recurrence, so it survives exactly as an interval does.
+        dates: shape.repeating ? was.when.dates : null,
       },
     }))
   }
@@ -239,7 +241,14 @@ export class DocketDocument extends SegmentedDocument {
       // **Losing the interval loses what measured from it.** A matter that does
       // not recur has no step advancing its clock, and leaving one behind would
       // be a pointer that means nothing.
-      when: { ...was.when, every, ...(every === null ? { after: null } : {}) },
+      when: {
+        ...was.when,
+        every,
+        // **An interval and a list are one answer, so setting one clears the
+        // other.** A matter holding both would have two answers about when it
+        // comes round and no rule for which wins.
+        ...(every === null ? { after: null } : { dates: null }),
+      },
     }))
   }
 
@@ -482,6 +491,34 @@ export class DocketDocument extends SegmentedDocument {
   }
 
   /**
+   * Set the instances outright (H7, restored).
+   *
+   * **An alternative to the interval, so setting one clears the other.** Both
+   * answer *when does it come round*; a matter holding both would have two
+   * answers and no rule for which wins.
+   *
+   * **Sorted and de-duplicated on the way in**, because the list arrives pasted
+   * out of a chat thread and nobody agrees sessions in order. `start` moves to
+   * the first one that has not passed, which is what *the instance this is on*
+   * means — and to the last one if they all have, so a finished campaign reads
+   * as finished rather than as never having happened.
+   */
+  async setDates(id: string, dates: readonly DateKey[], today: DateKey): Promise<void> {
+    const kept = [...new Set(dates)].sort()
+    await this.#write(id, was => ({
+      ...was,
+      when: kept.length === 0
+        ? { ...was.when, dates: null }
+        : {
+          ...was.when,
+          dates: kept,
+          every: null,
+          start: kept.find(one => compareDateKeys(one, today) >= 0) ?? kept[kept.length - 1] ?? null,
+        },
+    }))
+  }
+
+  /**
    * Move a recurring matter on to its next instance.
    *
    * **The stored date is the NEXT one, not a first one years back**, which is
@@ -493,8 +530,23 @@ export class DocketDocument extends SegmentedDocument {
    */
   async advanceInstance(id: string, from?: DateKey): Promise<DateKey | null> {
     const found = await this.#find(id)
-    const { start, every } = found.matter.when
-    if (start === null || every === null) return null
+    const { start, every, dates } = found.matter.when
+    if (start === null) return null
+    // **A listed recurrence steps to the next one written down**, and stops when
+    // the list does. Running out is not an error — it is a campaign whose next
+    // few sessions have not been agreed yet, which is exactly the state *no date
+    // yet* already means, and which puts the matter back in front of somebody at
+    // the moment they would know the answer.
+    if (dates !== null) {
+      const next = dates.find(one => one > start) ?? null
+      await this.#write(id, was => ({
+        ...was,
+        when: { ...was.when, start: next },
+        steps: was.steps.map(one => ({ ...one, done: null, made: null })),
+      }))
+      return next
+    }
+    if (every === null) return null
     // **`from` is what *every three months* is three months from**, and the two
     // repeating shapes answer that differently. A recurring EVENT is on the
     // calendar, so it counts from the instance that has just passed — which is

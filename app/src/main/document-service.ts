@@ -2053,6 +2053,14 @@ export class DocumentService {
     return when
   }
 
+  /** The instances, listed outright — an alternative to the interval (H7). */
+  async docketSetDates(id: DocumentId, matter: string, dates: readonly DateKey[]): Promise<void> {
+    const today = this.today
+    await this.#serial(async () =>
+      this.#corpus.use(id, doc => (doc as DocketDocument).setDates(matter, dates, today)))
+    await this.#wrote(id)
+  }
+
   /** Stop work on it, keeping what it has already done (D76). */
   async docketSuspend(id: DocumentId, matter: string): Promise<void> {
     await this.#serial(async () =>
@@ -2315,7 +2323,11 @@ export class DocumentService {
     let moved = false
     for (let guard = 0; guard < 500; guard += 1) {
       const matter = (await this.docketMatters(docket)).find(one => one.id === id)
-      if (matter === undefined || matter.when.every === null || matter.when.start === null) break
+      // **A recurrence is an interval OR a list**, and this asked only about the
+      // interval — so a listed matter never moved on at all, which is the one
+      // thing a list is for.
+      const recurs = matter !== undefined && (matter.when.every !== null || matter.when.dates !== null)
+      if (matter === undefined || !recurs || matter.when.start === null) break
       // **Settled, and what the next one is measured from, are the same
       // question asked of the two repeating shapes** — so they are answered
       // together rather than in two places that could come to differ.
@@ -2584,6 +2596,7 @@ function scheduleFor(shape: NewMatter | undefined): Schedule {
     every: mode.repeating ? every : null,
     // Set once the first step exists, since it names one (see `docketAdd`).
     after: null,
+    dates: null,
   }
 }
 
