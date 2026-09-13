@@ -2469,3 +2469,57 @@ body {
   border-color: rgb(var(--status-error) / .6);
   background: rgb(var(--status-error) / .08);
 }
+
+/* ── the schedule panel (MH4, H7) ───────────────────────────────────────────
+   **A panel, because the field was too small to say this much in.** The schedule
+   was one narrow text box parsed leniently; a list of dates in there would be a
+   long unreadable string in a box you cannot see the end of.
+
+   It opens UNDER the row and the row keeps its shape, so nothing that was
+   already on screen moves sideways — and the growth downwards is a reflow
+   somebody asked for by clicking (D42). */
+.sched {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column; gap: .45rem;
+  margin: .4rem 0 .2rem 1.9rem; padding: .6rem .75rem;
+  border-left: 2px solid rgb(var(--accent) / .5);
+  background: rgb(var(--surface-ground));
+  border-radius: 0 5px 5px 0;
+  font-family: var(--font-ui); font-size: 12px; color: rgb(var(--text));
+}
+.sched-row { display: flex; align-items: center; gap: .45rem; }
+/* One width for every label, so the controls beside them line up in a column. */
+.sched-label {
+  flex: none; width: 4.5rem;
+  font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: rgb(var(--text-muted));
+}
+.sched-shapes { display: flex; flex-wrap: wrap; gap: .1rem 1rem; padding-left: 4.5rem; }
+.sched-option { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+.sched-option input { margin: 0; }
+.sched-date, .sched-n {
+  font: inherit; color: rgb(var(--text)); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border)); border-radius: 4px; padding: .1rem .3rem;
+}
+.sched-n { width: 3.5rem; }
+
+.sched-list { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding-left: 4.5rem; }
+/* A date you can take off, which is the one edit a list actually needs. */
+.sched-date-chip {
+  display: inline-flex; align-items: center; gap: .15rem;
+  font-variant-numeric: tabular-nums;
+  background: rgb(var(--surface)); border: 1px solid rgb(var(--border));
+  border-radius: 4px; padding: .05rem .15rem .05rem .35rem;
+}
+
+/* **The next few instances, whatever the shape.** What makes an interval
+   concrete — *every 1 month on the 31st* is a rule until you watch it land on
+   the 28th of February — and the full list a listed schedule wants to show. */
+.sched-next {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .1rem .5rem;
+  margin: .2rem 0 0; color: rgb(var(--text-muted));
+  font-variant-numeric: tabular-nums;
+}
+.sched-peek { white-space: nowrap; }
+.sched-done { display: flex; justify-content: flex-end; }
+.docket-when.open { color: rgb(var(--text-muted)); }

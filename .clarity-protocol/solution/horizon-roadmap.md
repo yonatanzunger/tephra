@@ -15,12 +15,14 @@ keyboard.
 > ships is what makes MH6's threshold real rather than guessed, so moving it
 > earlier shortens the chain to the only phase that is currently blocked on data.
 >
-> Four things come before both, in this order: **the stale documents** (healthy
-> practice, and four phases of drift is already too much), **the screenshot
-> harness** (broken, and it is what the visual loop runs on), **the explicit list
-> of instances** (wanted immediately, and it is H7's withdrawn requirement
-> returning with evidence), and then MH5. The remaining docket-backlog items and
-> the rest of MH4 follow.
+> Four things come before both, in this order: ~~the stale documents~~ ✓,
+> ~~the screenshot harness~~ ✓, ~~the explicit list of instances~~ ✓ (D80), and
+> then **MH5**. The remaining docket-backlog items and the rest of MH4 follow.
+>
+> **All three cleared 2026-09-13.** The documents were amended; the harness
+> turned out not to be broken at all (note 54); and the instance list brought the
+> **schedule panel** with it, which was not planned and is the larger half —
+> D80.
 >
 > **And H8's narrowing is accepted rather than owed** — see the amendment in
 > `goal/horizon.md`. The strip at frame level is dropped, not deferred. The numbers are

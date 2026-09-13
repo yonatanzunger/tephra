@@ -1650,6 +1650,86 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'schedule') {
+      // The schedule panel (MH4, H7) — **structural, not parsed**.
+      await window.tephra.doc.newDocument('Games', undefined, 'docket')
+      await settle(1400)
+      const docket = (await window.tephra.docket.list())[0]?.id
+      if (docket === undefined) { say('appError', 'no docket'); return }
+      const game = await window.tephra.docket.add(docket, 'The campaign',
+        { mode: 'recurring-event' })
+      // **Go to it**, since making a docket does not open one: `newDocument`
+      // creates the file and the pane is still wherever it was.
+      await pane.goTo({ kind: 'document', id: docket })
+      await settle(1400)
+      // Dates relative to the app's own today, never the harness's (m2's rule).
+      const list = await window.tephra.todo.which()
+      const day = await window.tephra.todo.today(list)
+      const from = (days: number): string =>
+        new Date(Date.parse(`${day}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+      void game
+
+      const row = (): Element | undefined => [...document.querySelectorAll('.docket-row')].find(
+        r => (r.querySelector('.docket-name')?.textContent ?? '').includes('campaign'))
+      say('slugAtRest', row()?.querySelector('.docket-when')?.textContent?.trim() ?? '')
+
+      // **Clicking the sentence opens the panel**, which is the whole gesture.
+      ;(row()?.querySelector('.docket-when') as HTMLElement | null)?.click()
+      await settle(600)
+      say('panelOpen', document.querySelectorAll('.sched').length)
+      say('shapes', [...document.querySelectorAll('.sched-option')]
+        .map(n => (n.textContent ?? '').trim()))
+      // The mode drop-down is here as well as on *add a matter*, because a
+      // mistake made at creation has to be correctable the way it was made.
+      say('modeHere', [...document.querySelectorAll('.sched .docket-mode option')]
+        .map(n => n.textContent ?? '').length)
+
+      const choose = async (label: string): Promise<void> => {
+        const pick = [...document.querySelectorAll('.sched-option')].find(
+          n => (n.textContent ?? '').trim() === label)?.querySelector('input') as HTMLElement | null
+        pick?.click()
+        await settle(800)
+      }
+      const setDate = async (sel: string, value: string): Promise<void> => {
+        const field = document.querySelector(sel) as HTMLInputElement | null
+        if (field === null) return
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(field, value)
+        field.dispatchEvent(new Event('change', { bubbles: true }))
+        await settle(800)
+      }
+
+      await choose('On these dates')
+      say('listedChosen', document.querySelectorAll('.sched-list').length)
+      say('afterChoose', {
+        panels: document.querySelectorAll('.sched').length,
+        checked: [...document.querySelectorAll('.sched-option')]
+          .filter(n => (n.querySelector('input') as HTMLInputElement | null)?.checked === true)
+          .map(n => (n.textContent ?? '').trim()),
+      })
+      await setDate('.sched-list .sched-date', from(7))
+      await setDate('.sched-list .sched-date', from(21))
+      say('chips', [...document.querySelectorAll('.sched-date-chip')]
+        .map(n => (n.textContent ?? '').replace('\u00d7', '').trim()))
+      // **The preview is the point of the panel**: whatever shape is selected,
+      // these are the dates it actually produces.
+      say('preview', [...document.querySelectorAll('.sched-peek')].map(n => n.textContent ?? ''))
+
+      // The picture worth having is the panel OPEN; the slug at rest is checked
+      // below and is one line of text.
+      await shot()
+      ;(document.querySelector('.sched-done button') as HTMLElement | null)?.click()
+      await settle(900)
+      say('slugAfter', row()?.querySelector('.docket-when')?.textContent?.trim() ?? '')
+      say('styled', unstyled(/\.(sched[a-z-]*)\b/g, [
+        'sched', 'sched-row', 'sched-label', 'sched-shapes', 'sched-option',
+        'sched-date', 'sched-n', 'sched-list', 'sched-date-chip', 'sched-next',
+        'sched-peek', 'sched-done',
+      ]))
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+    }
+
     if (scene === 'today') {
       // The day's selection (H9, MH4) — **a mark on the day, and a view over it**.
       const list = await window.tephra.todo.which()

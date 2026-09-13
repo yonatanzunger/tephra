@@ -587,6 +587,13 @@ export type DocketCommand =
       readonly matter: string
       readonly start: string | null
     }
+  /** The instances, listed outright (H7) — the alternative to an interval. */
+  | {
+      readonly kind: 'dates'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly dates: readonly DateKey[]
+    }
   /** How often it comes round, as typed: `90d`, `1m on 31`, or nothing. */
   | {
       readonly kind: 'every'

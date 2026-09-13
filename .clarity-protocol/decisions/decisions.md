@@ -3795,3 +3795,58 @@ wanted one.
 > next step appear rather than waiting for a day boundary. That was always the
 > intended feel; an explicit pass in the tests had been standing in for it.
 
+---
+
+## D80: The schedule is edited structurally, and a recurrence may be a list
+
+**Date:** 2026-09-13
+**Status:** decided
+**Restores:** H7's *explicit list*, withdrawn by D76. **Amends:** D76's schedule
+and its editing surface. **Source:** asked from use.
+
+**A recurrence is an interval OR a list of dates**, never both. `Schedule` gains
+`dates`, and `start` still means *the instance this is on* — so `dueOn`, the
+horizon and the tick are unchanged. What changes is only where the next instance
+comes from: **read, rather than computed**.
+
+**No fifth mode.** The four modes are two axes — once vs repeatedly, and you do
+it vs it happens to you — and a listed recurrence is still *repeatedly*. What
+varies is how the recurrence is *expressed*, which is a field and not a kind.
+
+**Running out of dates leaves the matter with no date**, which already means
+*not scheduled* and reads correctly as *the next few sessions have not been
+agreed yet*. The list is kept: sessions that happened are facts about the
+campaign, and dropping them as they pass would make the list mean something
+different every week.
+
+**And the schedule is edited in a panel, structurally.** Four radio buttons —
+no date · on a date · repeating · on these dates — with the fields under each
+meaning exactly one thing, plus the mode drop-down and a computed preview of the
+next instances.
+
+> **Because text flexible enough to feel natural is harder than it looks.** The
+> schedule was one narrow field parsed leniently (`every 90d`, a date, nothing),
+> and adding a list to it would have made a long unreadable string in a box whose
+> end you cannot see — said from use before it was built, which is the cheapest
+> moment to hear it. A grammar that *nearly* works is worse than controls: it
+> fails on the cases somebody assumed would work, and getting it genuinely right
+> needs a language model, which is absurd for four shapes.
+>
+> **The preview is the part that pays for the panel.** *Every 1 month on the
+> 31st* is a rule until you watch it land on the 28th of February; showing the
+> instances it actually produces turns the anchor-and-clamp rule from a thing you
+> must know into a thing you can see. It doubles as the full list a listed
+> schedule wants.
+>
+> **The mode selector is in two places on purpose**, here and on *add a matter*:
+> a mistake made at creation has to be correctable the way it was made.
+>
+> **Two faults the acceptance scene caught**, both of which would have shipped.
+> Choosing *on these dates* on an undated matter sprang straight back — it made
+> an empty list, an empty list is no list, and the radio reverted, the control
+> refusing the only thing you could do first. *Listed with nothing in it yet* is
+> a real state of the editor and not of the file, so the panel holds it. And the
+> panel closed on its first click, because every other field in a matter is one
+> commit and done — which for a four-control panel is indistinguishable from the
+> control not working.
+

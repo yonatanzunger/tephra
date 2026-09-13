@@ -44,10 +44,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
 import { RowMenu, type RowMenuRequest } from '../../frame/RowMenu'
 import {
-  MODES, readInterval, readSchedule, readStepWhen, shapeOf, spellInterval, spellStepWhen,
+  instancesIn, MODES, readInterval, readSchedule, readStepWhen, shapeOf, spellInterval,
+  spellStepWhen,
   type Matter, type Mode, type NewMatter as NewMatterShape, type Section, type StepKind,
 } from '../../../../shared/kinds/docket.ts'
-import type { DocumentId } from '../../../../shared/document-api.ts'
+import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
+import { addDays } from '../../../../shared/dates.ts'
 
 export function DocketSurface({
   window: docWindow,
@@ -110,6 +112,17 @@ export function DocketSurface({
    * reading (H3).
    */
   const [open, setOpen] = useState<string | null>(null)
+  /**
+   * What day it is, for the schedule panel's preview of the next instances.
+   *
+   * **Asked of main, which owns the clock** (D62/D63) — a surface that took it
+   * from `new Date()` would disagree with the app either side of midnight and in
+   * a notebook whose zone is not the machine's, which is the ordinary case here.
+   */
+  const [today, setToday] = useState<DateKey | null>(null)
+  useEffect(() => {
+    void window.tephra.doc.open().then(info => setToday(info.today as DateKey)).catch(() => undefined)
+  }, [])
   const [problem, setProblem] = useState<string | null>(null)
   /**
    * What is being dragged, and where it would land.
@@ -475,6 +488,10 @@ export function DocketSurface({
                 onSetMode={mode => {
                   if (matter.id !== null) void act(window.tephra.docket.setMode(id, matter.id, mode))
                 }}
+                onSetDates={dates => {
+                  if (matter.id !== null) void act(window.tephra.docket.setDates(id, matter.id, dates))
+                }}
+                today={today}
                 onActivate={() => {
                   if (matter.id !== null) void act(window.tephra.docket.activate(id, matter.id))
                 }}
@@ -483,7 +500,12 @@ export function DocketSurface({
                 }}
                 onEdit={field => setEditing(field === null || matter.id === null ? null : { matter: matter.id, field })}
                 onCommit={(field, value) => {
-                  setEditing(null)
+                  // **The schedule panel stays open while it is edited.** Every
+                  // other field here is one commit and done, so committing closed
+                  // the editor — and a panel with four controls in it closed on
+                  // the first click, which looked exactly like the control not
+                  // working.
+                  if (field !== 'when' && field !== 'every') setEditing(null)
                   if (matter.id === null) return
                   void act(commit(id, matter.id, field, value))
                 }}
@@ -669,6 +691,8 @@ function Row({
   onStepKind,
   onSetAfter,
   onSetMode,
+  onSetDates,
+  today,
   open,
   onShow,
   onMenu,
@@ -694,6 +718,9 @@ function Row({
   onAdding: (open: boolean) => void
   onEdit: (field: Field | null) => void
   onCommit: (field: Field, value: string) => void
+  /** The instances, listed outright — the alternative to an interval (H7). */
+  onSetDates: (dates: readonly DateKey[]) => void
+  today: DateKey | null
   onRemove: () => void
   onAddStep: (when: string, text: string, kind: StepKind) => Promise<unknown>
   onDropStep: (step: string) => void
@@ -847,36 +874,11 @@ function Row({
             that used to sit here was the heaviest mark on a page of quiet
             ones, for a setting that is usually at its default. */}
         {editing === 'when' ? (
-          <span className="docket-schedule">
-            <select
-              className="docket-mode"
-              value={matter.mode}
-              onChange={event => onSetMode(event.target.value as Mode)}
-            >
-              {MODES.map(one => (
-                <option key={one.key} value={one.key}>{one.title}</option>
-              ))}
-            </select>
-            <Field1
-              initial={matter.when.start ?? ''}
-              className="docket-field narrow"
-              placeholder="when"
-              title="The next time this happens"
-              onCommit={v => onCommit('when', v)}
-              onCancel={() => onEdit(null)}
-            />
-            {shapeOf(matter.mode).repeating && (
-              <Field1
-                initial={matter.when.every === null ? '' : spellInterval(matter.when.every)}
-                className="docket-field narrow"
-                placeholder="how often"
-                title="90d · 6 months · 1y · 1m on 31"
-                onCommit={v => onCommit('every', v)}
-                onCancel={() => onEdit(null)}
-              />
-            )}
-            <button className="docket-quiet" onClick={() => onEdit(null)}>done</button>
-          </span>
+          // **The slug stays where it was, and the panel opens below.** Replacing
+          // the sentence with the editor moved everything right of it; the row
+          // keeps its shape and the panel grows underneath, which is a reflow
+          // somebody asked for by clicking (D42).
+          <span className="docket-when open">{read}</span>
         ) : (
           <button
             className={`docket-when${inactive ? ' undecided' : ''}`}
@@ -907,6 +909,19 @@ function Row({
           </button>
         )}
       </div>
+
+      {editing === 'when' && (
+        <SchedulePanel
+          matter={matter}
+          today={today}
+          onMode={onSetMode}
+          onStart={v => onCommit('when', v ?? '')}
+          onEvery={v => onCommit('every', v ?? '')}
+          onAfter={onSetAfter}
+          onDates={onSetDates}
+          onClose={() => onEdit(null)}
+        />
+      )}
 
       {/* **Only what HAS content, and only then.** Tags and an owner are facts
           about the matter and belong on the page; *tag* and *who* are controls
@@ -1254,6 +1269,220 @@ function NoteField({
 }
 
 /** One short field, committed on Enter and abandoned on Escape. */
+/**
+ * The schedule, edited structurally rather than typed (MH4, H7).
+ *
+ * **A panel, because the field was too small to say this much in.** The schedule
+ * was one narrow text box: a date, or `every 90d`, parsed leniently on the way
+ * in. Adding a list of dates to that would have made it a long unreadable
+ * string in a box you cannot see the end of — reported from use before it was
+ * built, which is the cheapest moment to hear it.
+ *
+ * **Structural, not parsed.** Text flexible enough to feel natural is hard to
+ * get right without a language model, and a grammar that *nearly* works is worse
+ * than controls: it fails on the cases somebody assumed would work. So the four
+ * shapes are four radio buttons and every field under them means exactly one
+ * thing.
+ *
+ * **The four shapes are the whole vocabulary** — no date, one date, an interval
+ * from a date or from completion, or a list. They are mutually exclusive by
+ * construction here, which is what keeps a matter from holding two answers about
+ * when it comes round.
+ */
+function SchedulePanel({
+  matter,
+  today,
+  onMode,
+  onStart,
+  onEvery,
+  onAfter,
+  onDates,
+  onClose,
+}: {
+  matter: Matter
+  today: DateKey | null
+  onMode: (mode: Mode) => void
+  onStart: (start: string | null) => void
+  onEvery: (every: string | null) => void
+  onAfter: (after: string | null) => void
+  onDates: (dates: readonly DateKey[]) => void
+  onClose: () => void
+}): React.JSX.Element {
+  const { when } = matter
+  /**
+   * Which shape is selected, held here rather than derived from the schedule.
+   *
+   * **Because *listed with nothing in it yet* is a real UI state and not a real
+   * schedule.** Derived, choosing *on these dates* on an undated matter produced
+   * an empty list, an empty list is no list, and the radio sprang back — the
+   * control refusing the only thing you could do first. The file needs no
+   * representation for it; this does.
+   */
+  const [shape, setShape] = useState<Shape>(
+    when.dates !== null ? 'listed'
+      : when.every !== null ? 'repeating'
+        : when.start !== null ? 'once'
+          : 'none',
+  )
+  const [adding, setAdding] = useState('')
+
+  /**
+   * What the next few instances actually are.
+   *
+   * **Computed from whatever is selected**, which is what makes an interval
+   * concrete — *every 1 month on the 31st* is a rule until you see it land on
+   * the 28th of February — and doubles as the full list a listed schedule wants
+   * to show. Six, because the point is to recognise the pattern, not to read a
+   * calendar.
+   */
+  const upcoming = instancesIn(matter, addDays(today ?? ('9999-12-31' as DateKey), 800)).slice(0, 6)
+
+  const pick = (next: Shape): void => {
+    if (next === shape) return
+    setShape(next)
+    // **Changing shape clears what the old one meant**, rather than leaving a
+    // field set that nothing reads. A schedule with a stale interval on it would
+    // come back the moment somebody switched back, which is a surprise.
+    if (next === 'none') { onDates([]); onEvery(null); onStart(null); return }
+    if (next === 'once') { onDates([]); onEvery(null); return }
+    if (next === 'repeating') { onDates([]); onEvery('1m'); return }
+    onEvery(null)
+    onDates(when.start === null ? [] : [when.start])
+  }
+
+  const option = (key: Shape, label: string): React.JSX.Element => (
+    <label className="sched-option">
+      <input type="radio" name="sched" checked={shape === key} onChange={() => pick(key)} />
+      {label}
+    </label>
+  )
+
+  return (
+    <div className="sched" role="group" aria-label="When this happens">
+      {/* **The same drop-down the add button offers**, because a mistake made at
+          creation has to be correctable the way it was made. */}
+      <label className="sched-row">
+        <span className="sched-label">This is</span>
+        <select
+          className="docket-mode"
+          value={matter.mode}
+          onChange={event => onMode(event.target.value as Mode)}
+        >
+          {MODES.map(one => <option key={one.key} value={one.key}>{one.title}</option>)}
+        </select>
+      </label>
+
+      <div className="sched-shapes">
+        {option('none', 'No date yet')}
+        {option('once', 'On a date')}
+        {option('repeating', 'Repeating')}
+        {option('listed', 'On these dates')}
+      </div>
+
+      {(shape === 'once' || shape === 'repeating') && (
+        <label className="sched-row">
+          <span className="sched-label">{shape === 'repeating' ? 'Starting' : 'On'}</span>
+          <input
+            type="date"
+            className="sched-date"
+            value={when.start ?? ''}
+            onChange={event => onStart(event.target.value === '' ? null : event.target.value)}
+          />
+        </label>
+      )}
+
+      {shape === 'repeating' && (
+        <>
+          <label className="sched-row">
+            <span className="sched-label">Every</span>
+            <input
+              type="number"
+              min={1}
+              className="sched-n"
+              value={when.every?.n ?? 1}
+              onChange={event => onEvery(`${Math.max(1, Number(event.target.value) || 1)}${when.every?.unit ?? 'm'}`)}
+            />
+            <select
+              className="docket-mode"
+              value={when.every?.unit ?? 'm'}
+              onChange={event => onEvery(`${when.every?.n ?? 1}${event.target.value}`)}
+            >
+              {(['d', 'w', 'm', 'y'] as const).map(u => (
+                <option key={u} value={u}>{UNIT_WORDS[u]}</option>
+              ))}
+            </select>
+          </label>
+          {/* **The distinction the modes exist for**, said in words rather than
+              as a pointer to a step id: one is the calendar's business and the
+              other is yours (D76). */}
+          <div className="sched-shapes">
+            <label className="sched-option">
+              <input
+                type="radio"
+                name="from"
+                checked={when.after === null}
+                onChange={() => onAfter(null)}
+              />
+              counting from that date
+            </label>
+            <label className="sched-option">
+              <input
+                type="radio"
+                name="from"
+                checked={when.after !== null}
+                onChange={() => onAfter(matter.steps[0]?.id ?? null)}
+                disabled={matter.steps.length === 0}
+              />
+              counting from when it is done
+            </label>
+          </div>
+        </>
+      )}
+
+      {shape === 'listed' && (
+        <div className="sched-list">
+          {(when.dates ?? []).map(one => (
+            <span className="sched-date-chip" key={one}>
+              {one}
+              <button
+                className="docket-quiet"
+                title="Take this date off"
+                onClick={() => onDates((when.dates ?? []).filter(other => other !== one))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <input
+            type="date"
+            className="sched-date"
+            value={adding}
+            onChange={event => {
+              const said = event.target.value
+              setAdding('')
+              if (said !== '') onDates([...(when.dates ?? []), said as DateKey])
+            }}
+          />
+        </div>
+      )}
+
+      {upcoming.length > 0 && (
+        <p className="sched-next">
+          <span className="sched-label">Next</span>
+          {upcoming.map(one => <span className="sched-peek" key={one}>{one}</span>)}
+        </p>
+      )}
+
+      <div className="sched-done">
+        <button className="docket-quiet" onClick={onClose}>done</button>
+      </div>
+    </div>
+  )
+}
+
+type Shape = 'none' | 'once' | 'repeating' | 'listed'
+const UNIT_WORDS: Record<string, string> = { d: 'days', w: 'weeks', m: 'months', y: 'years' }
+
 function Field1({
   initial,
   placeholder,
