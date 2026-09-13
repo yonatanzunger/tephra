@@ -2063,8 +2063,15 @@ test('and the horizon reads the same clock, or it would disagree with the list',
   const kia = await service.docketAdd(id, 'Kia repairs', { mode: 'task' })
   await service.docketAddStep(id, kia, '+2d', 'collect it')
   await service.docketActivate(id, kia)
+  // The seeded step generated on activation and carries a due date now, so it is
+  // the task list's row; the step two days out is still the docket's. Both read
+  // the same clock, which is the claim — one from a completion stamp and one
+  // from a start date, and an hour where the zones disagree.
   const rows = await service.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
-  assert.deepEqual(rows.map(one => [one.on, one.text]), [['2026-03-12', 'collect it']])
+  assert.deepEqual(rows.map(one => [one.on, one.kind, one.text]), [
+    ['2026-03-10', 'due', 'Kia repairs'],
+    ['2026-03-12', 'task', 'collect it'],
+  ])
 })
 
 test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', async t => {
@@ -2081,8 +2088,8 @@ test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', as
   const list = await service.todoList()
   const items = await service.todoItems(list, service.today)
   assert.deepEqual(items.map(one => one.text).sort(), [
-    "Kia repairs #'Kia repairs'",
-    "find a general mechanic #'Kia repairs'",
+    "Kia repairs #'Kia repairs' DUE 2026-03-10",
+    "find a general mechanic #'Kia repairs' DUE 2026-03-10",
   ])
   // And it is a real tag, not text that looks like one.
   assert.deepEqual([...new Set(items.flatMap(one => one.tags))], ['Kia repairs'])
@@ -2198,4 +2205,45 @@ test('and setting an interval afterwards clears the list, both being one answer'
   const matter = (await service.docketMatters(id))[0]
   assert.notEqual(matter?.when.every, null)
   assert.equal(matter?.when.dates, null, 'a matter must not hold two answers')
+})
+
+test('A GENERATED TASK CARRIES ITS DUE DATE, which the schedule already knew', async t => {
+  // It arrived with no deadline, so it sorted with the undated and said nothing
+  // about the rhythm it belongs to — *change the water filter every 120 days* is
+  // not the same kind of thing as a note to self.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await service.docketAdd(id, 'Change the water filter',
+    { mode: 'recurring-task', every: '120d', start: '2026-03-10' })
+
+  const list = await service.todoList()
+  const items = await service.todoItems(list, service.today)
+  assert.equal(items[0]?.due, '2026-03-10', 'the day the schedule says it should happen')
+  assert.deepEqual(items.map(withoutMarks), ['Change the water filter'])
+})
+
+test('and a RUN-UP step is due on its own day, not on the occasion it leads to', async t => {
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const day = await service.docketAdd(id, 'The ACM talk',
+    { mode: 'event', start: '2026-03-17' })
+  await service.docketAddStep(id, day, '7d', 'write the slides')
+
+  const list = await service.todoList()
+  const items = await service.todoItems(list, service.today)
+  assert.deepEqual(items.map(one => [withoutMarks(one), one.due]),
+    [['write the slides', '2026-03-10']], 'the day it is meant to be done, not the 17th')
+})
+
+test('and the horizon does not show it twice, the two sources staying disjoint', async t => {
+  // A due date is the task list's source; the step that made it is no longer the
+  // docket's. Without this the same commitment would be counted twice.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  await service.docketAdd(id, 'Change the water filter',
+    { mode: 'recurring-task', every: '120d', start: '2026-03-10' })
+
+  const rows = await service.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
+  assert.deepEqual(rows.map(one => [one.on, one.kind, one.text]),
+    [['2026-03-10', 'due', 'Change the water filter']], 'once, as a dated task')
 })

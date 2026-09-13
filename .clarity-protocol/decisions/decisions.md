@@ -3841,6 +3841,58 @@ next instances.
 > **The mode selector is in two places on purpose**, here and on *add a matter*:
 > a mistake made at creation has to be correctable the way it was made.
 >
+> **Amended the same day, from the first look at it.** Three corrections, and
+> the first is the one that matters:
+>
+> **The panel asks only what the MODE leaves open**, rather than asking the same
+> question twice. *Repeating* was a radio button sitting beside a drop-down that
+> already said *Recurring event* — two controls contradicting each other by
+> construction, with a person left to work out which won. So: a **task** has
+> begun or it has not; a **one-off event** asks nothing at all, because having a
+> date or not is just whether the field is filled; and anything **recurring**
+> chooses between a rule and a list. *Counting from when it is done* appears only
+> where completion is a thing that happens, which the mode table already knew and
+> nobody was asking.
+>
+> **A recurring task takes a list too**, which the first cut offered only to
+> events — a quarterly report on four agreed dates is as real as a game's
+> sessions. That makes a recurring task ask **two independent questions**, so the
+> panel holds two states rather than one shape: conflated, choosing *on these
+> dates* unset *started*, which is not a thing either answer says about the
+> other.
+>
+> **And a finished step says when it was finished** — `completed 2026-09-12`
+> rather than the schedule it no longer needs. *Right away* on something already
+> done describes a plan nobody wants, while the fact that answers *where is this
+> up to* was nowhere on the page. It is also what will make a matter's **last
+> action** legible by reading its steps.
+>
+> **And three more from the first hour of real use**, which is what this design
+> record exists to record rather than to have predicted:
+>
+> **A generated task carries a due date**, which the schedule already knew and
+> was throwing away — so an air filter every 120 days sorted with the undated and
+> said nothing about the rhythm it belongs to. The date is the **step's own**: the
+> day the schedule says it should happen, which for a run-up step is its own day
+> and not the occasion's. Overdue afterwards is correct, and is what H7a asks for.
+>
+> **A matter counting from its own completion asks for the LAST one, not the
+> next.** It stores *when it is next due*; what a person has is *when I last did
+> it*, and typing the last water-filter change into a field meaning the next one
+> produced a task instantly overdue. The field says **Last done** for that one
+> shape and the interval does the arithmetic — which needed `backInterval`, the
+> inverse of anchor-and-clamp, round-trip tested.
+>
+> **And two faults in the panel itself.** Each recurrence radio fired *two*
+> writes, and since a docket write reconciles and is read back (MH4), the panel
+> re-rendered twice from two different states and the controls appeared to fight
+> — reported as *it tries to reset everything else and gets very confused*. One
+> write per click now. And the interval box could not be emptied: bound straight
+> to its value with a `Math.max(1, …)` on the way in, the keystroke that cleared
+> it wrote `1` back, so a `1` could never be replaced by a `30`. **A controlled
+> field that coerces on every keystroke cannot be edited, only overwritten** —
+> which is worth stating once, because it is the same fault every time.
+>
 > **Two faults the acceptance scene caught**, both of which would have shipped.
 > Choosing *on these dates* on an undated matter sprang straight back — it made
 > an empty list, an empty list is no list, and the radio reverted, the control

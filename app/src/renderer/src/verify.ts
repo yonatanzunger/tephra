@@ -1730,12 +1730,52 @@ export async function runVerify(request: string): Promise<void> {
         await settle(1000)
         say('shapesForTask', [...document.querySelectorAll('.sched-option')]
           .map(n => (n.textContent ?? '').trim()))
-        setter?.call(mode, 'event')
+        // **A recurring task asks BOTH questions**, which is the fix for a panel
+        // that had conflated them: whether work has begun, and how it comes
+        // round — and a list is as good an answer as a rule for either kind.
+        setter?.call(mode, 'recurring-task')
         mode?.dispatchEvent(new Event('change', { bubbles: true }))
         await settle(1000)
-        say('shapesForOneOffEvent', [...document.querySelectorAll('.sched-option')]
-          .map(n => (n.textContent ?? '').trim()))
-        say('oneOffEventHasField', document.querySelectorAll('.sched-row .sched-date').length)
+      }
+
+      // ── the question somebody can answer (D80, amended) ──
+      //
+      // **A matter recurring from its own completion stores *when it is next
+      // due*, and what a person has is *when I last did it*.** Typed into a
+      // field meaning the next one, the last water-filter change produced a task
+      // that was instantly overdue. On a fresh matter of that shape, because a
+      // matter dragged through three modes is not how anybody meets this.
+      {
+        const filter = await window.tephra.docket.add(docket, 'Change the water filter',
+          { mode: 'recurring-task', every: '120d' })
+        await settle(1200)
+        const row = [...document.querySelectorAll('.docket-row')].find(
+          r => (r.querySelector('.docket-name')?.textContent ?? '').includes('water filter'))
+        ;(row?.querySelector('.docket-when') as HTMLElement | null)?.click()
+        await settle(800)
+        const options = (): Element[] => [...(row?.querySelectorAll('.sched-option') ?? [])]
+        const press = async (label: string): Promise<void> => {
+          ;(options().find(n => (n.textContent ?? '').trim().startsWith(label))
+            ?.querySelector('input') as HTMLElement | null)?.click()
+          await settle(900)
+        }
+        await press('Started on')
+        await press('counting from when it is done')
+        say('askedFor', [...(row?.querySelectorAll('.sched-label') ?? [])]
+          .map(n => n.textContent?.trim()))
+
+        const box = row?.querySelector('.sched-row .sched-date') as HTMLInputElement | null
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(box, from(-200))
+        box?.dispatchEvent(new Event('change', { bubbles: true }))
+        await settle(1200)
+        say('lastDone', {
+          typed: from(-200),
+          shows: (row?.querySelector('.sched-row .sched-date') as HTMLInputElement | null)?.value ?? '',
+          slug: row?.querySelector('.docket-when')?.textContent?.trim() ?? '',
+          next: [...(row?.querySelectorAll('.sched-peek') ?? [])].map(n => n.textContent ?? ''),
+        })
+        void filter
       }
 
       ;(document.querySelector('.sched-done button') as HTMLElement | null)?.click()

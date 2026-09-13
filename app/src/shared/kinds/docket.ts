@@ -1184,6 +1184,35 @@ export function dueOn(
 }
 
 /**
+ * The instance *before* this one — the inverse of `addInterval`.
+ *
+ * **Because the question somebody can answer is not always the one stored.** A
+ * matter that recurs from its own completion stores *when it is next due*, and
+ * what a person knows is *when I last did it*: opening a filter change and being
+ * asked for the next due date means doing the arithmetic in your head, with the
+ * interval sitting right there on the screen. So the panel asks for the last one
+ * and converts, which is this.
+ *
+ * Days and weeks are exact. Months and years go back the same way they go
+ * forward — same day number, clamped to the month's end — so the pair round-trips
+ * except where a clamp has genuinely lost information, which is the same
+ * asymmetry `addInterval` documents going the other way.
+ */
+export function backInterval(start: DateKey, every: Interval): DateKey {
+  if (every.unit === 'd') return addDays(start, -every.n)
+  if (every.unit === 'w') return addDays(start, -every.n * 7)
+  const [y, m, d] = (start as string).split('-').map(Number) as [number, number, number]
+  const meant = every.day ?? d
+  const months = every.unit === 'y' ? every.n * 12 : every.n
+  const at = (y * 12 + (m - 1)) - months
+  const year = Math.floor(at / 12)
+  const month = (at % 12) + 1
+  const room = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const day = Math.min(meant, room)
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}` as DateKey
+}
+
+/**
  * One instance on to the next, keeping the day somebody meant.
  *
  * **Days and weeks are arithmetic; months and years are a calendar.** Adding a

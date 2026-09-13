@@ -2259,8 +2259,18 @@ export class DocumentService {
             // **Composed once, rather than added and then tagged.** Two writes
             // would be two undo steps for one act, which is the rule `bulk` and
             // `finishWalk` already keep.
+            // **And a due date, because the schedule already knows one.** A
+            // generated task arrived with no deadline, so it sorted with the
+            // undated and said nothing about the rhythm it belongs to — an air
+            // filter due every 120 days is not the same as a note to self. The
+            // date is the step's own: the day the schedule says it should
+            // happen, which for a run-up step is its own day and not the
+            // occasion's. Being overdue afterwards is correct and is what H7a
+            // asks for — outstanding is shown, never quietly reissued.
             const mark = spellTag(matter.name)
-            const item = await this.todoAdd(list, mark === null ? step.text : `${step.text} ${mark}`)
+            const item = await this.todoAdd(list, [step.text, mark, `DUE ${due}`]
+              .filter(one => one !== null && one !== '')
+              .join(' '))
             // **The matter is a TAG, not a prefix.** On the list a step's text
             // stands alone — *find a general mechanic* says nothing about which
             // car — and the first cut solved that by writing the matter's name

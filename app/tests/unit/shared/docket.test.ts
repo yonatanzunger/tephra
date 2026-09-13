@@ -11,7 +11,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  matterBlock, parseInterval, parseInterval as _pi, parseLegacyWhen, parseMatter, parseOffset,
+  addInterval, backInterval, matterBlock, parseInterval, parseInterval as _pi, parseLegacyWhen, parseMatter, parseOffset,
   parseStepWhen, readInterval, readSchedule, readStepWhen, scanMatters, spellInterval,
   spellOffset, spellStepWhen,
   unusedMatterId, STANDING, type Matter,
@@ -598,4 +598,26 @@ test('and one counting from completion already said it right, so it is unchanged
 test('and with no mode given it reads as it always did, for callers that have none', () => {
   const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null }
   assert.equal(readSchedule(when), '2026-09-10')
+})
+
+test('BACK AND FORWARD ROUND-TRIP, so "last done" can be asked for instead', () => {
+  // A matter recurring from its own completion stores *when it is next due*, and
+  // what a person knows is *when I last did it*. The panel asks the question
+  // somebody can answer and converts, which needs the inverse to exist.
+  for (const every of [
+    { n: 120, unit: 'd' as const },
+    { n: 2, unit: 'w' as const },
+    { n: 3, unit: 'm' as const },
+    { n: 1, unit: 'y' as const },
+  ]) {
+    const from = '2026-09-13' as DateKey
+    assert.equal(addInterval(backInterval(from, every), every).date, from, JSON.stringify(every))
+  }
+})
+
+test('and a month-end anchor survives the trip, which is where it could not', () => {
+  // 31 Jan going back a month is 31 Dec, not 28 Feb's worth of drift — the same
+  // rule `addInterval` keeps going forward.
+  assert.equal(backInterval('2026-01-31' as DateKey, { n: 1, unit: 'm' }), '2025-12-31')
+  assert.equal(backInterval('2026-03-31' as DateKey, { n: 1, unit: 'm' }), '2026-02-28')
 })

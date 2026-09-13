@@ -44,9 +44,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
 import { RowMenu, type RowMenuRequest } from '../../frame/RowMenu'
 import {
-  instancesIn, MODES, readInterval, readSchedule, readStepWhen, shapeOf, spellInterval,
+  addInterval, backInterval, instancesIn, MODES, readInterval, readSchedule, readStepWhen,
+  shapeOf, spellInterval,
   spellStepWhen,
-  type Matter, type Mode, type NewMatter as NewMatterShape, type Section, type StepKind,
+  type Interval, type Matter, type Mode, type NewMatter as NewMatterShape, type Section,
+  type StepKind,
 } from '../../../../shared/kinds/docket.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 import { addDays, dateKeyAt, DEFAULT_ZONE } from '../../../../shared/dates.ts'
@@ -1335,38 +1337,40 @@ function SchedulePanel({
   onClose: () => void
 }): React.JSX.Element {
   const { when } = matter
+  const doing = shapeOf(matter.mode).kind === 'task'
+  const repeats = shapeOf(matter.mode).repeating
+  const fromCompletion = shapeOf(matter.mode).fromCompletion
+
   /**
-   * Which shape is selected, held here rather than derived from the schedule.
+   * Two independent questions, held here rather than derived.
    *
-   * **Because *listed with nothing in it yet* is a real UI state and not a real
-   * schedule.** Derived, choosing *on these dates* on an undated matter produced
-   * an empty list, an empty list is no list, and the radio sprang back — the
-   * control refusing the only thing you could do first. The file needs no
-   * representation for it; this does.
+   * **A recurring task asks both**: whether work has begun, and how it comes
+   * round. One `shape` field conflated them — choosing *on these dates* would
+   * have unset *started*, which is not a thing either answer says about the
+   * other.
+   *
+   * **And both need UI state of their own, because their empty values are
+   * indistinguishable from unset.** *Started on* with no date yet is `start ===
+   * null`, which is also *not started*; *on these dates* with none yet is no
+   * list, which is also *every so often*. Derived, each radio sprang back the
+   * moment it was pressed — the control refusing the only thing you could do
+   * first. The file needs no representation for either; this does.
    */
-  const [shape, setShape] = useState<Shape>(
-    when.dates !== null ? 'listed'
-      : when.every !== null ? 'repeating'
-        : when.start !== null ? 'once'
-          : 'none',
-  )
+  const [started, setStarted] = useState(when.start !== null)
+  const [listed, setListed] = useState(when.dates !== null)
   const [adding, setAdding] = useState('')
-  /**
-   * **The shape follows the mode when the mode changes.** Switching *one-off
-   * task* to *recurring event* left the old answer selected, so the panel
-   * offered a rule and a list while holding *started on* — a state the mode says
-   * is impossible. Changing what a thing IS is allowed to change what is being
-   * asked about it.
-   */
+  /** What is in the interval box, which may be mid-edit and so not a number. */
+  const [count, setCount] = useState(String(when.every?.n ?? 1))
   useEffect(() => {
-    setShape(
-      when.dates !== null ? 'listed'
-        : when.every !== null ? 'repeating'
-          : shapeOf(matter.mode).repeating ? 'repeating'
-            : when.start !== null ? 'once'
-              : 'none',
-    )
-    // Only when the MODE moves: everything else is the panel's own doing.
+    setCount(String(when.every?.n ?? 1))
+    // Only when the stored interval moves; typing is the field's own business.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [when.every?.n])
+
+  useEffect(() => {
+    // Changing what a thing IS is allowed to change what is asked about it.
+    setStarted(when.start !== null)
+    setListed(when.dates !== null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matter.mode])
 
@@ -1381,41 +1385,18 @@ function SchedulePanel({
    */
   const upcoming = instancesIn(matter, addDays(today ?? ('9999-12-31' as DateKey), 800)).slice(0, 6)
 
-  const pick = (next: Shape): void => {
-    if (next === shape) return
-    setShape(next)
-    // **Changing shape clears what the old one meant**, rather than leaving a
-    // field set that nothing reads. A schedule with a stale interval on it would
-    // come back the moment somebody switched back, which is a surprise.
-    if (next === 'none') { onDates([]); onEvery(null); onStart(null); return }
-    if (next === 'once') { onDates([]); onEvery(null); return }
-    if (next === 'repeating') { onDates([]); onEvery('1m'); return }
-    onEvery(null)
-    onDates(when.start === null ? [] : [when.start])
-  }
-
-  const option = (key: Shape, label: string, group = 'sched'): React.JSX.Element => (
+  const radio = (
+    group: string,
+    on: boolean,
+    label: string,
+    choose: () => void,
+    off = false,
+  ): React.JSX.Element => (
     <label className="sched-option">
-      <input type="radio" name={group} checked={shape === key} onChange={() => pick(key)} />
+      <input type="radio" name={group} checked={on} disabled={off} onChange={choose} />
       {label}
     </label>
   )
-
-  /**
-   * What a matter *does* is the mode's to say; this only asks what is left.
-   *
-   * **The four shapes were asking a question the drop-down had already
-   * answered.** *Repeating* sat beside a mode called *Recurring event*, and
-   * *On these dates* was offered on a one-off — two controls contradicting each
-   * other by construction, and a person left to work out which one won.
-   *
-   * So the panel asks only what the mode leaves open, and it is different in
-   * each case: a **task** has started or it has not; an **event** has a date or
-   * it has not, which is just whether the field is filled; and a **recurring
-   * event** still has to choose between a rule and a list.
-   */
-  const doing = shapeOf(matter.mode).kind === 'task'
-  const repeats = shapeOf(matter.mode).repeating
 
   return (
     <div className="sched" role="group" aria-label="When this happens">
@@ -1430,49 +1411,101 @@ function SchedulePanel({
         </select>
       </label>
 
-      {/* A task: started, or not. The date is *when work began* (D80). */}
+      {/* **A task has begun or it has not.** The date is *when work began* (D80),
+          which is a different fact from an event's *when this happens*. */}
       {doing && (
         <div className="sched-shapes">
-          {option('none', 'Not started')}
-          {option('once', 'Started on')}
+          {radio('began', !started, 'Not started', () => { setStarted(false); onStart(null) })}
+          {radio('began', started, 'Started on', () => setStarted(true))}
         </div>
       )}
 
-      {/* A recurring event: a rule, or a list of dates. */}
-      {!doing && repeats && (
-        <div className="sched-shapes">
-          {option('repeating', 'Every so often')}
-          {option('listed', 'On these dates')}
-        </div>
-      )}
-
-      {/* **A one-off event asks nothing**: it has a date or it has not, and an
-          empty field says that better than a radio button beside it. */}
       {/* **A one-off event always has the field**, whether or not it has a date:
           it asks nothing above, so without this there would be no way to give it
           one — the panel would open on a matter it could not schedule. */}
-      {(shape === 'once' || shape === 'repeating' || (!doing && !repeats)) && (
-        <label className="sched-row">
-          <span className="sched-label">{doing ? 'Started' : shape === 'repeating' ? 'Starting' : 'On'}</span>
-          <input
-            type="date"
-            className="sched-date"
-            value={when.start ?? ''}
-            onChange={event => onStart(event.target.value === '' ? null : event.target.value)}
-          />
-        </label>
+      {((doing && started) || (!doing && (!repeats || !listed))) && (() => {
+        /**
+         * **Ask the question somebody can answer.**
+         *
+         * A matter recurring from its own completion stores *when it is next
+         * due*, and what a person has is *when I last did it* — reported from
+         * use, typing the last water-filter change into a field that meant the
+         * next one and getting a task that was instantly overdue. So for that one
+         * shape the field says **Last done** and the interval does the
+         * arithmetic; everywhere else it still means exactly what it says.
+         */
+        const counted = repeats && !listed && when.after !== null && when.every !== null
+        const shown = counted && when.start !== null
+          ? backInterval(when.start, when.every as Interval)
+          : when.start
+        return (
+          <label className="sched-row">
+            <span className="sched-label">
+              {counted ? 'Last done' : doing ? 'Started' : repeats ? 'Starting' : 'On'}
+            </span>
+            <input
+              type="date"
+              className="sched-date"
+              value={shown ?? ''}
+              title={counted ? 'When it was last done; the next one follows from the interval' : undefined}
+              onChange={event => {
+                const said = event.target.value
+                if (said === '') { onStart(null); return }
+                onStart(counted && when.every !== null
+                  ? addInterval(said as DateKey, when.every as Interval).date
+                  : said)
+              }}
+            />
+          </label>
+        )
+      })()}
+
+      {/* **How it comes round**, which is the other question entirely — and a
+          list is as good an answer as a rule for either kind (H7). */}
+      {repeats && (
+        <div className="sched-shapes">
+          {/* **One write per click, at most.** These fired two apiece — clear the
+              list, then set an interval — and each write reconciles and is read
+              back, so the panel re-rendered twice from two different states and
+              the radios appeared to fight each other. Reported from use as
+              *it tries to reset everything else and gets very confused*.
+
+              Setting an interval already clears a list and vice versa (D80), so
+              one call does both; and *on these dates* with none yet needs no
+              write at all, because an empty list is not a thing the file says. */}
+          {radio('recur', !listed, 'Every so often', () => {
+            setListed(false)
+            if (when.every === null) onEvery('1m')
+          })}
+          {radio('recur', listed, 'On these dates', () => {
+            setListed(true)
+            if (when.every !== null) onEvery(null)
+          })}
+        </div>
       )}
 
-      {repeats && shape !== 'listed' && (
+      {repeats && !listed && (
         <>
           <label className="sched-row">
             <span className="sched-label">Every</span>
+            {/* **Typed as text, committed when it is a number.** Bound straight
+                to the value with a `Math.max(1, …)` on the way in, an empty
+                field became `1` on the keystroke that emptied it — so you could
+                not backspace a `1` to type `30`, which is the commonest edit
+                there is. Reported from use. The field holds what was typed; the
+                schedule hears only what parses. */}
             <input
-              type="number"
-              min={1}
+              type="text"
+              inputMode="numeric"
               className="sched-n"
-              value={when.every?.n ?? 1}
-              onChange={event => onEvery(`${Math.max(1, Number(event.target.value) || 1)}${when.every?.unit ?? 'm'}`)}
+              value={count}
+              onChange={event => {
+                const said = event.target.value.replace(/[^0-9]/g, '')
+                setCount(said)
+                const n = Number(said)
+                if (said !== '' && n >= 1) onEvery(`${n}${when.every?.unit ?? 'm'}`)
+              }}
+              onBlur={() => setCount(String(when.every?.n ?? 1))}
             />
             <select
               className="docket-mode"
@@ -1484,34 +1517,34 @@ function SchedulePanel({
               ))}
             </select>
           </label>
-          {/* **The distinction the modes exist for**, said in words rather than
-              as a pointer to a step id: one is the calendar's business and the
-              other is yours (D76). */}
-          <div className="sched-shapes">
-            <label className="sched-option">
-              <input
-                type="radio"
-                name="from"
-                checked={when.after === null}
-                onChange={() => onAfter(null)}
-              />
-              counting from that date
-            </label>
-            <label className="sched-option">
-              <input
-                type="radio"
-                name="from"
-                checked={when.after !== null}
-                onChange={() => onAfter(matter.steps[0]?.id ?? null)}
-                disabled={matter.steps.length === 0}
-              />
-              counting from when it is done
-            </label>
-          </div>
+          {/* **Only where completion is a thing that happens** — an event is not
+              *done*, so this is the recurring TASK's question and D76's whole
+              point: one is the calendar's business and the other is yours. */}
+          {fromCompletion && (() => {
+            // **A clock can only read a TASK step**, since a status step is
+            // never done. Offering this on a matter whose steps are all
+            // reminders was a control that accepted the click and did nothing —
+            // the panel's own version of the affordance faults MH1 kept hitting.
+            const clock = matter.steps.find(one => one.kind === 'task' && one.id !== null)
+            return (
+              <div className="sched-shapes">
+                {radio('from', when.after === null, 'counting from that date', () => onAfter(null))}
+                {radio(
+                  'from',
+                  when.after !== null,
+                  clock === undefined
+                    ? 'counting from when it is done — needs a step to do'
+                    : 'counting from when it is done',
+                  () => onAfter(clock?.id ?? null),
+                  clock === undefined,
+                )}
+              </div>
+            )
+          })()}
         </>
       )}
 
-      {shape === 'listed' && (
+      {repeats && listed && (
         <div className="sched-list">
           {(when.dates ?? []).map(one => (
             <span className="sched-date-chip" key={one}>
@@ -1552,7 +1585,6 @@ function SchedulePanel({
   )
 }
 
-type Shape = 'none' | 'once' | 'repeating' | 'listed'
 const UNIT_WORDS: Record<string, string> = { d: 'days', w: 'weeks', m: 'months', y: 'years' }
 
 function Field1({
