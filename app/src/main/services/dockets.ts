@@ -22,8 +22,6 @@ import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
 import type { DayService } from './day-service.ts'
 import type { FixedPoints } from './fixed-point.ts'
-import { serveKinds, type Served, type Serves } from './serves.ts'
-import { CHANNEL, type DocketCommand } from '../../shared/ipc.ts'
 import type { DocketDocument } from '../x/documents/kinds/docket.ts'
 import {
   MODES, parseInterval, spellInterval, spellStepWhen, UNSCHEDULED,
@@ -35,7 +33,7 @@ import type { DateKey, DocumentId } from '../../shared/document-api.ts'
 import { ONLY_SEGMENT } from '../../shared/document-api.ts'
 import type { DocketRow } from '../../shared/ipc.ts'
 
-export class Dockets implements Serves {
+export class Dockets {
   readonly #store: CorpusService
   readonly #durable: DurabilityService
   readonly #day: DayService
@@ -53,52 +51,6 @@ export class Dockets implements Serves {
     this.#fixed = fixed
   }
 
-  /**
-   * Its channel: one union, one arm per kind (MH1, D83).
-   *
-   * **Exhaustive by construction.** Adding a command to `DocketCommand` in
-   * `shared/ipc.ts` is a compile error here until it is handled, where the
-   * thirty-four case `switch` this replaced would have fallen through.
-   */
-  serves(): readonly Served[] {
-    return [
-      serveKinds<DocketCommand>(CHANNEL.docket, {
-      list: () => this.dockets(),
-      matters: command => this.docketMatters(command.docket),
-      add: command => this.docketAdd(command.docket, command.name, command.shape, command.section),
-      rename: command => this.docketRename(command.docket, command.matter, command.name),
-      mode: command => this.docketSetMode(command.docket, command.matter, command.mode),
-      start: command => this.docketSetStart(command.docket, command.matter, command.start),
-      moveTo: command => this.docketMoveTo(command.docket, command.matter, command.to),
-      dates: command => this.docketSetDates(command.docket, command.matter, command.dates),
-      every: command => this.docketSetEvery(command.docket, command.matter, command.every),
-      after: command => this.docketSetAfter(command.docket, command.matter, command.after),
-      advance: command => this.docketAdvance(command.docket, command.matter),
-      owner: command => this.docketSetOwner(command.docket, command.matter, command.owner),
-      link: command => this.docketSetLink(command.docket, command.matter, command.link),
-      tag: command => this.docketTag(command.docket, command.matter, command.subject),
-      untag: command => this.docketUntag(command.docket, command.matter, command.subject),
-      remove: command => this.docketRemove(command.docket, command.matter),
-      notes: command => this.docketSetNotes(command.docket, command.matter, command.notes),
-      addStep: command => this.docketAddStep( command.docket, command.matter, command.when, command.text, command.stepKind, ),
-      editStep: command => this.docketEditStep( command.docket, command.matter, command.step, command.text, ),
-      stepWhen: command => this.docketSetStepWhen( command.docket, command.matter, command.step, command.when, ),
-      stepKind: command => this.docketSetStepKind( command.docket, command.matter, command.step, command.stepKind, ),
-      removeStep: command => this.docketRemoveStep(command.docket, command.matter, command.step),
-      completeStep: command => this.docketCompleteStep( command.docket, command.matter, command.step, command.done, ),
-      activate: command => this.docketActivate(command.docket, command.matter),
-      suspend: command => this.docketSuspend(command.docket, command.matter),
-      sections: command => this.docketSections(command.docket),
-      addSection: command => this.docketAddSection(command.docket, command.name),
-      renameSection: command => this.docketRenameSection(command.docket, command.name, command.to),
-      removeSection: command => this.docketRemoveSection(command.docket, command.name),
-      nudgeSection: command => this.docketNudgeSection(command.docket, command.name, command.delta),
-      place: command => this.docketMoveMatter( command.docket, command.matter, command.section, command.before, ),
-      nudge: command => this.docketNudgeMatter(command.docket, command.matter, command.delta),
-      move: command => this.docketMove(command.docket, command.matter, command.to),
-      }),
-    ]
-  }
 
   /** A turn in the one mutation queue. */
   #mutate<T>(work: () => Promise<T>): Promise<T> {

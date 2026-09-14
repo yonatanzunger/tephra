@@ -455,8 +455,22 @@ and a fix bundled into a move spends that property.
        enormous class and now says twice what the accessor says once; stripping
        it is a rename across some four hundred call sites and belongs in its own
        change rather than in the move that made it redundant.
-   - Still to do: **the agenda** (D84) — which is what layer 2 turned out to be —
-     and then the shell tier below.
+5. **The agenda — done 2026-09-14** (D84). `agenda-service.ts`, 741 lines: the
+   construct, over `Dockets` (496) and `Tasks` (228).
+   - **Its three faces**, all moved together because they are one concern: the
+     reconciliation pass (`reconcile`, `#reconcileDockets`, `#advanceDocket`,
+     `#setStepMade`, `#registerReconcilers`), the cross-form writes
+     (`todoSetStatus`, `todoBulk`, `todoPutDown`, `#finished`), and the
+     cross-form reads (`horizon`, `matterFor`).
+   - **It declares both unions and the reconcile door**, per the settled answer
+     to question 1: the composite declares the user-facing verbs. `Dockets` lost
+     its `serves()` and now answers no channel at all — which is the mark of a
+     store.
+   - `DocumentService` is **2,805 → 1,238** and holds what is left: windows and
+     the text contract, the file lifecycle, UI state, the zone offer, and the
+     remaining hand-written channels.
+   - Still to do: **the shell tier** (name it, and move `frame` into it as a real
+     service), and the `docket`/`todo` prefix strip.
 
 ## The agenda, and what sits at each level (D84)
 

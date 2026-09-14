@@ -123,7 +123,7 @@ export function registerDocumentIpc(service: DocumentService): void {
   // **A window of days, asked for by the caller.** The full view wants months
   // and the compact strip wants a fortnight; what counts as *bearing down* is
   // the same computation either way, so only the window differs (D74).
-  ipcMain.handle(CHANNEL.horizon, (_e, from: DateKey, to: DateKey) => service.horizon(from, to))
+  ipcMain.handle(CHANNEL.horizon, (_e, from: DateKey, to: DateKey) => service.agenda.horizon(from, to))
 
   /**
    * Follow a reference that leaves the app (D10's third and fourth kinds).

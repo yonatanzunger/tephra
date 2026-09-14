@@ -347,10 +347,10 @@ async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
  * and puts it back, which reports one of each and nets to nothing.
  */
 async function settled(service: Parameters<typeof onList>[0] & {
-  reconcile(): Promise<void>
+  readonly agenda: { reconcile(): Promise<void> }
 }): Promise<void> {
   const before = await onList(service)
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.deepEqual(await onList(service), before, 'another pass changed the list')
 }
 
@@ -1496,8 +1496,8 @@ test('IDEMPOTENCE: running it again makes nothing', async t => {
   const car = await service.docket.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.docketActivate(id, car)
   const first = await onList(service)
-  await service.reconcile()
-  await service.reconcile()
+  await service.agenda.reconcile()
+  await service.agenda.reconcile()
   // **The same items, not merely the same number.** Withdrawing and re-making
   // would keep the count and change the ids, which is the failure a count
   // cannot see — and the one the old assertion on `made` could not see either,
@@ -1513,7 +1513,7 @@ test('THE LONG ABSENCE: a month away yields one task, not thirty', async t => {
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docket.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.docketActivate(id, car)
-  for (let day = 0; day < 30; day += 1) await service.reconcile()
+  for (let day = 0; day < 30; day += 1) await service.agenda.reconcile()
   const list = await service.todo.todoList()
   assert.equal((await service.todo.todoItems(list, service.today)).length, 1)
 })
@@ -1522,7 +1522,7 @@ test('a matter nobody started generates nothing, which is what inactive MEANS', 
   const { service } = await serviced(t)
   const id = await service.newDocument('The house', undefined, 'docket')
   await service.docket.docketAdd(id, 'The car needs fixing', { mode: 'task' })
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.deepEqual(await onList(service), [], 'nothing was generated')
 })
 
@@ -1548,7 +1548,7 @@ test('THE CHAIN FIRES: finishing one brings the next', async t => {
   const shop = (await service.docket.docketMatters(id))[0]?.steps[0]?.id ?? ''
   await service.docket.docketAddStep(id, car, 'then', 'have the car fixed')
   await service.docket.docketActivate(id, car)
-  await service.reconcile()
+  await service.agenda.reconcile()
   await service.docket.docketCompleteStep(id, car, shop, true)
   const list = await service.todo.todoList()
   assert.deepEqual((await service.todo.todoItems(list, service.today)).map(withoutMarks),
@@ -1571,7 +1571,7 @@ test('and a reminder is authored but inert, there being no horizon yet', async t
   const talk = await service.docket.docketAdd(id, 'The ACM talk',
     { mode: 'event', start: service.today })
   await service.docket.docketActivate(id, talk)
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.deepEqual(await onList(service), [], 'MH2 is what gives it somewhere to go')
 })
 
@@ -1588,7 +1588,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   const [first] = await onList(service)
   const list = await service.todo.todoList()
 
-  await service.todoSetStatus(list, first as string, 'done')
+  await service.agenda.todoSetStatus(list, first as string, 'done')
   assert.notEqual((await service.docket.docketMatters(id))[0]?.steps[0]?.done, null,
     'the step knows, without anybody telling it')
 
@@ -1606,7 +1606,7 @@ test('and a task nothing generated flows back to nothing, quietly', async t => {
   await service.newDocument('The house', undefined, 'docket')
   const list = await service.todo.todoList()
   const mine = await service.todo.todoAdd(list, 'something I typed myself')
-  await service.todoSetStatus(list, mine, 'done')
+  await service.agenda.todoSetStatus(list, mine, 'done')
   const items = await service.todo.todoItems(list, service.today)
   assert.equal(items.find(one => one.id === mine)?.status, 'done')
 })
@@ -1616,7 +1616,7 @@ test('SUSPEND WITHDRAWS what it put on the list, and only that', async t => {
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docket.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.docketActivate(id, car)
-  await service.reconcile()
+  await service.agenda.reconcile()
   const list = await service.todo.todoList()
   const mine = await service.todo.todoAdd(list, 'something I typed myself')
   assert.equal((await service.todo.todoItems(list, service.today)).length, 2)
@@ -1634,7 +1634,7 @@ test('and it leaves a finished one alone, because finishing it was true', async 
   await service.docket.docketActivate(id, car)
   const [made] = await onList(service)
   const list = await service.todo.todoList()
-  await service.todoSetStatus(list, made as string, 'done')
+  await service.agenda.todoSetStatus(list, made as string, 'done')
 
   await service.docket.docketSuspend(id, car)
   const items = await service.todo.todoItems(list, service.today)
@@ -1647,7 +1647,7 @@ test('and re-activating generates afresh, having withdrawn the last lot', async 
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docket.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.docketActivate(id, car)
-  await service.reconcile()
+  await service.agenda.reconcile()
   await service.docket.docketSuspend(id, car)
   await service.docket.docketActivate(id, car)
   const list = await service.todo.todoList()
@@ -1674,8 +1674,8 @@ test('A RECURRING TASK ADVANCES when the step its clock reads is finished', asyn
   assert.equal(made.length, 1)
 
   const list = await service.todo.todoList()
-  await service.todoSetStatus(list, made[0] as string, 'done')
-  await service.reconcile()
+  await service.agenda.todoSetStatus(list, made[0] as string, 'done')
+  await service.agenda.reconcile()
 
   const matter = (await service.docket.docketMatters(id))[0]
   assert.equal(matter?.when.start, '2026-06-10', 'three months on from the day it was done')
@@ -1694,8 +1694,8 @@ test('and does NOT generate the next one until its day comes round', async t => 
     { mode: 'recurring-task', every: '3m', start: service.today })
   const list = await service.todo.todoList()
   const made = await onList(service)
-  await service.todoSetStatus(list, made[0] as string, 'done')
-  await service.reconcile()
+  await service.agenda.todoSetStatus(list, made[0] as string, 'done')
+  await service.agenda.reconcile()
   const items = await service.todo.todoItems(list, service.today)
   assert.equal(items.length, 1, 'and the finished one is still there, still finished')
 })
@@ -1714,7 +1714,7 @@ test('THE LONG ABSENCE, calendar-driven: a year away yields ONE birthday', async
   await service.docket.docketAddStep(id, day, '7d', 'buy a present')
 
   await on('2026-03-10')
-  await service.reconcile()
+  await service.agenda.reconcile()
 
   const matter = (await service.docket.docketMatters(id))[0]
   assert.equal(matter?.when.start, '2026-03-14', 'the next one, not the thirtieth one')
@@ -1735,7 +1735,7 @@ test('THE LONG ABSENCE, completion-driven: a year away yields ONE, not none', as
     { mode: 'recurring-task', every: '6m', start: '2020-04-01' })
 
   await on('2026-03-10')
-  await service.reconcile()
+  await service.agenda.reconcile()
   const list = await service.todo.todoList()
   assert.deepEqual((await service.todo.todoItems(list, service.today)).map(withoutMarks),
     ['Sharpen the mower blade'], 'still owed, and said so')
@@ -1752,12 +1752,12 @@ test('AN OUTSTANDING INSTANCE IS OVERDUE, not reissued (H7a)', async t => {
   const day = await service.docket.docketAdd(id, 'The quarterly report',
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docket.docketAddStep(id, day, '3d', 'write it')
-  await service.reconcile()
+  await service.agenda.reconcile()
   const list = await service.todo.todoList()
   assert.equal((await service.todo.todoItems(list, service.today)).length, 1, 'three days of run-up')
 
   await on('2026-07-01')
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-03-05',
     'sitting on the instance that is not finished')
   // **And still exactly ONE**, four months later: the task list carries an
@@ -1780,8 +1780,8 @@ test('and once it is settled it catches up in one step, to the CURRENT instance'
 
   await on('2026-07-01')
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-03-05', 'held, being owed')
-  await service.todoSetStatus(list, made[0] as string, 'done')
-  await service.reconcile()
+  await service.agenda.todoSetStatus(list, made[0] as string, 'done')
+  await service.agenda.reconcile()
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-09-05',
     'past June, which is also behind us, and stopped at the one ahead')
 })
@@ -1795,7 +1795,7 @@ test('a recurring EVENT with nothing owed rolls forward on its own', async t => 
     { mode: 'recurring-event', every: '1y', start: '2026-03-14' })
 
   await on('2026-03-20')
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2027-03-14')
 })
 
@@ -1814,11 +1814,11 @@ test('THE CLAMP, exercised by the tick: the 31st keeps meaning the 31st', async 
     const due = (await service.docket.docketMatters(id))[0]?.when.start ?? ''
     seen.push(due)
     await on(due)
-    await service.reconcile()
+    await service.agenda.reconcile()
     const step = (await service.docket.docketMatters(id))[0]?.steps[0]
     assert.notEqual(step?.made, null, `something to do on ${due}`)
-    await service.todoSetStatus(list, step?.made as string, 'done')
-    await service.reconcile()
+    await service.agenda.todoSetStatus(list, step?.made as string, 'done')
+    await service.agenda.reconcile()
   }
   // February clamps to the 28th; March does NOT inherit the clamp.
   assert.deepEqual(seen, ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30'])
@@ -1835,7 +1835,7 @@ test('IDEMPOTENCE OVER THE WHOLE PASS: thirty runs leave one answer', async t =>
   await service.docket.docketAdd(id, 'Fix the skylight', { mode: 'task', start: '2026-03-01' })
 
   await on('2026-03-03')
-  for (let run = 0; run < 30; run += 1) await service.reconcile()
+  for (let run = 0; run < 30; run += 1) await service.agenda.reconcile()
   const list = await service.todo.todoList()
   const texts = (await service.todo.todoItems(list, service.today)).map(withoutMarks).sort()
   assert.deepEqual(texts, ['Fix the skylight', 'write it'])
@@ -1851,7 +1851,7 @@ test('AND IT WITHDRAWS, because a reconciler that only adds is an event handler'
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docket.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.docketActivate(id, car)
-  await service.reconcile()
+  await service.agenda.reconcile()
   const list = await service.todo.todoList()
   assert.equal((await service.todo.todoItems(list, service.today)).length, 1)
 
@@ -1872,10 +1872,10 @@ test('and withdrawing does not touch what a person typed, or what is done', asyn
   const made = await onList(service)
   const list = await service.todo.todoList()
   const mine = await service.todo.todoAdd(list, 'something I typed myself')
-  await service.todoSetStatus(list, made[0] as string, 'done')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'done')
 
   await service.docket.docketSetStart(id, car, null)
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.deepEqual((await service.todo.todoItems(list, service.today)).map(one => one.id).sort(),
     [made[0] as string, mine].sort())
 })
@@ -1889,7 +1889,7 @@ test('AND A MATTER WITH NO INTERVAL NEVER ADVANCES, however long it sits', async
     { mode: 'task', start: '2026-03-01' })
   const made = await onList(service)
   const list = await service.todo.todoList()
-  await service.todoSetStatus(list, made[0] as string, 'done')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'done')
 
   await on('2027-03-01')
   await settled(service)
@@ -1914,7 +1914,7 @@ test('THE WEDGE: nevermind on a generated task must not silence the matter', asy
   const made = await onList(service)
   assert.equal(made.length, 1)
 
-  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'dropped')
   const matter = (await service.docket.docketMatters(id))[0]
   assert.equal(matter?.when.start, '2026-06-10', 'it moved on, rather than stopping for ever')
 })
@@ -1932,7 +1932,7 @@ test('and SKIPPING counts from the day it was SCHEDULED, not from today', async 
 
   // A fortnight of ignoring it, and then *nevermind*.
   await on('2026-03-24')
-  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'dropped')
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-06-10',
     'three months from the tenth, not from the twenty-fourth')
 })
@@ -1946,7 +1946,7 @@ test('whereas DOING it counts from the day it was done, which is the other verb'
   const made = await onList(service)
 
   await on('2026-03-24')
-  await service.todoSetStatus(list, made[0] as string, 'done')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'done')
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-06-24',
     'three months from when it actually happened')
 })
@@ -1958,7 +1958,7 @@ test('and BACKLOG resolves it too, an item nobody can see being owed by nobody',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todo.todoList()
   const made = await onList(service)
-  await service.todoSetStatus(list, made[0] as string, 'backlog')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'backlog')
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-06-10')
 })
 
@@ -1974,9 +1974,9 @@ test('A RECURRING EVENT IS NOT WEDGED BY IT EITHER, owed meaning STILL asked', a
   const list = await service.todo.todoList()
   const made = await onList(service)
 
-  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'dropped')
   await on('2026-07-01')
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-09-05',
     'past the one that was dropped and the one after it')
 })
@@ -1992,7 +1992,7 @@ test('AND A DROPPED ITEM IS LEFT ALONE, dropping it being their decision too', a
   const list = await service.todo.todoList()
   const made = await onList(service)
 
-  await service.todoSetStatus(list, made[0] as string, 'dropped')
+  await service.agenda.todoSetStatus(list, made[0] as string, 'dropped')
   await service.docket.docketSuspend(id, car)
   const items = await service.todo.todoItems(list, service.today)
   assert.equal(items.find(one => one.id === made[0])?.status, 'dropped',
@@ -2075,7 +2075,7 @@ test('THE EVENING BUG: a step done after 4pm unblocks the next one TODAY', async
 
   const list = await service.todo.todoList()
   const first = (await service.docket.docketMatters(id))[0]?.steps[0]
-  await service.todoSetStatus(list, first?.made as string, 'done')
+  await service.agenda.todoSetStatus(list, first?.made as string, 'done')
 
   assert.deepEqual((await service.todo.todoItems(list, service.today)).map(withoutMarks).sort(),
     ['Kia repairs', 'repair group 1 items'],
@@ -2092,7 +2092,7 @@ test('and the horizon reads the same clock, or it would disagree with the list',
   // the task list's row; the step two days out is still the docket's. Both read
   // the same clock, which is the claim — one from a completion stamp and one
   // from a start date, and an hour where the zones disagree.
-  const rows = await service.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
+  const rows = await service.agenda.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
   assert.deepEqual(rows.map(one => [one.on, one.kind, one.text]), [
     ['2026-03-10', 'due', 'Kia repairs'],
     ['2026-03-12', 'task', 'collect it'],
@@ -2148,12 +2148,12 @@ test('and the way back exists: an item says which matter made it', async t => {
   await service.docket.docketActivate(id, kia)
   const made = (await service.docket.docketMatters(id))[0]?.steps[0]?.made as string
 
-  assert.deepEqual(await service.matterFor(made), { docket: id, matter: kia })
+  assert.deepEqual(await service.agenda.matterFor(made), { docket: id, matter: kia })
 
   // And a task somebody typed came from nowhere, which is not an error.
   const list = await service.todo.todoList()
   const mine = await service.todo.todoAdd(list, 'something I typed myself')
-  assert.equal(await service.matterFor(mine), null)
+  assert.equal(await service.agenda.matterFor(mine), null)
 })
 
 // ── an explicit list of instances (H7, restored) ────────────
@@ -2191,7 +2191,7 @@ test('THE HORIZON READS THE LIST, rather than computing a sequence', async t => 
   const game = await service.docket.docketAdd(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.docketSetDates(id, game, ['2026-09-20', '2026-10-04', '2026-11-29'] as DateKey[])
 
-  const rows = await service.horizon('2026-09-01' as DateKey, '2026-10-31' as DateKey)
+  const rows = await service.agenda.horizon('2026-09-01' as DateKey, '2026-10-31' as DateKey)
   assert.deepEqual(rows.map(one => one.on), ['2026-09-20', '2026-10-04'],
     'the two in the window, and not the one past its end')
 })
@@ -2203,7 +2203,7 @@ test('AND IT ADVANCES TO THE NEXT ONE WRITTEN DOWN, not to a computed date', asy
   await service.docket.docketSetDates(id, game, ['2026-09-20', '2026-10-04'] as DateKey[])
 
   await on('2026-09-21')
-  await service.reconcile()
+  await service.agenda.reconcile()
   assert.equal((await service.docket.docketMatters(id))[0]?.when.start, '2026-10-04',
     'the next session, whatever the gap was')
 })
@@ -2218,11 +2218,11 @@ test('and running out of dates leaves it with NO DATE, which is the honest state
   await service.docket.docketSetDates(id, game, ['2026-09-20'] as DateKey[])
 
   await on('2026-09-21')
-  await service.reconcile()
+  await service.agenda.reconcile()
   const matter = (await service.docket.docketMatters(id))[0]
   assert.equal(matter?.when.start, null, 'no more sessions scheduled')
   assert.deepEqual(matter?.when.dates, ['2026-09-20'], 'and the list is kept, being what happened')
-  assert.deepEqual(await service.horizon('2026-01-01' as DateKey, '2027-01-01' as DateKey), [])
+  assert.deepEqual(await service.agenda.horizon('2026-01-01' as DateKey, '2027-01-01' as DateKey), [])
 })
 
 test('and setting an interval afterwards clears the list, both being one answer', async t => {
@@ -2272,7 +2272,7 @@ test('and the horizon does not show it twice, the two sources staying disjoint',
   await service.docket.docketAdd(id, 'Change the water filter',
     { mode: 'recurring-task', every: '120d', start: '2026-03-10' })
 
-  const rows = await service.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
+  const rows = await service.agenda.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
   assert.deepEqual(rows.map(one => [one.on, one.kind, one.text]),
     [['2026-03-10', 'due', 'Change the water filter']], 'once, as a dated task')
 })
@@ -2355,7 +2355,7 @@ test('THE POINT: putting a task down gives it a home and leaves its line alone',
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed #house OWNER Sam')
 
-  const made = await service.todoPutDown(list, item)
+  const made = await service.agenda.todoPutDown(list, item)
   assert.notEqual(made, null)
 
   // The line stays, saying what happened to it: `[>]` is *transferred*, which
@@ -2374,7 +2374,7 @@ test('and its subjects and its owner come with it, being facts about the THING',
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed #house OWNER Sam DUE 2026-03-20')
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
 
   const matter = (await service.docket.docketMatters(BACKLOG_DOCKET))[0]
   assert.deepEqual(matter?.tags, ['house'])
@@ -2393,7 +2393,7 @@ test('and a task a DOCKET made is not given a second home', async t => {
   const list = await service.todo.todoList()
   const made = (await service.docket.docketMatters(id))[0]?.steps[0]?.made as string
 
-  assert.equal(await service.todoPutDown(list, made), null, 'nowhere new to go')
+  assert.equal(await service.agenda.todoPutDown(list, made), null, 'nowhere new to go')
   assert.deepEqual(await service.docket.docketMatters(BACKLOG_DOCKET), [])
 })
 
@@ -2401,8 +2401,8 @@ test('and putting down twice does not make two of it', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  await service.todoPutDown(list, item)
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
   assert.equal((await service.docket.docketMatters(BACKLOG_DOCKET)).length, 1)
 })
 
@@ -2413,7 +2413,7 @@ test('and somewhere else, when the answer is already known', async t => {
   const house = await service.newDocument('The house', undefined, 'docket')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  await service.todoPutDown(list, item, house)
+  await service.agenda.todoPutDown(list, item, house)
   assert.deepEqual((await service.docket.docketMatters(house)).map(one => one.name), ['repaint the shed'])
   assert.deepEqual(await service.docket.docketMatters(BACKLOG_DOCKET), [])
 })
@@ -2431,13 +2431,13 @@ test('THE BUG: putting down a CARRIED item marks the line it is on now', async t
   await on('2026-03-12')
   await service.todo.todoList()
 
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
   const now = (await service.todo.todoItems(list, service.today)).find(one => one.id === item)
   assert.equal(now?.status, 'backlog', 'the line says it was transferred')
   assert.equal((await service.docket.docketMatters(BACKLOG_DOCKET)).length, 1)
 
   // And pressing again is a no-op, which is what a repeated keystroke needs.
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
   assert.equal((await service.docket.docketMatters(BACKLOG_DOCKET)).length, 1)
 })
 
@@ -2447,7 +2447,7 @@ test('and the backlog docket lives with the others, and is NAMED', async t => {
   // anything looks for a docket, so putting a task down appeared to do nothing.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
-  await service.todoPutDown(list, await service.todo.todoAdd(list, 'repaint the shed'))
+  await service.agenda.todoPutDown(list, await service.todo.todoAdd(list, 'repaint the shed'))
 
   const rows = await service.docket.dockets()
   assert.deepEqual(rows.map(one => [one.id, one.title]),
@@ -2467,7 +2467,7 @@ test('UNDO CANNOT REACH A MOVE, because a transfer is not text you typed', async
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
 
   // **Undo reaches past it**, to the edit before — here, the line's creation.
   // That is the point: the transfer is not on the stack at all, so there is no
@@ -2487,7 +2487,7 @@ test('and the line says where it went, in the file and not only on screen', asyn
   const house = await service.newDocument('The house', undefined, 'docket')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  await service.todoPutDown(list, item, house)
+  await service.agenda.todoPutDown(list, item, house)
 
   const line = (await service.todo.todoItems(list, service.today)).find(one => one.id === item)
   assert.equal(line?.moved, 'The house')
@@ -2534,7 +2534,7 @@ test('THE POINT: putting a task down gives it a home and leaves its line alone',
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed #house OWNER Sam')
 
-  const made = await service.todoPutDown(list, item)
+  const made = await service.agenda.todoPutDown(list, item)
   assert.notEqual(made, null)
 
   // The line stays, saying what happened to it: `[>]` is *transferred*, which
@@ -2553,7 +2553,7 @@ test('and its subjects and its owner come with it, being facts about the THING',
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed #house OWNER Sam DUE 2026-03-20')
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
 
   const matter = (await service.docket.docketMatters(BACKLOG_DOCKET))[0]
   assert.deepEqual(matter?.tags, ['house'])
@@ -2572,7 +2572,7 @@ test('and a task a DOCKET made is not given a second home', async t => {
   const list = await service.todo.todoList()
   const made = (await service.docket.docketMatters(id))[0]?.steps[0]?.made as string
 
-  assert.equal(await service.todoPutDown(list, made), null, 'nowhere new to go')
+  assert.equal(await service.agenda.todoPutDown(list, made), null, 'nowhere new to go')
   assert.deepEqual(await service.docket.docketMatters(BACKLOG_DOCKET), [])
 })
 
@@ -2580,8 +2580,8 @@ test('and putting down twice does not make two of it', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  await service.todoPutDown(list, item)
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
   assert.equal((await service.docket.docketMatters(BACKLOG_DOCKET)).length, 1)
 })
 
@@ -2592,7 +2592,7 @@ test('and somewhere else, when the answer is already known', async t => {
   const house = await service.newDocument('The house', undefined, 'docket')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  await service.todoPutDown(list, item, house)
+  await service.agenda.todoPutDown(list, item, house)
   assert.deepEqual((await service.docket.docketMatters(house)).map(one => one.name), ['repaint the shed'])
   assert.deepEqual(await service.docket.docketMatters(BACKLOG_DOCKET), [])
 })
@@ -2610,13 +2610,13 @@ test('THE BUG: putting down a CARRIED item marks the line it is on now', async t
   await on('2026-03-12')
   await service.todo.todoList()
 
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
   const now = (await service.todo.todoItems(list, service.today)).find(one => one.id === item)
   assert.equal(now?.status, 'backlog', 'the line says it was transferred')
   assert.equal((await service.docket.docketMatters(BACKLOG_DOCKET)).length, 1)
 
   // And pressing again is a no-op, which is what a repeated keystroke needs.
-  await service.todoPutDown(list, item)
+  await service.agenda.todoPutDown(list, item)
   assert.equal((await service.docket.docketMatters(BACKLOG_DOCKET)).length, 1)
 })
 
@@ -2626,7 +2626,7 @@ test('and the backlog docket lives with the others, and is NAMED', async t => {
   // anything looks for a docket, so putting a task down appeared to do nothing.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
-  await service.todoPutDown(list, await service.todo.todoAdd(list, 'repaint the shed'))
+  await service.agenda.todoPutDown(list, await service.todo.todoAdd(list, 'repaint the shed'))
 
   const rows = await service.docket.dockets()
   assert.deepEqual(rows.map(one => [one.id, one.title]),
@@ -2641,7 +2641,7 @@ test('A MATTER MOVES BETWEEN DOCKETS, carrying what it is', async t => {
   const house = await service.newDocument('The house', undefined, 'docket')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed #outside OWNER Sam')
-  const made = await service.todoPutDown(list, item) as string
+  const made = await service.agenda.todoPutDown(list, item) as string
   await service.docket.docketAddStep(BACKLOG_DOCKET, made, 'then', 'buy the paint')
   await service.docket.docketSetNotes(BACKLOG_DOCKET, made, ['the south wall is worst'])
 
@@ -2667,7 +2667,7 @@ test('and ACTIVATING is how it comes back to the list, freshly', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const list = await service.todo.todoList()
   const item = await service.todo.todoAdd(list, 'repaint the shed')
-  const made = await service.todoPutDown(list, item) as string
+  const made = await service.agenda.todoPutDown(list, item) as string
 
   await service.docket.docketActivate(BACKLOG_DOCKET, made)
   const items = await service.todo.todoItems(list, service.today)
@@ -2796,10 +2796,10 @@ test('DERIVED IS RECOVERABLE FROM PRIMARY: the step names what it made', async t
   const step = (await service.docket.docketMatters(id))[0]?.steps[0]
   assert.equal(step?.made, made, 'the link is stored on the PRIMARY side')
   // And it reads back the other way, which is what the surfaces ask.
-  assert.deepEqual(await service.matterFor(made), { docket: id, matter: car })
+  assert.deepEqual(await service.agenda.matterFor(made), { docket: id, matter: car })
   // A typed one belongs to nothing, and says so rather than guessing.
   const mine = await service.todo.todoAdd(list, 'Ring the dentist')
-  assert.equal(await service.matterFor(mine), null)
+  assert.equal(await service.agenda.matterFor(mine), null)
 })
 
 test('A RESOLVED ITEM IS A FACT ABOUT THE PAST: reconcile leaves it alone', async t => {
@@ -2813,7 +2813,7 @@ test('A RESOLVED ITEM IS A FACT ABOUT THE PAST: reconcile leaves it alone', asyn
     await service.docket.docketActivate(id, car)
     const list = await service.todo.todoList()
     const made = (await service.todo.todoItems(list, service.today))[0]?.id ?? ''
-    await service.todoSetStatus(list, made, answer)
+    await service.agenda.todoSetStatus(list, made, answer)
     await service.docket.docketSuspend(id, car)
     const left = await service.todo.todoItems(list, service.today)
     assert.deepEqual(left.map(one => one.id), [made], `a ${answer} item stayed`)
@@ -2866,7 +2866,7 @@ test('AND SO DOES A TASK-LIST WRITE, because the clause reads the list', async t
   const started = (await service.docket.docketMatters(id))[0]?.when.start
 
   // *Nevermind* — put down rather than done. Nobody calls reconcile.
-  await service.todoSetStatus(list, first, 'dropped')
+  await service.agenda.todoSetStatus(list, first, 'dropped')
 
   // The instance moved on, because dropping it resolved what was outstanding.
   assert.notEqual(
@@ -2891,12 +2891,12 @@ test('and a real flow stays far below the divergence threshold', async t => {
   const list = await service.todo.todoList()
   for (const day of ['2026-04-10', '2026-05-11', '2026-06-11', '2026-07-12']) {
     const item = (await service.todo.todoItems(list, service.today)).find(one => one.status === 'todo')
-    if (item?.id != null) await service.todoSetStatus(list, item.id, 'done')
+    if (item?.id != null) await service.agenda.todoSetStatus(list, item.id, 'done')
     await on(day)
   }
   assert.ok(
-    service.reconciliationHighWater <= 3,
-    `an ordinary flow reached ${service.reconciliationHighWater} rounds on one key`,
+    service.agenda.reconciliationHighWater <= 3,
+    `an ordinary flow reached ${service.agenda.reconciliationHighWater} rounds on one key`,
   )
   // Measured 2026-09-14: **2**. The limit is 25.
 })

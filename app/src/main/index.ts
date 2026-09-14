@@ -542,11 +542,11 @@ app.whenReady().then(async () => {
   // and the keys that woke each one — so the log is better than the count this
   // line used to print, and a run that would not settle says so instead of
   // passing silently (D83).
-  service.onReconciled(report => {
+  service.agenda.onReconciled(report => {
     if (report.diverged !== null) console.error(`Tephra: ${report.summary}`)
     else if (report.rounds > 1) console.log(`Tephra: ${report.summary}`)
   })
-  await service.reconcile().catch(() => undefined)
+  await service.agenda.reconcile().catch(() => undefined)
 
   // **The other half of taking over: being taken from.** Once another Tephra
   // has the notebook, this one must stop before it writes — so the tiers are

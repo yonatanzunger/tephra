@@ -2306,10 +2306,30 @@ console.log('\n\u2014 capture from the stream \u2014')
   // the real one (note 61); that hole is now gated shut, and this failed again
   // afterwards. So the cause is still unknown.
   //
-  // `whereTheItemsAre` is the instrumentation added for the next occurrence: it
-  // says which days the list holds and how many items are on each, which
-  // separates *never committed* from *committed under another day* — the two
-  // causes an empty `items` cannot distinguish. Read it before theorising.
+  // **What is now RULED OUT, from one instrumented failure (2026-09-14):**
+  //
+  //     read  items=[] days={}
+  //     WROTE items=[] days=[] list="tasks.todo" error="none"
+  //
+  //   - **Not a day mismatch.** Both windows report no days at all, so the item
+  //     is not filed under a date the reader is not looking at. That kills the
+  //     whole family the seeding race belonged to.
+  //   - **Not propagation.** The window that *committed* sees no item either, so
+  //     it is not a question of the reader's view being stale.
+  //   - **Not an error.** Neither window's error surface has anything on it.
+  //   - **Not the second window failing to boot**: it opened, and its row
+  //     arrived prefilled, both asserted and both passing in the failure.
+  //
+  // **What is left**, unproven: the commit does not complete. Every symptom fits
+  // `todo.add` hanging — no item, no error, and `settle` never called, so the
+  // driver never gets its link and times out after twelve seconds. `addResolves`
+  // is the probe that would settle it: it races a write from the committing
+  // window against four seconds. On healthy runs it says `resolved`. **No
+  // failing run has been caught with it in place yet** — when one is, that field
+  // is the answer.
+  //
+  // Read the numbers before theorising. Two hypotheses died here already, both
+  // plausible, both about the wrong half of the system.
   const kept = report(await launch('capture', await week([prose])))
   check('a selection can be taken from mid-sentence', kept.selected === 'call the surveyor about the boundary')
   check(
@@ -2321,7 +2341,13 @@ console.log('\n\u2014 capture from the stream \u2014')
     'committing it makes the item and leaves the sentence its words',
     Array.isArray(kept.items) && kept.items[0] === 'call the surveyor about the boundary' &&
       /Spoke to the agent today\./.test(String(kept.prose)) && /before Friday\./.test(String(kept.prose)),
-    `${JSON.stringify(kept.items)} · ${JSON.stringify(kept.whereTheItemsAre)}`,
+    `read ${JSON.stringify(kept.items)} · ${JSON.stringify(kept.whereTheItemsAre)}` +
+      ` · WROTE items=${JSON.stringify(kept['w2.itemsHere'])}` +
+      ` days=${JSON.stringify(kept['w2.daysHere'])}` +
+      ` list=${JSON.stringify(kept['w2.listHere'])}` +
+      ` error=${JSON.stringify(kept['w2.errorHere'])}` +
+      ` addResolves=${JSON.stringify(kept['w2.addResolves'])}` +
+      ` afterProbe=${JSON.stringify(kept['w2.afterProbe'])}`,
   )
   check(
     'and the words now point at the task they became',

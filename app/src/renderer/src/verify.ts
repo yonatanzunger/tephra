@@ -149,6 +149,35 @@ export async function runVerify(request: string): Promise<void> {
         await settle(2500)
         say('rowGone', row() === null)
         say('leftBehind', document.querySelectorAll('.todo-row:not(.todo-adding)').length)
+        // **The WRITER's side, which was the gap.** The reader's report said the
+        // list was empty and could not say why — the instrumentation was all in
+        // the window that asks, and none in the window that commits. These three
+        // separate *the commit never happened* from *it happened and the reader
+        // cannot see it*, and the error surface is this window's own: `appError`
+        // was only ever read in the driver, so a failure here was silent.
+        say('errorHere', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+        {
+          const list = await window.tephra.todo.which()
+          const day = await window.tephra.todo.today(list)
+          say('listHere', list as unknown as string)
+          say('itemsHere', (await window.tephra.todo.items(list, day)).map(one => one.text))
+          say('daysHere', (await window.tephra.todo.days(list)) as unknown as string[])
+          // **Does a write from this window resolve at all?** Every symptom so
+          // far fits `todo.add` hanging: no item, no error, and `settle` never
+          // called — so the driver never gets its link. A hang and a write that
+          // silently does nothing look identical from outside; this tells them
+          // apart, which nothing else has.
+          // **Only in the committed half.** The abandoned half asserts the list
+          // stays empty, and a probe that writes an item fails it — which it
+          // did, and which was my contamination rather than a finding.
+          if (arg !== 'escape') say('addResolves', await Promise.race([
+            window.tephra.todo.add(list, 'probe: does a write resolve').then(() => 'resolved'),
+            new Promise(r => setTimeout(() => r('HUNG'), 4000)),
+          ]).catch(e => `threw ${String(e).slice(0, 80)}`))
+          if (arg !== 'escape') {
+            say('afterProbe', (await window.tephra.todo.items(list, day)).map(one => one.text))
+          }
+        }
         await settle(2500)
         return
       }
