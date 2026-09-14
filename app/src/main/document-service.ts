@@ -1,8 +1,21 @@
-// The document service: one Document, many window handles, and a serial queue.
+// The document service: one Document, many window handles, and every verb the
+// app can do.
 //
-// DELIBERATELY FREE OF ELECTRON. The one rule here that matters more than the
-// rest is that edits apply in the order they were composed, and that ordering
-// is exactly the kind of thing that is subtly wrong in a way no manual test
+// **Layers 1 and 2, not yet separated** (D83). This class is being split into
+// services that follow the IPC channels, over the `CoreService` it already
+// holds — so what is here is *everything that has not moved yet*, and the plan
+// for where each part goes is `solution/service-layers.md`. It reaches the
+// corpus only through the core, because a second path to a document would be a
+// second path around the queue.
+//
+// The queue and the three write tiers are the core's now. The private names
+// this file still uses for them — `#corpus`, `#stream`, `#index`, `#serial`,
+// `#touched` — are forwarders, kept so that extracting the core moved no call
+// site; they go as each service starts naming `#core` directly.
+//
+// DELIBERATELY FREE OF ELECTRON. The one rule that matters more than the rest
+// is that edits apply in the order they were composed, and that ordering is
+// exactly the kind of thing that is subtly wrong in a way no manual test
 // notices. Keeping this module importable from plain Node is what lets it be
 // tested at all.
 //
@@ -19,10 +32,8 @@ import { CHANNEL, type Attached, type Base, type DayProse, type DocketRow, type 
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../shared/comments.ts'
 import type { Notebook } from './w/notebook.ts'
-import { Wal, type WalRecord } from './w/wal.ts'
-import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
-import { StreamHistory } from './x/history.ts'
+import type { StreamHistory } from './x/history.ts'
 import type { RestoreReport, Version } from '../shared/history-api.ts'
 import {
   dayFile, documentRoot, kindOf, noteFile, NOTES_DIR, parseDayFile, relativePath,
@@ -57,7 +68,6 @@ import { Scanner } from './x/documents/search.ts'
 import type { Search } from '../shared/search-api.ts'
 import { STREAM_ID, type Corpus } from './x/documents/corpus.ts'
 import { Filesets } from './x/fileset.ts'
-import { applyEdits } from './x/text-edits.ts'
 import type { LocalWindow } from './x/window.ts'
 import { CoreService, type MessageSink } from './core-service.ts'
 
@@ -71,20 +81,6 @@ export type { MessageSink }
 
 
 /**
- * The file-write tier (D32 M2): quiescence OR a ceiling, never quiescence alone.
- *
- * Quiescence alone fails under exactly the condition this notebook exists for —
- * writing continuously for an hour never reaches quiescence, so the file is
- * never written and everything lives in memory until something goes wrong. The
- * ceiling closes that, and it is why both numbers are here rather than one.
- *
- * Durability belongs in main, not in the renderer: the renderer is the process
- * most likely to die, and asking it to remember to save is asking the least
- * reliable component to own the most important guarantee.
- */
-const QUIESCE_MS = 1_000
-
-/**
  * How often the service checks whether the day has changed.
  *
  * Well below noticing, well above costing anything — and a poll rather than a
@@ -92,26 +88,6 @@ const QUIESCE_MS = 1_000
  * was asleep when the boundary passed.
  */
 const DAY_CHECK_MS = 30_000
-
-const MAX_INTERVAL_MS = 5_000
-
-/**
- * The third tier (D32) — recording a recoverable VERSION of the notebook, not
- * "committing", which is one store's word for it. Same shape as the file tier
- * and for the same reason:
- * **quiescence alone fails under precisely the condition this notebook exists
- * for.** Writing continuously for an hour never reaches quiescence, so without
- * a ceiling the commit would never happen and the whole hour would live in one
- * commit — or in none, if the process died.
- */
-/**
- * The first tier (D32). Small enough that what it can lose is a few keystrokes;
- * large enough that a burst of typing is one write rather than thirty.
- */
-const WAL_BATCH_MS = 50
-
-const VERSION_QUIESCE_MS = 5 * 60_000
-const VERSION_MAX_MS = 30 * 60_000
 
 export interface ServiceOptions {
   /** The clock, so a test can be at any hour it likes without waiting. */
@@ -193,17 +169,6 @@ export class DocumentService {
   readonly #windows = new Map<WindowId, { window: LocalWindow; release: Unsubscribe }>()
   #nextId: WindowId = 1
 
-  #flushTimer: ReturnType<typeof setTimeout> | null = null
-  #dirtySince: number | null = null
-
-  #repo: Repository | null = null
-  #versionTimer: ReturnType<typeof setTimeout> | null = null
-  #versionDirtySince: number | null = null
-  readonly #quiesceMs: number
-  readonly #maxIntervalMs: number
-  readonly #versionQuiesceMs: number
-  readonly #versionMaxMs: number
-  readonly #wantsHistory: boolean
 
   /** The day the app believes it is in, and the poll that keeps it honest. */
   #clock: DayClock
@@ -236,46 +201,17 @@ export class DocumentService {
   #dayTimer: ReturnType<typeof setInterval> | null = null
   readonly #now: () => Date
 
-  /** Something is unwritten or unversioned; the tiers have work to do. */
-  #unsavedWork = false
-  /** Whether anything outside the app changed since the last version. */
-  #sawExternal = false
-
-  /**
-   * One log per document (D32, D54).
-   *
-   * `walFile(docId)` has always taken an id and has only ever been given
-   * `'stream'`. Making it real here rather than when the second writable kind
-   * arrives means a pin's durability is not a thing anybody has to remember to
-   * add.
-   */
-  readonly #wals = new Map<DocumentId, Wal>()
-  readonly #walBatchMs: number
-  readonly #walPending = new Map<DocumentId, WalRecord[]>()
-  #walTimer: ReturnType<typeof setTimeout> | null = null
-
-  /** Dates touched since the last version, for its reason. */
-  readonly #pendingDates = new Set<string>()
-  /** The first line of the most recent insertion, for the message. */
-  #headline = ''
-
   readonly #notebook: Notebook
 
   constructor(notebook: Notebook, options: ServiceOptions = {}) {
     this.#notebook = notebook
     // **The core first**, because everything below this line reaches through it:
     // the corpus, the index and the stream are its, and so is the queue (D83).
-    this.#core = new CoreService(notebook)
+    this.#core = new CoreService(notebook, options)
     // Beside the index rather than in the core: only search uses the Scanner,
     // so it belongs to the search service when that is split out (D83).
     this.#search = new Scanner(notebook, this.#index)
     this.#filesets = new Filesets(this.#corpus)
-    this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
-    this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
-    this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
-    this.#versionQuiesceMs = options.versionQuiesceMs ?? VERSION_QUIESCE_MS
-    this.#versionMaxMs = options.versionMaxMs ?? VERSION_MAX_MS
-    this.#wantsHistory = options.history !== false
     this.#now = options.now ?? (() => new Date())
     this.#idleMs = options.idleMs
     // Seeded properly once the stream can be asked what the newest day is; a
@@ -295,76 +231,6 @@ export class DocumentService {
     this.#seeded = this.#seedTheClock()
     this.#systemZone = options.systemZone ?? systemZone
     this.#watchTheClock(options.dayCheckMs ?? DAY_CHECK_MS)
-
-    // What went into the commit message, gathered as it happens. Reconstructing
-    // it later would mean diffing, and the point of quoting the text is that it
-    // is right there at the moment of the change.
-    // Into the log before the file tier gets to it: that gap is the whole
-    // reason the log exists.
-    // Through the Corpus rather than from a document: with documents opening
-    // and being let go, a subscription against one of them has no lifetime to
-    // live in (D54). The id says which document an edit belongs to.
-    this.#corpus.onJournal((id, segment, baseLen, edits) => {
-      const pending = this.#walPending.get(id) ?? []
-      for (const edit of edits) {
-        pending.push({
-          doc: id as string,
-          date: segment as string,
-          baseLen,
-          from: edit.from,
-          to: edit.to,
-          insert: edit.insert,
-        })
-      }
-      this.#walPending.set(id, pending)
-      this.#scheduleWal()
-    })
-
-    this.#corpus.onChanged((_id, change) => {
-      // **Any document changing schedules a write.** The service used to say so
-      // at each of its own mutating methods, which was complete while it was
-      // the only writer — then a pin became a document edit made through
-      // another object, and nothing scheduled anything: the text sat in memory
-      // until the app quit. A change is a change, whoever asked for it (D54).
-      if (change.origin !== 'external') this.#touched()
-
-      // An external change must not colour OUR commit message. Measured before
-      // this guard existed: a hand-edit set the headline, and the next commit
-      // triggered by typing quoted text its author never wrote.
-      if (change.origin === 'external') return
-      for (const edit of change.edits) {
-        this.#pendingDates.add(edit.span.begin.segment as string)
-        const line = edit.payload.split('\n').find(l => l.trim() !== '')
-        if (line !== undefined) this.#headline = line.trim()
-      }
-    })
-
-    // Hand-editing is a feature, so the app has to notice. Queued with the
-    // edits, because a reload racing a write is the corruption this whole
-    // layer exists to avoid.
-    notebook.onExternalChange(changes => {
-      void this.#serial(async () => {
-        for (const change of changes) await (await this.#stream).externalChanged(change.rel)
-
-        // **What the document did not take, the sidebar still needs.** A day
-        // file becomes a DocumentChange and travels the ordinary way; a section
-        // file edited by hand is a change to something no window is holding, so
-        // it is announced as itself and whoever cares re-asks (D53).
-        const elsewhere = changes.map(c => c.rel).filter(rel => parseDayFile(rel) === null)
-        if (elsewhere.length > 0) {
-          this.#core.announce(CHANNEL.corpusChanged, elsewhere)
-        }
-        // Nothing to collect: the commit scans for itself. All that is needed
-        // is that a commit becomes worth scheduling, and that the message
-        // admits the notebook was edited from outside.
-        this.#sawExternal = true
-        this.#versionable()
-      })
-    })
-
-    this.#corpus.onDiverged((_id, divergence) => {
-      this.#core.announce(CHANNEL.diverged, divergence)
-    })
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -495,7 +361,7 @@ export class DocumentService {
       // The idle rule's only input, and it is free here: every keystroke
       // already passes through this method (D62).
       if (request.origin === 'user') this.#clock.wrote()
-      this.#scheduleFlush()
+      this.#core.writeSoon()
       return {
         generation: window.generation,
         length: window.text.length,
@@ -534,7 +400,7 @@ export class DocumentService {
     const ack = await this.#serial(() =>
       this.#corpus.use(id, async doc => {
         const change = await doc.undo()
-        this.#scheduleFlush()
+        this.#core.writeSoon()
         return { change, generation: doc.generation }
       }),
     )
@@ -550,27 +416,15 @@ export class DocumentService {
     return this.#serial(() =>
       this.#corpus.use(id, async doc => {
         const change = await doc.redo()
-        this.#scheduleFlush()
+        this.#core.writeSoon()
         return { change, generation: doc.generation }
       }),
     )
   }
 
+  /** Write anything outstanding — the core's file tier (D83). */
   async flush(): Promise<void> {
-    this.#cancelFlush()
-    // Everything with unsaved work, not only the stream: the tiers are the
-    // corpus's, not one document's (D54, MC2c).
-    const written = await this.#serial(() => this.#corpus.flushAll())
-    // ORDER MATTERS: files first, then the log. A crash between the two replays
-    // edits the files already contain, which is exactly what `baseLen` makes
-    // harmless. The other order would lose them outright.
-    if (this.#walTimer !== null) clearTimeout(this.#walTimer)
-    this.#walTimer = null
-    this.#walPending.clear()
-    for (const wal of this.#wals.values()) await wal.clear()
-    if (written.length > 0) {
-      this.#versionable()
-    }
+    return this.#core.flush()
   }
 
   // ── the day, which changes whether or not anyone is looking ──
@@ -793,61 +647,17 @@ export class DocumentService {
     this.#dayTimer.unref?.()
   }
 
-  // ── the write-ahead log (D32) ────────────────────────────────
+  // ── durability, which is the core's (D32, D83) ───────────────
+  //
+  // The three tiers — log, file, version — live in `CoreService` now. What is
+  // left here is the doors into them, kept so that `main/index.ts` and the
+  // suites need not know the split has happened yet, and the READS over the
+  // history, which belong to a history service when that is split out.
 
-  /** The log for one document, made on first use. */
-  #walFor(id: DocumentId): Wal {
-    const held = this.#wals.get(id)
-    if (held !== undefined) return held
-    const made = new Wal(this.#notebook, id as string)
-    this.#wals.set(id, made)
-    return made
-  }
-
-  #scheduleWal(): void {
-    if (this.#walTimer !== null) return
-    this.#walTimer = setTimeout(() => {
-      this.#walTimer = null
-      for (const [id, batch] of [...this.#walPending]) {
-        this.#walPending.delete(id)
-        void this.#walFor(id).append(batch)
-      }
-    }, this.#walBatchMs)
-  }
-
-  /**
-   * Replay whatever the last session did not manage to write, and write it.
-   *
-   * Called once at startup, before any window opens. A record whose day is not
-   * the length that record expected is skipped: it is already in the file,
-   * because the crash landed after the write and before the log was cleared.
-   * Later records then match again, so recovery resumes wherever the files
-   * actually got to rather than refusing wholesale.
-   */
+  /** Replay whatever the last session did not manage to write. */
   async recover(): Promise<number> {
-    // One log per document, so recovery asks each of them. Only the stream is
-    // writable today; a record naming anything else is from a build that could
-    // write more, and is skipped rather than guessed at.
-    const records = await this.#walFor(STREAM_ID).read()
-    if (records.length === 0) return 0
-
-    let applied = 0
-    for (const record of records) {
-      if (record.doc !== (STREAM_ID as string)) continue
-      const segment = await (await this.#stream).segment(record.date as DateKey)
-      if (segment.readOnly || segment.diverged) continue
-      if (segment.length !== record.baseLen) continue // already on disk
-      const body = segment.body
-      segment.setBody(applyEdits(body, [{ from: record.from, to: record.to, insert: record.insert }]))
-      applied++
-    }
-
-    if (applied > 0) await this.flush()
-    else await this.#walFor(STREAM_ID).clear()
-    return applied
+    return this.#core.recover()
   }
-
-  // ── the version tier (D32) ───────────────────────────────────
 
   /**
    * Open the repository and reconcile whatever happened while the app was not
@@ -855,88 +665,24 @@ export class DocumentService {
    * legitimately be skipped — a test that only wants the document should not
    * pay for a git repository.
    */
+  /** Open the notebook's history, if it has one — the core's version tier. */
   async openHistory(): Promise<void> {
-    if (!this.#wantsHistory) return
-    this.#repo = await GitRepository.open(this.#notebook.root)
-    const first = (await this.#repo.latest()) === null
-    await this.#repo.save(first ? 'Opened the notebook' : 'Changes made outside Tephra')
+    return this.#core.openHistory()
   }
 
-  /**
-   * Record a version of the notebook now.
-   *
-   * Flushes first: saving a file the editor has not written yet records the
-   * previous state and quietly loses the newest work from the history — the one
-   * place it was supposed to be safe.
-   */
+  /** Record a version of the notebook now. */
   async saveVersion(): Promise<VersionId | null> {
-    this.#cancelVersion()
-    if (this.#repo === null) return null
-    await this.flush()
-
-    const message = this.#reason()
-    this.#pendingDates.clear()
-    this.#headline = ''
-    this.#sawExternal = false
-    this.#unsavedWork = false
-    // The store finds what changed for itself. Nothing is tracked here on its
-    // behalf, and nothing here knows how it is stored.
-    return this.#repo.save(message)
-  }
-
-  /**
-   * The reason a version was recorded: the first line of what changed, prefixed
-   * by the dates touched — chosen because the job is finding a lost paragraph a year later,
-   * and a timestamp does not help with that.
-   *
-   * NOTE for the purge procedure (T10): this puts content in the version's
-   * reason as well as in the file, so deleted text lives in two places per commit
-   * and a purge must rewrite messages too.
-   */
-  #reason(): string {
-    const dates = [...this.#pendingDates].sort()
-    const where =
-      dates.length === 0
-        ? 'notebook'
-        : dates.length === 1
-          ? (dates[0] as string)
-          : `${dates[0] as string}..${dates[dates.length - 1] as string}`
-    const text = this.#headline.length > 72 ? `${this.#headline.slice(0, 71)}\u2026` : this.#headline
-    // One scan means a commit may carry work from elsewhere alongside ours.
-    // Saying so is the honest version of the earlier attempt to separate them:
-    // the message quotes only what WE wrote, and admits when that is not the
-    // whole story.
-    if (text === '') return this.#sawExternal ? 'Changes made outside Tephra' : where
-    return `${where} \u00b7 ${text}${this.#sawExternal ? ' (with changes made outside Tephra)' : ''}`
-  }
-
-  #scheduleVersion(): void {
-    if (this.#repo === null) return
-    if (!this.#unsavedWork) return
-    const now = Date.now()
-    this.#versionDirtySince ??= now
-    if (this.#versionTimer !== null) clearTimeout(this.#versionTimer)
-    const remaining = this.#versionMaxMs - (now - this.#versionDirtySince)
-    this.#versionTimer = setTimeout(
-      () => void this.saveVersion(),
-      Math.max(0, Math.min(this.#versionQuiesceMs, remaining)),
-    )
-  }
-
-  #cancelVersion(): void {
-    if (this.#versionTimer !== null) clearTimeout(this.#versionTimer)
-    this.#versionTimer = null
-    this.#versionDirtySince = null
+    return this.#core.saveVersion()
   }
 
   /** The history, for reading. Null when history is off. */
   get repository(): Repository | null {
-    return this.#repo
+    return this.#core.repository
   }
 
   /** Days and versions, rather than paths and object ids (D32). */
   get history(): StreamHistory | null {
-    return this.#repo === null ? null : new StreamHistory(this.#repo)
+    return this.#core.history
   }
 
   async versions(limit = 50): Promise<readonly Version[]> {
@@ -1005,32 +751,13 @@ export class DocumentService {
     // Through the Corpus, which is what knows which documents are open: a
     // restore that wrote files under one would be undone by its buffer (MC7).
     const report = await this.#serial(() => history.restore(version, this.#corpus))
-    this.#unsavedWork = true
+    this.#core.unsaved()
     await this.flush()
-    await this.#repo?.save(`Restored to ${version.slice(0, 7)}`)
+    await this.#core.saveVersionNamed(`Restored to ${version.slice(0, 7)}`)
     return report
   }
 
-  /**
-   * Write after a second of quiet, but never later than five seconds after the
-   * first unsaved change — whichever comes first.
-   */
-  #scheduleFlush(): void {
-    const now = Date.now()
-    this.#dirtySince ??= now
-    if (this.#flushTimer !== null) clearTimeout(this.#flushTimer)
-    const remaining = this.#maxIntervalMs - (now - this.#dirtySince)
-    this.#flushTimer = setTimeout(
-      () => void this.flush(),
-      Math.max(0, Math.min(this.#quiesceMs, remaining)),
-    )
-  }
 
-  #cancelFlush(): void {
-    if (this.#flushTimer !== null) clearTimeout(this.#flushTimer)
-    this.#flushTimer = null
-    this.#dirtySince = null
-  }
 
   /**
    * Quiesce: write anything outstanding, commit it, and stop the timers.
@@ -1040,12 +767,7 @@ export class DocumentService {
    * the history rather than waiting for a quiescence that will never come.
    */
   async stop(): Promise<void> {
-    await this.flush()
-    await this.saveVersion()
-    this.#cancelFlush()
-    this.#cancelVersion()
-    if (this.#walTimer !== null) clearTimeout(this.#walTimer)
-    this.#walTimer = null
+    return this.#core.stop()
   }
 
   releaseWindow(id: WindowId): void {
@@ -1111,7 +833,7 @@ export class DocumentService {
     const id = await this.#serial(async () => (await this.#stream).branch(span, name))
     // Not `#touched()`: the branched file is already on disk, so the window
     // where the two halves disagree is closed now rather than in a second (D13).
-    this.#unsavedWork = true
+    this.#core.unsaved()
     await this.flush()
     return id
   }
@@ -1703,14 +1425,12 @@ export class DocumentService {
    * only when something else happens to save.
    */
   #touched(): void {
-    this.#unsavedWork = true
-    this.#scheduleFlush()
+    this.#core.touched()
   }
 
   /** The same, for the version tier's much longer clock (D32). */
   #versionable(): void {
-    this.#unsavedWork = true
-    this.#scheduleVersion()
+    this.#core.versionable()
   }
 
   /**

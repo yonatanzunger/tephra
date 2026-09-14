@@ -1,6 +1,7 @@
 # Service layers — splitting `DocumentService`
 
-**Status: designed 2026-09-13; the core's first slice is built.**
+**Status: designed 2026-09-13; the core's store, queue, bus and write tiers are
+built.**
 `architecture-as-built.md` describes what *is*; this describes what we are going
 to do, and each piece moves into that file as it lands. Decided in D83. Progress
 is tracked under *Order of work* at the foot — **1a is done**, and nothing above
@@ -187,7 +188,21 @@ leave the file without a single design decision.
      the queue would have meant proving two things at once, with the suites
      unable to say which had gone wrong. The forwarders go as each service is
      split out and starts naming `#core` directly.
-   - **1b** — the durability tiers: flush, version, WAL.
+   - **1b done, 2026-09-13** — the three write tiers (D32): the WAL, the file
+     tier, the version tier, plus `flush`, `stop`, `recover`, `saveVersion`,
+     `openHistory` and the `history`/`repository` accessors. **The four corpus
+     and notebook subscriptions moved with them** — the journal, the change
+     watch, the external-change reload, the divergence notice — because they are
+     what *feed* the tiers, and leaving them behind would have meant the core
+     owning the tiers while something above it decided when they fired.
+     `DocumentService` went 2,805 → 2,495 lines; the core is 553.
+     - Three `#scheduleFlush()` callers — `edit`, `undo`, `redo` — wanted the
+       file timer **without** marking unversioned work, so that became
+       `core.writeSoon()` rather than being folded into `touched()`. An undo
+       that puts a document back exactly as it was found should not tell the
+       version tier there is something to commit.
+     - The history *reads* — `versions`, `readDay`, `restore` — stayed put.
+       They are the history service's, layer 1, not durability.
    - **1c** — the day: `today`, `zone`, the roll.
    - **1d** — the reconciler inversion: `reconciles(name, pass)`.
 2. **`registerIpc`**, so a service can claim its own channels and the 74-case
