@@ -1,40 +1,32 @@
-// **Layer 0 — the core.** Everything in `main/` may call this; it calls nothing
-// above it (D83).
+// **Foundation. Depends on `CorpusService` and `Bus`.**
 //
-// What lives here is what every service needs and no service may have a second
-// copy of: the store, the one mutation queue, and the bus that reaches the
-// renderer. The layers above — domain services on layer 1, composing services on
-// layer 2 — reach the corpus **only** through here, because a second path to a
-// document is a second path around the queue.
+// The three write tiers (D32), and nothing else: the log, the file, the version.
 //
-// **The queue is the reason this class exists.** Idempotence has to hold
-// *concurrently*, not merely repeatedly (note 51: two overlapping reconciliation
-// passes generated the same task, because each read a world the other was
-// halfway through changing). Per-service queues would break that silently, and a
-// data race is the failure this project's tests are worst at catching.
+// **Quiescence alone fails under exactly the condition this notebook exists
+// for.** Writing continuously never reaches quiet, so a quiescence-only rule
+// would never write and everything would live in memory until something went
+// wrong. Every tier here is therefore *quiescence OR a ceiling*, and that is why
+// each has two numbers rather than one.
 //
-// **Electron-free, deliberately.** Pushed messages go to a `MessageSink` rather
-// than to a `BrowserWindow`, which is what lets the part most likely to be
-// subtly wrong be tested in plain Node.
+// **Durability belongs in main, not in the renderer**: the renderer is the
+// process most likely to die, and asking it to remember to save is asking the
+// least reliable component to own the most important guarantee.
 //
-// Extracted from `DocumentService` on 2026-09-13, bottom-first, so that
-// everything above it moves onto an interface already proven by the suites.
-// `Corpus` and `CorpusIndex` are peers beneath it — both built over the
-// notebook, neither over the other — and this class is the single interface onto
-// the pair.
+// **It subscribes; the corpus does not call it.** Marking work unsaved when a
+// document changes looks like the corpus reaching up into this service. It is
+// the other way round: this one asks the corpus to tell it, which keeps the
+// dependency pointing down while the news travels up (D83).
+//
+// No IPC channels of its own. `flush` is the renderer-facing door and belongs to
+// whichever domain service owns the text; this is what it calls.
 
-import { Corpus } from './x/documents/corpus.ts'
-import { CorpusIndex } from './x/documents/corpus-index.ts'
-import type { StreamDocument } from './x/documents/kinds/stream.ts'
-import type { Notebook } from './w/notebook.ts'
 import { Wal, type WalRecord } from './w/wal.ts'
 import { GitRepository } from './w/git-repository.ts'
 import type { Repository } from './w/repository.ts'
 import { StreamHistory } from './x/history.ts'
 import { applyEdits } from './x/text-edits.ts'
-import { parseDayFile } from './w/layout.ts'
+import type { CorpusService } from './corpus-service.ts'
 import type { DateKey, DocumentId, VersionId } from '../shared/document-api.ts'
-import { CHANNEL } from '../shared/ipc.ts'
 import { STREAM_ID } from '../shared/document-api.ts'
 
 /**
@@ -43,18 +35,7 @@ import { STREAM_ID } from '../shared/document-api.ts'
  */
 const WAL_BATCH_MS = 50
 
-/**
- * The file tier (D32 M2): quiescence OR a ceiling, never quiescence alone.
- *
- * **Quiescence alone fails under the condition this notebook exists for.**
- * Writing continuously never reaches quiet, so the file would be never written
- * and everything would live in memory until something went wrong. The ceiling
- * closes that, and it is why both numbers exist rather than one.
- *
- * Durability belongs in main, not in the renderer: the renderer is the process
- * most likely to die, and asking it to remember to save is asking the least
- * reliable component to own the most important guarantee.
- */
+/** The file tier (D32 M2): a second of quiet, and never later than five. */
 const QUIESCE_MS = 1_000
 const MAX_INTERVAL_MS = 5_000
 
@@ -67,8 +48,16 @@ const MAX_INTERVAL_MS = 5_000
 const VERSION_QUIESCE_MS = 5 * 60_000
 const VERSION_MAX_MS = 30 * 60_000
 
-/** What the core's tiers can be told, so tests need not wait half an hour. */
-export interface CoreOptions {
+/**
+ * What the tiers can be told.
+ *
+ * **Overridable so they can be tested in milliseconds rather than by waiting
+ * half an hour — and all of them, because they are chained**: a commit is
+ * scheduled by a file write, so a test that compresses only the commit tier is
+ * still waiting on the file tier's one-second quiescence, and concludes wrongly
+ * that the commit never happens.
+ */
+export interface DurabilityOptions {
   readonly walBatchMs?: number
   readonly quiesceMs?: number
   readonly maxIntervalMs?: number
@@ -78,52 +67,12 @@ export interface CoreOptions {
   readonly history?: boolean
 }
 
-/**
- * Where a pushed message goes.
- *
- * An interface rather than a `BrowserWindow` so this whole layer stays free of
- * Electron.
- */
-export interface MessageSink {
-  send(channel: string, message: unknown): void
-}
+export class DurabilityService {
+  readonly #corpus: CorpusService
 
-export class CoreService {
-  readonly #notebook: Notebook
-  readonly #corpus: Corpus
-  readonly #index: CorpusIndex
-
-  /**
-   * The stream, borrowed once and held for as long as the app lives.
-   *
-   * **Held because it is watched, not instead of borrowing it.** The core is
-   * what keeps the stream open — every window over it, the write tiers, the
-   * journal — so it takes a watch at construction and the Corpus may never let
-   * go of it. The borrow is how it gets the reference the first time; the watch
-   * is what makes keeping it safe (D54).
-   *
-   * A promise rather than a value because opening is asynchronous in general,
-   * even where this kind's construction is not.
-   */
-  readonly #stream: Promise<StreamDocument>
-
-  /**
-   * Every mutation of a document chains onto this; reads do not.
-   *
-   * **Named for what it orders, because the app holds more than one queue.** It
-   * is not *the* queue: the reconciliation pass queue is the other, and they
-   * order different things at different grains — this one puts individual edits
-   * in sequence, that one keeps whole passes from overlapping. A single pass
-   * makes many mutations and they interleave with everybody else's through here
-   * quite happily.
-   */
-  #documentMutationQueue: Promise<unknown> = Promise.resolve()
-
-  #sinks: MessageSink[] = []
-
-  // ── the three write tiers (D32) ──────────────────────────────
-
+  /** Something is unwritten or unversioned; the tiers have work to do. */
   #unsavedWork = false
+
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #dirtySince: number | null = null
   readonly #quiesceMs: number
@@ -140,6 +89,7 @@ export class CoreService {
   readonly #pendingDates = new Set<string>()
   /** The first line of the most recent insertion, for the message. */
   #headline = ''
+  /** Whether anything outside the app changed since the last version. */
   #sawExternal = false
 
   /**
@@ -155,18 +105,8 @@ export class CoreService {
   readonly #walPending = new Map<DocumentId, WalRecord[]>()
   #walTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(notebook: Notebook, options: CoreOptions = {}) {
-    this.#notebook = notebook
-    this.#corpus = new Corpus(notebook)
-    this.#corpus.watch(STREAM_ID) // the stream is open for as long as the app is
-    this.#stream = this.#corpus.use(STREAM_ID, async doc => doc as StreamDocument)
-    // The two point at each other by construction order: the index reads days
-    // through the document so a loaded one answers from memory, and the
-    // document answers corpus-wide questions through the index (D52).
-    // The index is handed a way to REACH the stream rather than the stream
-    // itself: opening is asynchronous in general, and a constructor cannot wait.
-    this.#index = new CorpusIndex(notebook, () => this.#stream)
-
+  constructor(corpus: CorpusService, options: DurabilityOptions = {}) {
+    this.#corpus = corpus
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
     this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
@@ -174,15 +114,12 @@ export class CoreService {
     this.#versionMaxMs = options.versionMaxMs ?? VERSION_MAX_MS
     this.#wantsHistory = options.history !== false
 
-    // What went into the commit message, gathered as it happens. Reconstructing
-    // it later would mean diffing, and the point of quoting the text is that it
-    // is right there at the moment of the change.
     // Into the log before the file tier gets to it: that gap is the whole
     // reason the log exists.
     // Through the Corpus rather than from a document: with documents opening
     // and being let go, a subscription against one of them has no lifetime to
     // live in (D54). The id says which document an edit belongs to.
-    this.#corpus.onJournal((id, segment, baseLen, edits) => {
+    corpus.onJournal((id, segment, baseLen, edits) => {
       const pending = this.#walPending.get(id) ?? []
       for (const edit of edits) {
         pending.push({
@@ -198,7 +135,7 @@ export class CoreService {
       this.#scheduleWal()
     })
 
-    this.#corpus.onChanged((_id, change) => {
+    corpus.onChanged((_id, change) => {
       // **Any document changing schedules a write.** The service used to say so
       // at each of its own mutating methods, which was complete while it was
       // the only writer — then a pin became a document edit made through
@@ -217,94 +154,16 @@ export class CoreService {
       }
     })
 
-    // Hand-editing is a feature, so the app has to notice. Queued with the
-    // edits, because a reload racing a write is the corruption this whole
-    // layer exists to avoid.
-    notebook.onExternalChange(changes => {
-      void this.mutate(async () => {
-        for (const change of changes) await (await this.#stream).externalChanged(change.rel)
-
-        // **What the document did not take, the sidebar still needs.** A day
-        // file becomes a DocumentChange and travels the ordinary way; a section
-        // file edited by hand is a change to something no window is holding, so
-        // it is announced as itself and whoever cares re-asks (D53).
-        const elsewhere = changes.map(c => c.rel).filter(rel => parseDayFile(rel) === null)
-        if (elsewhere.length > 0) this.announce(CHANNEL.corpusChanged, elsewhere)
-        // Nothing to collect: the commit scans for itself. All that is needed
-        // is that a commit becomes worth scheduling, and that the message
-        // admits the notebook was edited from outside.
-        this.#sawExternal = true
-        this.versionable()
-      })
-    })
-
-    this.#corpus.onDiverged((_id, divergence) => {
-      this.announce(CHANNEL.diverged, divergence)
+    // Nothing to collect: the commit scans for itself. All that is needed is
+    // that a commit becomes worth scheduling, and that the message admits the
+    // notebook was edited from outside.
+    corpus.onExternalChange(() => {
+      this.#sawExternal = true
+      this.versionable()
     })
   }
 
-  // ── the store ────────────────────────────────────────────────
-
-  get notebook(): Notebook {
-    return this.#notebook
-  }
-
-  get corpus(): Corpus {
-    return this.#corpus
-  }
-
-  get index(): CorpusIndex {
-    return this.#index
-  }
-
-  get stream(): Promise<StreamDocument> {
-    return this.#stream
-  }
-
-  // ── the write path ───────────────────────────────────────────
-
-  /**
-   * Put this work in line behind every other mutation.
-   *
-   * The chain is kept alive across a rejection, or one failed edit would wedge
-   * every edit after it.
-   */
-  mutate<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.#documentMutationQueue.then(work, work)
-    this.#documentMutationQueue = next.then(
-      () => undefined,
-      () => undefined,
-    )
-    return next
-  }
-
-  // ── the bus ──────────────────────────────────────────────────
-
-  addSink(sink: MessageSink): () => void {
-    this.#sinks.push(sink)
-    return () => {
-      this.#sinks = this.#sinks.filter(s => s !== sink)
-    }
-  }
-
-  /** To every renderer listening. */
-  announce(channel: string, message: unknown): void {
-    for (const sink of this.#sinks) sink.send(channel, message)
-  }
-
-  /**
-   * This document in particular changed, so anything holding it should re-ask.
-   *
-   * **For surfaces that read through verbs rather than hold a window** — a
-   * docket or a task list asks what a document contains and redraws from the
-   * answer, so without this a docket left open would sit there stale while
-   * generation changed it underneath.
-   */
-  changed(id: DocumentId): void {
-    this.announce(CHANNEL.documentsChanged, { documents: [id] })
-  }
-
-  // ── durability: the three tiers (D32) ────────────────────────
+  // ── saying there is work ─────────────────────────────────────
 
   /**
    * There is unsaved work, and it should reach the file soon.
@@ -329,10 +188,10 @@ export class CoreService {
    * Write soon, without claiming there is unversioned work.
    *
    * **Deliberately not `touched()`.** Three callers — `edit`, `undo`, `redo` —
-   * want the file timer and nothing else, because the `onChanged` subscription
-   * above has already marked the work for whichever of them actually changed
-   * something. Setting the flag here as well would tell the version tier there
-   * was work to commit after an undo that put the document back exactly as it
+   * want the file timer and nothing else, because the change subscription has
+   * already marked the work for whichever of them actually changed something.
+   * Setting the flag here as well would tell the version tier there was
+   * something to commit after an undo that put the document back exactly as it
    * was found.
    */
   writeSoon(): void {
@@ -349,6 +208,8 @@ export class CoreService {
   unsaved(): void {
     this.#unsavedWork = true
   }
+
+  // ── the file tier ────────────────────────────────────────────
 
   /**
    * Write after a second of quiet, but never later than five seconds after the
@@ -375,7 +236,7 @@ export class CoreService {
     this.#cancelFlush()
     // Everything with unsaved work, not only the stream: the tiers are the
     // corpus's, not one document's (D54, MC2c).
-    const written = await this.mutate(() => this.#corpus.flushAll())
+    const written = await this.#corpus.mutate(() => this.#corpus.corpus.flushAll())
     // ORDER MATTERS: files first, then the log. A crash between the two replays
     // edits the files already contain, which is exactly what `baseLen` makes
     // harmless. The other order would lose them outright.
@@ -388,11 +249,13 @@ export class CoreService {
     }
   }
 
+  // ── the log tier ─────────────────────────────────────────────
+
   /** The log for one document, made on first use. */
   #walFor(id: DocumentId): Wal {
     const held = this.#wals.get(id)
     if (held !== undefined) return held
-    const made = new Wal(this.#notebook, id as string)
+    const made = new Wal(this.#corpus.notebook, id as string)
     this.#wals.set(id, made)
     return made
   }
@@ -427,7 +290,7 @@ export class CoreService {
     let applied = 0
     for (const record of records) {
       if (record.doc !== (STREAM_ID as string)) continue
-      const segment = await (await this.#stream).segment(record.date as DateKey)
+      const segment = await (await this.#corpus.stream).segment(record.date as DateKey)
       if (segment.readOnly || segment.diverged) continue
       if (segment.length !== record.baseLen) continue // already on disk
       const body = segment.body
@@ -440,9 +303,17 @@ export class CoreService {
     return applied
   }
 
+  // ── the version tier ─────────────────────────────────────────
+
+  /**
+   * Open the repository and reconcile whatever happened while the app was not
+   * running. Separate from construction because it does real I/O and can
+   * legitimately be skipped — a test that only wants the document should not
+   * pay for a git repository.
+   */
   async openHistory(): Promise<void> {
     if (!this.#wantsHistory) return
-    this.#repo = await GitRepository.open(this.#notebook.root)
+    this.#repo = await GitRepository.open(this.#corpus.notebook.root)
     const first = (await this.#repo.latest()) === null
     await this.#repo.save(first ? 'Opened the notebook' : 'Changes made outside Tephra')
   }
@@ -507,13 +378,13 @@ export class CoreService {
         : dates.length === 1
           ? (dates[0] as string)
           : `${dates[0] as string}..${dates[dates.length - 1] as string}`
-    const text = this.#headline.length > 72 ? `${this.#headline.slice(0, 71)}\u2026` : this.#headline
+    const text = this.#headline.length > 72 ? `${this.#headline.slice(0, 71)}…` : this.#headline
     // One scan means a commit may carry work from elsewhere alongside ours.
     // Saying so is the honest version of the earlier attempt to separate them:
     // the message quotes only what WE wrote, and admits when that is not the
     // whole story.
     if (text === '') return this.#sawExternal ? 'Changes made outside Tephra' : where
-    return `${where} \u00b7 ${text}${this.#sawExternal ? ' (with changes made outside Tephra)' : ''}`
+    return `${where} · ${text}${this.#sawExternal ? ' (with changes made outside Tephra)' : ''}`
   }
 
   #scheduleVersion(): void {

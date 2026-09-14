@@ -43,9 +43,15 @@ channels; a few own none, being pure readers.
 flowchart TB
   subgraph MAIN["Electron main"]
     direction TB
-    L2["<b>Layer 2 — composing services</b><br/>horizon · reconciliation · transfers<br/><i>cross more than one domain</i>"]
-    L1["<b>Layer 1 — domain services</b><br/>documents · text · annotations · comments · docket · todo<br/>search · nav · history · app · frame<br/><i>each owns one kind of thing, and its channels</i>"]
-    L0["<b>Layer 0 — CoreService</b><br/>the store · the write path · durability · the day · the bus"]
+    L2["<b>Composing services</b><br/>horizon · reconciliation · transfers<br/><i>each crosses more than one domain</i>"]
+    L1["<b>Domain services</b><br/>documents · text · annotations · comments · docket · todo<br/>search · nav · history · app · frame<br/><i>one kind of thing each, and its channels</i>"]
+    subgraph F["Foundation — no IPC channels"]
+      direction TB
+      DAY["<b>DayService</b><br/>today · clockDay · moment · zone · the roll"]
+      DUR["<b>DurabilityService</b><br/>the three write tiers (D32)"]
+      CS["<b>CorpusService</b><br/>the store, and the one mutation queue"]
+      BUS["<b>Bus</b><br/>sinks · announce"]
+    end
     subgraph XU["X upper — whole-corpus objects"]
       direction LR
       CORP["Corpus"]
@@ -53,7 +59,7 @@ flowchart TB
       SCAN["Scanner"]
     end
     subgraph XL["X lower — per-document objects"]
-      SD["SegmentedDocument + kinds · DocumentWindow · Segment<br/>frontmatter · markers · text-edits · anomalies · comments · day-clock"]
+      SD["SegmentedDocument + kinds · DocumentWindow · Segment<br/>frontmatter · markers · text-edits · anomalies · day-clock"]
     end
     W["<b>W — infrastructure</b><br/>Notebook · Repository · lock · watcher · themes"]
   end
@@ -61,10 +67,15 @@ flowchart TB
   REND["<b>Renderer</b><br/>X mirror → Z features and UI"]
 
   L2 --> L1
-  L2 --> L0
-  L1 --> L0
-  L0 --> CORP
-  L0 --> IDX
+  L2 --> F
+  L1 --> F
+  DAY --> CS
+  DAY --> DUR
+  DUR --> CS
+  CS --> BUS
+  DAY --> BUS
+  CS --> CORP
+  CS --> IDX
   SCAN --> IDX
   CORP --> SD
   IDX --> SD
@@ -76,16 +87,37 @@ flowchart TB
 
 **Corpus and CorpusIndex are peers**, both built over the notebook and both
 reaching the same per-document objects — which is why they belong to one layer
-and why core is the single interface onto the pair. `Scanner` is X-upper too but
-is **not** core's: only search uses it, so the search service owns it.
+and why `CorpusService` is the single interface onto the pair. `Scanner` is
+X-upper too but is **not** its: only search uses it, so the search service owns
+it.
 
 ## The rule
 
-> **Call down, never sideways, never up.**
+> **The dependencies form a DAG.**
 
-A service may call the core and any service in a lower layer. It may not call a
-peer, and nothing may call upward. **Every file names its layer in its opening
-comment**, so the reach a file is allowed is legible before reading a line of it.
+That is the whole constraint. The tiers in the diagram are a coarse reading aid,
+not the rule — **the number of layers does not matter and neither does the number
+of services**; what matters is that each service's scope is nameable in a phrase
+and that nothing points back up. **Every file names its tier and what it may
+depend on in its opening comment**, so the reach a file is allowed is legible
+before reading a line of it.
+
+**Numbered levels were the first draft and they broke twice.** Durability and the
+day both need the corpus, which as numbered peers would have been a forbidden
+sideways call; and *which rung* a foundation service shares with a domain service
+is not a meaningful question. Acyclic answers both.
+
+**Foundation services own no channels.** A channel is something the renderer has
+a name for, and there is nothing on the far side of the fence that corresponds to
+a corpus or a queue — the UI has no reason to talk to anything that low. So the
+whole foundation is invisible from the renderer, and exists to be depended on.
+
+**Lower things emit; higher things subscribe.** `corpus.onChanged → touched()`
+reads like the corpus reaching up into durability, and it is the reverse:
+durability asks the corpus to tell it. The dependency points down while the news
+travels up. This is the second place the pattern has been the answer — the
+reconciler is the other — which makes it the general rule here rather than one
+trick.
 
 This is what breaks the docket/todo cycle honestly: docket stops knowing about
 todo, todo stops knowing about docket, and the three flows that genuinely span
@@ -97,49 +129,52 @@ discussion in the last fortnight, and they are the three that were structurally
 homeless. D78 already says the horizon is its own object *implemented by* its
 sources; this gives that sentence somewhere to live.
 
-## The core's contract
+## The foundation's four contracts
 
-Five responsibilities, and nothing else qualifies:
+One each, and each nameable in a phrase — which is the test the single
+`CoreService` was failing:
 
-1. **The store** — `use(id, fn)`, `list(kind)`, over Corpus and CorpusIndex.
-2. **The write path** — *one* mutation queue. This is why core must exist at
-   all: **idempotence has to hold concurrently, not merely repeatedly** (note 51
-   — two overlapping passes generated the same task). Per-service queues would
-   break that silently, and a data race is what the tests are worst at catching.
-3. **Durability** — the flush tier, the version tier, the WAL (D32).
-4. **The day** — `today`, `zone`, the roll (D62, D63).
-5. **The bus** — sinks and `announce`.
+1. **`Bus`** — where a pushed message goes. Depends on nothing, which is what
+   lets the other three use it without depending on each other.
+2. **`CorpusService`** — *the corpus, and the discipline for writing to it*: the
+   store, and **one** mutation queue. The queue is why this class must exist at
+   all, because **idempotence has to hold concurrently, not merely repeatedly**
+   (note 51 — two overlapping passes generated the same task). A second queue
+   anywhere would break that silently, and a data race is the failure the tests
+   are worst at catching.
+3. **`DurabilityService`** — the three write tiers (D32), each *quiescence OR a
+   ceiling*, never quiescence alone.
+4. **`DayService`** — what day the app is filing into, and the notebook's zone
+   (D62, D63). **Not the zone *offer***, which is session UI state and belongs to
+   the app service: D63's rule is that the zone is offered and never applied, so
+   the offer is not a fact about the notebook at all. The `zone` itself is here
+   because it is an input to date *arithmetic* — `dueOn` is zone-aware, and
+   getting that wrong is what made a task finished at 17:42 in a GMT+8 notebook
+   come due "tomorrow".
+
+**Where `reconcile()` goes, and the inversion it forces.** Reconciliation is a
+*composing* service — it reads dockets and writes the task list — so it sits at
+the top of the DAG, while `wrote()` is the ordinary end of every verb down in the
+foundation. The foundation therefore cannot call it. Services **register** passes
+instead:
 
 ```ts
-/** Layer 0. Everything may call this; it calls nothing above it. */
-export interface Core {
-  use<T>(id: DocumentId, fn: (doc: Document) => Promise<T>): Promise<T>
-  list(kind: DocumentKind): Promise<readonly DocumentId[]>
-
-  /** The one queue. Survives a rejecting link, as `#serial` does today. */
-  mutate<T>(work: () => Promise<T>): Promise<T>
-  /** Dirty, announced, reconciled — the ordinary end of a verb. */
-  wrote(id: DocumentId): Promise<void>
-  /** Dirty only: something changed that no document holds. */
-  touched(): void
-
-  /** D77 made literal: core runs the passes and owns none of them. */
-  reconciles(name: string, pass: () => Promise<unknown>): void
-  reconcile(): Promise<Record<string, unknown>>
-
-  readonly today: DateKey
-  readonly zone: string
-  announce<T>(channel: string, payload: T): void
-}
+reconciles(name: string, pass: () => Promise<unknown>): void
+reconcile(): Promise<Record<string, unknown>>
 ```
 
-**The inversion is the point, not a workaround.** `#wrote()` calls `reconcile()`
-today; reconciliation is layer 2 and core is layer 0, so core cannot call it.
-Services **register** passes instead, and core runs them serialised and never
-re-entrantly without knowing what they do. D77 says `reconcile()` is *make all
-derived state true again*, with dockets as its **first clause** — registration
-turns that phrase from a comment into the structure, and a second clause costs a
-registration rather than an edit to the reconciler.
+run serialised and never re-entrantly, by something that knows nothing about what
+the passes do. D77 says `reconcile()` is *make all derived state true again*,
+with dockets as its **first clause** — registration turns that phrase from a
+comment into the structure, and a second clause costs a registration rather than
+an edit to the reconciler.
+
+**Still open: who holds the registry.** It cannot be `CorpusService`, whose scope
+is the store and the queue. A fifth foundation service for it would be a class
+holding one array. The likeliest answer is that the pass queue belongs to the
+reconciliation service itself, and the verbs that want a pass after writing ask
+*it* — which makes the edge point up from domain to composing, and that is legal
+in a DAG as long as nothing comes back down. To be settled when 1d is built.
 
 ## The naming fault to fix on the way
 
@@ -151,9 +186,12 @@ OS window.
 
 ## The channel grouping
 
-| service | layer | channels | owns |
+| service | tier | channels | owns |
 |---|---|---|---|
-| **core** | 0 | — | Corpus, CorpusIndex, the queue, the tiers, the clock, the bus |
+| **Bus** | foundation | — | sinks |
+| **CorpusService** | foundation | — | Corpus, CorpusIndex, the stream, **the mutation queue** |
+| **DurabilityService** | foundation | — | the three write tiers (D32) |
+| **DayService** | foundation | — | the clock, the notebook's zone |
 | **documents** | 1 | open, read, new, rename, duplicate, delete, importText, branch, linkBase, openLink, print, attachImage, chooseImage | lifecycle and identity |
 | **text** | 1 | edit, release, extend, flush, undo, redo, spans, proseIn, extent | windows, desync |
 | **annotations** | 1 | tag, untag, renameTag, setAnchor, removeAnchor, resolveAnchor | — |

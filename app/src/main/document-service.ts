@@ -11,7 +11,7 @@
 // The queue and the three write tiers are the core's now. The private names
 // this file still uses for them — `#corpus`, `#stream`, `#index`, `#serial`,
 // `#touched` — are forwarders, kept so that extracting the core moved no call
-// site; they go as each service starts naming `#core` directly.
+// site; they go as each service starts naming the foundation directly.
 //
 // DELIBERATELY FREE OF ELECTRON. The one rule that matters more than the rest
 // is that edits apply in the order they were composed, and that ordering is
@@ -69,7 +69,9 @@ import type { Search } from '../shared/search-api.ts'
 import { STREAM_ID, type Corpus } from './x/documents/corpus.ts'
 import { Filesets } from './x/fileset.ts'
 import type { LocalWindow } from './x/window.ts'
-import { CoreService, type MessageSink } from './core-service.ts'
+import { Bus, type MessageSink } from './bus.ts'
+import { CorpusService } from './corpus-service.ts'
+import { DurabilityService } from './durability-service.ts'
 
 /**
  * Anything that can carry a pushed message to a renderer.
@@ -126,14 +128,20 @@ export interface ServiceOptions {
 
 export class DocumentService {
   /**
-   * **Layer 0, held rather than inherited** (D83).
+   * **The foundation, held rather than inherited** (D83).
    *
-   * The store, the one mutation queue and the bus live here now. What is left in
-   * this class is layer 1 and layer 2 work that has not been split out yet, and
-   * it reaches the corpus **only** through this — a second path to a document
-   * would be a second path around the queue.
+   * Three focused services rather than one vague one: the bus pushes, the corpus
+   * service owns the store and the one mutation queue, and the durability
+   * service owns the three write tiers. They form a DAG — durability depends on
+   * the corpus, the corpus on the bus, and nothing points back up.
+   *
+   * What is left in this class is domain and composing work that has not been
+   * split out yet, and it reaches the corpus **only** through `#store`, because
+   * a second path to a document would be a second path around the queue.
    */
-  readonly #core: CoreService
+  readonly #bus: Bus
+  readonly #store: CorpusService
+  readonly #durable: DurabilityService
 
   /**
    * The core's parts under the names this class has always called them.
@@ -142,18 +150,18 @@ export class DocumentService {
    * sixty-eight `#serial` calls alone; rewriting them in the same change that
    * moves the queue would have meant proving two things at once, with the
    * acceptance suites unable to say which of them had gone wrong. These go away
-   * as each service is split out and starts naming `#core` directly.
+   * as each service is split out and names the foundation directly.
    */
   get #corpus(): Corpus {
-    return this.#core.corpus
+    return this.#store.corpus
   }
 
   get #stream(): Promise<StreamDocument> {
-    return this.#core.stream
+    return this.#store.stream
   }
 
   get #index(): CorpusIndex {
-    return this.#core.index
+    return this.#store.index
   }
 
   readonly #search: Scanner
@@ -207,7 +215,12 @@ export class DocumentService {
     this.#notebook = notebook
     // **The core first**, because everything below this line reaches through it:
     // the corpus, the index and the stream are its, and so is the queue (D83).
-    this.#core = new CoreService(notebook, options)
+    // **The foundation, innermost first.** The bus depends on nothing, the
+    // corpus service on the bus, and durability on the corpus — so they are
+    // built in that order and the DAG is visible in the construction (D83).
+    this.#bus = new Bus()
+    this.#store = new CorpusService(notebook, this.#bus)
+    this.#durable = new DurabilityService(this.#store, options)
     // Beside the index rather than in the core: only search uses the Scanner,
     // so it belongs to the search service when that is split out (D83).
     this.#search = new Scanner(notebook, this.#index)
@@ -268,7 +281,7 @@ export class DocumentService {
   /** Run `work` after everything already queued, and before anything queued later. */
   /** The core's queue, under the name this class's sixty-eight callers use. */
   #serial<T>(work: () => Promise<T>): Promise<T> {
-    return this.#core.mutate(work)
+    return this.#store.mutate(work)
   }
 
   /**
@@ -361,7 +374,7 @@ export class DocumentService {
       // The idle rule's only input, and it is free here: every keystroke
       // already passes through this method (D62).
       if (request.origin === 'user') this.#clock.wrote()
-      this.#core.writeSoon()
+      this.#durable.writeSoon()
       return {
         generation: window.generation,
         length: window.text.length,
@@ -400,7 +413,7 @@ export class DocumentService {
     const ack = await this.#serial(() =>
       this.#corpus.use(id, async doc => {
         const change = await doc.undo()
-        this.#core.writeSoon()
+        this.#durable.writeSoon()
         return { change, generation: doc.generation }
       }),
     )
@@ -416,7 +429,7 @@ export class DocumentService {
     return this.#serial(() =>
       this.#corpus.use(id, async doc => {
         const change = await doc.redo()
-        this.#core.writeSoon()
+        this.#durable.writeSoon()
         return { change, generation: doc.generation }
       }),
     )
@@ -424,7 +437,7 @@ export class DocumentService {
 
   /** Write anything outstanding — the core's file tier (D83). */
   async flush(): Promise<void> {
-    return this.#core.flush()
+    return this.#durable.flush()
   }
 
   // ── the day, which changes whether or not anyone is looking ──
@@ -525,7 +538,7 @@ export class DocumentService {
     // A zone change can put the calendar past the writing day, which is an
     // ordinary boundary and crossed the ordinary way.
     await this.crossTheDay()
-    this.#core.announce(CHANNEL.dayRolled, this.#clock.writingDay)
+    this.#bus.announce(CHANNEL.dayRolled, this.#clock.writingDay)
   }
 
   /**
@@ -582,7 +595,7 @@ export class DocumentService {
     const key = notice === null ? null : `${notice.notebook} ${notice.system}`
     if (key === this.#offered) return
     this.#offered = key
-    this.#core.announce(CHANNEL.zoneNotice, notice)
+    this.#bus.announce(CHANNEL.zoneNotice, notice)
   }
 
   /**
@@ -622,7 +635,7 @@ export class DocumentService {
     // event (D62).
     if (writing !== this.#announced) {
       this.#announced = writing
-      this.#core.announce(CHANNEL.dayRolled, writing)
+      this.#bus.announce(CHANNEL.dayRolled, writing)
       // **Unattended, at the boundary** (H5): reconciliation is not contingent on
       // anybody doing a thing, because the whole point is that it happens while
       // nobody is looking. Failures are swallowed here on purpose — a
@@ -656,7 +669,7 @@ export class DocumentService {
 
   /** Replay whatever the last session did not manage to write. */
   async recover(): Promise<number> {
-    return this.#core.recover()
+    return this.#durable.recover()
   }
 
   /**
@@ -667,22 +680,22 @@ export class DocumentService {
    */
   /** Open the notebook's history, if it has one — the core's version tier. */
   async openHistory(): Promise<void> {
-    return this.#core.openHistory()
+    return this.#durable.openHistory()
   }
 
   /** Record a version of the notebook now. */
   async saveVersion(): Promise<VersionId | null> {
-    return this.#core.saveVersion()
+    return this.#durable.saveVersion()
   }
 
   /** The history, for reading. Null when history is off. */
   get repository(): Repository | null {
-    return this.#core.repository
+    return this.#durable.repository
   }
 
   /** Days and versions, rather than paths and object ids (D32). */
   get history(): StreamHistory | null {
-    return this.#core.history
+    return this.#durable.history
   }
 
   async versions(limit = 50): Promise<readonly Version[]> {
@@ -751,9 +764,9 @@ export class DocumentService {
     // Through the Corpus, which is what knows which documents are open: a
     // restore that wrote files under one would be undone by its buffer (MC7).
     const report = await this.#serial(() => history.restore(version, this.#corpus))
-    this.#core.unsaved()
+    this.#durable.unsaved()
     await this.flush()
-    await this.#core.saveVersionNamed(`Restored to ${version.slice(0, 7)}`)
+    await this.#durable.saveVersionNamed(`Restored to ${version.slice(0, 7)}`)
     return report
   }
 
@@ -767,7 +780,7 @@ export class DocumentService {
    * the history rather than waiting for a quiescence that will never come.
    */
   async stop(): Promise<void> {
-    return this.#core.stop()
+    return this.#durable.stop()
   }
 
   releaseWindow(id: WindowId): void {
@@ -833,7 +846,7 @@ export class DocumentService {
     const id = await this.#serial(async () => (await this.#stream).branch(span, name))
     // Not `#touched()`: the branched file is already on disk, so the window
     // where the two halves disagree is closed now rather than in a second (D13).
-    this.#core.unsaved()
+    this.#durable.unsaved()
     await this.flush()
     return id
   }
@@ -1425,12 +1438,12 @@ export class DocumentService {
    * only when something else happens to save.
    */
   #touched(): void {
-    this.#core.touched()
+    this.#durable.touched()
   }
 
   /** The same, for the version tier's much longer clock (D32). */
   #versionable(): void {
-    this.#core.versionable()
+    this.#durable.versionable()
   }
 
   /**
@@ -2349,11 +2362,11 @@ export class DocumentService {
 
   /** Where pushed messages go — the core's bus (D83). */
   addSink(sink: MessageSink): () => void {
-    return this.#core.addSink(sink)
+    return this.#bus.addSink(sink)
   }
 
   #broadcast(message: WindowChangedMessage): void {
-    this.#core.announce(CHANNEL.windowChanged, message)
+    this.#bus.announce(CHANNEL.windowChanged, message)
   }
 
   /**
@@ -2404,11 +2417,11 @@ export class DocumentService {
    * which keeps a docket from redrawing every time anybody types in the stream.
    */
   #changed(id: DocumentId): void {
-    this.#core.changed(id)
+    this.#store.changed(id)
   }
 
   #broadcastReset(id: WindowId): void {
-    this.#core.announce(CHANNEL.windowReset, { id })
+    this.#bus.announce(CHANNEL.windowReset, { id })
   }
 }
 

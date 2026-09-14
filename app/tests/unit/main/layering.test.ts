@@ -121,13 +121,17 @@ const NOT_THE_NOTEBOOK = ['system-zone.ts']
 /**
  * Where the app is assembled, and so the one place allowed to make a Notebook.
  *
- * **`core-service.ts` is the floor's doorway** (D83): it makes the `Corpus` and
- * the `CorpusIndex` — peers, both built over the notebook — and hands every
- * layer above it a way to reach documents without ever naming a file.
+ * **`corpus-service.ts` is the floor's doorway** (D83): it makes the `Corpus`
+ * and the `CorpusIndex` — peers, both built over the notebook — and hands
+ * everything above a way to reach documents without ever naming a file.
+ * `durability-service.ts` is here for the other reason: the write tiers ARE the
+ * notebook's storage discipline, so the log and the repository are its to make.
  * `document-service.ts` is still here because it is still being split; it leaves
  * this list when the last of it has moved into a service.
  */
-const COMPOSITION = ['index.ts', 'core-service.ts', 'document-service.ts', 'print.ts']
+const COMPOSITION = [
+  'index.ts', 'corpus-service.ts', 'durability-service.ts', 'document-service.ts', 'print.ts',
+]
 
 test('only the floor touches storage', async () => {
   const offenders: string[] = []

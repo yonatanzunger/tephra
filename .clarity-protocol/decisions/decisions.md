@@ -4028,18 +4028,47 @@ that the structure wanted already existed in `ipc.ts`.
 channel boundary** — each channel registered by exactly one service, a service
 free to own several — over a new **`CoreService`**, on explicit layers:
 
-| layer | what | may call |
-|---|---|---|
-| 2 | composing services — horizon, reconciliation, transfers | core + layer 1 |
-| 1 | domain services — one kind of thing each, and its channels | core |
-| 0 | `CoreService` — store, write path, durability, the day, the bus | X, W |
+| tier | what |
+|---|---|
+| **composing** | horizon, reconciliation, transfers — each crosses more than one domain |
+| **domain** | one kind of thing each, **and its channels** |
+| **foundation** | `Bus`, `CorpusService`, `DurabilityService`, `DayService` — **no channels at all** |
 
-with `Corpus` and `CorpusIndex` as **peers** in X-upper beneath core, and
-`Scanner` beside them but owned by the search service, since only search uses it.
+with `Corpus` and `CorpusIndex` as **peers** in X-upper beneath the corpus
+service, and `Scanner` beside them but owned by the search service, since only
+search uses it.
 
-> **Call down, never sideways, never up**, and **every file names its layer in
-> its opening comment** — so what a file may legitimately reach is legible before
-> reading a line of it.
+> **The dependencies form a DAG**, and **every file names its tier and what it
+> may depend on in its opening comment** — so what a file may legitimately reach
+> is legible before reading a line of it.
+
+**Amended 2026-09-13, the same day, twice while building it.**
+
+**A DAG, not a numbered stack.** Numbered levels made two questions impossible
+to answer: durability and the day both need the corpus, which as peers would
+have been a forbidden sideways call, and *which rung* a foundation service shares
+with a domain service is not a meaningful question. The constraint that does all
+the work is simply **acyclic**; the tiers above are a coarse reading aid, not the
+rule.
+
+**Focused scope beats few services.** `CoreService` was the first draft's single
+layer-0 class, and its name was the tell: no honest noun covered the store, the
+queue, the bus and the three write tiers at once. It became four — `Bus`
+(depends on nothing), `CorpusService` (the store **and the one mutation queue** —
+*the corpus, and the discipline for writing to it*), `DurabilityService` (the
+three tiers), and `DayService`. Each is nameable in a phrase, which is the test
+that was failing.
+
+**Foundation services own no IPC channels**, and that is a rule rather than an
+accident: a channel is something the renderer has a name for, and there is
+nothing on the far side of the fence corresponding to a corpus or a queue. The
+UI has no reason to talk to anything that low.
+
+> **Lower things emit; higher things subscribe.** `corpus.onChanged → touched()`
+> looks like the corpus reaching up into durability. It is the reverse:
+> durability asks the corpus to tell it, so the dependency points down while the
+> news travels up. The same inversion the reconciler needs — which makes it the
+> general rule here rather than one trick.
 
 **Why the channel boundary.** It is already a real boundary: everything crossing
 it is plain data, so each contract is narrow and testable by construction. The
