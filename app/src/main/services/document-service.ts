@@ -76,6 +76,7 @@ import { FixedPoints, type RunReport } from './fixed-point.ts'
 import { DurabilityService } from './durability-service.ts'
 import { DayService } from './day-service.ts'
 import { CommentsService } from './comments-service.ts'
+import { NavService } from './nav-service.ts'
 import type { Serves } from './serves.ts'
 
 /**
@@ -171,7 +172,6 @@ export class DocumentService {
   }
 
   readonly #search: Scanner
-  readonly #filesets: Filesets
   /**
    * The windows, and what keeps each one's document open.
    *
@@ -208,6 +208,8 @@ export class DocumentService {
   readonly #day: DayService
   /** Margin notes, extracted (D47, D83). */
   readonly #comments: CommentsService
+  /** What the sidebar asks, extracted (D52, D83). */
+  readonly #nav: NavService
 
   readonly #notebook: Notebook
 
@@ -229,7 +231,6 @@ export class DocumentService {
     // Beside the index rather than in the core: only search uses the Scanner,
     // so it belongs to the search service when that is split out (D83).
     this.#search = new Scanner(notebook, this.#index)
-    this.#filesets = new Filesets(this.#corpus)
     this.#day = new DayService(this.#store, this.#durable, this.#bus, this.#fixed, options)
     this.#systemZone = options.systemZone ?? systemZone
     // **The one upward edge left, inverted.** Every poll has to re-offer the
@@ -240,6 +241,7 @@ export class DocumentService {
     this.#day.onChecked(() => this.#tellAboutTheZone())
     this.#registerReconcilers()
     this.#comments = new CommentsService(this.#store, this.#durable, this.#day)
+    this.#nav = new NavService(this.#store, this.#day)
   }
 
   /**
@@ -251,7 +253,24 @@ export class DocumentService {
    * up to `index.ts` and this class is finished.
    */
   services(): readonly Serves[] {
-    return [this.#comments]
+    return [this.#comments, this.#nav]
+  }
+
+  /**
+   * The extracted services, by name, for whoever still reaches through here.
+   *
+   * **Transitional and deliberately plain.** The integration suites construct a
+   * `DocumentService` and ask it things; as a group moves out, the suite's route
+   * to it moves too, and naming the service is more honest than leaving a
+   * forwarder on this class that pretends the verb is still its own. Both go
+   * away together when composition moves up to `index.ts`.
+   */
+  get comments(): CommentsService {
+    return this.#comments
+  }
+
+  get nav(): NavService {
+    return this.#nav
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -598,33 +617,6 @@ export class DocumentService {
     return (await this.history?.versions(limit)) ?? []
   }
 
-  /**
-   * Every document a person could open, with what it is called (MC6).
-   *
-   * The stream comes first and is called the notebook: it is the one document
-   * that is not a file and the one everybody means by "the notebook".
-   *
-   * Borrowed for READING and not retained — a chooser is a sweep over the
-   * corpus, and a sweep that displaced the document being written in would be
-   * the buffer-cache mistake this borrow mode exists to avoid (D54).
-   */
-  async documents(): Promise<readonly { id: DocumentId; title: string }[]> {
-    const out: { id: DocumentId; title: string }[] = [{ id: STREAM_ID, title: 'Notebook' }]
-    for (const id of await this.#corpus.list()) {
-      if (id === STREAM_ID) continue
-      const title = await this.#corpus.use(id, doc => doc.titleOf(ONLY_SEGMENT), {
-        mode: 'read',
-        retain: false,
-      })
-      out.push({ id, title: title ?? basename(id as string) })
-    }
-    return out
-  }
-
-  /** The curated sections (D53) — the hand-made half of the sidebar. */
-  get sections(): Filesets {
-    return this.#filesets
-  }
 
   /** The corpus index (D52) — what the sidebar asks, and what repairs it. */
   get index(): CorpusIndex {
@@ -815,7 +807,7 @@ export class DocumentService {
     // one and the answer to "where did it go" is the same: the section you were
     // looking at. Only a section with a file has a line to write (D53).
     if (section !== undefined && (await this.#corpus.exists(section as DocumentId))) {
-      await this.#filesets.pin({ kind: 'file', path: relativePath(section as RelPath, id as string as RelPath) },
+      await this.#store.filesets.pin({ kind: 'file', path: relativePath(section as RelPath, id as string as RelPath) },
         wanted === '' ? nameOf(id) : wanted, section)
     }
     this.#touched()
@@ -855,7 +847,7 @@ export class DocumentService {
     await this.#corpus.use(to, async doc => {
       if ((await doc.titleOf(ONLY_SEGMENT)) !== null) await doc.setTitleOf(ONLY_SEGMENT, wanted)
     })
-    await this.#filesets.retarget(id as string as RelPath, to as string as RelPath)
+    await this.#store.filesets.retarget(id as string as RelPath, to as string as RelPath)
     this.#touched()
     return to
   }
@@ -1129,26 +1121,6 @@ export class DocumentService {
    */
   readonly #takenIds = (): Promise<ReadonlySet<string>> => this.#index.itemIds()
 
-  /**
-   * The link directory, dated (R10a, ML3).
-   *
-   * **The index finds them; this says what day each was seen on.** A day file's
-   * day is exact and the index already knows it; everything else is its stamp,
-   * turned into a date in the notebook's zone — which the index does not have
-   * and should not, because there is one answer about what day it is and it
-   * lives here (D62, D63).
-   */
-  async links(): Promise<readonly LinkRow[]> {
-    const zone = this.zone
-    return (await this.#index.links()).map(row => ({
-      ...row,
-      appearances: row.appearances.map(at => ({
-        ...at,
-        on: at.at.date ?? dateKeyAt(new Date(at.when), zone),
-        ...whereWritten(at.at.file as RelPath),
-      })),
-    }))
-  }
 
   /**
    * What was finished under each tag before today (T8's tail, MT6).
@@ -2346,6 +2318,28 @@ function directoryFor(section?: string): string {
  * when clicked. A note is its own file and answers the same way, so nothing
  * downstream has to branch.
  */
+
+/**
+ * Which file a relative link is written FROM.
+ *
+ * A day's links resolve from its own file in `notebook.stream/YYYY/MM/`; every
+ * other document's resolve from wherever that document is. The same two cases
+ * printing has, and the reason `Base` is one type (`ipc.ts`).
+ */
+function fileOfBase(base: Base, _today?: DateKey): RelPath {
+  return base.kind === 'day' ? dayFile(base.date) : (base.id as string as RelPath)
+}
+
+/**
+ * Every suffix that declares a kind, longest first.
+ *
+ * **Longest first matters**: `.todo.md` ends with `.md`, so a shorter match
+ * would win and take the kind off. One list, and `nameOf` in `shared/slug.ts`
+ * is the other half of the same fact — what comes off a name, and what must
+ * stay on it.
+ */
+const KIND_SUFFIXES: readonly string[] = ['.fileset.md', '.docket.md', '.todo.md', '.md']
+
 /**
  * What *Add a matter* asked for, as the three variables.
  *
@@ -2378,41 +2372,3 @@ function scheduleFor(shape: NewMatter | undefined): Schedule {
     dates: null,
   }
 }
-
-function whereWritten(file: RelPath): { doc: DocumentId; segment: string; source: string } {
-  const root = documentRoot(file)
-  if (root === null) {
-    return {
-      doc: file as unknown as DocumentId,
-      segment: ONLY_SEGMENT as unknown as string,
-      source: nameOf(file),
-    }
-  }
-  return {
-    doc: root as unknown as DocumentId,
-    segment: parseDayFile(file)?.date ?? (ONLY_SEGMENT as unknown as string),
-    // The notebook is called the notebook; a list is called what it is named.
-    source: root === STREAM_DIR ? 'notebook' : nameOf(root),
-  }
-}
-
-/**
- * Which file a relative link is written FROM.
- *
- * A day's links resolve from its own file in `notebook.stream/YYYY/MM/`; every
- * other document's resolve from wherever that document is. The same two cases
- * printing has, and the reason `Base` is one type (`ipc.ts`).
- */
-function fileOfBase(base: Base, _today?: DateKey): RelPath {
-  return base.kind === 'day' ? dayFile(base.date) : (base.id as string as RelPath)
-}
-
-/**
- * Every suffix that declares a kind, longest first.
- *
- * **Longest first matters**: `.todo.md` ends with `.md`, so a shorter match
- * would win and take the kind off. One list, and `nameOf` in `shared/slug.ts`
- * is the other half of the same fact — what comes off a name, and what must
- * stay on it.
- */
-const KIND_SUFFIXES: readonly string[] = ['.fileset.md', '.docket.md', '.todo.md', '.md']

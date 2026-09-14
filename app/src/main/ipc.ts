@@ -118,31 +118,12 @@ export function registerDocumentIpc(service: DocumentService): void {
     created.on('closed', () => searches.closeFor(owner))
   })
 
-  // The sidebar. Every one of these is a question about the whole corpus, which
-  // is why they go through the index rather than through the document (D52).
-  ipcMain.handle(CHANNEL.navSubjects, () => service.index.subjects())
-  ipcMain.handle(CHANNEL.navBookmarks, () => service.index.bookmarks())
-  ipcMain.handle(CHANNEL.navTimeline, () => service.index.timeline())
-  ipcMain.handle(CHANNEL.navLinks, () => service.links())
+  // The sidebar is `services/nav-service.ts` now, and declares its own channels.
+  //
   // **A window of days, asked for by the caller.** The full view wants months
   // and the compact strip wants a fortnight; what counts as *bearing down* is
   // the same computation either way, so only the window differs (D74).
   ipcMain.handle(CHANNEL.horizon, (_e, from: DateKey, to: DateKey) => service.horizon(from, to))
-  ipcMain.handle(CHANNEL.navThreads, () => service.index.threads())
-  ipcMain.handle(CHANNEL.navOccurrences, (_e, reference: Reference) =>
-    service.index.occurrences(reference),
-  )
-  ipcMain.handle(CHANNEL.navStatus, () => service.index.status())
-  ipcMain.handle(CHANNEL.navSections, () => service.sections.tree())
-  ipcMain.handle(CHANNEL.navPin, (_e, reference: Reference, label: string, section?: string) =>
-    service.sections.pin(reference, label, section),
-  )
-  ipcMain.handle(CHANNEL.navUnpin, (_e, reference: Reference, section?: string) =>
-    service.sections.unpin(reference, section),
-  )
-  ipcMain.handle(CHANNEL.navRelabel, (_e, reference: Reference, label: string, section: string) =>
-    service.sections.relabel(reference, label, section),
-  )
 
   /**
    * Follow a reference that leaves the app (D10's third and fourth kinds).
@@ -153,7 +134,6 @@ export function registerDocumentIpc(service: DocumentService): void {
    * subject, a day — never arrives here, because going there is navigation and
    * not opening.
    */
-  ipcMain.handle(CHANNEL.navDocuments, () => service.documents())
   ipcMain.handle(CHANNEL.newDocument, (_e, label?: string, section?: string, kind?: 'markdown' | 'todo' | 'docket') =>
     service.newDocument(label, section, kind),
   )

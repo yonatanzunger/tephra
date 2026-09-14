@@ -175,6 +175,37 @@ test('AN OUTSIDE WRITE DURING A PASS STILL WAITS', { timeout: 5_000 }, async () 
   await slow
 })
 
+test('AN ANSWER MEANS THE WORK IS DONE, however the runs fell', { timeout: 15_000 }, async () => {
+  // **The property `note` used to nearly keep.** It returned the run in flight,
+  // and a key arriving in the microtask hop between *the loop decided to stop*
+  // and *`#running` was cleared* got a promise that was already resolving — so
+  // the caller was told its work was done when it had not begun. Nothing was
+  // lost, since the next trigger picked the key up; the *answer* was wrong, and
+  // an early answer here is the `docketActivate` bug (D77).
+  //
+  // Stated as the contract rather than as the race: after `changed` answers, the
+  // pass has seen the state as it was when we asked. Run enough times to land in
+  // the hop, with a fire-and-forget trigger first, the way the corpus reports
+  // every write before a verb asks again for the waiting.
+  const table = new FixedPoints()
+  let state = 0
+  let seen = -1
+  table.register(
+    fn('p', '^k$', async () => {
+      await Promise.resolve()
+      seen = state
+    }),
+  )
+  let lagged = 0
+  for (let i = 0; i < 300; i += 1) {
+    state = i
+    void table.changed('k')
+    await table.changed('k')
+    if (seen !== state) lagged += 1
+  }
+  assert.equal(lagged, 0, 'answered before the work was done')
+})
+
 test('MONOTONE SATURATION: a cycle of keys converges rather than spinning', { timeout: 5_000 }, async () => {
   // The real convergence argument in miniature: steps unblock steps, so even a
   // cycle among them merely makes every member active — and then there is

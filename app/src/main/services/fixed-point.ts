@@ -172,6 +172,15 @@ class FixedPointRunner {
   /** The keys of each round of the current run, oldest first. */
   #history: string[][] = []
 
+  /**
+   * Who is waiting for this function to be quiescent.
+   *
+   * **Not per run**, because a caller does not care which run does its work —
+   * only that the work is done when it is answered. An abandoned run settles
+   * these too: giving up is an ending.
+   */
+  #waiting: (() => void)[] = []
+
   #onRun: ((report: RunReport) => void)[] = []
 
   #highWater = 0
@@ -237,13 +246,31 @@ class FixedPointRunner {
    */
   note(key: string): Promise<void> {
     this.#queued.push(key)
-    if (this.#running !== null) return this.#running
-    const run = this.#loop().finally(() => {
+    // **Waiting on quiescence, not on a particular run** — which is a narrower
+    // promise than it first appears, and the first version made the wider one.
+    // It returned the run in flight; but the loop decides to stop *synchronously*
+    // at the top of a round, and `#running` is cleared a microtask later. A key
+    // arriving in that hop was queued behind a run already resolving, so the
+    // caller was told the work was done when it had not started. The next
+    // trigger would pick the key up, so nothing was lost — what was wrong was
+    // the answer, and an early answer here is the `docketActivate` bug (D77).
+    const settled = new Promise<void>(resolve => this.#waiting.push(resolve))
+    if (this.#running === null) this.#begin()
+    return settled
+  }
+
+  #begin(): void {
+    this.#running = this.#loop().finally(() => {
       this.#running = null
       this.#history = []
+      // Anything reported while that was finishing, including in the hop above.
+      if (this.#queued.length > 0) this.#begin()
+      else {
+        const waiting = this.#waiting
+        this.#waiting = []
+        for (const resolve of waiting) resolve()
+      }
     })
-    this.#running = run
-    return run
   }
 
   /** Round after round, until a round leaves nothing queued. */

@@ -10,9 +10,11 @@
 // corresponds to a corpus or a queue. A foundation service exists to be
 // depended on, not to be called from outside the process.
 //
-// **`Corpus` and `CorpusIndex` are peers**, both built over the notebook and
-// both reaching the same per-document objects, neither over the other. This
-// class is the single interface onto the pair.
+// **`Corpus`, `CorpusIndex` and `Filesets` are peers**, all built over the
+// notebook and all reaching the same per-document objects, none over another.
+// This class is the single interface onto the set — which is why it holds
+// `Filesets` rather than the nav service: two services read it, and a service
+// owning it would mean the other reaching sideways.
 //
 // **Lower things emit; higher things subscribe.** `DurabilityService` needs to
 // know when a document changed, and it learns by subscribing here — this class
@@ -21,6 +23,7 @@
 
 import { Corpus, STREAM_ID } from '../x/documents/corpus.ts'
 import { CorpusIndex } from '../x/documents/corpus-index.ts'
+import { Filesets } from '../x/fileset.ts'
 import type { StreamDocument } from '../x/documents/kinds/stream.ts'
 import type { Notebook } from '../w/notebook.ts'
 import { parseDayFile } from '../w/layout.ts'
@@ -71,6 +74,7 @@ export class CorpusService {
   /** Told after the reload, so a subscriber sees a corpus already caught up. */
   #onExternal: ((rels: readonly string[]) => void)[] = []
 
+  readonly #filesets: Filesets
   readonly #fixed: FixedPoints
 
   constructor(notebook: Notebook, bus: Bus, fixed: FixedPoints) {
@@ -86,6 +90,7 @@ export class CorpusService {
     // The index is handed a way to REACH the stream rather than the stream
     // itself: opening is asynchronous in general, and a constructor cannot wait.
     this.#index = new CorpusIndex(notebook, () => this.#stream)
+    this.#filesets = new Filesets(this.#corpus)
 
     // Hand-editing is a feature, so the app has to notice. Queued with the
     // edits, because a reload racing a write is the corruption this whole layer
@@ -142,6 +147,20 @@ export class CorpusService {
 
   get stream(): Promise<StreamDocument> {
     return this.#stream
+  }
+
+  /**
+   * The curated sections (D53) — the hand-made half of the sidebar.
+   *
+   * **Held here rather than by the nav service, because two services read it.**
+   * Nav shows the tree and edits it; the document lifecycle pins a new file into
+   * a section and retargets one that was renamed. A service owning it would mean
+   * the other reaching sideways for it, which the DAG forbids — and it belongs
+   * here on its own merits: like `Corpus` and `CorpusIndex` it is a whole-corpus
+   * object over the notebook, which is what this service is the interface onto.
+   */
+  get filesets(): Filesets {
+    return this.#filesets
   }
 
   // ── the queue ────────────────────────────────────────────────

@@ -274,7 +274,7 @@ test('the documents list names every document, the notebook first', async t => {
   await mkdir(join(root, 'notes'), { recursive: true })
   await writeFile(join(root, 'notes', 'plain.md'), '---\ntephra: 1\nkind: markdown\n---\nNo title.\n')
 
-  const documents = await service.documents()
+  const documents = await service.nav.documents()
   assert.equal(documents[0]?.title, 'Notebook', 'the one document that is not a file comes first')
   assert.deepEqual(
     documents.slice(1).map(d => d.title).sort(),
@@ -488,7 +488,7 @@ test('DELETING leaves the entry that named it dangling, and visibly (D7)', async
   await service.flush()
 
   assert.equal(existsSync(join(root, 'notes', 'gone.md')), false)
-  const tree = await service.sections.tree()
+  const tree = await service.nav.sections()
   const entry = tree.entries.flatMap(e => e.children?.entries ?? []).find(e => e.label === 'Was here')
   assert.notEqual(entry, undefined, 'the entry is still there')
   assert.equal(entry?.missing, true, 'and it says it cannot be found')
