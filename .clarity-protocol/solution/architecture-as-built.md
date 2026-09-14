@@ -104,6 +104,11 @@ flowchart TB
 
 ### The layers, named
 
+**W, X and Z are borrowed nomenclature, not local jargon** — the layering they
+name comes from [*W, X and Z: the layers of a
+system*](https://betterprogramming.pub/w-x-and-z-the-layers-of-a-system-568cf6b1477c),
+which is why the letters are kept rather than renamed to words.
+
 Reading up from the disk. **W** and **X** were always layers; what was implicit
 until now is that **X has two halves**, and saying so is what makes *which layer
 may call which* a question with an answer.
@@ -113,15 +118,21 @@ may call which* a question with an answer.
 | **W** — infrastructure | `Notebook`, `Repository` and its git implementation, layout, atomic write, the lock, the watcher, themes | the filesystem |
 | **X lower** — per-document objects | `SegmentedDocument` and its kinds, `DocumentWindow`, `Segment`, and the parsing beneath them — frontmatter, markers, text-edits, anomalies, comments, day-clock | W |
 | **X upper** — whole-corpus objects | `Corpus` and `CorpusIndex`, **peers**: both built over the notebook, both reaching the same per-document objects, neither over the other. `Scanner` sits above the index | X lower, W |
-| **the service** | `DocumentService` — the serial queue, the write tiers, every verb the app can do. **Electron-free** | X, W |
+| **the services** | `main/services/` — a DAG of them (D83). The foundation is `Bus`, `CorpusService` (the store and the one mutation queue), `DurabilityService` (the three write tiers), `DayService`, `FixedPoints` (running derived state to a fixed point) and `change-keys.ts` (what a change is called). `DocumentService` still holds everything not yet split out. **All Electron-free**, checked by directory | X, W |
 | **the boundary** | `CHANNEL` + payload types, `preload` | — |
 | **X mirror** | `RemoteDocument`, `RemoteWindow` — a local copy, so coordinates answer synchronously | the boundary |
 | **Z** — features and UI | `Pane`, the editor, the surfaces, the frame | the mirror |
 
-> **The service layer is being split** into a `CoreService` with domain and
-> composing services above it, each following the IPC channels — decided in D83,
-> planned in `service-layers.md`, **not yet built.** This table describes the one
-> service that exists today; it gains rows as that work lands.
+> **The service layer is a DAG, not a rung.** `DurabilityService` and
+> `DayService` both sit over `CorpusService`, which sits over `Bus` — so *which
+> level* a service is on is not a meaningful question, and the constraint that
+> does the work is simply **acyclic**. Every service file names its tier and its
+> dependencies in its opening comment (D83).
+>
+> **The domain and composing services are still to come** — one per IPC channel
+> group, with the horizon, the reconciler and the transfer gestures above them.
+> `service-layers.md` has the plan and the progress; `DocumentService` is what
+> has not moved yet.
 
 **X lives in main, not in a hidden renderer** (D37). One consequence shapes
 everything else: the renderer holds a *mirror* of X — `RemoteDocument` and

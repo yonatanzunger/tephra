@@ -19,7 +19,7 @@ import { withoutMarks } from '../../src/shared/kinds/todo.ts'
 async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
   const root = await mkdtemp(join(tmpdir(), 'tephra-horizon-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const { DocumentService } = await import('../../src/main/document-service.ts')
+  const { DocumentService } = await import('../../src/main/services/document-service.ts')
   let clock = new Date(at)
   const service = new DocumentService(nb, {
     now: () => clock,

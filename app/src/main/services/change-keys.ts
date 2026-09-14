@@ -29,8 +29,8 @@
 // report you can act on, where one naming the document is a place to start
 // looking.
 
-import { kindOf } from './w/layout.ts'
-import type { DateKey, DocumentId } from '../shared/document-api.ts'
+import { kindOf } from '../w/layout.ts'
+import type { DateKey, DocumentId } from '../../shared/document-api.ts'
 
 /** A document was written to. */
 export function documentKey(id: DocumentId): string {

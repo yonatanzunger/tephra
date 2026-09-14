@@ -16,7 +16,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/document-service.ts'
+import { DocumentService } from '../../src/main/services/document-service.ts'
 import { CHANNEL } from '../../src/shared/ipc.ts'
 import type { ZoneNotice } from '../../src/shared/ipc.ts'
 

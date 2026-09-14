@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService, type ServiceOptions } from '../../src/main/document-service.ts'
+import { DocumentService, type ServiceOptions } from '../../src/main/services/document-service.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
 import {

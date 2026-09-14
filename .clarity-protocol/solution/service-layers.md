@@ -213,6 +213,35 @@ as modules (`searches.ts`, `windows.ts`, `CorpusIndex`, `Repository`), which is 
 useful result on its own: a good part of the 2,805 lines is delegation that can
 leave the file without a single design decision.
 
+## Where the files live
+
+**`main/services/`**, added 2026-09-14 once the foundation was built and before
+the ten or so domain and composing services land in the same place.
+
+**Deliberately not the whole reorganisation.** `x/` still mixes its two halves —
+`corpus.ts`, `corpus-index.ts` and `search.ts` are X-upper while `segmented.ts`
+and `stored.ts` are X-lower — and the layering test keys its floor rule off that
+prefix, exempting everything under `main/x/` as *sideways within X*. So **an
+upward edge inside X is not currently caught**, and there are two: `x/fileset.ts`
+and `x/history.ts` both import `documents/corpus.ts`. Both merely *take* a
+`Corpus` as a parameter, which is closer to injection than to a violation — but
+the point is that the test cannot tell, because the directories do not match the
+layers. Splitting them is the next reorganisation, and it makes that rule precise
+rather than merely tidier.
+
+The order matters: the extractions will add files to `main/services/`, so
+reorganising `x/` first would mean doing it twice, with the bigger pass second.
+
+**W, X and Z stay as letters.** They are borrowed nomenclature — [*W, X and Z:
+the layers of a
+system*](https://betterprogramming.pub/w-x-and-z-the-layers-of-a-system-568cf6b1477c)
+— rather than local jargon, so renaming them to words would lose the reference.
+
+> **One gain arrived immediately.** *No service imports Electron* was a list with
+> one filename on it, and every service written since would have had to be added
+> to it by somebody remembering. It is now stated over the directory, so a new
+> service is covered by existing.
+
 ## Order of work
 
 1. **Core first**, extracted whole, with `DocumentService` left calling it. No

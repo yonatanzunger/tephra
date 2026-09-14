@@ -38,9 +38,12 @@ const src = (rel: string): string => join(here, '../../../src', rel)
  * Not "everything in main" — `index.ts`, `ipc.ts`, `menu.ts` and `print.ts` ARE
  * the Electron layer and importing it is their job. These are the ones with
  * tests that construct them directly.
+ *
+ * **Every service is node-only too**, and that is checked by directory below
+ * rather than listed here: `main/services/` exists precisely so the rule can be
+ * stated once over all of them instead of naming each as it is written (D83).
  */
 const NODE_ONLY = [
-  'main/document-service.ts',
   'main/x/documents/kinds/stream.ts',
   'main/x/segment.ts',
   'main/x/comments.ts',
@@ -50,6 +53,33 @@ const NODE_ONLY = [
   'main/w/git-repository.ts',
   'main/w/wal.ts',
 ]
+
+test('NO SERVICE imports electron, and the rule is the directory', async () => {
+  // **Stated over a directory, so a new service is covered by existing it.**
+  // This was a list with one name on it, and every service written since would
+  // have had to be added by somebody remembering to — which is the shape note 61
+  // records decaying. The layout now carries the layering, so the test can ask
+  // about the layer.
+  const offenders: string[] = []
+  for (const rel of await sources('main/services')) {
+    const text = await readFile(src(`main/services/${rel}`), 'utf8')
+    for (const m of text.matchAll(/^\s*import[^\n]*from\s*'([^']+)'/gm)) {
+      const from = m[1] as string
+      if (from === 'electron' || from.startsWith('electron/')) {
+        offenders.push(`services/${rel} imports ${from}`)
+      }
+      // The indirect route: `verify-mode.ts` imports `app`, so importing
+      // `verifyEnv` imports Electron without the word appearing.
+      if (from.endsWith('verify-mode.ts')) offenders.push(`services/${rel} imports verify-mode`)
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'a service must run under plain node — whatever it needs is passed in by the ' +
+      'layer that already has it. See the header of this file.',
+  )
+})
 
 for (const rel of NODE_ONLY) {
   test(`${rel} does not import electron`, async () => {
@@ -65,13 +95,6 @@ for (const rel of NODE_ONLY) {
     )
   })
 }
-
-test('and it does not reach it second-hand either', async () => {
-  // The third breakage was indirect: `verify-mode.ts` imports `app`, so
-  // importing `verifyEnv` imported Electron without the word appearing.
-  const text = await readFile(src('main/document-service.ts'), 'utf8')
-  assert.equal(text.includes("from './verify-mode.ts'"), false, 'verify-mode imports Electron')
-})
 
 // ── the invariant stack (D54) ─────────────────────────────────────────────
 
@@ -132,8 +155,9 @@ const NOT_THE_NOTEBOOK = ['system-zone.ts']
  * this list when the last of it has moved into a service.
  */
 const COMPOSITION = [
-  'index.ts', 'corpus-service.ts', 'durability-service.ts', 'day-service.ts',
-  'document-service.ts', 'print.ts',
+  'index.ts', 'print.ts',
+  'services/corpus-service.ts', 'services/durability-service.ts',
+  'services/day-service.ts', 'services/document-service.ts',
 ]
 
 

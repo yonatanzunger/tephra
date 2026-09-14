@@ -15,7 +15,7 @@
 // the integration suites can drive it under plain node (`layering.test.ts`).
 
 import type { BrowserWindow, WebContents } from 'electron'
-import type { DocumentService } from './document-service.ts'
+import type { DocumentService } from './services/document-service.ts'
 import { attachWindow } from './ipc.ts'
 import { setMenuTargets } from './menu.ts'
 import { STREAM_ID, type DocumentId } from '../shared/document-api.ts'

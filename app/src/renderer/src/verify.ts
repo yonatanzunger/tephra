@@ -972,6 +972,23 @@ export async function runVerify(request: string): Promise<void> {
       const list = await window.tephra.todo.which()
       const today = await window.tephra.todo.today(list)
       say('items', (await window.tephra.todo.items(list, today)).map(i => i.text))
+      // **Instrumented, because this check has flaked three times and the
+      // leading theory was wrong.** An empty `items` has two very different
+      // causes that it cannot tell apart: the second window never committed, or
+      // it committed under a different day than this read looks under. These
+      // say which — every day the list holds, and what is on each.
+      //
+      // The seeding race (note 61) was the suspect and is not the answer: the
+      // gate landed, and this failed again afterwards. So the next failure
+      // should arrive with its own evidence rather than another hypothesis.
+      {
+        const days = await window.tephra.todo.days(list)
+        const perDay: Record<string, number> = {}
+        for (const day of days) {
+          perDay[day as unknown as string] = (await window.tephra.todo.items(list, day)).length
+        }
+        say('whereTheItemsAre', { readAt: today, days: perDay })
+      }
       say('prose', view.state.doc.toString().replace(/\n+/g, ' ').slice(0, 170))
 
       // **From a bare caret it takes you to the list with a row already open**,

@@ -19,16 +19,16 @@
 // has never heard of it. That keeps the dependency pointing down while the data
 // flows up, and it is the same inversion the reconciler uses (D77, D83).
 
-import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
-import { CorpusIndex } from './x/documents/corpus-index.ts'
-import type { StreamDocument } from './x/documents/kinds/stream.ts'
-import type { Notebook } from './w/notebook.ts'
-import { parseDayFile } from './w/layout.ts'
+import { Corpus, STREAM_ID } from '../x/documents/corpus.ts'
+import { CorpusIndex } from '../x/documents/corpus-index.ts'
+import type { StreamDocument } from '../x/documents/kinds/stream.ts'
+import type { Notebook } from '../w/notebook.ts'
+import { parseDayFile } from '../w/layout.ts'
 import type { Bus } from './bus.ts'
 import type { FixedPoints } from './fixed-point.ts'
 import { documentKey } from './change-keys.ts'
-import type { DocumentId, Unsubscribe } from '../shared/document-api.ts'
-import { CHANNEL } from '../shared/ipc.ts'
+import type { DocumentId, Unsubscribe } from '../../shared/document-api.ts'
+import { CHANNEL } from '../../shared/ipc.ts'
 
 
 export class CorpusService {

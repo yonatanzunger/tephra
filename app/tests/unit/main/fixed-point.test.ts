@@ -17,7 +17,7 @@ import {
   FixedPoints,
   type RunReport,
   type FixedPointFunction,
-} from '../../../src/main/fixed-point.ts'
+} from '../../../src/main/services/fixed-point.ts'
 
 /** The registration shape, so a test spells out only what it cares about. */
 const fn = (

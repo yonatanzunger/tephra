@@ -27,17 +27,17 @@
 // **No IPC channels**: `today` and the zone verbs are the app service's doors,
 // and this is what they call.
 
-import { DayClock } from './x/day-clock.ts'
-import { dayFile } from './w/layout.ts'
-import { readSettings, writeSettings } from './w/settings.ts'
+import { DayClock } from '../x/day-clock.ts'
+import { dayFile } from '../w/layout.ts'
+import { readSettings, writeSettings } from '../w/settings.ts'
 import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
 import type { Bus } from './bus.ts'
 import type { FixedPoints } from './fixed-point.ts'
 import { dayKey } from './change-keys.ts'
-import { compareDateKeys, isKnownZone } from '../shared/dates.ts'
-import type { DateKey, Unsubscribe } from '../shared/document-api.ts'
-import { CHANNEL } from '../shared/ipc.ts'
+import { compareDateKeys, isKnownZone } from '../../shared/dates.ts'
+import type { DateKey, Unsubscribe } from '../../shared/document-api.ts'
+import { CHANNEL } from '../../shared/ipc.ts'
 
 /** How often to notice midnight. Tests make it small. */
 const DAY_CHECK_MS = 30_000

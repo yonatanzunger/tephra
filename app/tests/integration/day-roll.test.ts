@@ -14,7 +14,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/document-service.ts'
+import { DocumentService } from '../../src/main/services/document-service.ts'
 import { msUntilNextDay, dateKeyAt } from '../../src/shared/dates.ts'
 
 /** A clock the test moves by hand, so no test waits for a real midnight. */

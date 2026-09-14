@@ -2293,13 +2293,23 @@ console.log('\n\u2014 capture from the stream \u2014')
   // **Committed**: the row opens in the list prefilled from the selection, and
   // once it is committed the words point at the task they became.
   //
-  // **Known to flake, 2026-09-13.** This is the only check in the suite that
-  // waits on a SECOND window booting — the driver gives it 12s to boot, claim,
-  // commit and send the answer back, and on a loaded machine that is sometimes
-  // not enough. It then reports an empty list and unlinked prose, which looks
-  // exactly like a broken capture rather than like a slow boot. Seen failing
-  // once and passing on the next run with no change in between; if it fails,
-  // re-run before believing it.
+  // **Known to flake — three times on 2026-09-13/14, always passing on the very
+  // next run with nothing changed in between.**
+  //
+  // This is the only check in the suite that waits on a SECOND window booting:
+  // the driver gives it 12s to boot, claim, commit and send the answer back.
+  // When it fails it reports an empty list and unlinked prose, which looks
+  // exactly like a broken capture rather than like a slow boot.
+  //
+  // **The seeding race was the leading theory and it is wrong.** A write racing
+  // startup could file an item under a guessed day while the read looked under
+  // the real one (note 61); that hole is now gated shut, and this failed again
+  // afterwards. So the cause is still unknown.
+  //
+  // `whereTheItemsAre` is the instrumentation added for the next occurrence: it
+  // says which days the list holds and how many items are on each, which
+  // separates *never committed* from *committed under another day* — the two
+  // causes an empty `items` cannot distinguish. Read it before theorising.
   const kept = report(await launch('capture', await week([prose])))
   check('a selection can be taken from mid-sentence', kept.selected === 'call the surveyor about the boundary')
   check(
@@ -2311,7 +2321,7 @@ console.log('\n\u2014 capture from the stream \u2014')
     'committing it makes the item and leaves the sentence its words',
     Array.isArray(kept.items) && kept.items[0] === 'call the surveyor about the boundary' &&
       /Spoke to the agent today\./.test(String(kept.prose)) && /before Friday\./.test(String(kept.prose)),
-    JSON.stringify(kept.items),
+    `${JSON.stringify(kept.items)} · ${JSON.stringify(kept.whereTheItemsAre)}`,
   )
   check(
     'and the words now point at the task they became',

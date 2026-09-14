@@ -20,14 +20,14 @@
 // No IPC channels of its own. `flush` is the renderer-facing door and belongs to
 // whichever domain service owns the text; this is what it calls.
 
-import { Wal, type WalRecord } from './w/wal.ts'
-import { GitRepository } from './w/git-repository.ts'
-import type { Repository } from './w/repository.ts'
-import { StreamHistory } from './x/history.ts'
-import { applyEdits } from './x/text-edits.ts'
+import { Wal, type WalRecord } from '../w/wal.ts'
+import { GitRepository } from '../w/git-repository.ts'
+import type { Repository } from '../w/repository.ts'
+import { StreamHistory } from '../x/history.ts'
+import { applyEdits } from '../x/text-edits.ts'
 import type { CorpusService } from './corpus-service.ts'
-import type { DateKey, DocumentId, VersionId } from '../shared/document-api.ts'
-import { STREAM_ID } from '../shared/document-api.ts'
+import type { DateKey, DocumentId, VersionId } from '../../shared/document-api.ts'
+import { STREAM_ID } from '../../shared/document-api.ts'
 
 /**
  * The first tier (D32). Small enough that what it can lose is a few keystrokes;

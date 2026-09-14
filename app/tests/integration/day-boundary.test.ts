@@ -12,7 +12,7 @@ import { mkdtemp, mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/document-service.ts'
+import { DocumentService } from '../../src/main/services/document-service.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
 import type { DateKey, ProseText, WindowPosition } from '../../src/shared/document-api.ts'
 
