@@ -6,13 +6,13 @@ import { IMAGE_EXTENSIONS } from '../shared/ipc.ts'
 import { readOutsideBytes } from './w/outside.ts'
 import { CHANNEL, type DocketCommand, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
 import { DocumentService } from './services/document-service.ts'
+import { claim, type Serves } from './services/serves.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
 import { Searches } from './searches.ts'
 import type { Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchRequest } from '../shared/ipc.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type { Followed, Reference } from '../shared/nav-api.ts'
-import type { CommentId } from '../shared/comments.ts'
 import type { DocumentId } from '../shared/document-api.ts'
 import type { Windows } from './windows.ts'
 import type { WindowReport } from '../shared/ipc.ts'
@@ -23,8 +23,30 @@ import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/docum
 
 export { DocumentService }
 
+/**
+ * Wire what the services declare (D83).
+ *
+ * **Nothing here decides anything.** A service says which channels it answers
+ * on; this walks the declarations and hands each to Electron. The duplicate
+ * check is `claim`'s, so *each channel belongs to exactly one service* fails at
+ * startup rather than being a sentence in a design document.
+ *
+ * This is the shape the seventy-four cases below are moving into, one service at
+ * a time. What is left in `registerDocumentIpc` is what has not moved yet.
+ */
+function wire(services: readonly Serves[]): void {
+  for (const [channel, answer] of claim(services)) {
+    ipcMain.handle(channel, (_event, ...args: unknown[]) => answer(...args))
+  }
+}
+
 /** One service per notebook, one notebook per app. */
 export function registerDocumentIpc(service: DocumentService): void {
+  // **Declared channels first**, so a collision with a hand-written case below
+  // shows up as Electron refusing a second handler for one channel rather than
+  // as whichever won.
+  wire([service])
+
   ipcMain.handle(CHANNEL.open, (_e, id?: DocumentId) => service.info(id))
   ipcMain.handle(CHANNEL.read, (_e, request: ReadRequest) => service.openWindow(request))
   ipcMain.handle(CHANNEL.edit, (_e, request: EditRequest) => service.edit(request))
@@ -375,7 +397,6 @@ export function registerDocumentIpc(service: DocumentService): void {
     service.readDay(version, date),
   )
   ipcMain.handle(CHANNEL.restore, (_e, version: VersionId) => service.restore(version))
-  ipcMain.handle(CHANNEL.comments, () => service.comments())
   if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())
 
   /**
@@ -408,21 +429,6 @@ export function registerDocumentIpc(service: DocumentService): void {
     if (process.platform === 'darwin') app.showEmojiPanel()
     return process.platform === 'darwin'
   })
-  ipcMain.handle(CHANNEL.startComment, (_e, span: Span, body: string) => service.startComment(span, body))
-  ipcMain.handle(CHANNEL.addComment, (_e, id: CommentId, body: string) => service.addComment(id, body))
-  ipcMain.handle(CHANNEL.editComment, (_e, id: CommentId, i: number, body: string) =>
-    service.editComment(id, i, body),
-  )
-  ipcMain.handle(CHANNEL.deleteComment, (_e, id: CommentId, i: number) => service.deleteComment(id, i))
-  ipcMain.handle(CHANNEL.setCommentResolved, (_e, id: CommentId, on: boolean) =>
-    service.setCommentResolved(id, on),
-  )
-  ipcMain.handle(CHANNEL.setCommentAssignee, (_e, id: CommentId, to: string | null) =>
-    service.setCommentAssignee(id, to),
-  )
-  ipcMain.handle(CHANNEL.reactToComment, (_e, id: CommentId, i: number, emoji: string, on: boolean) =>
-    service.reactToComment(id, i, emoji, on),
-  )
   ipcMain.handle(CHANNEL.undo, (_e, id?: DocumentId) => service.undo(id))
   ipcMain.handle(CHANNEL.redo, (_e, id?: DocumentId) => service.redo(id))
   ipcMain.handle(CHANNEL.flush, () => service.flush())

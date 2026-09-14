@@ -315,8 +315,46 @@ system*](https://betterprogramming.pub/w-x-and-z-the-layers-of-a-system-568cf6b1
        notebook was shut for a year advances through every missed interval —
        hundreds of writes to one field, all in one round. Limit 25; an ordinary
        recurring flow measures **2**.
-2. **`registerIpc`**, so a service can claim its own channels and the 74-case
-   switch in `ipc.ts` can shrink a service at a time.
+2. **Channels declare themselves — done 2026-09-14.** `services/serves.ts`:
+   a service returns `Served[]` from `serves()`, and `ipc.ts` walks the
+   declarations.
+   - **Declared, not registered, because of the Electron rule.** A service may
+     not import Electron — checked by directory — so it cannot call
+     `ipcMain.handle` for itself. The same inversion as everywhere else, applied
+     to the process boundary.
+   - **`claim()` is separated from the wiring so it can be tested.** `ipc.ts`
+     cannot run under plain Node; who claims what, and what happens when two
+     services want one channel, is the part worth a test.
+   - **It makes one of this decision's rules mechanical.** *Each channel is
+     registered by exactly one service* was a sentence here; `claim` throws on a
+     collision, at startup, before a window opens.
+   - The comment channels declare themselves already, one step ahead of the
+     code, so the extraction has that much less to do. **74 → 67** hand-written
+     handlers.
+2a. **A completeness test over the channels — done 2026-09-14.**
+   `tests/unit/main/channels.test.ts` relates the three sides that nothing else
+   relates: a channel is *declared* in `shared/ipc.ts`, *asked for* in
+   `preload`, and *answered* in `main`, and the three refer only to the same
+   string constant — so TypeScript cannot see a gap in any direction.
+   - asked and not answered → the renderer waits for ever, silently
+   - answered and not asked → dead code that reads as live
+   - answered twice → the migration hazard: a service declaring a channel whose
+     hand-written case was not deleted. Electron refuses the second handler, but
+     only at startup
+   - declared and neither asked nor listened → a channel nobody uses
+   - pushed by main and not listened for → a message into the void
+   All five hold today (91 declared, 79 answered, 79 asked, 13 listened), and
+   both failure modes were **checked by breaking them**: deleting one handler
+   and double-declaring one channel each failed the expected test by name.
+   - **Chosen over a `@ipc` decorator.** TS 7 and esbuild 0.25 do support
+     standard TC39 decorators — compiled and ran one to be sure — and the
+     decorator's one real advantage is that a verb cannot be added without its
+     channel. But `serves()` is one place to read to answer *what does this
+     service expose*, which is the question D83's one-channel-one-service rule
+     makes important, and a decorator scatters that across thirty methods. The
+     completeness test buys the safety without the scatter, and catches the
+     opposite failure a decorator cannot see.
+
 3. **Comments as the pilot** — 129 lines, 13 members, a clean domain, collapses
    eight channels into one union, **and it writes documents**, so it exercises
    the risky part (core access, the write path) while staying small enough to
