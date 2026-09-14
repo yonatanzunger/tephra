@@ -175,7 +175,13 @@ test('A REMINDER FINALLY HAS SOMEWHERE TO GO (H6), which MH3a left inert', async
     ['2026-08-17', 'status', 'work out what the plan is'],
     ['2026-11-15', 'status', 'Ada’s birthday'],
   ])
-  assert.equal((await service.reconcile()).made.length, 0, 'and it generates nothing, ever')
+  await service.reconcile()
+  const list = await service.todoList()
+  assert.deepEqual(
+    (await service.todoItems(list, service.today)).map(one => one.text),
+    [],
+    'and it generates nothing, ever',
+  )
 })
 
 test('A STANDING MATTER IS NOT ON THE HORIZON AT ALL, having no date to be on', async t => {

@@ -71,6 +71,8 @@ import { Filesets } from './x/fileset.ts'
 import type { LocalWindow } from './x/window.ts'
 import { Bus, type MessageSink } from './bus.ts'
 import { CorpusService } from './corpus-service.ts'
+import { documentKey, ASKED_KEY } from './change-keys.ts'
+import { FixedPoints, type RunReport } from './fixed-point.ts'
 import { DurabilityService } from './durability-service.ts'
 import { DayService } from './day-service.ts'
 
@@ -141,6 +143,7 @@ export class DocumentService {
    * a second path to a document would be a second path around the queue.
    */
   readonly #bus: Bus
+  readonly #fixed: FixedPoints
   readonly #store: CorpusService
   readonly #durable: DurabilityService
 
@@ -212,21 +215,26 @@ export class DocumentService {
     // corpus service on the bus, and durability on the corpus — so they are
     // built in that order and the DAG is visible in the construction (D83).
     this.#bus = new Bus()
-    this.#store = new CorpusService(notebook, this.#bus)
+    // **Depends on nothing, like the bus** — and both the bottom and the top
+    // depend on it: the corpus reports change keys into it, and the
+    // reconciliation clause registers with it. A leaf mediating between the two
+    // is what keeps the edge from pointing upward (D83).
+    this.#fixed = new FixedPoints()
+    this.#store = new CorpusService(notebook, this.#bus, this.#fixed)
     this.#durable = new DurabilityService(this.#store, options)
     // Beside the index rather than in the core: only search uses the Scanner,
     // so it belongs to the search service when that is split out (D83).
     this.#search = new Scanner(notebook, this.#index)
     this.#filesets = new Filesets(this.#corpus)
-    this.#day = new DayService(this.#store, this.#durable, this.#bus, options)
+    this.#day = new DayService(this.#store, this.#durable, this.#bus, this.#fixed, options)
     this.#systemZone = options.systemZone ?? systemZone
-    // **The two upward edges, inverted.** Crossing a boundary has to reconcile
-    // what derives from the day, and every poll has to re-offer the zone — both
-    // of which live above the day service, so it announces and these subscribe
-    // (D83). Awaited for the roll, because the boundary is not crossed until the
-    // derived state agrees with it.
-    this.#day.onRolled(() => this.reconcile().then(() => undefined))
+    // **The one upward edge left, inverted.** Every poll has to re-offer the
+    // zone, which is session UI state and lives above the day service — so it
+    // announces and this subscribes (D83). The roll used to be a second such
+    // edge; it publishes a `day:` key now, which the reconciler's trigger picks
+    // up like any other change.
     this.#day.onChecked(() => this.#tellAboutTheZone())
+    this.#registerReconcilers()
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -1001,7 +1009,6 @@ export class DocumentService {
     await this.#serial(async () =>
       this.#corpus.use(id, doc => (doc as TodoDocument).setStatus(item, status, note)),
     )
-    this.#touched()
     // **Completion flows back to whatever asked for it** (H7a). Finishing the
     // task is the act a person performs; the step it came from has to hear,
     // because that is what unblocks the next one and what a recurrence measures
@@ -1016,10 +1023,13 @@ export class DocumentService {
     // the list rather than from the step, so all this has to do is ask it to
     // look: the resolution is derived, and what changed is only that the
     // derivation is out of date.
-    // **Any resolution at all**, not just the two new ones: finishing already
-    // wrote the step's stamp above, and this is what turns that stamp into the
-    // next instance without waiting for a day boundary to come round.
-    if (!isLive(status)) await this.reconcile()
+    // **No explicit reconcile here any more.** This line used to read
+    // `if (!isLive(status)) await this.reconcile()` — right about the need and
+    // wrong about the mechanism: the docket clause reads the task list, so a
+    // write to the list is one of its inputs moving and its trigger now says so
+    // (D83). `#wrote` below reports the write and waits for what derives from
+    // it, which is the same guarantee without a verb having to remember.
+    await this.#wrote(id)
   }
 
   /**
@@ -1899,69 +1909,91 @@ export class DocumentService {
    * The return value names what actually changed, which is for logging and for
    * tests; a caller that acts on it is treating this as an event again.
    */
-  async reconcile(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
-    // **One pass at a time, because idempotence across SEQUENTIAL runs is not
-    // enough.** Two overlapping passes both read *this step has made nothing*
-    // before either writes, so both generate — and the pass that does it is the
-    // unattended one at the day boundary, racing whichever one a person
-    // triggered. The reconciler's whole claim is that running it more cannot do
-    // more; that has to hold for *concurrently* as well as *again*, and
-    // read-then-write is only atomic if the passes are queued.
-    const mine = this.#reconciliationPassQueue.then(() => this.#reconcileOnce(), () => this.#reconcileOnce())
-    this.#reconciliationPassQueue = mine.then(() => undefined, () => undefined)
-    return mine
+  async reconcile(): Promise<void> {
+    // **The explicit door — and it goes through the same one as everything
+    // else.** Startup and the day boundary are D77's other two triggers and
+    // neither is a data change, so each reports a synthetic key instead of
+    // reaching past the machinery. One path in, and a divergence report whose
+    // first round reads `asked:` says the run began because somebody asked.
+    //
+    // The ORDINARY trigger is not this method at all: it is a write, reported by
+    // the corpus and routed to whichever functions care (D83).
+    //
+    // **Returns nothing, and used to return what it had made and withdrawn.**
+    // That existed for one `console.log` at startup and for tests to use as a
+    // handle on the item just generated — and keeping it meant bolting a side
+    // channel onto a mechanism built precisely so that a pass reports nothing
+    // and its writes are observed instead. What the run did is now said by the
+    // runner, which has the rounds and their keys already (`onRun`); what the
+    // run *achieved* is read from the world, which is the better assertion
+    // anyway, since it fails for a pass that reports honestly and writes
+    // nothing.
+    await this.#fixed.changed(ASKED_KEY)
   }
 
   /**
-   * The tail of the queue of passes, so that two never run at once.
+   * The most rounds any one key has needed, across every pass this session.
    *
-   * **Not `#documentMutationQueue`**, which orders individual edits. Two queues,
-   * two grains: that one keeps edits in sequence, this one keeps whole passes
-   * from overlapping. A pass makes many writes and they interleave with
-   * everybody else's quite happily; what must not interleave is one pass's
-   * read-then-write with another's.
-   *
-   * **A promise, and it is a queue rather than a lock**: a caller that asks for
-   * a pass gets one, after whatever is already running. It exists because a pass
-   * is a read-modify-write — *this step has made nothing, so make one* — and two
-   * of those interleaved both read before either writes, which is how the day
-   * boundary's pass and a person's ended up generating the same task twice.
+   * **Exposed so the divergence threshold can be argued about from evidence.** A
+   * limit chosen against no data is the position the task list's soft cap has
+   * been stuck in since MT5c; this is what real flows actually reach.
    */
-  #reconciliationPassQueue: Promise<void> = Promise.resolve()
+  get reconciliationHighWater(): number {
+    return this.#fixed.highWater
+  }
 
   /**
-   * Whether a pass is running right now, so that its own writes are ignored.
+   * Told what each reconciliation run did — for the log, and for a run that
+   * would not settle.
    *
-   * **A different question from `#reconciliationPassQueue`, which is why it is
-   * a different thing.** That decides *when* a pass may run; this decides
-   * *whether a docket write should ask for one at all*. A pass writes to the dockets it
-   * reconciles — recording what each step made — and since every other docket
-   * write now summons a pass, its own writes would summon one too.
+   * **This replaced `reconcile()`'s return value.** That said what one forced
+   * run had made and withdrawn; this says what *every* run did, including the
+   * implicit ones, which is both more and better information — and it costs the
+   * clause nothing, because the runner already holds the rounds and their keys.
    */
-  #reconciliationActive = false
-
-  async #reconcileOnce(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
-    // One clause per kind of derived state. Today there is one; the shape is
-    // here so the second is an added line rather than a second design.
-    return this.#reconcileDockets()
+  onReconciled(told: (report: RunReport) => void): Unsubscribe {
+    return this.#fixed.onRun(told)
   }
 
-  /** What the dockets imply, made true: instances advanced, items in step. */
-  async #reconcileDockets(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
-    this.#reconciliationActive = true
-    try {
-      return await this.#reconcileDocketsOnce()
-    } finally {
-      this.#reconciliationActive = false
-    }
+  #registerReconcilers(): void {
+    this.#fixed.register({
+      name: 'dockets',
+      /**
+       * **Everything this clause reads**, which is more than the dockets.
+       *
+       * A docket write, obviously. But the pass also reads the task list — to
+       * know which generated items are still *outstanding*, which is what
+       * decides whether an instance is settled and may advance. So resolving a
+       * task changes an input, and a task finished is what unblocks the step
+       * that follows it.
+       *
+       * **Routed rather than remembered.** `todoSetStatus` used to end with
+       * `if (!isLive(status)) await this.reconcile()` — correct, and an
+       * invariant kept by memory at one door out of many, which is the shape
+       * note 61 records decaying. The trigger says it once instead.
+       *
+       * **And the day**, which is an input as much as either document: what is
+       * due depends on what day it is, so a roll wakes this the same way a write
+       * does. `asked:` covers startup and an explicit request — the triggers
+       * that are not changes to anything (`change-keys.ts` has the format).
+       */
+      trigger: '^(docket|todo|day|asked):',
+      pass: () => this.#reconcileDockets(),
+    })
   }
 
-  async #reconcileDocketsOnce(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
+  /**
+   * What the dockets imply, made true: instances advanced, items in step.
+   *
+   * **Returns nothing, which is what a fixed-point function is** (D83): its
+   * writes are observed by the corpus and reported as keys, so a pass that also
+   * described its own changes would be saying the same thing twice — and the
+   * second saying is the one somebody eventually forgets to keep true.
+   */
+  async #reconcileDockets(): Promise<void> {
     await this.#day.ready()
     const today = this.today
     const list = await this.todoList()
-    const made: string[] = []
-    const withdrawn: string[] = []
 
     /**
      * Which of the items dockets made are still being asked of somebody.
@@ -2047,7 +2079,6 @@ export class DocumentService {
             // prefix, where the redundancy was in the sentence itself.
 
             await this.#setStepMade(docket, id, step.id, item)
-            made.push(item)
             touched = true
           } else if (!wanted && step.made !== null && step.done === null && live.has(step.made)) {
             // **Only what it made, and only while it is still being asked.**
@@ -2059,14 +2090,12 @@ export class DocumentService {
             // always really about, stated too narrowly.
             await this.todoRemove(list, step.made)
             await this.#setStepMade(docket, id, step.id, null)
-            withdrawn.push(step.made)
             touched = true
           }
         }
       }
       if (touched) await this.#wrote(docket)
     }
-    return { made, withdrawn }
   }
 
   /**
@@ -2271,17 +2300,22 @@ export class DocumentService {
   async #wrote(id: DocumentId): Promise<void> {
     this.#touched()
     this.#changed(id)
-    // **Except the reconciler's own writes**, or it would ask itself to run
-    // again for every step it generated. It converges either way — the second
-    // pass finds nothing and stops — but relying on that is relying on an
-    // accident, and the flag says the rule instead.
-    //
     // **Awaited, so the verb's promise means what it says.** Fired and
     // forgotten, `docketActivate` resolved before the task existed — which is
-    // the bug this method was written to fix, merely made harder to see: the
-    // list was empty for however long the pass took. A verb that has returned
-    // has finished, derived state included.
-    if (!this.#reconciliationActive) await this.reconcile().catch(() => undefined)
+    // the bug this was written to fix, merely made harder to see: the list was
+    // empty for however long the pass took. A verb that has returned has
+    // finished, derived state included.
+    //
+    // **The corpus already reported this write**, unforgettably, and that report
+    // had nobody to hand a promise to. This is the same key again, and asking
+    // twice costs nothing — a key repeated inside one round is one key. What it
+    // buys is the waiting.
+    //
+    // **The reconciler's own writes need no exemption here**, which is the whole
+    // gain: the runner knows whether a call is descended from a pass, so a
+    // pass's writes are recorded for the next round instead of asking the pass
+    // to wait for itself (D83). The flag this method used to keep is gone.
+    await this.#fixed.changed(documentKey(id))
   }
 
 

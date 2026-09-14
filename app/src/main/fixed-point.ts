@@ -81,16 +81,38 @@ export interface FixedPointFunction {
   readonly pass: () => Promise<void>
 }
 
-/** A run that would not settle. */
-export interface DivergenceReport {
-  /** The function that kept being woken. */
+/**
+ * What one run did.
+ *
+ * **One report for both endings, because the useful information is the same.**
+ * A run that settled and a run that was abandoned differ in one field; the
+ * rounds and their keys are what you want to read either way — as a log line
+ * when it went well, and as the debugging trail when it did not.
+ */
+export interface RunReport {
+  /** The function that ran. */
   readonly pass: string
 
-  /** The key that kept coming back — the first thing to go and look at. */
-  readonly key: string
-
-  /** How many rounds that key appeared in. */
+  /** How many rounds it took. */
   readonly rounds: number
+
+  /**
+   * The key that kept coming back, or null if the run settled.
+   *
+   * Non-null means the run was **abandoned**: a key came back in more rounds
+   * than `ROUND_LIMIT` allows, which is the signature of two functions undoing
+   * each other's work. Nothing was rolled back — the writes already made stand,
+   * and because these functions are idempotent, triggering again carries on.
+   */
+  readonly diverged: string | null
+
+  /**
+   * One line, ready to log.
+   *
+   * Formatted here rather than by each caller, because this is where the
+   * knowledge of what the numbers mean lives.
+   */
+  readonly summary: string
 
   /**
    * Which keys woke this function in each round, oldest round first.
@@ -118,8 +140,11 @@ export interface DivergenceReport {
  * back *after* a round in which it was already handled — and that is what this
  * counts.
  *
- * Generous on purpose. A real flow reaching two or three rounds is ordinary; a
- * pair undoing each other's work reaches this in under a second.
+ * Generous on purpose, and now with a measurement behind it: an ordinary
+ * recurring docket flow — generate, finish, advance, generate again, over four
+ * instances — reaches **2** rounds on its busiest key (measured 2026-09-14, in
+ * `docket.test.ts`). A pair undoing each other's work reaches 25 in under a
+ * second. The gap between the two is what makes the number safe to pick.
  */
 const ROUND_LIMIT = 25
 
@@ -147,7 +172,7 @@ class FixedPointRunner {
   /** The keys of each round of the current run, oldest first. */
   #history: string[][] = []
 
-  #diverged: ((report: DivergenceReport) => void)[] = []
+  #onRun: ((report: RunReport) => void)[] = []
 
   #highWater = 0
 
@@ -195,10 +220,10 @@ class FixedPointRunner {
     return this.#matches(key)
   }
 
-  onDiverged(told: (report: DivergenceReport) => void): (() => void) {
-    this.#diverged.push(told)
+  onRun(told: (report: RunReport) => void): (() => void) {
+    this.#onRun.push(told)
     return () => {
-      this.#diverged = this.#diverged.filter(one => one !== told)
+      this.#onRun = this.#onRun.filter(one => one !== told)
     }
   }
 
@@ -224,20 +249,23 @@ class FixedPointRunner {
   /** Round after round, until a round leaves nothing queued. */
   async #loop(): Promise<void> {
     for (;;) {
-      if (this.#queued.length === 0) return
+      if (this.#queued.length === 0) {
+        this.#report(null)
+        return
+      }
       // Taken before the work runs, so whatever the work itself reports belongs
       // to the NEXT round rather than to this one.
       const keys = this.#queued
       this.#queued = []
       this.#history.push([...new Set(keys)])
 
-      const report = this.#diverging()
-      if (report !== null) {
+      const runaway = this.#runaway()
+      if (runaway !== null) {
         // **Abandoned, not cleared.** Anything still queued stays queued, so a
         // later trigger carries on from here — right if the run was merely long,
         // and harmless if it was looping, since it will be abandoned and
         // reported again.
-        for (const told of this.#diverged) told(report)
+        this.#report(runaway)
         return
       }
 
@@ -252,23 +280,39 @@ class FixedPointRunner {
   }
 
   /** The key that has come back too often, if there is one. */
-  #diverging(): DivergenceReport | null {
+  #runaway(): string | null {
     const seen = new Map<string, number>()
     for (const round of this.#history) {
       for (const key of round) seen.set(key, (seen.get(key) ?? 0) + 1)
     }
     for (const [key, count] of seen) {
       if (count > this.#highWater) this.#highWater = count
-      if (count > ROUND_LIMIT) {
-        return {
-          pass: this.#fn.name,
-          key,
-          rounds: count,
-          history: this.#history.map(one => [...one]),
-        }
-      }
+      if (count > ROUND_LIMIT) return key
     }
     return null
+  }
+
+  /**
+   * Say what the run did, settled or abandoned.
+   *
+   * **One place builds it**, so the two endings cannot come to describe
+   * themselves differently — which they would, being written apart.
+   */
+  #report(diverged: string | null): void {
+    const rounds = this.#history.length
+    // A run woken by a key nobody had queued has no rounds and nothing to say.
+    if (rounds === 0 && diverged === null) return
+    const report: RunReport = {
+      pass: this.#fn.name,
+      rounds,
+      diverged,
+      history: this.#history.map(one => [...one]),
+      summary:
+        diverged === null
+          ? `${this.#fn.name}: settled in ${rounds} round${rounds === 1 ? '' : 's'}`
+          : `${this.#fn.name}: gave up after ${rounds} rounds — ${diverged} kept changing`,
+    }
+    for (const told of this.#onRun) told(report)
   }
 }
 
@@ -282,7 +326,7 @@ class FixedPointRunner {
  */
 export class FixedPoints {
   readonly #runners = new Map<string, FixedPointRunner>()
-  #diverged: ((report: DivergenceReport) => void)[] = []
+  #onRun: ((report: RunReport) => void)[] = []
 
   /**
    * One turn at a time, across every function.
@@ -311,8 +355,8 @@ export class FixedPoints {
       throw new Error(`a fixed-point function called ${fn.name} is already registered`)
     }
     const runner = new FixedPointRunner(fn, this.#gate, this.#inPass)
-    runner.onDiverged(report => {
-      for (const told of this.#diverged) told(report)
+    runner.onRun(report => {
+      for (const told of this.#onRun) told(report)
     })
     this.#runners.set(fn.name, runner)
     return () => {
@@ -320,10 +364,10 @@ export class FixedPoints {
     }
   }
 
-  onDiverged(told: (report: DivergenceReport) => void): (() => void) {
-    this.#diverged.push(told)
+  onRun(told: (report: RunReport) => void): (() => void) {
+    this.#onRun.push(told)
     return () => {
-      this.#diverged = this.#diverged.filter(one => one !== told)
+      this.#onRun = this.#onRun.filter(one => one !== told)
     }
   }
 

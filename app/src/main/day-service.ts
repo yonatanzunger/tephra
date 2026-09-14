@@ -1,4 +1,5 @@
-// **Foundation. Depends on `CorpusService`, `DurabilityService` and `Bus`.**
+// **Foundation. Depends on `CorpusService`, `DurabilityService`, `Bus` and
+// `FixedPoints`.**
 //
 // What day the app is filing into, and the zone it computes dates in (D62, D63).
 //
@@ -16,10 +17,12 @@
 // `todoItems` all read the day without waiting. `ready()` is the honest version,
 // and the callers gate on it in one place rather than a hundred and fifty.
 //
-// **It emits rather than calls.** Crossing a boundary has to reconcile derived
-// state, and noticing the machine has moved has to re-offer the zone — both of
-// which live far above this service. So it announces and they subscribe, which
-// keeps the dependency pointing down while the news travels up (D83).
+// **It reports rather than calls.** Crossing a boundary has to rebuild what
+// derives from the day, and noticing the machine has moved has to re-offer the
+// zone — both of which live far above this service. The roll is **published as a
+// `day:` key** to the fixed-point runner, like any other change to an input; the
+// zone offer subscribes to `onChecked`. Either way the dependency points down
+// while the news travels up (D83).
 //
 // **No IPC channels**: `today` and the zone verbs are the app service's doors,
 // and this is what they call.
@@ -30,6 +33,8 @@ import { readSettings, writeSettings } from './w/settings.ts'
 import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
 import type { Bus } from './bus.ts'
+import type { FixedPoints } from './fixed-point.ts'
+import { dayKey } from './change-keys.ts'
 import { compareDateKeys, isKnownZone } from '../shared/dates.ts'
 import type { DateKey, Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL } from '../shared/ipc.ts'
@@ -60,18 +65,30 @@ export class DayService {
   /** The last writing day anybody was told about. */
   #announced: DateKey | null = null
 
-  #onRolled: ((day: DateKey) => Promise<void> | void)[] = []
   #onChecked: (() => void)[] = []
+
+  /**
+   * Where a day roll is published.
+   *
+   * **The day is an input to derived state**, so it reports a change like any
+   * other writer rather than keeping a private list of subscribers to call. The
+   * first cut had `onRolled`, awaited, and one subscriber that reconciled; a key
+   * says the same thing, is waited on the same way, and shows up in a divergence
+   * report naming the day instead of saying only that somebody asked (D83).
+   */
+  readonly #fixed: FixedPoints
 
   constructor(
     corpus: CorpusService,
     durable: DurabilityService,
     bus: Bus,
+    fixed: FixedPoints,
     options: DayOptions = {},
   ) {
     this.#corpus = corpus
     this.#durable = durable
     this.#bus = bus
+    this.#fixed = fixed
     this.#now = options.now ?? (() => new Date())
     this.#idleMs = options.idleMs
 
@@ -190,20 +207,6 @@ export class DayService {
   // ── the boundary ─────────────────────────────────────────────
 
   /**
-   * Told when the writing day changes, and **awaited**.
-   *
-   * The boundary is not crossed until the state deriving from the new day
-   * agrees with it — the same no-half-crossed-boundary rule the crossing is
-   * built on — so a subscriber that reconciles is waited for.
-   */
-  onRolled(told: (day: DateKey) => Promise<void> | void): Unsubscribe {
-    this.#onRolled.push(told)
-    return () => {
-      this.#onRolled = this.#onRolled.filter(one => one !== told)
-    }
-  }
-
-  /**
    * Told on every poll, boundary or not.
    *
    * The same poll notices the machine moving: changing the system zone is not
@@ -259,12 +262,14 @@ export class DayService {
       this.#bus.announce(CHANNEL.dayRolled, writing)
       // **Unattended, at the boundary** (H5): what derives from the day is not
       // contingent on anybody doing a thing, because the whole point is that it
-      // happens while nobody is looking. Failures are swallowed on purpose — a
-      // background pass that throws must not take the day roll with it, and the
-      // next pass will try again, since nothing depends on this one having run.
-      for (const told of this.#onRolled) {
-        await Promise.resolve(told(writing)).catch(() => undefined)
-      }
+      // happens while nobody is looking.
+      //
+      // **Awaited**: the boundary is not crossed until what derives from the new
+      // day agrees with it, which is the same no-half-crossed-boundary rule the
+      // rest of this method is built on. Failures cannot travel out of here — a
+      // pass that throws is the runner's business and does not take the roll
+      // with it.
+      await this.#fixed.changed(dayKey(writing))
     }
 
     for (const told of this.#onChecked) told()

@@ -619,14 +619,14 @@ check(
   `on the list: ${JSON.stringify(r.onTheList)}`,
 )
 check(
-  'and running again makes nothing, which is what stops a month away from',
-  'yielding thirty of them'.length > 0 && r.generatedAgain === 0,
-  `second pass made ${r.generatedAgain}`,
-)
-check(
-  'and takes nothing away either, a settled notebook being a quiet one',
-  r.withdrewNothing === 0,
-  `second pass withdrew ${r.withdrewNothing}`,
+  'and running again changes NOTHING — the same items, not merely as many',
+  // **One check where there were two, and stronger than both.** They asked a
+  // report for *made: 0* and *withdrawn: 0*, which a pass that took one away
+  // and put it back would have passed, reporting one of each. And the first
+  // carried `'yielding thirty of them'.length > 0 &&` in its condition — a
+  // fragment of its own title, always true, contributing nothing.
+  r.sameAfterTwice === true && r.countAfterTwice === 1,
+  `same=${r.sameAfterTwice} count=${r.countAfterTwice}`,
 )
 check(
   'IT WITHDRAWS: suspending clears the date, and the pass takes the task back',

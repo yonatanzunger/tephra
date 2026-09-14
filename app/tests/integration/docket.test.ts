@@ -336,6 +336,24 @@ async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
  * already done and `made` is empty — correctly. What the tests were ever about
  * is what is on the list.
  */
+/**
+ * Assert that another pass changes nothing.
+ *
+ * **Asked of the list, not of a report.** `reconcile()` used to answer with what
+ * it had made and withdrawn, and the idiom here was
+ * `deepEqual(await reconcile(), { made: [], withdrawn: [] })`. The report is
+ * gone — a fixed-point function's writes are observed, not described (D83) — and
+ * this is the stronger claim anyway: it fails for a pass that takes an item away
+ * and puts it back, which reports one of each and nets to nothing.
+ */
+async function settled(service: Parameters<typeof onList>[0] & {
+  reconcile(): Promise<void>
+}): Promise<void> {
+  const before = await onList(service)
+  await service.reconcile()
+  assert.deepEqual(await onList(service), before, 'another pass changed the list')
+}
+
 async function onList(service: {
   todoList(): Promise<DocumentId>
   todoItems(id: DocumentId, day: DateKey): Promise<readonly { id: string | null }[]>
@@ -1464,7 +1482,7 @@ test('THE POINT OF THE PHASE: a docket puts work on the list', async t => {
   const items = await service.todoItems(list, service.today)
   assert.deepEqual(items.map(withoutMarks), ['The car needs fixing'])
   assert.deepEqual(items.flatMap(one => one.tags), ['The house'], 'tagged with its docket')
-  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
+  await settled(service)
 })
 
 test('IDEMPOTENCE: running it again makes nothing', async t => {
@@ -1475,10 +1493,15 @@ test('IDEMPOTENCE: running it again makes nothing', async t => {
   const id = await service.newDocument('The house', undefined, 'docket')
   const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
   await service.docketActivate(id, car)
-  assert.equal((await service.reconcile()).made.length, 0)
-  assert.equal((await service.reconcile()).made.length, 0)
-  const list = await service.todoList()
-  assert.equal((await service.todoItems(list, service.today)).length, 1)
+  const first = await onList(service)
+  await service.reconcile()
+  await service.reconcile()
+  // **The same items, not merely the same number.** Withdrawing and re-making
+  // would keep the count and change the ids, which is the failure a count
+  // cannot see — and the one the old assertion on `made` could not see either,
+  // since a pass that withdrew one and made one reports both.
+  assert.deepEqual(await onList(service), first)
+  assert.equal(first.length, 1)
 })
 
 test('THE LONG ABSENCE: a month away yields one task, not thirty', async t => {
@@ -1497,7 +1520,8 @@ test('a matter nobody started generates nothing, which is what inactive MEANS', 
   const { service } = await serviced(t)
   const id = await service.newDocument('The house', undefined, 'docket')
   await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
-  assert.deepEqual((await service.reconcile()).made, [])
+  await service.reconcile()
+  assert.deepEqual(await onList(service), [], 'nothing was generated')
 })
 
 test('and a step still waiting on another does not come due', async t => {
@@ -1545,7 +1569,8 @@ test('and a reminder is authored but inert, there being no horizon yet', async t
   const talk = await service.docketAdd(id, 'The ACM talk',
     { mode: 'event', start: service.today })
   await service.docketActivate(id, talk)
-  assert.deepEqual((await service.reconcile()).made, [], 'MH2 is what gives it somewhere to go')
+  await service.reconcile()
+  assert.deepEqual(await onList(service), [], 'MH2 is what gives it somewhere to go')
 })
 
 test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => {
@@ -1571,7 +1596,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   // feel like, and what the explicit pass here used to be standing in for.
   assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks),
     ['The car needs fixing', 'have the car fixed'])
-  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
+  await settled(service)
 })
 
 test('and a task nothing generated flows back to nothing, quietly', async t => {
@@ -1668,8 +1693,7 @@ test('and does NOT generate the next one until its day comes round', async t => 
   const list = await service.todoList()
   const made = await onList(service)
   await service.todoSetStatus(list, made[0] as string, 'done')
-  const second = await service.reconcile()
-  assert.deepEqual(second.made, [], 'June is not today')
+  await service.reconcile()
   const items = await service.todoItems(list, service.today)
   assert.equal(items.length, 1, 'and the finished one is still there, still finished')
 })
@@ -1813,8 +1837,7 @@ test('IDEMPOTENCE OVER THE WHOLE PASS: thirty runs leave one answer', async t =>
   const list = await service.todoList()
   const texts = (await service.todoItems(list, service.today)).map(withoutMarks).sort()
   assert.deepEqual(texts, ['Fix the skylight', 'write it'])
-  const after = await service.reconcile()
-  assert.deepEqual(after, { made: [], withdrawn: [] }, 'and the thirty-first says nothing')
+  await settled(service) // and the thirty-first changes nothing
 })
 
 test('AND IT WITHDRAWS, because a reconciler that only adds is an event handler', async t => {
@@ -1834,7 +1857,7 @@ test('AND IT WITHDRAWS, because a reconciler that only adds is an event handler'
   // part of the verb now (MH4) — so the withdrawal has already happened by the
   // time this returns, and a second pass finds nothing left to take back.
   await service.docketSetStart(id, car, null)
-  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
+  await settled(service)
   assert.equal((await service.todoItems(list, service.today)).length, 0)
   assert.equal((await service.docketMatters(id))[0]?.steps[0]?.made, null)
 })
@@ -1850,8 +1873,7 @@ test('and withdrawing does not touch what a person typed, or what is done', asyn
   await service.todoSetStatus(list, made[0] as string, 'done')
 
   await service.docketSetStart(id, car, null)
-  const { withdrawn } = await service.reconcile()
-  assert.deepEqual(withdrawn, [], 'a finished task is a true statement about the past')
+  await service.reconcile()
   assert.deepEqual((await service.todoItems(list, service.today)).map(one => one.id).sort(),
     [made[0] as string, mine].sort())
 })
@@ -1868,7 +1890,7 @@ test('AND A MATTER WITH NO INTERVAL NEVER ADVANCES, however long it sits', async
   await service.todoSetStatus(list, made[0] as string, 'done')
 
   await on('2027-03-01')
-  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
+  await settled(service)
   assert.equal((await service.docketMatters(id))[0]?.when.start, '2026-03-01')
   void car
 })
@@ -2028,7 +2050,7 @@ test('and the pass does not summon itself for every step it generates', async t 
   const list = await service.todoList()
   assert.deepEqual((await service.todoItems(list, service.today)).map(withoutMarks).sort(),
     ['One', 'Three', 'Two'], 'one each, and none twice')
-  assert.deepEqual(await service.reconcile(), { made: [], withdrawn: [] })
+  await settled(service)
 })
 
 test('THE EVENING BUG: a step done after 4pm unblocks the next one TODAY', async t => {
@@ -2795,4 +2817,84 @@ test('A RESOLVED ITEM IS A FACT ABOUT THE PAST: reconcile leaves it alone', asyn
     assert.deepEqual(left.map(one => one.id), [made], `a ${answer} item stayed`)
     assert.equal(left[0]?.status, answer, 'and kept the answer it was given')
   }
+})
+
+// ── reconciliation runs through the fixed-point runner (D83) ────────────────
+
+test('A DOCKET WRITE TRIGGERS A PASS, with nobody remembering to ask', async t => {
+  // **The change of mechanism, from the outside.** Reconciliation used to be
+  // summoned by `#wrote` calling it; now a write is reported by the corpus as a
+  // key, and whichever fixed-point functions care are woken. The observable
+  // claim is the same one D77 made and must survive the move: the verb has not
+  // returned until what derives from it is true.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+  await service.docketActivate(id, car)
+  const list = await service.todoList()
+  // Not after a reconcile() — after the verb.
+  assert.deepEqual(
+    (await service.todoItems(list, service.today)).map(withoutMarks),
+    ['The car needs fixing'],
+  )
+})
+
+test('AND SO DOES A TASK-LIST WRITE, because the clause reads the list', async t => {
+  // **Corrected while writing it.** The first version of this test claimed the
+  // opposite — that a task write must NOT summon a pass — and it passed for the
+  // wrong reason: the fixture had no dockets, so a pass that ran found nothing
+  // either way.
+  //
+  // The clause reads the task list, to know which generated items are still
+  // outstanding; that is what decides whether an instance may advance. So
+  // resolving a task changes one of its inputs. `todoSetStatus` used to say so
+  // with an explicit `await this.reconcile()` at the end — right about the need,
+  // and an invariant kept by memory at one door out of many (note 61). The
+  // trigger says it once instead, and this is what proves the move kept it.
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const filter = await service.docketAdd(id, 'Change the filter', {
+    mode: 'recurring-task',
+    every: '30d',
+  })
+  await service.docketActivate(id, filter)
+  const list = await service.todoList()
+  const first = (await service.todoItems(list, service.today))[0]?.id ?? ''
+  assert.notEqual(first, '')
+  const started = (await service.docketMatters(id))[0]?.when.start
+
+  // *Nevermind* — put down rather than done. Nobody calls reconcile.
+  await service.todoSetStatus(list, first, 'dropped')
+
+  // The instance moved on, because dropping it resolved what was outstanding.
+  assert.notEqual(
+    (await service.docketMatters(id))[0]?.when.start,
+    started,
+    'the matter advanced without anybody asking it to',
+  )
+})
+
+test('and a real flow stays far below the divergence threshold', async t => {
+  // **The empirical answer to "is the round limit right?"** A limit chosen
+  // against no data is the position the task list's soft cap has been stuck in
+  // since MT5c. This records what an ordinary flow actually reaches, so the
+  // number can be argued about from evidence.
+  const { service, on } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const car = await service.docketAdd(id, 'Change the filter', {
+    mode: 'recurring-task',
+    every: '30d',
+  })
+  await service.docketActivate(id, car)
+  const list = await service.todoList()
+  for (const day of ['2026-04-10', '2026-05-11', '2026-06-11', '2026-07-12']) {
+    const item = (await service.todoItems(list, service.today)).find(one => one.status === 'todo')
+    if (item?.id != null) await service.todoSetStatus(list, item.id, 'done')
+    await on(day)
+  }
+  assert.ok(
+    service.reconciliationHighWater <= 3,
+    `an ordinary flow reached ${service.reconciliationHighWater} rounds on one key`,
+  )
+  // Measured 2026-09-14: **2**. The limit is 25.
 })

@@ -1,8 +1,8 @@
 # Service layers — splitting `DocumentService`
 
-**Status: designed 2026-09-13; the whole foundation is built** — `Bus`,
-`CorpusService`, `DurabilityService`, `DayService` — with the reconciler
-inversion (1d) still to come.
+**Status: the foundation is built** — `Bus`, `CorpusService`,
+`DurabilityService`, `DayService`, `FixedPoints` — and reconciliation runs on it.
+Next is the first domain service; the plan is under *Order of work*.
 `architecture-as-built.md` describes what *is*; this describes what we are going
 to do, and each piece moves into that file as it lands. Decided in D83. Progress
 is tracked under *Order of work* at the foot — **1a is done**, and nothing above
@@ -259,7 +259,33 @@ leave the file without a single design decision.
        mutation queue — the one place every write already passes through — plus
        five doors that read the day before queueing. Pinned by *THE SEED LANDS
        BEFORE A WRITE PICKS A DAY*, which fails without the gate.
-   - **1d** — the reconciler inversion: `reconciles(name, pass)`.
+   - **1d done, 2026-09-14** — `main/fixed-point.ts`, and the reconciler moved
+     onto it. Three exports: `FixedPointFunction` (the API — a name, a trigger,
+     a pass), `FixedPoints` (the table and the routing), `DivergenceReport`.
+     - **Two classes, because two jobs.** `FixedPointRunner` (internal) runs one
+       function and owns its queue, rounds and threshold; `FixedPoints` holds the
+       table and routes keys. State is per function; **execution is not** — two
+       functions reading and writing the same document race exactly as two
+       copies of one did (note 51), so a turnstile the table owns is shared.
+     - **Re-entrancy by `AsyncLocalStorage`, not a flag.** A flag is true for a
+       pass's whole *duration*, and other work interleaves in that window — so a
+       second window's write would be told *you are inside the work* and return
+       without waiting, which is the `docketActivate` bug under a race. Proven:
+       the boolean version fails exactly one test, written to settle it.
+     - **Keys come from the corpus**, which reports every write as
+       `<kind>:<id>`; no write site remembers anything. `#wrote` asks again with
+       the same key to get the *waiting*, and asking twice is free because a key
+       repeated inside one round is one key.
+     - **The trigger names what the clause reads**, which is more than the
+       dockets: `'^(docket|todo|asked):'`. The task list is an input — it says
+       which generated items are still outstanding — so `todoSetStatus`'s
+       remembered `await this.reconcile()` became routing. And `asked:` is the
+       synthetic key for startup and the day boundary, so there is one path in
+       rather than a side door.
+     - **Divergence is counted in rounds, not reports.** A recurring matter whose
+       notebook was shut for a year advances through every missed interval —
+       hundreds of writes to one field, all in one round. Limit 25; an ordinary
+       recurring flow measures **2**.
 2. **`registerIpc`**, so a service can claim its own channels and the 74-case
    switch in `ipc.ts` can shrink a service at a time.
 3. **Comments as the pilot** — 129 lines, 13 members, a clean domain, collapses

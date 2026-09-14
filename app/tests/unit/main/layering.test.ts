@@ -136,6 +136,7 @@ const COMPOSITION = [
   'document-service.ts', 'print.ts',
 ]
 
+
 test('only the floor touches storage', async () => {
   const offenders: string[] = []
   for (const rel of await sources('main')) {

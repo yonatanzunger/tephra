@@ -238,8 +238,14 @@ const tephra = {
     setAfter: (docket: DocumentId, matter: string, after: string | null): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'after', docket, matter, after }),
     /** Reconcile the list with the dockets. Unattended in life; here to test. */
-    generate: (): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> =>
-      ipcRenderer.invoke(CHANNEL.docket, { kind: 'generate' }),
+    /**
+     * Ask for a reconciliation now, and wait for it to settle.
+     *
+     * **Returns nothing.** It used to answer with what it had made and
+     * withdrawn; nothing in the renderer ever read that, and a pass reports its
+     * changes by writing them, not by describing them (D83).
+     */
+    generate: (): Promise<void> => ipcRenderer.invoke(CHANNEL.docket, { kind: 'generate' }),
     /** Move a recurring matter on to its next instance. */
     advance: (docket: DocumentId, matter: string): Promise<DateKey | null> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'advance', docket, matter }),

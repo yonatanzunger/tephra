@@ -3915,15 +3915,22 @@ export async function runVerify(request: string): Promise<void> {
         if (docketId !== undefined && mower?.id != null) {
           await window.tephra.docket.activate(docketId, mower.id)
         }
-        const made = await window.tephra.docket.generate()
-        say('generated', made.made.length)
+        await window.tephra.docket.generate()
         const list = await window.tephra.todo.which()
-        const items = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
+        const day = await window.tephra.todo.today(list)
+        const items = await window.tephra.todo.items(list, day)
         say('onTheList', items.map(one => one.text).filter(t => t.includes('mower')))
-        // **Twice makes nothing**, which is the rule the whole pass rests on.
-        const again = await window.tephra.docket.generate()
-        say('generatedAgain', again.made.length)
-        say('withdrewNothing', again.withdrawn.length)
+        // **Twice changes nothing**, which is the rule the whole pass rests on.
+        //
+        // **Asked of the list rather than of a report.** `generate` used to
+        // answer with what it had made and withdrawn, and this counted both
+        // being zero — which a pass that withdrew one and made one back would
+        // have passed, since it reports one of each. The ids are the real claim.
+        const before = JSON.stringify(items.map(one => one.id))
+        await window.tephra.docket.generate()
+        const after = JSON.stringify((await window.tephra.todo.items(list, day)).map(one => one.id))
+        say('sameAfterTwice', before === after)
+        say('countAfterTwice', (await window.tephra.todo.items(list, day)).length)
 
         // **And it withdraws**, which is the half that makes it a reconciler
         // rather than a sweep: clearing the start date is the only act, and the

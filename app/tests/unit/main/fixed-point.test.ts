@@ -15,7 +15,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FixedPoints,
-  type DivergenceReport,
+  type RunReport,
   type FixedPointFunction,
 } from '../../../src/main/fixed-point.ts'
 
@@ -235,6 +235,38 @@ test('A FUNCTION THAT THROWS does not take the run with it', async () => {
   assert.deepEqual(ran.sort(), ['angry', 'calm'])
 })
 
+test('ASKING THOUGH NOTHING MOVED is an ordinary key', async () => {
+  // Startup and the day boundary: nothing changed, and the question is still
+  // *what should be true now*. A synthetic key rather than a side door, so
+  // there is one path into the machinery — and so a divergence report says
+  // which round began because somebody asked.
+  const table = new FixedPoints()
+  const ran: string[] = []
+  table.register(fn('a', '^(docket|asked):', async () => void ran.push('a')))
+  table.register(fn('b', '^docket:', async () => void ran.push('b')))
+  await table.changed('asked:reconcile')
+  assert.deepEqual(ran, ['a'], 'and it is routed like any other key')
+})
+
+test('EVERY RUN IS REPORTED, which is where the log comes from', async () => {
+  // **One report for both endings**, because the useful information is the
+  // same: the rounds and their keys read as a log line when it went well and as
+  // a debugging trail when it did not. This replaced `reconcile()`'s return
+  // value, which existed for one `console.log` and for tests.
+  const table = new FixedPoints()
+  const reports: RunReport[] = []
+  table.onRun(r => void reports.push(r))
+  table.register(fn('dockets', '^docket:', async () => undefined))
+  await table.changed('docket:house')
+  assert.equal(reports.length, 1)
+  const report = reports[0] as RunReport
+  assert.equal(report.pass, 'dockets')
+  assert.equal(report.rounds, 1)
+  assert.equal(report.diverged, null, 'it settled')
+  assert.deepEqual(report.history, [['docket:house']])
+  assert.equal(report.summary, 'dockets: settled in 1 round')
+})
+
 // ── divergence ─────────────────────────────────────────────────────────────
 
 test('A LEGITIMATE CATCH-UP IS NOT DIVERGENCE, however many writes', { timeout: 5_000 }, async () => {
@@ -243,8 +275,8 @@ test('A LEGITIMATE CATCH-UP IS NOT DIVERGENCE, however many writes', { timeout: 
   // hundreds of real writes to the same field, all inside one round. Counting
   // reports would condemn it; counting ROUNDS sees one round, once.
   const table = new FixedPoints()
-  const reports: DivergenceReport[] = []
-  table.onDiverged(r => void reports.push(r))
+  const reports: RunReport[] = []
+  table.onRun(r => void (r.diverged !== null && reports.push(r)))
   let caught = false
   table.register(
     fn('advance', '^docket:', async () => {
@@ -260,8 +292,8 @@ test('A LEGITIMATE CATCH-UP IS NOT DIVERGENCE, however many writes', { timeout: 
 
 test('DIVERGENCE IS CAUGHT AND REPORTED, rather than spun for ever', { timeout: 5_000 }, async () => {
   const table = new FixedPoints()
-  const reports: DivergenceReport[] = []
-  table.onDiverged(r => void reports.push(r))
+  const reports: RunReport[] = []
+  table.onRun(r => void (r.diverged !== null && reports.push(r)))
   let flag = false
   table.register(
     fn('sets it', '^flag$', async () => {
@@ -277,11 +309,12 @@ test('DIVERGENCE IS CAUGHT AND REPORTED, rather than spun for ever', { timeout: 
   )
   await table.changed('flag')
   assert.ok(reports.length >= 1, `reported ${reports.length}`)
-  const report = reports[0] as DivergenceReport
-  assert.equal(report.key, 'flag')
+  const report = reports[0] as RunReport
+  assert.equal(report.diverged, 'flag')
   assert.ok(report.rounds > 20, `gave up after ${report.rounds} rounds`)
   assert.equal(report.history.length, report.rounds, 'the trail is one entry per round')
   assert.deepEqual(report.history[0], ['flag'], 'and each entry is that round’s keys')
+  assert.match(report.summary, /gave up after \d+ rounds — flag kept changing/)
   void flag
 })
 
@@ -303,8 +336,8 @@ test('ONE FUNCTION DIVERGING LEAVES ANOTHER WORKING', { timeout: 5_000 }, async 
   // twenty-six times. Routing is what isolates; the split is what keeps the
   // books apart.
   const table = new FixedPoints()
-  const reports: DivergenceReport[] = []
-  table.onDiverged(r => void reports.push(r))
+  const reports: RunReport[] = []
+  table.onRun(r => void (r.diverged !== null && reports.push(r)))
   let calm = 0
   table.register(fn('spinner', '^spin$', async () => void (await table.changed('spin'))))
   table.register(fn('calm', '^calm$', async () => void calm++))

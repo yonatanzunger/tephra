@@ -538,8 +538,15 @@ app.whenReady().then(async () => {
   // **After recovery and before any window**, so that what a reader first sees
   // is the notebook as it should be rather than as it was a week ago, changing
   // under them a second later.
-  const ticked = await service.reconcile().catch(() => ({ made: [], withdrawn: [] }))
-  if (ticked.made.length > 0) console.log(`Tephra: ${ticked.made.length} task(s) from dockets`)
+  // **What a pass did is said by the runner**, which already holds the rounds
+  // and the keys that woke each one — so the log is better than the count this
+  // line used to print, and a run that would not settle says so instead of
+  // passing silently (D83).
+  service.onReconciled(report => {
+    if (report.diverged !== null) console.error(`Tephra: ${report.summary}`)
+    else if (report.rounds > 1) console.log(`Tephra: ${report.summary}`)
+  })
+  await service.reconcile().catch(() => undefined)
 
   // **The other half of taking over: being taken from.** Once another Tephra
   // has the notebook, this one must stop before it writes — so the tiers are

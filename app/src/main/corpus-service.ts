@@ -25,8 +25,11 @@ import type { StreamDocument } from './x/documents/kinds/stream.ts'
 import type { Notebook } from './w/notebook.ts'
 import { parseDayFile } from './w/layout.ts'
 import type { Bus } from './bus.ts'
+import type { FixedPoints } from './fixed-point.ts'
+import { documentKey } from './change-keys.ts'
 import type { DocumentId, Unsubscribe } from '../shared/document-api.ts'
 import { CHANNEL } from '../shared/ipc.ts'
+
 
 export class CorpusService {
   readonly #notebook: Notebook
@@ -68,9 +71,12 @@ export class CorpusService {
   /** Told after the reload, so a subscriber sees a corpus already caught up. */
   #onExternal: ((rels: readonly string[]) => void)[] = []
 
-  constructor(notebook: Notebook, bus: Bus) {
+  readonly #fixed: FixedPoints
+
+  constructor(notebook: Notebook, bus: Bus, fixed: FixedPoints) {
     this.#notebook = notebook
     this.#bus = bus
+    this.#fixed = fixed
     this.#corpus = new Corpus(notebook)
     this.#corpus.watch(STREAM_ID) // the stream is open for as long as the app is
     this.#stream = this.#corpus.use(STREAM_ID, async doc => doc as StreamDocument)
@@ -103,6 +109,20 @@ export class CorpusService {
 
     this.#corpus.onDiverged((_id, divergence) => {
       this.#bus.announce(CHANNEL.diverged, divergence)
+    })
+
+    // **Every write is reported, and no write site has to remember to do it.**
+    // What derives from a document has to be rebuilt when that document moves,
+    // and the alternative — asking each of a hundred and fifty verbs to say so —
+    // is the invariant-by-memory that note 61 records decaying. This is the one
+    // place every change already passes through.
+    //
+    // **Not awaited here**, because a change subscription is synchronous and has
+    // nobody to hand a promise to. A verb that must not resolve until derived
+    // state has caught up waits by asking again itself; asking twice costs
+    // nothing, since a key repeated inside one round is one key.
+    this.#corpus.onChanged((id) => {
+      void this.#fixed.changed(documentKey(id))
     })
   }
 
