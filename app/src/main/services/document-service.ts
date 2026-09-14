@@ -28,7 +28,7 @@ import type { Anomaly } from '../../shared/anomalies.ts'
 import type { LinkRow } from '../../shared/nav-api.ts'
 import { inHorizon, orderHorizon, type HorizonRow, type HorizonWindow } from '../../shared/horizon-api.ts'
 import { isOutside, isStream, BACKLOG_DOCKET, ONLY_SEGMENT, TASKS_ID, type Unsubscribe } from '../../shared/document-api.ts'
-import { CHANNEL, type Attached, type Base, type DayProse, type DocketRow, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../../shared/ipc.ts'
+import { CHANNEL, type DocketCommand, type TodoCommand, type Attached, type Base, type DayProse, type DocketRow, type ImageAttachment, type ChangeAck, type DocumentInfo, type EditAck, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowChangedMessage, type WindowId, type WindowSnapshot, type ZoneNotice } from '../../shared/ipc.ts'
 import type { DateKey, DocumentId, DocumentPosition, DocumentText, SegmentKey, Span, TypedSpan, VersionId } from '../../shared/document-api.ts'
 import type { CommentId, CommentThread } from '../../shared/comments.ts'
 import type { Notebook } from '../w/notebook.ts'
@@ -79,7 +79,9 @@ import { CommentsService } from './comments-service.ts'
 import { NavService } from './nav-service.ts'
 import { HistoryService } from './history-service.ts'
 import { SearchService } from './search-service.ts'
-import type { Serves } from './serves.ts'
+import { DocketService } from './docket-service.ts'
+import { TodoService } from './todo-service.ts'
+import { serve, serveKinds, type Served, type Serves } from './serves.ts'
 
 /**
  * Anything that can carry a pushed message to a renderer.
@@ -134,7 +136,7 @@ export interface ServiceOptions {
   readonly history?: boolean
 }
 
-export class DocumentService {
+export class DocumentService implements Serves {
   /**
    * **The foundation, held rather than inherited** (D83).
    *
@@ -215,6 +217,10 @@ export class DocumentService {
   readonly #history: HistoryService
   /** Searching the corpus, extracted — and it owns the Scanner (D65, D83). */
   readonly #search: SearchService
+  /** Dockets, extracted (MH1, D68, D83). */
+  readonly #docket: DocketService
+  /** The task list, extracted (MT3, D55, D83). */
+  readonly #todo: TodoService
 
   readonly #notebook: Notebook
 
@@ -248,6 +254,8 @@ export class DocumentService {
     this.#nav = new NavService(this.#store, this.#day)
     this.#history = new HistoryService(this.#store, this.#durable)
     this.#search = new SearchService(this.#store)
+    this.#docket = new DocketService(this.#store, this.#durable, this.#day, this.#fixed)
+    this.#todo = new TodoService(this.#store, this.#durable, this.#day, this.#fixed)
   }
 
   /**
@@ -258,8 +266,54 @@ export class DocumentService {
    * to this list; when the last one has gone, what builds the foundation moves
    * up to `index.ts` and this class is finished.
    */
+  /**
+   * The task list's channel — declared here, and not by `TodoService`.
+   *
+   * **A channel belongs to the service that can answer all of it**, and four of
+   * these fifteen arms cannot live in the task list's service: `status` and
+   * `bulk` have to tell the step that asked for an item that it is done,
+   * `putDown` has to make a matter, and `matterFor` means reading every docket.
+   * All four span two domains and sit above both (D83) — so the union spans
+   * tiers, and it belongs to the tier that can serve the whole of it.
+   *
+   * `serveKinds`'s exhaustiveness is what makes that a fact rather than a
+   * preference: a service declaring this channel is *required* to handle every
+   * kind, so one that cannot reach those four could not declare it at all.
+   *
+   * **The docket's channel went to `DocketService`**, where it belongs: every
+   * one of its thirty-two arms delegates, so nothing kept it here but the order
+   * things were done in.
+   */
+  serves(): readonly Served[] {
+    return [
+      // Reconciliation's own door, off the docket's union (D77, D83).
+      serve(CHANNEL.reconcile, () => this.reconcile()),
+      serveKinds<TodoCommand>(CHANNEL.todo, {
+      list: () => this.#todo.todoList(),
+      today: command => this.#todo.todoToday(command.list),
+      items: command => this.#todo.todoItems(command.list, command.date),
+      add: command => this.#todo.todoAdd(command.list, command.text),
+      status: command => this.todoSetStatus(command.list, command.item, command.status, command.note),
+      edit: command => this.#todo.todoEdit(command.list, command.item, command.text),
+      notes: command => this.#todo.todoSetNotes(command.list, command.item, command.notes),
+      remove: command => this.#todo.todoRemove(command.list, command.item),
+      tags: () => this.#todo.todoTags(),
+      days: command => this.#todo.todoDays(command.list),
+      resolved: () => this.#todo.todoResolved(),
+      backlog: () => this.#todo.todoBacklog(),
+      walk: command => this.#todo.todoWalk(command.list, command.date),
+      bulk: command => this.todoBulk(command.list, command.items, command.action),
+      putDown: command => this.todoPutDown(command.list, command.item, command.docket),
+      matterFor: command => this.matterFor(command.item),
+      chosen: command => this.#todo.todoChosen(command.list, command.date),
+      choose: command => this.#todo.todoChoose(command.list, command.date, command.item, command.chosen),
+      finishWalk: command => this.#todo.todoFinishWalk(command.list, command.date, command.drop),
+      }),
+    ]
+  }
+
   services(): readonly Serves[] {
-    return [this.#comments, this.#nav, this.#history, this.#search]
+    return [this, this.#comments, this.#nav, this.#history, this.#search, this.#docket]
   }
 
   /**
@@ -285,6 +339,24 @@ export class DocumentService {
 
   get searches(): SearchService {
     return this.#search
+  }
+
+  /**
+   * The docket service.
+   *
+   * **Its methods still carry a `docket` prefix**, so this reads
+   * `service.docket.docketAdd(…)`. The prefix distinguished them inside one
+   * enormous class and now says twice what the accessor says once; stripping it
+   * is a rename across some two hundred and fifty call sites and belongs in its
+   * own change, not in the move that made it redundant.
+   */
+  get docket(): DocketService {
+    return this.#docket
+  }
+
+  /** The task list service — its methods carry a `todo` prefix, as above. */
+  get todo(): TodoService {
+    return this.#todo
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -887,116 +959,8 @@ export class DocumentService {
     }
   }
 
-  // ── the task list (MT3) ──────────────────────────────────────
 
-  /**
-   * The notebook's TODO list, made if there is not one yet.
-   *
-   * **The `.todo` directory at the root is *the* list** (T1, D59) — the same
-   * way one stream is the notebook. It falls out of the layout rather than
-   * being named anywhere, and a second one at the root is an anomaly rather
-   * than a choice this has to arbitrate.
-   *
-   * Made on demand, because a notebook that has never had a task list should
-   * not carry an empty directory for one, and the first time you open the list
-   * is a perfectly good moment to decide you have one.
-   */
-  async todoList(): Promise<DocumentId> {
-    await this.#day.ready()
-    // **Named, not searched for** (D55 as amended, MT7). This used to return
-    // whichever root-level `.todo` came first, which with two lists means one
-    // silently wins — and `tasks.todo` is *the* task list the way
-    // `notebook.stream` is *the* notebook, so it answers the way that does.
-    const made = TASKS_ID
-    // No `create`: a directory document has no single file to be created, and
-    // the day the carry materialises IS what brings it into being.
-    await this.#corpus.use(made, doc => (doc as TodoDocument).carry(this.today, this.#takenIds))
-    this.#touched()
-    return made
-  }
 
-  /**
-   * Today's working set, materialised if this is the day's first touch (D55).
-   *
-   * **The carry is here rather than in the walk**, which is the correction D55
-   * records: the walk is offered and never compelled, so a list whose survival
-   * depended on it would come apart the first week away from the desk. Opening
-   * the list is enough, and opening it twice does nothing the second time.
-   */
-  /**
-   * Which segment of this list to show, and the carry that materialises it.
-   *
-   * **The writing day, not the calendar's** (D62). A list fetched at 00:30
-   * while somebody is still going shows the evening they are still in, and
-   * carries when they have stopped — the same boundary the notebook uses,
-   * asked at the moment the list is looked at.
-   *
-   * **Named `SegmentKey` rather than `DateKey`** (MT7), which the compiler does
-   * not care about — `DateKey` is an alias for `SegmentKey`, not a brand of its
-   * own — and a reader does: an overall list has one segment and no days, so a
-   * signature promising a date would be promising something this cannot always
-   * give. The carry answers for both shapes: for a daily list it materialises
-   * today, and for an overall one there is nothing to carry, so it adopts and
-   * stops.
-   */
-  async todoToday(id: DocumentId): Promise<SegmentKey> {
-    await this.#day.ready()
-    const today = this.today
-    await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds))
-    this.#touched()
-    const keys = await this.#corpus.use(id, doc => doc.keys(), { mode: 'read' })
-    // The day for a daily list; the one segment for an overall one.
-    return keys.includes(ONLY_SEGMENT) ? ONLY_SEGMENT : (today as unknown as SegmentKey)
-  }
-
-  /**
-   * Which days this list has, oldest first (T7's flow 7, MT6).
-   *
-   * **Scrubbing is nearly free and this is why**: a past working set is not
-   * reconstructed, it is a file. That is the property flow 7 was said to
-   * constrain the format for — "if flow 3's designated set is persisted per
-   * day, this is nearly free" — and D55 persisted it, so here is the bill.
-   */
-  async todoDays(id: DocumentId): Promise<readonly DateKey[]> {
-    return this.#corpus.use(id, async doc => [...(await doc.keys())] as DateKey[], { mode: 'read' })
-  }
-
-  async todoItems(id: DocumentId, date: DateKey): Promise<readonly TodoItem[]> {
-    return this.#corpus.use(id, doc => (doc as TodoDocument).itemsOn(date), { mode: 'read' })
-  }
-
-  /** Serialised with every other write, for the reason D37 gives. */
-  /**
-   * What was chosen for a day, and choosing (H9, MH4).
-   *
-   * **A mark on the day, not a status and not a tag** — see `CHOSEN` in the
-   * document for why both of those are wrong. Nothing about this is contingent
-   * on reorient: the ritual is offered and never required (H10), so choosing has
-   * to be a thing you can simply do.
-   */
-  async todoChosen(id: DocumentId, date: DateKey): Promise<readonly string[]> {
-    return this.#corpus.use(id, doc => (doc as TodoDocument).chosenOn(date), { mode: 'read' })
-  }
-
-  async todoChoose(id: DocumentId, date: DateKey, item: string, chosen: boolean): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as TodoDocument).choose(date, item, chosen)))
-    this.#touched()
-  }
-
-  async todoAdd(id: DocumentId, text: string): Promise<string> {
-    const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as TodoDocument).add(text, this.today, this.#takenIds)),
-    )
-    this.#touched()
-    return made
-  }
-
-  /** Rewrite what is written under an item. Nothing in a note is parsed. */
-  async todoSetNotes(id: DocumentId, item: string, notes: readonly string[]): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).setNotes(item, notes)))
-    this.#touched()
-  }
 
   /**
    * Answer an item, and let the step that made it hear.
@@ -1047,7 +1011,7 @@ export class DocumentService {
    */
   async #finished(item: string): Promise<void> {
     for (const docket of await this.#corpus.list('docket')) {
-      for (const matter of await this.docketMatters(docket)) {
+      for (const matter of await this.#docket.docketMatters(docket)) {
         const step = matter.steps.find(one => one.made === item)
         if (step?.id === undefined || step.id === null || matter.id === null) continue
         await this.#serial(async () =>
@@ -1094,7 +1058,7 @@ export class DocumentService {
    */
   async matterFor(item: string): Promise<{ docket: DocumentId; matter: string } | null> {
     for (const docket of await this.#corpus.list('docket')) {
-      for (const one of await this.docketMatters(docket)) {
+      for (const one of await this.#docket.docketMatters(docket)) {
         if (one.id === null) continue
         if (one.steps.some(step => step.made === item)) return { docket, matter: one.id }
       }
@@ -1102,63 +1066,7 @@ export class DocumentService {
     return null
   }
 
-  async todoRemove(id: DocumentId, item: string): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).remove(item)))
-    this.#touched()
-  }
 
-  /**
-   * Ids already spoken for anywhere in the corpus (MT5b, D56).
-   *
-   * **Handed to the document rather than looked up by it.** A `TodoDocument`
-   * knows one list; `tephra:todo/<id>` resolves without naming a list, so the
-   * id has to be unique across all of them, and only the index can say. Held as
-   * a field so it is one function rather than a closure made at each call site,
-   * and called only when an id is actually being minted.
-   */
-  readonly #takenIds = (): Promise<ReadonlySet<string>> => this.#index.itemIds()
-
-
-  /**
-   * What was finished under each tag before today (T8's tail, MT6).
-   *
-   * **`today` is the service's**, because there is one answer about what day it
-   * is and it lives here (D62). The index knows which day a file is; it does
-   * not know which day it is now, and should not.
-   */
-  async todoResolved(): Promise<Record<string, readonly ResolvedItem[]>> {
-    const byTag = await this.#index.resolvedByTag(this.today, RESOLVED_DAYS)
-    return Object.fromEntries(byTag)
-  }
-
-  /** Everything put down and not picked up again (T14). */
-  async todoBacklog(): Promise<readonly ResolvedItem[]> {
-    return this.#index.backlog()
-  }
-
-  /** Every tag that has ever been on a task (T6). The full set; live is today's. */
-  async todoTags(): Promise<readonly string[]> {
-    return this.#index.todoTags()
-  }
-
-  /** What the walk knows about a day (T11). A read: it decides nothing. */
-  async todoWalk(id: DocumentId, date: DateKey): Promise<WalkState> {
-    return this.#corpus.use(id, doc => (doc as TodoDocument).walkOf(date), { mode: 'read' })
-  }
-
-  /** End a pass. Serialised with every other write, for the reason D37 gives. */
-  async todoFinishWalk(id: DocumentId, date: DateKey, drop: readonly string[]): Promise<number> {
-    const dropped = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as TodoDocument).finishWalk(date, drop)),
-    )
-    this.#touched()
-    return dropped
-  }
-
-  async todoEdit(id: DocumentId, item: string, text: string): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as TodoDocument).edit(item, text)))
-    this.#touched()
-  }
 
   /**
    * What DOCUMENT a link names, if it names one.
@@ -1347,357 +1255,16 @@ export class DocumentService {
     return file.split('/').slice(0, -1).join('/')
   }
 
-  // ── dockets (MH1, D68) ─────────────────────────────────────
-
-  /**
-   * Every docket, by title.
-   *
-   * **Derived from the directory, not from a list somebody maintains** — the
-   * same rule the sidebar's directory sections follow: a docket is there because
-   * its file is there, which cannot be wrong.
-   */
-  async dockets(): Promise<readonly DocketRow[]> {
-    const ids = await this.#corpus.list('docket')
-    const rows = await Promise.all(ids.map(async id => ({
-      id,
-      // **What it is CALLED, falling back to what it is named.** The frontmatter
-      // title is the person's words; the filename is a slug of them and the only
-      // other name a document has (D59's rule, as `info()` applies it).
-      title: (await this.#corpus.use(id, doc => doc.titleOf(ONLY_SEGMENT))) ?? nameOf(id as string),
-    })))
-    return rows.sort((a, b) => a.title.localeCompare(b.title))
-  }
-
-  async docketMatters(id: DocumentId): Promise<readonly Matter[]> {
-    return this.#corpus.use(id, doc => (doc as DocketDocument).matters())
-  }
-
-  /**
-   * Put a matter on a docket.
-   *
-   * **`when` arrives as text, and is parsed here.** The notation is the one a
-   * person types into the field — `2026-11-12`, `every 90d`, nothing at all —
-   * and the renderer has no business owning a second copy of it (T16's rule,
-   * applied to a second grammar).
-   */
-  async docketAdd(
-    id: DocumentId,
-    name: string,
-    shape?: NewMatter,
-    section?: string,
-  ): Promise<string> {
-    const when = scheduleFor(shape)
-    const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc =>
-        (doc as DocketDocument).add(name, when, this.#takenMatterIds, section, shape?.mode)),
-    )
-    // **The template's first step, made here rather than by the caller.** The
-    // shape and the step it implies are one decision — *something happening*
-    // means a reminder on the day, *something to get done* means a task when
-    // work starts — so they are one call, and a matter cannot come into being
-    // half-shaped.
-    const mode = MODES.find(one => one.key === shape?.mode)
-    if (mode !== undefined) {
-      const first = await this.#serial(async () =>
-        this.#corpus.use(id, doc =>
-          (doc as DocketDocument).addStep(made, '+0d', name, mode.kind)))
-      // A recurring task measures from a step being done, and on a matter one
-      // step old there is only one it could be.
-      if (mode.fromCompletion && shape?.every !== undefined) {
-        await this.#serial(async () =>
-          this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(made, first)))
-      }
-    }
-    await this.#wrote(id)
-    return made
-  }
-
-  /** Change what kind of thing a matter is — the four a person chooses between. */
-  async docketSetMode(id: DocumentId, matter: string, mode: Mode): Promise<void> {
-    if (!MODES.some(one => one.key === mode)) {
-      throw new Error(`${mode} is not one of the four kinds of matter`)
-    }
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setMode(matter, mode)))
-    await this.#wrote(id)
-  }
-
-  /** The date of the next instance, or none — which is the whole of *inactive*. */
-  async docketSetStart(id: DocumentId, matter: string, start: string | null): Promise<void> {
-    const said = start === null || start.trim() === '' ? null : asDateKey(start.trim())
-    if (start !== null && start.trim() !== '' && said === null) {
-      throw new Error(`${start} is not a date`)
-    }
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setStart(matter, said)))
-    await this.#wrote(id)
-  }
-
-  /** How often it comes round. `every` as typed: `90d`, `1m on 31`, or nothing. */
-  async docketSetEvery(id: DocumentId, matter: string, every: string | null): Promise<void> {
-    const said = every === null || every.trim() === '' ? null : parseInterval(every)
-    if (every !== null && every.trim() !== '' && said === null) {
-      throw new Error(`${every} is not an interval like 90d, 6 months, or 1m on 31`)
-    }
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setEvery(matter, said)))
-    await this.#wrote(id)
-  }
-
-  /** Which step's completion starts the next instance, or none (D76, Qa). */
-  async docketSetAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setAfter(matter, after)))
-    await this.#wrote(id)
-  }
-
-  /** Move a recurring matter on to its next instance. */
-  async docketAdvance(id: DocumentId, matter: string): Promise<DateKey | null> {
-    const next = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).advanceInstance(matter)))
-    if (next !== null) this.#touched()
-    return next
-  }
-
-  async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).rename(matter, name)))
-    await this.#wrote(id)
-  }
 
 
 
-  async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
-    await this.#wrote(id)
-  }
 
-  async docketSetLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
-    await this.#wrote(id)
-  }
 
-  async docketTag(id: DocumentId, matter: string, subject: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).tagMatter(matter, subject)))
-    await this.#wrote(id)
-  }
 
-  async docketUntag(id: DocumentId, matter: string, subject: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
-    await this.#wrote(id)
-  }
 
-  /** The prose under a matter. Nothing in it is parsed (D56's rule, carried). */
-  async docketSetNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setNotes(matter, notes)))
-    await this.#wrote(id)
-  }
 
-  // ── sections on a docket (MH1) ──────────────────────────────
 
-  /** The docket divided into its sections, which is how it is read. */
-  async docketSections(id: DocumentId): Promise<readonly Section[]> {
-    return this.#corpus.use(id, doc => (doc as DocketDocument).sections())
-  }
 
-  async docketAddSection(id: DocumentId, name: string): Promise<string> {
-    const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).addSection(name)))
-    await this.#wrote(id)
-    return made
-  }
-
-  async docketRenameSection(id: DocumentId, name: string, to: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).renameSection(name, to)))
-    await this.#wrote(id)
-  }
-
-  /** Take the heading away and keep everything that was under it. */
-  async docketRemoveSection(id: DocumentId, name: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).removeSection(name)))
-    await this.#wrote(id)
-  }
-
-  /**
-   * A whole section one place up or down among the others. False at the ends.
-   *
-   * **Nothing derived depends on the order of sections**, which is why this
-   * touches without reconciling: the reading changes and the generated tasks do
-   * not. Same as `docketNudgeMatter`, for the same reason.
-   */
-  async docketNudgeSection(id: DocumentId, name: string, delta: number): Promise<boolean> {
-    const moved = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).nudgeSection(name, delta)))
-    if (moved) this.#touched()
-    return moved
-  }
-
-  /**
-   * Move a matter to another docket (MH5).
-   *
-   * **Written whole and then removed**, which is the same shape the move from
-   * the task list has: the thing exists in the new place before it stops
-   * existing in the old one, so a failure between the two leaves a duplicate
-   * rather than a hole. A duplicate is visible and correctable; a hole is not.
-   *
-   * **A new id in the new docket**, because a matter's id is unique across the
-   * corpus and the old block is going away — what travels is the matter, not its
-   * name in a file. What it was moved from travels too, so the trail survives.
-   */
-  async docketMoveTo(from: DocumentId, matter: string, to: DocumentId): Promise<string | null> {
-    if (from === to) return matter
-    const found = (await this.docketMatters(from)).find(one => one.id === matter)
-    if (found === undefined) return null
-
-    const made = await this.docketAdd(to, found.name, { mode: found.mode })
-    for (const tag of found.tags) await this.docketTag(to, made, tag)
-    if (found.owner !== null) await this.docketSetOwner(to, made, found.owner)
-    if (found.link !== null) await this.docketSetLink(to, made, found.link)
-    if (found.notes.length > 0) await this.docketSetNotes(to, made, found.notes)
-    // **By index, not by id**, since every step is being made afresh: an `after`
-    // pointing at the old docket's id would point at nothing. `spellStepWhen`
-    // already renders the index when given one, and `addStep` reads it back.
-    const place = (id: string): number | null => {
-      const at = found.steps.findIndex(one => one.id === id)
-      return at < 0 ? null : at + 1
-    }
-    for (const step of found.steps.slice(1)) {
-      await this.docketAddStep(to, made, spellStepWhen(step.when, place), step.text, step.kind)
-    }
-    if (found.when.start !== null) await this.docketSetStart(to, made, found.when.start)
-    if (found.when.every !== null) await this.docketSetEvery(to, made, spellInterval(found.when.every))
-    if (found.when.dates !== null) await this.docketSetDates(to, made, found.when.dates)
-    if (found.from !== null) {
-      await this.#serial(async () =>
-        this.#corpus.use(to, doc => (doc as DocketDocument).cameFrom(made, found.from as string)))
-    }
-
-    await this.docketRemove(from, matter)
-    await this.#wrote(to)
-    return made
-  }
-
-  /** Into a section — `''` is the undivided run — optionally above one matter. */
-  async docketMoveMatter(
-    id: DocumentId,
-    matter: string,
-    section: string,
-    before?: string,
-  ): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).moveMatter(matter, section, before)))
-    await this.#wrote(id)
-  }
-
-  /** One place up or down inside its own section. False at the ends. */
-  async docketNudgeMatter(id: DocumentId, matter: string, delta: number): Promise<boolean> {
-    const moved = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).nudgeMatter(matter, delta)))
-    if (moved) this.#touched()
-    return moved
-  }
-
-  /**
-   * A step on a matter: *at this moment, this happens* (H4, D76).
-   *
-   * **The schedule arrives as text and is parsed here**, the same rule the
-   * `when` field follows: the notation is what a person types — `2w`, `+3d`,
-   * `right away`, `after <step>` — and the renderer has no business owning a
-   * second copy of it (T16's rule, applied to a third grammar).
-   */
-  async docketAddStep(
-    id: DocumentId,
-    matter: string,
-    when: string,
-    text: string,
-    kind?: StepKind,
-  ): Promise<string> {
-    const made = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).addStep(matter, when, text, kind)))
-    await this.#wrote(id)
-    return made
-  }
-
-  /** Fix what a step says, keeping its id and its completion stamp. */
-  async docketEditStep(
-    id: DocumentId,
-    matter: string,
-    step: string,
-    text: string,
-  ): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).editStep(matter, step, text)))
-    await this.#wrote(id)
-  }
-
-  /** Reschedule one step. `when` as typed, parsed here. */
-  async docketSetStepWhen(
-    id: DocumentId,
-    matter: string,
-    step: string,
-    when: string,
-  ): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setStepWhen(matter, step, when)))
-    await this.#wrote(id)
-  }
-
-  /** Change a step's kind — the only way to author a `reschedule` (D76). */
-  async docketSetStepKind(
-    id: DocumentId,
-    matter: string,
-    step: string,
-    kind: StepKind,
-  ): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setStepKind(matter, step, kind)))
-    await this.#wrote(id)
-  }
-
-  async docketRemoveStep(id: DocumentId, matter: string, step: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).removeStep(matter, step)))
-    await this.#wrote(id)
-  }
-
-  /** Stamp a step done, or undo that. What a dependency reads (D76). */
-  async docketCompleteStep(
-    id: DocumentId,
-    matter: string,
-    step: string,
-    done: boolean,
-  ): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc =>
-        (doc as DocketDocument).completeStep(matter, step, done ? this.#moment : null)))
-    await this.#wrote(id)
-  }
-
-  /**
-   * Start work on a matter — the start date that makes its first step due today.
-   *
-   * **Today comes from the service, not the document**, because the clock is the
-   * service's (D62/D63) and a document that read one would be a second source of
-   * truth about what day it is.
-   */
-  async docketActivate(id: DocumentId, matter: string): Promise<DateKey> {
-    const when = await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).activate(matter, this.today)))
-    await this.#wrote(id)
-    return when
-  }
-
-  /** The instances, listed outright — an alternative to the interval (H7). */
-  async docketSetDates(id: DocumentId, matter: string, dates: readonly DateKey[]): Promise<void> {
-    const today = this.today
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).setDates(matter, dates, today)))
-    await this.#wrote(id)
-  }
 
   /**
    * Put a task down: mark it transferred, and give it a home (MH5, T14).
@@ -1722,7 +1289,7 @@ export class DocumentService {
    */
   async todoPutDown(list: DocumentId, item: string, docket?: DocumentId): Promise<string | null> {
     await this.#day.ready()
-    const found = (await this.todoItems(list, this.today)).find(one => one.id === item)
+    const found = (await this.#todo.todoItems(list, this.today)).find(one => one.id === item)
     // **Already put down is already housed.** The provenance check below only
     // catches a task a docket MADE; one that was put down has a matter nothing
     // points at, so asking twice would make a second copy of it — which is the
@@ -1745,11 +1312,11 @@ export class DocumentService {
     // **Its subjects and its owner come with it**, being facts about the thing
     // rather than about the list it was on; the due date does not, because a
     // deadline you have just declined is not one.
-    const made = await this.docketAdd(where, withoutMarks(found), { mode: 'task' })
+    const made = await this.#docket.docketAdd(where, withoutMarks(found), { mode: 'task' })
     await this.#serial(async () =>
       this.#corpus.use(where, doc => (doc as DocketDocument).cameFrom(made, item)))
-    for (const tag of found.tags) await this.docketTag(where, made, tag)
-    if (found.owner !== null) await this.docketSetOwner(where, made, found.owner)
+    for (const tag of found.tags) await this.#docket.docketTag(where, made, tag)
+    if (found.owner !== null) await this.#docket.docketSetOwner(where, made, found.owner)
     // **And the line is handed over**, last, so it names a docket that exists.
     // One direction, one instant: from here the matter is the docket's, the line
     // is a record of what happened, and nothing on the task list can act on it.
@@ -1762,59 +1329,7 @@ export class DocumentService {
     return made
   }
 
-  /** Stop work on it, keeping what it has already done (D76). */
-  async docketSuspend(id: DocumentId, matter: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
-    await this.#wrote(id)
-    // **And then reconcile, rather than withdrawing by hand.** Suspending is
-    // only *clear the start date*; what follows from that — the task it put on
-    // the list no longer being wanted — is something the tick already knows how
-    // to work out. This is the reconciler paying for itself: one rule about
-    // what should be true, instead of a bespoke undo beside every verb that
-    // could make it false.
-    await this.reconcile()
-  }
 
-  async docketRemove(id: DocumentId, matter: string): Promise<void> {
-    await this.#serial(async () => this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
-    await this.#wrote(id)
-  }
-
-  /**
-   * The move: off one docket and onto another, keeping the id (D71).
-   *
-   * **Both halves in one serialised turn**, because a matter that is out of the
-   * first and not yet in the second exists nowhere, and a crash in the gap loses
-   * it. The id surviving is the whole promise — history stays continuous and a
-   * reference still resolves.
-   */
-  async docketMove(id: DocumentId, matter: string, to: DocumentId): Promise<void> {
-    await this.#serial(async () => {
-      const taken = await this.#corpus.use(id, doc => (doc as DocketDocument).remove(matter))
-      await this.#corpus.use(to, doc => (doc as DocketDocument).adopt(taken))
-    })
-    await this.#wrote(id)
-  }
-
-  /**
-   * Matter ids taken anywhere in the corpus.
-   *
-   * **Every docket, because an id names a matter and not a docket** — the same
-   * reason `#takenIds` reads every task list. Scanned rather than indexed: a few
-   * hundred matters over a lifetime is not a thing to build an index for
-   * (`solution/horizon.md`), and the index would be the second copy of a truth
-   * the files already hold.
-   */
-  readonly #takenMatterIds = async (): Promise<ReadonlySet<string>> => {
-    const out = new Set<string>()
-    for (const id of await this.#corpus.list('docket')) {
-      for (const matter of await this.docketMatters(id)) {
-        if (matter.id !== null) out.add(matter.id)
-      }
-    }
-    return out
-  }
 
   // ── reconciliation: the clock tick (MH3a, MH3b, D76) ───────
 
@@ -1946,7 +1461,7 @@ export class DocumentService {
   async #reconcileDockets(): Promise<void> {
     await this.#day.ready()
     const today = this.today
-    const list = await this.todoList()
+    const list = await this.#todo.todoList()
 
     /**
      * Which of the items dockets made are still being asked of somebody.
@@ -1963,7 +1478,7 @@ export class DocumentService {
      * waiting*, and none of them means *ask again*.
      */
     const live = new Set(
-      (await this.todoItems(list, today))
+      (await this.#todo.todoItems(list, today))
         .filter(one => isLive(one.status))
         .flatMap(one => (one.id === null ? [] : [one.id])),
     )
@@ -1976,9 +1491,9 @@ export class DocumentService {
         ?? nameOf(docket as string)
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
-      for (const id of (await this.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
+      for (const id of (await this.#docket.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
         if (await this.#advanceDocket(docket, id, today, live)) touched = true
-        const matter = (await this.docketMatters(docket)).find(one => one.id === id)
+        const matter = (await this.#docket.docketMatters(docket)).find(one => one.id === id)
         if (matter === undefined) continue
         for (const step of matter.steps) {
           if (step.id === null || step.kind !== 'task') continue
@@ -2014,7 +1529,7 @@ export class DocumentService {
               spellTag(domain),
               matter.owner === null ? null : spellOwner(matter.owner),
             ]
-            const item = await this.todoAdd(list, [step.text, ...marks, `DUE ${due}`]
+            const item = await this.#todo.todoAdd(list, [step.text, ...marks, `DUE ${due}`]
               .filter(one => one !== null && one !== '')
               .join(' '))
             // **The matter is a TAG, not a prefix.** On the list a step's text
@@ -2041,7 +1556,7 @@ export class DocumentService {
             // their decision as one they ticked. Taking any of them back would
             // be overruling somebody — which is what the finished-item rule was
             // always really about, stated too narrowly.
-            await this.todoRemove(list, step.made)
+            await this.#todo.todoRemove(list, step.made)
             await this.#setStepMade(docket, id, step.id, null)
             touched = true
           }
@@ -2075,7 +1590,7 @@ export class DocumentService {
   ): Promise<boolean> {
     let moved = false
     for (let guard = 0; guard < 500; guard += 1) {
-      const matter = (await this.docketMatters(docket)).find(one => one.id === id)
+      const matter = (await this.#docket.docketMatters(docket)).find(one => one.id === id)
       // **A recurrence is an interval OR a list**, and this asked only about the
       // interval — so a listed matter never moved on at all, which is the one
       // thing a list is for.
@@ -2158,7 +1673,7 @@ export class DocumentService {
     // **Dockets: what is coming.** A step already on the list is the other
     // source's business, which `horizonOf` is what enforces.
     for (const docket of await this.#corpus.list('docket')) {
-      for (const matter of await this.docketMatters(docket)) {
+      for (const matter of await this.#docket.docketMatters(docket)) {
         for (const step of matterHorizon(matter, window, addDays, this.zone)) {
           rows.push({
             on: step.on,
@@ -2183,8 +1698,8 @@ export class DocumentService {
     // items, which is the live set — an undone item carries forward, so a
     // deadline that has gone by is still in front of somebody, and that is
     // precisely the row H8 asks the horizon to keep showing.
-    const list = await this.todoList()
-    for (const item of await this.todoItems(list, this.today)) {
+    const list = await this.#todo.todoList()
+    for (const item of await this.#todo.todoItems(list, this.today)) {
       if (item.due === null || !isLive(item.status)) continue
       if (!inHorizon(item.due, window)) continue
       rows.push({
@@ -2337,35 +1852,3 @@ function fileOfBase(base: Base, _today?: DateKey): RelPath {
  */
 const KIND_SUFFIXES: readonly string[] = ['.fileset.md', '.docket.md', '.todo.md', '.md']
 
-/**
- * What *Add a matter* asked for, as the three variables.
- *
- * **The mode is spent here and never stored** (D76, amended). It decides the
- * shape of the schedule and the kind of the first step, and after that a matter
- * is described entirely by `start`, `every` and `after` — so a job that later
- * gets a date does not have to be relabelled as an event, because there is no
- * label. A dated shape with no date given is simply not started yet, which is a
- * state the model already had.
- */
-function scheduleFor(shape: NewMatter | undefined): Schedule {
-  if (shape === undefined) return UNSCHEDULED
-  const mode = MODES.find(one => one.key === shape.mode)
-  if (mode === undefined) throw new Error(`${shape.mode} is not one of the four kinds of matter`)
-  const given = (said: string | undefined): string | null =>
-    said === undefined || said.trim() === '' ? null : said.trim()
-  const start = given(shape.start) === null ? null : asDateKey(given(shape.start) as string)
-  if (given(shape.start) !== null && start === null) {
-    throw new Error(`${shape.start} is not a date`)
-  }
-  const every = given(shape.every) === null ? null : parseInterval(given(shape.every) as string)
-  if (mode.repeating && given(shape.every) !== null && every === null) {
-    throw new Error(`${shape.every} is not an interval like 90d, 6 months, or 1m on 31`)
-  }
-  return {
-    start,
-    every: mode.repeating ? every : null,
-    // Set once the first step exists, since it names one (see `docketAdd`).
-    after: null,
-    dates: null,
-  }
-}

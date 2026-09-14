@@ -7,7 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { claim, serve, serveAsked, type Serves } from '../../../src/main/services/serves.ts'
+import { claim, serve, serveAsked, serveKinds, type Serves } from '../../../src/main/services/serves.ts'
 
 const serving = (...served: ReturnType<typeof serve>[]): Serves => ({ serves: () => served })
 
@@ -81,4 +81,40 @@ test('A CHANNEL MAY ASK WHICH WINDOW IS ASKING, as a number', () => {
 test('and an ordinary channel is not told, which is the default', () => {
   const one: Serves = { serves: () => [serve('k', () => 1)] }
   assert.equal(claim([one]).get('k')?.wantsAsker, undefined)
+})
+
+// ── a channel that carries a command union ─────────────────────────────────
+
+type Command =
+  | { readonly kind: 'list' }
+  | { readonly kind: 'add'; readonly text: string }
+  | { readonly kind: 'remove'; readonly item: string }
+
+test('A UNION CHANNEL DISPATCHES BY KIND, each arm narrowed', () => {
+  const seen: string[] = []
+  const one: Serves = {
+    serves: () => [
+      serveKinds<Command>('tephra:todo', {
+        list: () => void seen.push('list'),
+        // `command` is narrowed: `text` exists here and `item` does not.
+        add: command => void seen.push(`add ${command.text}`),
+        remove: command => void seen.push(`remove ${command.item}`),
+      }),
+    ],
+  }
+  const answer = claim([one]).get('tephra:todo')?.answer
+  answer?.({ kind: 'add', text: 'Ring the dentist' })
+  answer?.({ kind: 'remove', item: 'a7' })
+  answer?.({ kind: 'list' })
+  assert.deepEqual(seen, ['add Ring the dentist', 'remove a7', 'list'])
+})
+
+test('AN UNKNOWN KIND IS REFUSED, not read as undefined(…)', () => {
+  // The kind is the one argument from the renderer that decides which code
+  // runs, so it is checked where the others are merely trusted.
+  const one: Serves = {
+    serves: () => [serveKinds<Command>('c', { list: () => 1, add: () => 2, remove: () => 3 })],
+  }
+  const answer = claim([one]).get('c')?.answer
+  assert.throws(() => answer?.({ kind: 'nonesuch' }), /c has no case for nonesuch/)
 })

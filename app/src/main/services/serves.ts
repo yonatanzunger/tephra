@@ -86,6 +86,35 @@ export function serveAsked<A extends readonly unknown[]>(
 }
 
 /**
+ * Declare a channel that carries a **command union**, one arm per `kind`.
+ *
+ * `docket` and `todo` were the first two channels shaped this way and the shape
+ * has earned it: one channel, one union, and a verb added without touching the
+ * wiring. But the dispatch was a thirty-four case `switch` in `ipc.ts`, and a
+ * switch is a poor way to say *exactly these kinds, each handled once*.
+ *
+ * **A map of handlers is exhaustive by construction.** The type requires an arm
+ * for every `kind` in the union, so adding a command to the union in
+ * `shared/ipc.ts` makes this a compile error until it is handled — where a
+ * forgotten `case` fell through to whatever came next. Each arm receives the
+ * command **narrowed** to its own kind, so no arm re-checks what the key already
+ * proved.
+ */
+export function serveKinds<C extends { readonly kind: string }>(
+  channel: string,
+  handlers: { readonly [K in C['kind']]: (command: Extract<C, { readonly kind: K }>) => unknown },
+): Served {
+  return serve(channel, (command: C) => {
+    const handle = handlers[command.kind as C['kind']] as ((c: C) => unknown) | undefined
+    // **The kind is a claim too.** Every other argument from the renderer is
+    // trusted as a shape; this one decides which code runs, so an unknown kind
+    // is refused rather than being read as `undefined(…)`.
+    if (handle === undefined) throw new Error(`${channel} has no case for ${command.kind}`)
+    return handle(command)
+  })
+}
+
+/**
  * Every channel claimed, by whom, with collisions refused.
  *
  * **Separated from the wiring so it can be tested**: `ipc.ts` imports Electron

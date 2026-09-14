@@ -322,7 +322,7 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
  */
 async function showTasks(): Promise<void> {
   if (service === null) return
-  windows?.reveal({ kind: 'document', id: await service.todoList() })
+  windows?.reveal({ kind: 'document', id: await service.todo.todoList() })
 }
 
 /**
@@ -336,7 +336,7 @@ async function showTasks(): Promise<void> {
  */
 async function reorient(): Promise<void> {
   if (service === null) return
-  const win = windows?.reveal({ kind: 'document', id: await service.todoList() })
+  const win = windows?.reveal({ kind: 'document', id: await service.todo.todoList() })
   win?.webContents.send(CHANNEL.menuCommand, 'reorient')
 }
 

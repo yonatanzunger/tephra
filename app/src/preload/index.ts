@@ -245,7 +245,7 @@ const tephra = {
      * withdrawn; nothing in the renderer ever read that, and a pass reports its
      * changes by writing them, not by describing them (D83).
      */
-    generate: (): Promise<void> => ipcRenderer.invoke(CHANNEL.docket, { kind: 'generate' }),
+    generate: (): Promise<void> => ipcRenderer.invoke(CHANNEL.reconcile),
     /** Move a recurring matter on to its next instance. */
     advance: (docket: DocumentId, matter: string): Promise<DateKey | null> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'advance', docket, matter }),
@@ -384,12 +384,12 @@ const tephra = {
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'finishWalk', list, date, drop }),
     /** Show the list with a row open for a task, prefilled with `text` (T13). */
     capture: (text: string, wrap: boolean): Promise<DocumentId> =>
-      ipcRenderer.invoke(CHANNEL.todo, { kind: 'capture', text, wrap }),
+      ipcRenderer.invoke(CHANNEL.capture, { kind: 'capture', text, wrap }),
     /** The list takes it, if one is waiting. Taking it means nobody else will. */
-    claim: (): Promise<{ text: string } | null> => ipcRenderer.invoke(CHANNEL.todo, { kind: 'claim' }),
+    claim: (): Promise<{ text: string } | null> => ipcRenderer.invoke(CHANNEL.capture, { kind: 'claim' }),
     /** It became this item, or `null` because it was abandoned. */
     settle: (item: string | null): Promise<void> =>
-      ipcRenderer.invoke(CHANNEL.todo, { kind: 'settle', item }),
+      ipcRenderer.invoke(CHANNEL.capture, { kind: 'settle', item }),
     /**
      * A task this window asked for now exists, so its words can point at it.
      *

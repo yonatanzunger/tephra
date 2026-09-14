@@ -85,15 +85,19 @@ const keysOf = (counts: Map<string, number>): Set<string> => new Set(counts.keys
  * What answers a channel in main: a hand-written handler, a `ipcMain.on` for the
  * fire-and-forget ones, or a service's own declaration (D83).
  *
- * **`serveAsked` as well as `serve`**, and forgetting it is how this test first
- * earned its keep: the search service declared `searchOpen` with the variant
- * that is told which window asked, the pattern did not match it, and the test
- * reported a channel the renderer asks for and nothing answers. A false alarm —
- * and the *right* false alarm, because the alternative to a pattern that can
- * miss is no test at all. The honesty guard at the foot fired with it, which is
- * what it is for.
+ * **`serve\w*` rather than the variants by name**, because naming them was
+ * wrong twice in one afternoon: `serveAsked` arrived with the search service and
+ * `serveKinds` with the union channels, and each time the pattern missed the new
+ * one and the test reported a channel the renderer asks for and nothing answers.
+ * Both were the *right* false alarm — the alternative to a pattern that can miss
+ * is no test at all, and the honesty guard at the foot fired alongside each — but
+ * twice is the signal to stop enumerating. A declaration is `serve` and then
+ * whatever qualifies it — **and possibly a type argument**, which was the third
+ * face of the same mistake: `serveKinds<DocketCommand>(CHANNEL.docket, …)` puts
+ * `<…>` between the name and the paren, and a pattern that allowed any suffix
+ * still did not allow that.
  */
-const ANSWERS = /ipcMain\.(?:handle|on)\(\s*CHANNEL\.(\w+)|serve(?:Asked)?\(\s*CHANNEL\.(\w+)/g
+const ANSWERS = /ipcMain\.(?:handle|on)\(\s*CHANNEL\.(\w+)|\bserve\w*(?:<[^>]*>)?\(\s*CHANNEL\.(\w+)/g
 
 /** What the renderer asks for: a reply, or a message with no reply. */
 const ASKS = /ipcRenderer\.(?:invoke|send)\(\s*CHANNEL\.(\w+)/g

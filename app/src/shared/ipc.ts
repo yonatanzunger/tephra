@@ -98,6 +98,37 @@ export const CHANNEL = {
   /** Dockets: one channel, one union (MH1). */
   docket: 'tephra:docket',
 
+  /**
+   * Reconcile what the dockets produced with what they say (D77).
+   *
+   * **Reachable from the renderer only so that it can be TESTED in a window.**
+   * It runs unattended — at startup and at the day boundary — and nothing in
+   * the UI offers it, because a button that says *do the thing that is supposed
+   * to happen by itself* is a confession.
+   *
+   * **Its own channel, and it was an arm of the docket's union.** It is not a
+   * docket verb: it asks what should be true *everywhere* and makes it so, which
+   * spans the dockets and the task list both. While it shared a channel with the
+   * docket's verbs, that channel could not be the docket service's — the same
+   * thing capture did to the task list's (D83).
+   */
+  reconcile: 'tephra:reconcile',
+
+  /**
+   * Capture: a thought arrives mid-sentence and has to reach the list (T13).
+   *
+   * **Its own channel, and it was on `todo`'s.** It produces a task, which is
+   * why it started there — but what it *is* is a gesture between two windows:
+   * one window hands over some words, the list window claims them, and the
+   * answer travels back so the first can link to what it became. Every step of
+   * that holds a `WebContents`, so it belongs to the Electron layer and not to
+   * a service (D83) — and while it shared a channel with the task list's verbs,
+   * that channel could not be wholly anybody's.
+   *
+   * The preload keeps the same three doors, so nothing in the renderer changed.
+   */
+  capture: 'tephra:todo:capture',
+
   /** The sidebar's questions, answered by the corpus index (D51, D52). */
   navSubjects: 'tephra:nav:subjects',
   navBookmarks: 'tephra:nav:bookmarks',
@@ -617,15 +648,6 @@ export type DocketCommand =
     }
   /** Move a recurring matter on to its next instance. */
   | { readonly kind: 'advance'; readonly docket: DocumentId; readonly matter: string }
-  /**
-   * Reconcile what the dockets produced with what they say.
-   *
-   * **Reachable from the renderer only so that it can be TESTED in a window.**
-   * It runs unattended — at startup and at the day boundary — and nothing in
-   * the UI offers it, because a button that says *do the thing that is supposed
-   * to happen by itself* is a confession.
-   */
-  | { readonly kind: 'generate' }
   | {
       readonly kind: 'owner'
       readonly docket: DocumentId
@@ -757,6 +779,27 @@ export interface DocketRow {
   readonly title: string
 }
 
+/**
+ * Capture, between two windows (T13).
+ *
+ * Split off `TodoCommand` when the task list became a service: every step of
+ * this holds a `WebContents`, so it stays with the Electron layer (D83).
+ */
+export type CaptureCommand =
+  /**
+   * Show the list with a row open for a task.
+   *
+   * `text` prefills it — the words a selection offered. `wrap` says the asking
+   * window wants a link back once there is something to link to, which it
+   * cannot write itself: the item does not exist until the row is committed,
+   * and by then the caret is in another window.
+   */
+  | { readonly kind: 'capture'; readonly text: string; readonly wrap: boolean }
+  /** The list takes the waiting capture, if there is one. */
+  | { readonly kind: 'claim' }
+  /** It became this item, or `null` because it was abandoned. */
+  | { readonly kind: 'settle'; readonly item: string | null }
+
 export type TodoCommand =
   | { readonly kind: 'list' }
   | { readonly kind: 'today'; readonly list: DocumentId }
@@ -839,16 +882,4 @@ export type TodoCommand =
    * record is a day that offers to review a list it has already groomed.
    */
   | { readonly kind: 'finishWalk'; readonly list: DocumentId; readonly date: DateKey; readonly drop: readonly string[] }
-  /**
-   * Show the list with a row open for a task (T13).
-   *
-   * `text` prefills it — the words a selection offered. `wrap` says the asking
-   * window wants a link back once there is something to link to, which it
-   * cannot write itself: the item does not exist until the row is committed,
-   * and by then the caret is in another window.
-   */
-  | { readonly kind: 'capture'; readonly text: string; readonly wrap: boolean }
-  /** The list takes the waiting capture, if there is one. */
-  | { readonly kind: 'claim' }
-  /** It became this item, or `null` because it was abandoned. */
-  | { readonly kind: 'settle'; readonly item: string | null }
+

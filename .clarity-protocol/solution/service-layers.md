@@ -413,7 +413,78 @@ and a fix bundled into a move spends that property.
 > (`/^\d{4}-\d{2}-\d{2}T/`) while it came from the wall clock; it now asserts the
 > exact instant it was given. The one thing a test could not see is the thing
 > the bug lived in.
-4. The rest, thin routers first.
+4. **The rest — in progress.**
+   - **`history` and `search` done 2026-09-14.** `HistoryService` (3 channels);
+     `SearchService` (3 channels) which **owns the `Scanner`**, since nothing
+     else uses it, and `searches.ts` moved into `services/`.
+     - Search needed one mechanism: **`serveAsked`**, which hands the answer
+       *which window asked*, as a **number**. A cursor belongs to the window
+       that opened it — two windows searching are two walks through the corpus —
+       and a number rather than a `WebContents` keeps Electron out of a service.
+   - **`frame` is not a service and was removed from this plan.** Four of its
+     six handlers pass `e.sender` — the `WebContents` object — to `windows.ts`,
+     which imports `BrowserWindow`. It is Electron furniture like `menu.ts` and
+     `print.ts`. See *the shell tier* below: the honest reading is that it is a
+     service on a tier this taxonomy had not named.
+   - **`serveKinds` for the union channels.** `docket` carried a 34-case
+     `switch` in `ipc.ts` and `todo` a 19-case one; a map of handlers says the
+     same thing **exhaustively** — adding a command to either union is a compile
+     error until it is handled, verified by leaving an arm out. Each arm receives
+     the command narrowed to its kind. Both channels are declared by
+     `DocumentService` now, a step ahead of their code, as the comment channels
+     were.
+   - **Capture moved to its own channel** (`tephra:todo:capture`). Three arms of
+     the `todo` union hold a `WebContents`, so while they shared a channel with
+     the list's verbs that channel could not be wholly a service's. It produces a
+     task, which is why it lived there; what it *is* is a gesture between two
+     windows. **No renderer change** — the preload is the seam.
+   - `ipc.ts`: **471 → 342 lines, 74 → 48 hand-written handlers.**
+   - **`docket` and `todo` done 2026-09-14.** `DocketService` (503 lines, 33
+     verbs) and `TodoService` (233, 15). `DocumentService`: **2,374 → 1,883**.
+     - **The boundary was the interesting part.** Three verbs reach across and
+       stayed above both: `todoSetStatus` (a completion has to tell the step
+       that asked for it), `todoBulk` (the same, in bulk), and `matterFor`
+       (which means reading every docket). `todoPutDown` stayed for the same
+       reason. That is what lets the two services not know about each other.
+     - **`docketSuspend` lost a redundant `reconcile()`.** It called `#wrote`
+       and then reconciled again — right when only listed verbs reconciled, and
+       doing the work twice since every docket write reports its key and waits
+       (D83). It was also the last thing keeping that verb cross-domain.
+     - **The methods keep their `docket`/`todo` prefixes**, so calls read
+       `service.docket.docketAdd(…)`. The prefix distinguished them inside one
+       enormous class and now says twice what the accessor says once; stripping
+       it is a rename across some four hundred call sites and belongs in its own
+       change rather than in the move that made it redundant.
+   - Still to do: **layer 2** — reconciliation, the horizon, and the transfers —
+     and then the shell tier below.
+
+### The shell tier, which this plan had not named
+
+**Raised 2026-09-14.** The rule as written is *no service imports Electron* —
+which is a rule about a **layer** wearing the clothes of a rule about **all
+services**. The honest version:
+
+> The foundation and the domain services are Electron-free. **A shell tier above
+> them is not**, and `windows.ts`, `menu.ts`, `print.ts`, `scheme.ts` and the
+> capture gesture already live there, in `main/` root, unnamed.
+
+Naming it makes three current facts obvious instead of surprising: `frame` **is**
+a service that lives up there; capture belongs beside it; and `navOpen`'s split —
+the service says where a reference points, the shell opens it — is a **tier
+boundary** rather than a special case.
+
+**What the Electron-free rule actually buys**, so the trade is visible: it is what
+lets three integration suites drive the service under plain Node, and that
+property has been broken three times by three imports each added for a good local
+reason — `app.isPackaged` at module scope, `shell` for opening a link, `verifyEnv`
+for a timing knob. Every service extracted today inherits that testability, which
+is why these extractions have been verifiable at all. The cost, honestly counted,
+is **one** distortion: the capture split — and that split was an improvement
+anyway.
+
+Enforceable the same way: `main/services/` Electron-free, `main/shell/` not, both
+checked by directory. To be done after todo and docket, which are pure domain and
+do not touch the question.
 5. **Layer 2 last**, because it is the part the cycle lives in, and by then both
    its dependencies are behind interfaces.
 

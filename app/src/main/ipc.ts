@@ -4,7 +4,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type WebContents
 import { basename, extname } from 'node:path'
 import { IMAGE_EXTENSIONS } from '../shared/ipc.ts'
 import { readOutsideBytes } from './w/outside.ts'
-import { CHANNEL, type DocketCommand, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
+import { CHANNEL, type CaptureCommand, type DocketCommand, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
 import { DocumentService } from './services/document-service.ts'
 import { claim, type Serves } from './services/serves.ts'
 import { printPassage } from './print.ts'
@@ -154,131 +154,18 @@ export function registerDocumentIpc(service: DocumentService): void {
   let waiting: Capture | null = null
   let claimed: Capture | null = null
 
-  ipcMain.handle(CHANNEL.docket, async (_e, command: DocketCommand) => {
-    switch (command.kind) {
-      case 'list':
-        return service.dockets()
-      case 'matters':
-        return service.docketMatters(command.docket)
-      case 'add':
-        return service.docketAdd(command.docket, command.name, command.shape, command.section)
-      case 'rename':
-        return service.docketRename(command.docket, command.matter, command.name)
-      case 'mode':
-        return service.docketSetMode(command.docket, command.matter, command.mode)
-      case 'start':
-        return service.docketSetStart(command.docket, command.matter, command.start)
-      case 'moveTo':
-        return service.docketMoveTo(command.docket, command.matter, command.to)
-      case 'dates':
-        return service.docketSetDates(command.docket, command.matter, command.dates)
-      case 'every':
-        return service.docketSetEvery(command.docket, command.matter, command.every)
-      case 'after':
-        return service.docketSetAfter(command.docket, command.matter, command.after)
-      case 'generate':
-        return service.reconcile()
-      case 'advance':
-        return service.docketAdvance(command.docket, command.matter)
-      case 'owner':
-        return service.docketSetOwner(command.docket, command.matter, command.owner)
-      case 'link':
-        return service.docketSetLink(command.docket, command.matter, command.link)
-      case 'tag':
-        return service.docketTag(command.docket, command.matter, command.subject)
-      case 'untag':
-        return service.docketUntag(command.docket, command.matter, command.subject)
-      case 'remove':
-        return service.docketRemove(command.docket, command.matter)
-      case 'notes':
-        return service.docketSetNotes(command.docket, command.matter, command.notes)
-      case 'addStep':
-        return service.docketAddStep(
-          command.docket, command.matter, command.when, command.text, command.stepKind,
-        )
-      case 'editStep':
-        return service.docketEditStep(
-          command.docket, command.matter, command.step, command.text,
-        )
-      case 'stepWhen':
-        return service.docketSetStepWhen(
-          command.docket, command.matter, command.step, command.when,
-        )
-      case 'stepKind':
-        return service.docketSetStepKind(
-          command.docket, command.matter, command.step, command.stepKind,
-        )
-      case 'removeStep':
-        return service.docketRemoveStep(command.docket, command.matter, command.step)
-      case 'completeStep':
-        return service.docketCompleteStep(
-          command.docket, command.matter, command.step, command.done,
-        )
-      case 'activate':
-        return service.docketActivate(command.docket, command.matter)
-      case 'suspend':
-        return service.docketSuspend(command.docket, command.matter)
-      case 'sections':
-        return service.docketSections(command.docket)
-      case 'addSection':
-        return service.docketAddSection(command.docket, command.name)
-      case 'renameSection':
-        return service.docketRenameSection(command.docket, command.name, command.to)
-      case 'removeSection':
-        return service.docketRemoveSection(command.docket, command.name)
-      case 'nudgeSection':
-        return service.docketNudgeSection(command.docket, command.name, command.delta)
-      case 'place':
-        return service.docketMoveMatter(
-          command.docket, command.matter, command.section, command.before,
-        )
-      case 'nudge':
-        return service.docketNudgeMatter(command.docket, command.matter, command.delta)
-      case 'move':
-        return service.docketMove(command.docket, command.matter, command.to)
-    }
-  })
+  // Dockets: declared by the service now, one arm per kind (D83).
 
-  ipcMain.handle(CHANNEL.todo, async (e, command: TodoCommand) => {
+  /**
+   * Capture, which is a gesture between two windows (T13, D83).
+   *
+   * **Its own channel now, and it was on the task list's.** It produces a task,
+   * which is why it lived there — but every step of it holds a `WebContents`, so
+   * it belongs to this layer and not to a service; and while it shared a channel
+   * with the list's verbs, that channel could not be wholly the list service's.
+   */
+  ipcMain.handle(CHANNEL.capture, async (e, command: CaptureCommand) => {
     switch (command.kind) {
-      case 'list':
-        return service.todoList()
-      case 'today':
-        return service.todoToday(command.list)
-      case 'items':
-        return service.todoItems(command.list, command.date)
-      case 'add':
-        return service.todoAdd(command.list, command.text)
-      case 'status':
-        return service.todoSetStatus(command.list, command.item, command.status, command.note)
-      case 'edit':
-        return service.todoEdit(command.list, command.item, command.text)
-      case 'notes':
-        return service.todoSetNotes(command.list, command.item, command.notes)
-      case 'remove':
-        return service.todoRemove(command.list, command.item)
-      case 'tags':
-        return service.todoTags()
-      case 'days':
-        return service.todoDays(command.list)
-      case 'resolved':
-        return service.todoResolved()
-      case 'backlog':
-        return service.todoBacklog()
-      case 'walk':
-        return service.todoWalk(command.list, command.date)
-      case 'bulk':
-        return service.todoBulk(command.list, command.items, command.action)
-      case 'putDown':
-        return service.todoPutDown(command.list, command.item, command.docket)
-      case 'matterFor':
-        return service.matterFor(command.item)
-      case 'chosen':
-        return service.todoChosen(command.list, command.date)
-      case 'choose':
-        return service.todoChoose(command.list, command.date, command.item, command.chosen)
-      case 'finishWalk':
-        return service.todoFinishWalk(command.list, command.date, command.drop)
       case 'capture': {
         // **Left for the list to pull.** Pushing at a window that may have been
         // created a millisecond ago races its renderer: `did-finish-load` is
@@ -287,7 +174,7 @@ export function registerDocumentIpc(service: DocumentService): void {
         // shape the day boundary settled on (D62). Revealing is the caller's
         // next call, because windows are not this handler's to know about.
         waiting = { text: command.text, wrap: command.wrap, origin: e.sender }
-        return service.todoList()
+        return service.todo.todoList()
       }
       case 'claim': {
         // **Only when there is something to take.** The list asks on arrival
@@ -315,6 +202,8 @@ export function registerDocumentIpc(service: DocumentService): void {
       }
     }
   })
+
+  // The task list: declared by the service now, one arm per kind (D83).
   ipcMain.handle(CHANNEL.renameDocument, (_e, id: DocumentId, label: string) =>
     service.renameDocument(id, label),
   )
@@ -332,7 +221,7 @@ export function registerDocumentIpc(service: DocumentService): void {
       // Which day it is showing is the list's business, and it shows today —
       // the item's newest instance is what the item IS now. Landing on the
       // exact line is worth having and is not this milestone's.
-      return { document: await service.todoList() }
+      return { document: await service.todo.todoList() }
     }
     if (reference.kind !== 'file') return 'unsupported'
 

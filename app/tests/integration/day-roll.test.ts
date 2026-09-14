@@ -149,17 +149,17 @@ test('THE SEED LANDS BEFORE A WRITE PICKS A DAY', async t => {
   // **Nothing is awaited that would seed it first.** The other suites' helper
   // happens to call `info()`, which does await the seed — which is why this was
   // invisible everywhere except in the running app.
-  const list = await svc.todoList()
-  const made = await svc.todoAdd(list, 'Ring the dentist')
+  const list = await svc.todo.todoList()
+  const made = await svc.todo.todoAdd(list, 'Ring the dentist')
 
   // The day the write used and the day a read looks under are the same day.
-  const today = await svc.todoToday(list)
-  const items = await svc.todoItems(list, today)
+  const today = await svc.todo.todoToday(list)
+  const items = await svc.todo.todoItems(list, today)
   // **What the days ARE is the informative thing**, not what `today` says now:
   // by the time this line runs the seed has landed, so the service and the read
   // agree and only the file disagrees. The first version of this message
   // printed the same date twice and explained nothing.
-  const days = await svc.todoDays(list).catch(() => [])
+  const days = await svc.todo.todoDays(list).catch(() => [])
   assert.ok(
     items.some(one => one.id === made),
     `filed under a day nothing reads back: read ${String(today)}, list holds ${JSON.stringify(days)}`,
