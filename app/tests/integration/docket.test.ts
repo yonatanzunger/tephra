@@ -2723,3 +2723,76 @@ test('and an exchange is reversible, which is what makes it an exchange', async 
   await doc.nudgeSection('Periodic', -1)
   assert.equal(await file(), before, 'there and back is where it started')
 })
+
+// ── the boundary between primary and derived (D77) ──────────────────────────
+//
+// **`reconcile()` exists to rebuild derived items from primary ones**, which is
+// only safe while it can tell the two apart. It can: every generated item is
+// recorded on the step that made it (`step.made`), so the reconciler never
+// matches on text or on tags and never guesses. These pin that boundary from
+// the outside, because until now it was stated in a comment and enforced by a
+// condition, and nothing would have noticed either of them changing.
+
+test('PRIMARY IS UNTOUCHABLE: a typed task is nobody else\'s business', async t => {
+  const { service } = await serviced(t)
+  const list = await service.todoList()
+  const mine = await service.todoAdd(list, 'Ring the dentist')
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+  await service.docketActivate(id, car)
+  // Suspending withdraws what the docket made — and only that.
+  await service.docketSuspend(id, car)
+  const left = await service.todoItems(list, service.today)
+  assert.deepEqual(left.map(withoutMarks), ['Ring the dentist'])
+  assert.equal(left[0]?.id, mine, 'the same item, not a rebuilt lookalike')
+})
+
+test('and text identical to a generated one is still typed, not adopted', async t => {
+  // The reconciler could have matched on the sentence. It does not, and this is
+  // what says so: two items reading the same, one owned and one not.
+  const { service } = await serviced(t)
+  const list = await service.todoList()
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+  await service.docketActivate(id, car)
+  const mine = await service.todoAdd(list, 'The car needs fixing')
+  await service.docketSuspend(id, car)
+  const left = await service.todoItems(list, service.today)
+  assert.deepEqual(left.map(one => one.id), [mine], 'the docket took back only its own')
+})
+
+test('DERIVED IS RECOVERABLE FROM PRIMARY: the step names what it made', async t => {
+  const { service } = await serviced(t)
+  const id = await service.newDocument('The house', undefined, 'docket')
+  const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+  await service.docketActivate(id, car)
+  const list = await service.todoList()
+  const made = (await service.todoItems(list, service.today))[0]?.id ?? ''
+  assert.notEqual(made, '')
+  const step = (await service.docketMatters(id))[0]?.steps[0]
+  assert.equal(step?.made, made, 'the link is stored on the PRIMARY side')
+  // And it reads back the other way, which is what the surfaces ask.
+  assert.deepEqual(await service.matterFor(made), { docket: id, matter: car })
+  // A typed one belongs to nothing, and says so rather than guessing.
+  const mine = await service.todoAdd(list, 'Ring the dentist')
+  assert.equal(await service.matterFor(mine), null)
+})
+
+test('A RESOLVED ITEM IS A FACT ABOUT THE PAST: reconcile leaves it alone', async t => {
+  // Three exemptions that are one exemption. Once somebody has answered an item
+  // — ticked, dropped, or moved on — taking it back would be overruling them,
+  // and the reconciler's business is only what is still being asked.
+  for (const answer of ['done', 'dropped'] as const) {
+    const { service } = await serviced(t)
+    const id = await service.newDocument('The house', undefined, 'docket')
+    const car = await service.docketAdd(id, 'The car needs fixing', { mode: 'task' })
+    await service.docketActivate(id, car)
+    const list = await service.todoList()
+    const made = (await service.todoItems(list, service.today))[0]?.id ?? ''
+    await service.todoSetStatus(list, made, answer)
+    await service.docketSuspend(id, car)
+    const left = await service.todoItems(list, service.today)
+    assert.deepEqual(left.map(one => one.id), [made], `a ${answer} item stayed`)
+    assert.equal(left[0]?.status, answer, 'and kept the answer it was given')
+  }
+})

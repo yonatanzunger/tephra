@@ -161,6 +161,8 @@ both projects, for that reason.
 | The window never moves | `frame/metrics.ts` + `Frame.tsx` (D42) |
 | Type is decided | `shared/theme.ts` + `theme/useTheme.ts`; files in `config/themes/` |
 | Markup is hidden or revealed | `editor/kinds/markdown/widgets.ts` — and see **Q11**, unresolved |
+| **Where an annotation is drawn** | `shared/presentation.ts`'s `place()` — one policy for every renderer and every surface (D50). A tag's slot follows its **extent**: under `REGION` it is a rule under the words (`markdown/tags.ts`), over it a spine in the left band (`markdown/tag-spines.ts`), and on paper a margin note (D82) |
+| **What a marker stands for** | `markdown/range-commands.ts`'s `markAt` → `frame/MarkPanel.tsx`. A handle is a bookmark, a tagged range or a **commented** one — all three, since the third was missing (note 59) |
 | Format problems surface | `main/x/anomalies.ts` → titlebar count → `frame/Anomalies.tsx` |
 | **Which day it is** | `main/x/day-clock.ts` — `writingDay` waits for you to stop, `clockDay` is the calendar (D62); the zone is chosen, not detected (D63) |
 | **A document is opened by id** | `Corpus.use` in `main/x/documents/corpus.ts`; the kind comes from the name (D59, `kindOf`) |
@@ -181,6 +183,38 @@ both projects, for that reason.
 | **Comments in the margin** | `main/x/comments.ts` → `frame/Rail.tsx`, anchored by markers |
 | **What each window is showing, and restoring it** | `main/windows.ts` + `shared/ui-state.ts`; per-window location and cursor, machine-local theme, list view and search width (D30) |
 | **Which keys do what** | `solution/keymap.md`, kept true by `tests/unit/keymap.test.ts` |
+
+---
+
+## Which data is primary and which is derived
+
+**Written down because reconciliation only works while the two can be told
+apart** (D77). Everything derived may be destroyed and rebuilt at any moment;
+nothing primary may be touched by anything except the person who wrote it.
+
+| Primary — authored, never rebuilt | Derived — rebuilt from the primary at will |
+|---|---|
+| the notebook's prose, in the day files | the corpus index: subjects, bookmarks, timeline, links, threads, task items (D52 — deleting `.tephra/index` costs only time) |
+| a **matter** on a docket: its steps, schedule, owner, tags | the **task items a docket generates** — made, withdrawn and re-made by `reconcile()` |
+| a task item somebody **typed**, and any item after it has been answered | the **horizon**, which is computed on every ask and never stored (D78) |
+| the annotations: tags, bookmarks, comments | the summaries, chips and counts every surface draws |
+
+**The boundary is a stored link, not a guess.** A step records the id of the item
+it made (`step.made`), so `reconcile()` withdraws only what it can name, and
+`DocumentService.matterFor` reads the same link the other way for a surface
+asking *where did this come from*. Nothing matches on text or on tags — two items
+reading identically, one generated and one typed, are told apart correctly.
+
+**A derived item stops being the reconciler's business the moment somebody
+answers it.** Ticked, dropped, backlogged or deleted are one case, not four:
+each means *stop waiting*, and none means *ask again*. Taking one back would be
+overruling a person, which is what the rule was always about.
+
+> Pinned from the outside in `tests/integration/docket.test.ts` — *primary is
+> untouchable*, *text identical to a generated one is still typed*, *the step
+> names what it made*, *a resolved item is a fact about the past*. Until those
+> existed the boundary was stated in a comment and enforced by one condition,
+> and nothing would have noticed either of them changing.
 
 ---
 
