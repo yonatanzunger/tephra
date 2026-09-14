@@ -253,7 +253,7 @@ class FixedPointRunner {
     // arriving in that hop was queued behind a run already resolving, so the
     // caller was told the work was done when it had not started. The next
     // trigger would pick the key up, so nothing was lost — what was wrong was
-    // the answer, and an early answer here is the `docketActivate` bug (D77).
+    // the answer, and an early answer here is the `docket.activate` bug (D77).
     const settled = new Promise<void>(resolve => this.#waiting.push(resolve))
     if (this.#running === null) this.#begin()
     return settled

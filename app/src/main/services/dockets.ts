@@ -72,7 +72,7 @@ export class Dockets {
    * same rule the sidebar's directory sections follow: a docket is there because
    * its file is there, which cannot be wrong.
    */
-  async dockets(): Promise<readonly DocketRow[]> {
+  async all(): Promise<readonly DocketRow[]> {
     const ids = await this.#store.corpus.list('docket')
     const rows = await Promise.all(ids.map(async id => ({
       id,
@@ -83,7 +83,7 @@ export class Dockets {
     })))
     return rows.sort((a, b) => a.title.localeCompare(b.title))
   }
-  async docketMatters(id: DocumentId): Promise<readonly Matter[]> {
+  async matters(id: DocumentId): Promise<readonly Matter[]> {
     return this.#store.corpus.use(id, doc => (doc as DocketDocument).matters())
   }
 
@@ -95,7 +95,7 @@ export class Dockets {
    * and the renderer has no business owning a second copy of it (T16's rule,
    * applied to a second grammar).
    */
-  async docketAdd(
+  async add(
     id: DocumentId,
     name: string,
     shape?: NewMatter,
@@ -128,7 +128,7 @@ export class Dockets {
   }
 
   /** Change what kind of thing a matter is — the four a person chooses between. */
-  async docketSetMode(id: DocumentId, matter: string, mode: Mode): Promise<void> {
+  async setMode(id: DocumentId, matter: string, mode: Mode): Promise<void> {
     if (!MODES.some(one => one.key === mode)) {
       throw new Error(`${mode} is not one of the four kinds of matter`)
     }
@@ -138,7 +138,7 @@ export class Dockets {
   }
 
   /** The date of the next instance, or none — which is the whole of *inactive*. */
-  async docketSetStart(id: DocumentId, matter: string, start: string | null): Promise<void> {
+  async setStart(id: DocumentId, matter: string, start: string | null): Promise<void> {
     const said = start === null || start.trim() === '' ? null : asDateKey(start.trim())
     if (start !== null && start.trim() !== '' && said === null) {
       throw new Error(`${start} is not a date`)
@@ -149,7 +149,7 @@ export class Dockets {
   }
 
   /** How often it comes round. `every` as typed: `90d`, `1m on 31`, or nothing. */
-  async docketSetEvery(id: DocumentId, matter: string, every: string | null): Promise<void> {
+  async setEvery(id: DocumentId, matter: string, every: string | null): Promise<void> {
     const said = every === null || every.trim() === '' ? null : parseInterval(every)
     if (every !== null && every.trim() !== '' && said === null) {
       throw new Error(`${every} is not an interval like 90d, 6 months, or 1m on 31`)
@@ -160,44 +160,44 @@ export class Dockets {
   }
 
   /** Which step's completion starts the next instance, or none (D76, Qa). */
-  async docketSetAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
+  async setAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setAfter(matter, after)))
     await this.#durable.wrote(id)
   }
 
   /** Move a recurring matter on to its next instance. */
-  async docketAdvance(id: DocumentId, matter: string): Promise<DateKey | null> {
+  async advance(id: DocumentId, matter: string): Promise<DateKey | null> {
     const next = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).advanceInstance(matter)))
     if (next !== null) this.#touched()
     return next
   }
-  async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
+  async rename(id: DocumentId, matter: string, name: string): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).rename(matter, name)))
     await this.#durable.wrote(id)
   }
-  async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
+  async setOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
     await this.#durable.wrote(id)
   }
-  async docketSetLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
+  async setLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
     await this.#durable.wrote(id)
   }
-  async docketTag(id: DocumentId, matter: string, subject: string): Promise<void> {
+  async tag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).tagMatter(matter, subject)))
     await this.#durable.wrote(id)
   }
-  async docketUntag(id: DocumentId, matter: string, subject: string): Promise<void> {
+  async untag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
     await this.#durable.wrote(id)
   }
 
   /** The prose under a matter. Nothing in it is parsed (D56's rule, carried). */
-  async docketSetNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
+  async setNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setNotes(matter, notes)))
     await this.#durable.wrote(id)
@@ -206,23 +206,23 @@ export class Dockets {
   // ── sections on a docket (MH1) ──────────────────────────────
 
   /** The docket divided into its sections, which is how it is read. */
-  async docketSections(id: DocumentId): Promise<readonly Section[]> {
+  async sections(id: DocumentId): Promise<readonly Section[]> {
     return this.#store.corpus.use(id, doc => (doc as DocketDocument).sections())
   }
-  async docketAddSection(id: DocumentId, name: string): Promise<string> {
+  async addSection(id: DocumentId, name: string): Promise<string> {
     const made = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).addSection(name)))
     await this.#durable.wrote(id)
     return made
   }
-  async docketRenameSection(id: DocumentId, name: string, to: string): Promise<void> {
+  async renameSection(id: DocumentId, name: string, to: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).renameSection(name, to)))
     await this.#durable.wrote(id)
   }
 
   /** Take the heading away and keep everything that was under it. */
-  async docketRemoveSection(id: DocumentId, name: string): Promise<void> {
+  async removeSection(id: DocumentId, name: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).removeSection(name)))
     await this.#durable.wrote(id)
@@ -233,9 +233,9 @@ export class Dockets {
    *
    * **Nothing derived depends on the order of sections**, which is why this
    * touches without reconciling: the reading changes and the generated tasks do
-   * not. Same as `docketNudgeMatter`, for the same reason.
+   * not. Same as `nudgeMatter`, for the same reason.
    */
-  async docketNudgeSection(id: DocumentId, name: string, delta: number): Promise<boolean> {
+  async nudgeSection(id: DocumentId, name: string, delta: number): Promise<boolean> {
     const moved = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).nudgeSection(name, delta)))
     if (moved) this.#touched()
@@ -254,16 +254,16 @@ export class Dockets {
    * corpus and the old block is going away — what travels is the matter, not its
    * name in a file. What it was moved from travels too, so the trail survives.
    */
-  async docketMoveTo(from: DocumentId, matter: string, to: DocumentId): Promise<string | null> {
+  async moveTo(from: DocumentId, matter: string, to: DocumentId): Promise<string | null> {
     if (from === to) return matter
-    const found = (await this.docketMatters(from)).find(one => one.id === matter)
+    const found = (await this.matters(from)).find(one => one.id === matter)
     if (found === undefined) return null
 
-    const made = await this.docketAdd(to, found.name, { mode: found.mode })
-    for (const tag of found.tags) await this.docketTag(to, made, tag)
-    if (found.owner !== null) await this.docketSetOwner(to, made, found.owner)
-    if (found.link !== null) await this.docketSetLink(to, made, found.link)
-    if (found.notes.length > 0) await this.docketSetNotes(to, made, found.notes)
+    const made = await this.add(to, found.name, { mode: found.mode })
+    for (const tag of found.tags) await this.tag(to, made, tag)
+    if (found.owner !== null) await this.setOwner(to, made, found.owner)
+    if (found.link !== null) await this.setLink(to, made, found.link)
+    if (found.notes.length > 0) await this.setNotes(to, made, found.notes)
     // **By index, not by id**, since every step is being made afresh: an `after`
     // pointing at the old docket's id would point at nothing. `spellStepWhen`
     // already renders the index when given one, and `addStep` reads it back.
@@ -272,23 +272,23 @@ export class Dockets {
       return at < 0 ? null : at + 1
     }
     for (const step of found.steps.slice(1)) {
-      await this.docketAddStep(to, made, spellStepWhen(step.when, place), step.text, step.kind)
+      await this.addStep(to, made, spellStepWhen(step.when, place), step.text, step.kind)
     }
-    if (found.when.start !== null) await this.docketSetStart(to, made, found.when.start)
-    if (found.when.every !== null) await this.docketSetEvery(to, made, spellInterval(found.when.every))
-    if (found.when.dates !== null) await this.docketSetDates(to, made, found.when.dates)
+    if (found.when.start !== null) await this.setStart(to, made, found.when.start)
+    if (found.when.every !== null) await this.setEvery(to, made, spellInterval(found.when.every))
+    if (found.when.dates !== null) await this.setDates(to, made, found.when.dates)
     if (found.from !== null) {
       await this.#mutate(async () =>
         this.#store.corpus.use(to, doc => (doc as DocketDocument).cameFrom(made, found.from as string)))
     }
 
-    await this.docketRemove(from, matter)
+    await this.remove(from, matter)
     await this.#durable.wrote(to)
     return made
   }
 
   /** Into a section — `''` is the undivided run — optionally above one matter. */
-  async docketMoveMatter(
+  async moveMatter(
     id: DocumentId,
     matter: string,
     section: string,
@@ -300,7 +300,7 @@ export class Dockets {
   }
 
   /** One place up or down inside its own section. False at the ends. */
-  async docketNudgeMatter(id: DocumentId, matter: string, delta: number): Promise<boolean> {
+  async nudgeMatter(id: DocumentId, matter: string, delta: number): Promise<boolean> {
     const moved = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).nudgeMatter(matter, delta)))
     if (moved) this.#touched()
@@ -315,7 +315,7 @@ export class Dockets {
    * `right away`, `after <step>` — and the renderer has no business owning a
    * second copy of it (T16's rule, applied to a third grammar).
    */
-  async docketAddStep(
+  async addStep(
     id: DocumentId,
     matter: string,
     when: string,
@@ -329,7 +329,7 @@ export class Dockets {
   }
 
   /** Fix what a step says, keeping its id and its completion stamp. */
-  async docketEditStep(
+  async editStep(
     id: DocumentId,
     matter: string,
     step: string,
@@ -341,7 +341,7 @@ export class Dockets {
   }
 
   /** Reschedule one step. `when` as typed, parsed here. */
-  async docketSetStepWhen(
+  async setStepWhen(
     id: DocumentId,
     matter: string,
     step: string,
@@ -353,7 +353,7 @@ export class Dockets {
   }
 
   /** Change a step's kind — the only way to author a `reschedule` (D76). */
-  async docketSetStepKind(
+  async setStepKind(
     id: DocumentId,
     matter: string,
     step: string,
@@ -363,14 +363,14 @@ export class Dockets {
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setStepKind(matter, step, kind)))
     await this.#durable.wrote(id)
   }
-  async docketRemoveStep(id: DocumentId, matter: string, step: string): Promise<void> {
+  async removeStep(id: DocumentId, matter: string, step: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).removeStep(matter, step)))
     await this.#durable.wrote(id)
   }
 
   /** Stamp a step done, or undo that. What a dependency reads (D76). */
-  async docketCompleteStep(
+  async completeStep(
     id: DocumentId,
     matter: string,
     step: string,
@@ -389,7 +389,7 @@ export class Dockets {
    * service's (D62/D63) and a document that read one would be a second source of
    * truth about what day it is.
    */
-  async docketActivate(id: DocumentId, matter: string): Promise<DateKey> {
+  async activate(id: DocumentId, matter: string): Promise<DateKey> {
     const when = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).activate(matter, this.#day.today)))
     await this.#durable.wrote(id)
@@ -397,7 +397,7 @@ export class Dockets {
   }
 
   /** The instances, listed outright — an alternative to the interval (H7). */
-  async docketSetDates(id: DocumentId, matter: string, dates: readonly DateKey[]): Promise<void> {
+  async setDates(id: DocumentId, matter: string, dates: readonly DateKey[]): Promise<void> {
     const today = this.#day.today
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setDates(matter, dates, today)))
@@ -405,7 +405,7 @@ export class Dockets {
   }
 
   /** Stop work on it, keeping what it has already done (D76). */
-  async docketSuspend(id: DocumentId, matter: string): Promise<void> {
+  async suspend(id: DocumentId, matter: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).suspend(matter)))
     // **And then reconciled, rather than withdrawing by hand.** Suspending is
@@ -421,7 +421,7 @@ export class Dockets {
     // this verb from being an ordinary one.
     await this.#durable.wrote(id)
   }
-  async docketRemove(id: DocumentId, matter: string): Promise<void> {
+  async remove(id: DocumentId, matter: string): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
     await this.#durable.wrote(id)
   }
@@ -434,7 +434,7 @@ export class Dockets {
    * it. The id surviving is the whole promise — history stays continuous and a
    * reference still resolves.
    */
-  async docketMove(id: DocumentId, matter: string, to: DocumentId): Promise<void> {
+  async move(id: DocumentId, matter: string, to: DocumentId): Promise<void> {
     await this.#mutate(async () => {
       const taken = await this.#store.corpus.use(id, doc => (doc as DocketDocument).remove(matter))
       await this.#store.corpus.use(to, doc => (doc as DocketDocument).adopt(taken))
@@ -454,7 +454,7 @@ export class Dockets {
   readonly #takenMatterIds = async (): Promise<ReadonlySet<string>> => {
     const out = new Set<string>()
     for (const id of await this.#store.corpus.list('docket')) {
-      for (const matter of await this.docketMatters(id)) {
+      for (const matter of await this.matters(id)) {
         if (matter.id !== null) out.add(matter.id)
       }
     }
@@ -489,7 +489,7 @@ function scheduleFor(shape: NewMatter | undefined): Schedule {
   return {
     start,
     every: mode.repeating ? every : null,
-    // Set once the first step exists, since it names one (see `docketAdd`).
+    // Set once the first step exists, since it names one (see `add`).
     after: null,
     dates: null,
   }

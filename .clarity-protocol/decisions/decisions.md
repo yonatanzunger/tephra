@@ -4018,7 +4018,8 @@ spine is reachable anywhere along its length.
 ## D83: The main process is layered, every file says which layer it is on, and services follow the channels
 
 **Date:** 2026-09-13
-**Status:** decided; **not yet built** — the plan is `solution/service-layers.md`
+**Status:** decided and **built** (2026-09-14) — the plan and its record of
+execution are `solution/service-layers.md`
 **Constrains:** every future service in `main/`. **Extends:** D77 (reconciliation),
 D78 (the horizon is its own object), D37 (X lives in main).
 **Source:** `DocumentService` at 2,805 lines and 150 members, and the observation
@@ -4106,12 +4107,52 @@ catching.
 > splits into **text** for the buffer and **frame** for the OS window, before the
 > ambiguity is baked into a service name.
 
+**Amended 2026-09-14, a fourth tier: the shell.** The table above has three
+tiers and a rule beside it — *no service imports Electron* — which was a rule
+about a **layer** dressed as a rule about **all services**. There are four:
+
+| tier | what |
+|---|---|
+| **shell** | `frame`, the menu, printing, the `tephra://` scheme, the capture gesture — **may use Electron, which is the point** |
+| **composing** | horizon, reconciliation, transfers |
+| **domain** | one kind of thing each, and its channels |
+| **foundation** | `Bus`, `CorpusService`, `DurabilityService`, `DayService`, `FixedPoints` — no channels |
+
+> The foundation and the domain services are **Electron-free**, checked by
+> directory (`main/services/`). The shell tier above them is not, and lives in
+> `main/shell/`.
+
+**What the Electron-free rule buys, counted honestly**, since naming a tier that
+is exempt from it invites the question: it is what lets three integration suites
+drive the services under plain Node. That property has been broken three times by
+three imports each added for a good local reason — `app.isPackaged` at module
+scope, `shell` to open a link, `verifyEnv` for a timing knob — and every service
+extracted under D83 inherits it, which is why the extractions were verifiable at
+all. The cost is **one** distortion, `navOpen`'s split: the service says where a
+reference points, the shell opens it. Under the amendment that is not a special
+case but a **tier boundary**, and the split was an improvement anyway.
+
+**And `frame` needed no exemption.** It was cut from the plan because four of its
+six handlers pass a `WebContents` to `windows.ts`. They read nothing from it but
+`sender.id` — `Windows` has matched windows by id since it was written, and keys
+its registry `Map<number, Entry>` — so they take the id and `FrameService`
+declares them with `serveAsked`, the mechanism search already needed. **No
+Electron object crosses the boundary.** The tier's licence is spent on one line:
+pushing `revealed` to the window it just revealed, because a window already open
+has no mount to react to and a hidden one never sees focus.
+
+**Built 2026-09-14.** `DocumentService` 2,805 → 1,238 lines; `ipc.ts` 471 → 342
+with hand-written handlers 74 → 48; eleven services, two stores, the agenda
+(D84), and the shell tier. `tests/unit/main/channels.test.ts` relates the three
+sides of a channel that nothing else related, which is what made the extractions
+safe to do one at a time.
+
 ---
 
 ## D84: The agenda is one construct with two forms, and the dockets and the task list are its stores
 
 **Date:** 2026-09-14
-**Status:** decided; **not yet built**
+**Status:** decided and **built** (2026-09-14)
 **Extends:** D68/D75/D76 (the docket), D55/D56 (a task item), D77
 (reconciliation), D78 (the horizon), D79 (putting one down), D83 (the service
 DAG). **Source:** asked while splitting `DocumentService` — *why don't these

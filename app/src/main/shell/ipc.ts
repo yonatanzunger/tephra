@@ -2,23 +2,24 @@
 
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type WebContents } from 'electron'
 import { basename, extname } from 'node:path'
-import { IMAGE_EXTENSIONS } from '../shared/ipc.ts'
-import { readOutsideBytes } from './w/outside.ts'
-import { CHANNEL, type CaptureCommand, type DocketCommand, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../shared/ipc.ts'
-import { DocumentService } from './services/document-service.ts'
-import { claim, type Serves } from './services/serves.ts'
+import { IMAGE_EXTENSIONS } from '../../shared/ipc.ts'
+import { readOutsideBytes } from '../w/outside.ts'
+import { CHANNEL, type CaptureCommand, type DocketCommand, type EditRequest, type ExtendRequest, type ReadRequest, type SpansRequest, type WindowId, type TodoCommand } from '../../shared/ipc.ts'
+import { DocumentService } from '../services/document-service.ts'
+import { claim, type Serves } from '../services/serves.ts'
+import { FrameService } from './frame-service.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
-import type { Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchRequest } from '../shared/ipc.ts'
-import type { QueryId } from '../shared/search-api.ts'
-import type { Followed, Reference } from '../shared/nav-api.ts'
-import type { DocumentId } from '../shared/document-api.ts'
+import type { Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchRequest } from '../../shared/ipc.ts'
+import type { QueryId } from '../../shared/search-api.ts'
+import type { Followed, Reference } from '../../shared/nav-api.ts'
+import type { DocumentId } from '../../shared/document-api.ts'
 import type { Windows } from './windows.ts'
-import type { WindowReport } from '../shared/ipc.ts'
-import type { NavTarget } from '../shared/pane-api.ts'
-import type { RelPath } from './w/layout.ts'
-import type { UiState } from '../shared/ui-state.ts'
-import type { DateKey, DocumentPosition, Span, VersionId } from '../shared/document-api.ts'
+import type { WindowReport } from '../../shared/ipc.ts'
+import type { NavTarget } from '../../shared/pane-api.ts'
+import type { RelPath } from '../w/layout.ts'
+import type { UiState } from '../../shared/ui-state.ts'
+import type { DateKey, DocumentPosition, Span, VersionId } from '../../shared/document-api.ts'
 
 export { DocumentService }
 
@@ -35,6 +36,16 @@ export { DocumentService }
  */
 function wire(services: readonly Serves[]): void {
   for (const [channel, served] of claim(services)) {
+    // **Told or asked, and it has to be one or the other.** `ipcMain.handle` is
+    // deaf to `ipcRenderer.send` and `ipcMain.on` cannot reply, so a channel
+    // registered at the wrong door fails in total silence (`serves.ts`, `told`).
+    if (served.told === true) {
+      ipcMain.on(channel, (event, ...args: unknown[]) => {
+        if (served.wantsAsker === true) served.answer(event.sender.id, ...args)
+        else served.answer(...args)
+      })
+      continue
+    }
     ipcMain.handle(channel, (event, ...args: unknown[]) =>
       // **The asker is a number, and only when asked for.** A service may not
       // import Electron, so the one thing it can be told about the caller is an
@@ -174,7 +185,7 @@ export function registerDocumentIpc(service: DocumentService): void {
         // shape the day boundary settled on (D62). Revealing is the caller's
         // next call, because windows are not this handler's to know about.
         waiting = { text: command.text, wrap: command.wrap, origin: e.sender }
-        return service.todo.todoList()
+        return service.todo.list()
       }
       case 'claim': {
         // **Only when there is something to take.** The list asks on arrival
@@ -221,7 +232,7 @@ export function registerDocumentIpc(service: DocumentService): void {
       // Which day it is showing is the list's business, and it shows today —
       // the item's newest instance is what the item IS now. Landing on the
       // exact line is worth having and is not this milestone's.
-      return { document: await service.todo.todoList() }
+      return { document: await service.todo.list() }
     }
     if (reference.kind !== 'file') return 'unsupported'
 
@@ -310,26 +321,15 @@ export function registerDocumentIpc(service: DocumentService): void {
 }
 
 /** Push messages to a renderer for as long as its window lives. */
-/** The window half of the bridge: which window this is, and what it now shows. */
+/**
+ * The window half of the bridge — `shell/frame-service.ts` declares it now.
+ *
+ * It is a service like any other, on the tier that may use Electron (D83). Its
+ * four sender-taking verbs turned out to need only the window's **id**, which
+ * `Windows` has always matched on, so no Electron object crosses the boundary.
+ */
 export function registerWindowIpc(windows: Windows, onImport: (id: DocumentId | null) => void): void {
-  ipcMain.handle(CHANNEL.windowInfo, e => windows.infoFor(e.sender))
-  ipcMain.on(CHANNEL.windowReport, (e, report: WindowReport) => windows.report(e.sender, report))
-  ipcMain.handle(CHANNEL.windowCreate, (_e, target?: NavTarget) => {
-    windows.open(target)
-  })
-  /**
-   * Show something in a window of its own — the one that already has it, or a
-   * new one. What ⌘0 and ⌘1 do, reachable by a renderer that has a reason.
-   */
-  ipcMain.handle(CHANNEL.windowReveal, (_e, target: NavTarget) => {
-    const shown = windows.reveal(target)
-    // Told, not left to notice: a window already open has no mount to react to,
-    // and a hidden one — every window in verification mode — never sees focus.
-    if (!shown.isDestroyed()) shown.webContents.send(CHANNEL.revealed)
-  })
-  ipcMain.handle(CHANNEL.windowClose, e => windows.close(e.sender))
-  // The badge and the File menu reach the same act; main owns it either way.
-  ipcMain.handle(CHANNEL.windowImport, e => onImport(windows.importableFor(e.sender)))
+  wire([new FrameService(windows, onImport)])
 }
 
 export function attachWindow(service: DocumentService, window: BrowserWindow): void {

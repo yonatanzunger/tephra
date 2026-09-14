@@ -13,8 +13,8 @@
 // without I/O — it takes the newest written day, that file's mtime, and the
 // notebook's zone — so a synchronous `today` is a lie until the seed lands. The
 // old comment claimed *every door into this object awaits `#seeded` first*, and
-// six of about a hundred and fifty actually did; `todoAdd`, `todoToday` and
-// `todoItems` all read the day without waiting. `ready()` is the honest version,
+// six of about a hundred and fifty actually did; `todo.add`, `todo.today` and
+// `todo.items` all read the day without waiting. `ready()` is the honest version,
 // and the callers gate on it in one place rather than a hundred and fifty.
 //
 // **It reports rather than calls.** Crossing a boundary has to rebuild what

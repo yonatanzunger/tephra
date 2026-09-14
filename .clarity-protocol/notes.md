@@ -1447,3 +1447,45 @@ doors were safe, and a list nobody could keep is the signal to find the gate.
 > Related: note 50's rule that a rendering which is nearly right looks exactly
 > right. This is the same failure one layer down — an invariant that is nearly
 > maintained reads exactly like one that is.
+
+## 62. Two doors that look like one, and the one that is deaf
+
+**2026-09-14, extracting `FrameService`.** Six window handlers moved out of
+`ipc.ts` and became a service declaration each. Typecheck passed. The unit suite
+— 1,147 tests, including a channels test written specifically to catch a channel
+left behind by these extractions — passed. m0 failed on *the caret was recorded
+as (segment, offset), not a buffer offset*, a check about a different thing
+entirely: reopen a window, and the caret is where you left it.
+
+`ipcRenderer.send` and `ipcRenderer.invoke` are two different doors.
+`ipcMain.handle` answers an `invoke` and is **deaf to a send**; `ipcMain.on`
+hears a send and can never reply. Five of the six handlers had been `handle` and
+one — `windowReport`, which the renderer fires as the caret moves and does not
+wait on — had been `on`. The wiring behind a service declaration registers
+`handle`, so the renderer went on reporting the caret into a channel with no
+listener behind it.
+
+**What makes this worth a note is the silence.** No error. No rejected promise,
+because nothing was waiting. No warning from Electron that a message arrived for
+a channel with no listener, and no log line anywhere. The channels test I had
+written for exactly this class of mistake confirmed the channel was answered —
+it *was* answered, at the wrong door, and the test's patterns cannot see which.
+The caret simply stopped being recorded, and the only thing in the whole
+apparatus that noticed was an acceptance check that closes a window and opens it
+again.
+
+**The lesson is about where a fact has to live.** Told-or-asked is a property of
+the channel that only the two ends know: the renderer picks a verb, the service
+declares a shape, and the wiring in between cannot derive it. So the declaration
+now carries it — `told(serveAsked(CHANNEL.windowReport, …))` — and `wire()`
+registers `on` for those. A wrapper rather than a fourth `serve…` variant,
+because *told* is orthogonal to everything else a declaration says: this one
+channel is both told and wants to know which window told it.
+
+**And the second lesson is one I keep relearning.** This refactor was verified at
+every step by typecheck and 1,147 unit tests, and the thing that caught the only
+real regression in eight steps was a black-box check driving the actual app. The
+unit tests can only relate what the code says; the acceptance suites are the only
+place where what the two processes *do* is observed. That is twice now in a
+fortnight — note 58 measured pixels, this one opened a window — that the check
+which earned its keep was the slow one.

@@ -15,13 +15,13 @@
 // the integration suites can drive it under plain node (`layering.test.ts`).
 
 import type { BrowserWindow, WebContents } from 'electron'
-import type { DocumentService } from './services/document-service.ts'
+import type { DocumentService } from '../services/document-service.ts'
 import { attachWindow } from './ipc.ts'
 import { setMenuTargets } from './menu.ts'
-import { STREAM_ID, type DocumentId } from '../shared/document-api.ts'
-import type { WindowInfo, WindowReport } from '../shared/ipc.ts'
-import type { NavTarget } from '../shared/pane-api.ts'
-import { defaultUiState, defaultWindowState, type UiState, type WindowState } from '../shared/ui-state.ts'
+import { STREAM_ID, type DocumentId } from '../../shared/document-api.ts'
+import type { WindowInfo, WindowReport } from '../../shared/ipc.ts'
+import type { NavTarget } from '../../shared/pane-api.ts'
+import { defaultUiState, defaultWindowState, type UiState, type WindowState } from '../../shared/ui-state.ts'
 
 interface Entry {
   readonly id: number
@@ -116,8 +116,8 @@ export class Windows {
   }
 
   /** Which window a renderer is, answered to the renderer asking. */
-  infoFor(sender: WebContents): WindowInfo {
-    const found = this.#entryFor(sender)
+  infoFor(asker: number): WindowInfo {
+    const found = this.#entryFor(asker)
     return {
       id: found?.id ?? 0,
       state: found?.state ?? defaultWindowState,
@@ -128,8 +128,8 @@ export class Windows {
   }
 
   /** What a window is showing now. Also what it is called, which is its title. */
-  report(sender: WebContents, report: WindowReport): void {
-    const found = this.#entryFor(sender)
+  report(asker: number, report: WindowReport): void {
+    const found = this.#entryFor(asker)
     if (found === undefined) return
     found.state = { location: report.location, cursor: report.cursor }
     found.importable = report.importable
@@ -144,8 +144,8 @@ export class Windows {
     this.#save()
   }
 
-  close(sender: WebContents): void {
-    this.#entryFor(sender)?.window.close()
+  close(asker: number): void {
+    this.#entryFor(asker)?.window.close()
   }
 
   /**
@@ -171,8 +171,8 @@ export class Windows {
    * taking focus, or one whose click landed while a dialog had it — would
    * otherwise be told there is nothing to import, about the file it is showing.
    */
-  importableFor(sender: WebContents): DocumentId | null {
-    return this.#entryFor(sender)?.importable ?? null
+  importableFor(asker: number): DocumentId | null {
+    return this.#entryFor(asker)?.importable ?? null
   }
 
   #focused(): Entry | undefined {
@@ -211,9 +211,17 @@ export class Windows {
     await this.#service.saveUiState(state)
   }
 
-  #entryFor(sender: WebContents): Entry | undefined {
+  /**
+   * The window a renderer is, by its id.
+   *
+   * **A number rather than a `WebContents`**, which is all it ever was: this
+   * matched on `sender.id` from the start. Taking the id means the frame service
+   * can declare its own channels with `serveAsked` and needs no way to carry an
+   * Electron object across the boundary (D83).
+   */
+  #entryFor(asker: number): Entry | undefined {
     for (const entry of this.#entries.values()) {
-      if (!entry.window.isDestroyed() && entry.window.webContents.id === sender.id) return entry
+      if (!entry.window.isDestroyed() && entry.window.webContents.id === asker) return entry
     }
     return undefined
   }

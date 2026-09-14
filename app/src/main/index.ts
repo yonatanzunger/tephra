@@ -4,12 +4,12 @@
 
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection } from './menu.ts'
-import { verifyMode, verifyEnv } from './verify-mode.ts'
+import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection } from './shell/menu.ts'
+import { verifyMode, verifyEnv } from './shell/verify-mode.ts'
 import { author } from './x/comments.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
-import { declareScheme, serveRenderer, APP_ORIGIN } from './scheme.ts'
+import { declareScheme, serveRenderer, APP_ORIGIN } from './shell/scheme.ts'
 import { Notebook, type OpenOptions } from './w/notebook.ts'
 import { LockHeldError } from './w/lock.ts'
 import { deleteTheme, listThemes, saveTheme, seedThemes } from './w/themes.ts'
@@ -46,8 +46,8 @@ if (verifyMode()) {
       'oversized-window override and abrupt exit are all reachable. Never for ordinary use.',
   )
 }
-import { DocumentService, registerDocumentIpc, registerWindowIpc } from './ipc.ts'
-import { Windows } from './windows.ts'
+import { DocumentService, registerDocumentIpc, registerWindowIpc } from './shell/ipc.ts'
+import { Windows } from './shell/windows.ts'
 
 // app.getAppPath() rather than import.meta.url: the built main process is CJS,
 // where import.meta does not exist, and this works in both.
@@ -316,13 +316,13 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
 /**
  * The task list, in its own window.
  *
- * `todoList()` makes it if there is not one yet: a notebook that has never had
+ * `todo.list()` makes it if there is not one yet: a notebook that has never had
  * a task list should not carry an empty directory for one, and asking to see it
  * is a good moment to decide you have one (T1).
  */
 async function showTasks(): Promise<void> {
   if (service === null) return
-  windows?.reveal({ kind: 'document', id: await service.todo.todoList() })
+  windows?.reveal({ kind: 'document', id: await service.todo.list() })
 }
 
 /**
@@ -336,7 +336,7 @@ async function showTasks(): Promise<void> {
  */
 async function reorient(): Promise<void> {
   if (service === null) return
-  const win = windows?.reveal({ kind: 'document', id: await service.todo.todoList() })
+  const win = windows?.reveal({ kind: 'document', id: await service.todo.list() })
   win?.webContents.send(CHANNEL.menuCommand, 'reorient')
 }
 

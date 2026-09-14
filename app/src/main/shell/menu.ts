@@ -15,7 +15,7 @@
 // rather than inherited; omitting them silently removes copy and paste.
 
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
-import { CHANNEL } from '../shared/ipc.ts'
+import { CHANNEL } from '../../shared/ipc.ts'
 import {
   RANGE_COMMANDS,
   isEnabled,
@@ -23,7 +23,7 @@ import {
   type CommandGroup,
   type RangeCommandId,
   type SelectionState,
-} from '../shared/commands.ts'
+} from '../../shared/commands.ts'
 import { verifyMode } from './verify-mode.ts'
 
 export interface MenuState {

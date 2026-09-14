@@ -139,7 +139,7 @@ const ROLE_KEYS: Readonly<Record<string, string>> = {
 }
 
 async function menuKeys(): Promise<readonly string[]> {
-  const menu = await readFile(join(SRC, 'main', 'menu.ts'), 'utf8')
+  const menu = await readFile(join(SRC, 'main', 'shell', 'menu.ts'), 'utf8')
   const hand = [...menu.matchAll(/accelerator: '([^']+)'/g)].map(m => m[1] as string)
   const roles = [...menu.matchAll(/role: '([a-zA-Z]+)'/g)]
     .map(m => ROLE_KEYS[m[1] as string])

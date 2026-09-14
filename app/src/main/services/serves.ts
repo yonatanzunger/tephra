@@ -45,6 +45,19 @@ export interface Served {
    * other's place.
    */
   readonly wantsAsker?: true
+  /**
+   * Whether the renderer **tells** this channel rather than asking it.
+   *
+   * `ipcRenderer.send` and `ipcRenderer.invoke` are two different doors:
+   * `ipcMain.handle` is deaf to a `send`, and `ipcMain.on` never gets to reply.
+   * A service declares which door it is behind, because the wiring cannot know —
+   * **and the failure when it guesses is silent**. `windowReport` was wired as
+   * asked, the renderer went on sending its caret position into a channel with
+   * no listener, and nothing anywhere logged a word: no error, no dropped
+   * message, just a caret that had never been recorded by the time the window
+   * was reopened.
+   */
+  readonly told?: true
 }
 
 /** A service that answers the renderer. */
@@ -134,4 +147,18 @@ export function claim(services: readonly Serves[]): ReadonlyMap<string, Served> 
     }
   }
   return claimed
+}
+
+/**
+ * Mark a declaration as one the renderer **tells** — `ipcRenderer.send`, no
+ * reply — so the wiring listens with `ipcMain.on` instead of answering with
+ * `ipcMain.handle`.
+ *
+ * **A wrapper rather than a fourth `serve…`**, because *told* is orthogonal to
+ * everything else a declaration says: `windowReport` is both told and wants to
+ * know which window told it, and a variant per combination would be four names
+ * for two questions. `told(serveAsked(…))` reads as the two facts it is.
+ */
+export function told(served: Served): Served {
+  return { ...served, told: true }
 }

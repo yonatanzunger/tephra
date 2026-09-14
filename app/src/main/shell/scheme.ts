@@ -7,11 +7,11 @@
 
 import { protocol, net } from 'electron'
 import { resolve } from 'node:path'
-import { resolveWithinRoot } from './paths.ts'
+import { resolveWithinRoot } from '../paths.ts'
 import { pathToFileURL } from 'node:url'
-import { SCHEME } from '../shared/scheme.ts'
+import { SCHEME } from '../../shared/scheme.ts'
 
-export { APP_ORIGIN, NOTEBOOK_ORIGIN, SCHEME } from '../shared/scheme.ts'
+export { APP_ORIGIN, NOTEBOOK_ORIGIN, SCHEME } from '../../shared/scheme.ts'
 
 /**
  * MUST be called before app.whenReady(). Electron requires the privilege

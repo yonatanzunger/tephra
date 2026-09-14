@@ -421,11 +421,12 @@ and a fix bundled into a move spends that property.
        *which window asked*, as a **number**. A cursor belongs to the window
        that opened it — two windows searching are two walks through the corpus —
        and a number rather than a `WebContents` keeps Electron out of a service.
-   - **`frame` is not a service and was removed from this plan.** Four of its
-     six handlers pass `e.sender` — the `WebContents` object — to `windows.ts`,
-     which imports `BrowserWindow`. It is Electron furniture like `menu.ts` and
-     `print.ts`. See *the shell tier* below: the honest reading is that it is a
-     service on a tier this taxonomy had not named.
+   - **`frame` was removed from this plan here and came back at step 8.** Four of
+     its six handlers pass `e.sender` — the `WebContents` object — to
+     `windows.ts`, which imports `BrowserWindow`, so it read as Electron
+     furniture like `menu.ts` and `print.ts`. Two things were wrong with that:
+     the taxonomy had not named the tier such furniture lives on, and the
+     handlers do not actually want a `WebContents` — only the id inside it.
    - **`serveKinds` for the union channels.** `docket` carried a 34-case
      `switch` in `ipc.ts` and `todo` a 19-case one; a map of handlers says the
      same thing **exhaustively** — adding a command to either union is a compile
@@ -469,8 +470,32 @@ and a fix bundled into a move spends that property.
    - `DocumentService` is **2,805 → 1,238** and holds what is left: windows and
      the text contract, the file lifecycle, UI state, the zone offer, and the
      remaining hand-written channels.
-   - Still to do: **the shell tier** (name it, and move `frame` into it as a real
-     service), and the `docket`/`todo` prefix strip.
+8. **The shell tier, named, and `frame` is a service after all.** `git mv` of
+   `ipc.ts`, `menu.ts`, `print.ts`, `scheme.ts`, `verify-mode.ts` and
+   `windows.ts` into `src/main/shell/`, then `FrameService` declaring all six
+   window channels.
+   - **It needed no exemption in the end.** The four verbs that looked like the
+     reason a frame service was impossible took a `WebContents` and read nothing
+     from it but `sender.id` — `Windows` has always matched windows by id and
+     keyed its registry `Map<number, Entry>`. They take the id, and the service
+     declares them with `serveAsked` like any other. **The Electron object never
+     crosses the boundary**; the tier's licence is spent on one line, the push
+     to a revealed window.
+   - The layering test now states *NO SERVICE imports electron* over the
+     **directory** `main/services/`, so the rule covers services not yet written
+     rather than a list of names to remember to extend.
+   - Two path assertions moved with the files (`keymap`'s read of `menu.ts`, the
+     composition list's `print.ts`), which is the layering tests doing exactly
+     the job they were written for.
+
+9. **The prefix strip.** `docketAdd` → `add`, `todoItems` → `items`, 48 names
+   across some four hundred call sites; `dockets()` → `all()` and `todoList()` →
+   `list()` where the plain strip left nothing. Mechanical, and typecheck caught
+   both places it over-reached: `CorpusIndex.todoTags` is not a store method and
+   two structural type literals in the docket suite name the methods they
+   expect.
+
+Nothing is left on this plan.
 
 ## The agenda, and what sits at each level (D84)
 
@@ -567,8 +592,12 @@ is **one** distortion: the capture split — and that split was an improvement
 anyway.
 
 Enforceable the same way: `main/services/` Electron-free, `main/shell/` not, both
-checked by directory. To be done after todo and docket, which are pure domain and
-do not touch the question.
+checked by directory.
+
+**Done 2026-09-14, and it cost less than this section expected.** `frame` turned
+out to need no Electron in its service at all (step 8 above), so the tier's
+licence is used by `windows.ts`, `menu.ts`, `print.ts`, `scheme.ts` and one line
+of `FrameService` — not by the six handlers that prompted the question.
 5. **Layer 2 last**, because it is the part the cycle lives in, and by then both
    its dependencies are behind interfaces.
 

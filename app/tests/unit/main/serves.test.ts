@@ -7,7 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { claim, serve, serveAsked, serveKinds, type Serves } from '../../../src/main/services/serves.ts'
+import { claim, serve, serveAsked, serveKinds, told, type Serves } from '../../../src/main/services/serves.ts'
 
 const serving = (...served: ReturnType<typeof serve>[]): Serves => ({ serves: () => served })
 
@@ -81,6 +81,27 @@ test('A CHANNEL MAY ASK WHICH WINDOW IS ASKING, as a number', () => {
 test('and an ordinary channel is not told, which is the default', () => {
   const one: Serves = { serves: () => [serve('k', () => 1)] }
   assert.equal(claim([one]).get('k')?.wantsAsker, undefined)
+})
+
+test('A TOLD CHANNEL SAYS SO, because the two doors are not interchangeable', () => {
+  // **The failure this exists for, which was not hypothetical.** `windowReport`
+  // is `ipcRenderer.send` — the renderer reports the caret and does not wait. It
+  // was declared like every other channel, so the wiring registered
+  // `ipcMain.handle`, which is **deaf to a send**. Nothing errored, nothing
+  // logged, no message was reported dropped; the caret was simply never recorded,
+  // and the only thing that noticed was an m0 acceptance check reopening a
+  // window. The declaration has to carry it, because the wiring cannot know.
+  const one: Serves = {
+    serves: () => [told(serveAsked('r', (asker: number, at: number) => [asker, at]))],
+  }
+  const served = claim([one]).get('r')
+  assert.equal(served?.told, true, 'the wiring must listen, not answer')
+  assert.equal(served?.wantsAsker, true, 'and told is orthogonal to the asker')
+})
+
+test('and an ordinary channel is asked, which is the default', () => {
+  const one: Serves = { serves: () => [serve('k', () => 1)] }
+  assert.equal(claim([one]).get('k')?.told, undefined)
 })
 
 // ── a channel that carries a command union ─────────────────────────────────

@@ -155,7 +155,7 @@ const NOT_THE_NOTEBOOK = ['system-zone.ts']
  * this list when the last of it has moved into a service.
  */
 const COMPOSITION = [
-  'index.ts', 'print.ts',
+  'index.ts', 'shell/print.ts',
   'services/corpus-service.ts', 'services/durability-service.ts',
   'services/day-service.ts', 'services/document-service.ts',
 ]

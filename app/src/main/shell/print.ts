@@ -17,8 +17,8 @@ import { writeFile } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { PrintJob } from '../shared/ipc.ts'
-import { dayDir, LOCAL } from './w/layout.ts'
+import type { PrintJob } from '../../shared/ipc.ts'
+import { dayDir, LOCAL } from '../w/layout.ts'
 import { verifyMode } from './verify-mode.ts'
 
 /**

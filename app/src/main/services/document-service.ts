@@ -304,19 +304,19 @@ export class DocumentService {
   }
 
   /**
-   * The docket service.
+   * The docket store: `service.docket.add(…)`, `service.docket.matters(…)`.
    *
-   * **Its methods still carry a `docket` prefix**, so this reads
-   * `service.docket.docketAdd(…)`. The prefix distinguished them inside one
-   * enormous class and now says twice what the accessor says once; stripping it
-   * is a rename across some two hundred and fifty call sites and belongs in its
-   * own change, not in the move that made it redundant.
+   * **The prefixes are gone.** Inside one enormous class `docketAdd` had to say
+   * which half of the notebook it belonged to; once the halves became classes
+   * the prefix said twice what the accessor says once, and the strip was its own
+   * change (some four hundred call sites) rather than a rider on the move that
+   * made it redundant.
    */
   get docket(): Dockets {
     return this.#docket
   }
 
-  /** The task list service — its methods carry a `todo` prefix, as above. */
+  /** The task store, the same way: `service.todo.add(…)`, `service.todo.items(…)`. */
   get todo(): Tasks {
     return this.#todo
   }
@@ -366,7 +366,7 @@ export class DocumentService {
    * A synchronous `today` is a lie until the clock is seeded, because the day
    * cannot be known without reading the newest written day and the notebook's
    * zone. The old comment claimed every door awaited the seed; six of about a
-   * hundred and fifty did, and `todoAdd` was not among them — so a write racing
+   * hundred and fifty did, and `todo.add` was not among them — so a write racing
    * startup could file an item under the guessed day while every later read
    * looked under the real one, and the item simply was not there.
    *

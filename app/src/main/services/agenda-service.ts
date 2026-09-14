@@ -130,60 +130,60 @@ export class AgendaService implements Serves {
       // Reconciliation's own door, off the docket's union (D77, D83).
       serve(CHANNEL.reconcile, () => this.reconcile()),
       serveKinds<DocketCommand>(CHANNEL.docket, {
-      list: () => this.#docket.dockets(),
-      matters: command => this.#docket.docketMatters(command.docket),
-      add: command => this.#docket.docketAdd(command.docket, command.name, command.shape, command.section),
-      rename: command => this.#docket.docketRename(command.docket, command.matter, command.name),
-      mode: command => this.#docket.docketSetMode(command.docket, command.matter, command.mode),
-      start: command => this.#docket.docketSetStart(command.docket, command.matter, command.start),
-      moveTo: command => this.#docket.docketMoveTo(command.docket, command.matter, command.to),
-      dates: command => this.#docket.docketSetDates(command.docket, command.matter, command.dates),
-      every: command => this.#docket.docketSetEvery(command.docket, command.matter, command.every),
-      after: command => this.#docket.docketSetAfter(command.docket, command.matter, command.after),
-      advance: command => this.#docket.docketAdvance(command.docket, command.matter),
-      owner: command => this.#docket.docketSetOwner(command.docket, command.matter, command.owner),
-      link: command => this.#docket.docketSetLink(command.docket, command.matter, command.link),
-      tag: command => this.#docket.docketTag(command.docket, command.matter, command.subject),
-      untag: command => this.#docket.docketUntag(command.docket, command.matter, command.subject),
-      remove: command => this.#docket.docketRemove(command.docket, command.matter),
-      notes: command => this.#docket.docketSetNotes(command.docket, command.matter, command.notes),
-      addStep: command => this.#docket.docketAddStep( command.docket, command.matter, command.when, command.text, command.stepKind, ),
-      editStep: command => this.#docket.docketEditStep( command.docket, command.matter, command.step, command.text, ),
-      stepWhen: command => this.#docket.docketSetStepWhen( command.docket, command.matter, command.step, command.when, ),
-      stepKind: command => this.#docket.docketSetStepKind( command.docket, command.matter, command.step, command.stepKind, ),
-      removeStep: command => this.#docket.docketRemoveStep(command.docket, command.matter, command.step),
-      completeStep: command => this.#docket.docketCompleteStep( command.docket, command.matter, command.step, command.done, ),
-      activate: command => this.#docket.docketActivate(command.docket, command.matter),
-      suspend: command => this.#docket.docketSuspend(command.docket, command.matter),
-      sections: command => this.#docket.docketSections(command.docket),
-      addSection: command => this.#docket.docketAddSection(command.docket, command.name),
-      renameSection: command => this.#docket.docketRenameSection(command.docket, command.name, command.to),
-      removeSection: command => this.#docket.docketRemoveSection(command.docket, command.name),
-      nudgeSection: command => this.#docket.docketNudgeSection(command.docket, command.name, command.delta),
-      place: command => this.#docket.docketMoveMatter( command.docket, command.matter, command.section, command.before, ),
-      nudge: command => this.#docket.docketNudgeMatter(command.docket, command.matter, command.delta),
-      move: command => this.#docket.docketMove(command.docket, command.matter, command.to),
+      list: () => this.#docket.all(),
+      matters: command => this.#docket.matters(command.docket),
+      add: command => this.#docket.add(command.docket, command.name, command.shape, command.section),
+      rename: command => this.#docket.rename(command.docket, command.matter, command.name),
+      mode: command => this.#docket.setMode(command.docket, command.matter, command.mode),
+      start: command => this.#docket.setStart(command.docket, command.matter, command.start),
+      moveTo: command => this.#docket.moveTo(command.docket, command.matter, command.to),
+      dates: command => this.#docket.setDates(command.docket, command.matter, command.dates),
+      every: command => this.#docket.setEvery(command.docket, command.matter, command.every),
+      after: command => this.#docket.setAfter(command.docket, command.matter, command.after),
+      advance: command => this.#docket.advance(command.docket, command.matter),
+      owner: command => this.#docket.setOwner(command.docket, command.matter, command.owner),
+      link: command => this.#docket.setLink(command.docket, command.matter, command.link),
+      tag: command => this.#docket.tag(command.docket, command.matter, command.subject),
+      untag: command => this.#docket.untag(command.docket, command.matter, command.subject),
+      remove: command => this.#docket.remove(command.docket, command.matter),
+      notes: command => this.#docket.setNotes(command.docket, command.matter, command.notes),
+      addStep: command => this.#docket.addStep( command.docket, command.matter, command.when, command.text, command.stepKind, ),
+      editStep: command => this.#docket.editStep( command.docket, command.matter, command.step, command.text, ),
+      stepWhen: command => this.#docket.setStepWhen( command.docket, command.matter, command.step, command.when, ),
+      stepKind: command => this.#docket.setStepKind( command.docket, command.matter, command.step, command.stepKind, ),
+      removeStep: command => this.#docket.removeStep(command.docket, command.matter, command.step),
+      completeStep: command => this.#docket.completeStep( command.docket, command.matter, command.step, command.done, ),
+      activate: command => this.#docket.activate(command.docket, command.matter),
+      suspend: command => this.#docket.suspend(command.docket, command.matter),
+      sections: command => this.#docket.sections(command.docket),
+      addSection: command => this.#docket.addSection(command.docket, command.name),
+      renameSection: command => this.#docket.renameSection(command.docket, command.name, command.to),
+      removeSection: command => this.#docket.removeSection(command.docket, command.name),
+      nudgeSection: command => this.#docket.nudgeSection(command.docket, command.name, command.delta),
+      place: command => this.#docket.moveMatter( command.docket, command.matter, command.section, command.before, ),
+      nudge: command => this.#docket.nudgeMatter(command.docket, command.matter, command.delta),
+      move: command => this.#docket.move(command.docket, command.matter, command.to),
       }),
       serveKinds<TodoCommand>(CHANNEL.todo, {
-      list: () => this.#todo.todoList(),
-      today: command => this.#todo.todoToday(command.list),
-      items: command => this.#todo.todoItems(command.list, command.date),
-      add: command => this.#todo.todoAdd(command.list, command.text),
+      list: () => this.#todo.list(),
+      today: command => this.#todo.today(command.list),
+      items: command => this.#todo.items(command.list, command.date),
+      add: command => this.#todo.add(command.list, command.text),
       status: command => this.todoSetStatus(command.list, command.item, command.status, command.note),
-      edit: command => this.#todo.todoEdit(command.list, command.item, command.text),
-      notes: command => this.#todo.todoSetNotes(command.list, command.item, command.notes),
-      remove: command => this.#todo.todoRemove(command.list, command.item),
-      tags: () => this.#todo.todoTags(),
-      days: command => this.#todo.todoDays(command.list),
-      resolved: () => this.#todo.todoResolved(),
-      backlog: () => this.#todo.todoBacklog(),
-      walk: command => this.#todo.todoWalk(command.list, command.date),
+      edit: command => this.#todo.edit(command.list, command.item, command.text),
+      notes: command => this.#todo.setNotes(command.list, command.item, command.notes),
+      remove: command => this.#todo.remove(command.list, command.item),
+      tags: () => this.#todo.tags(),
+      days: command => this.#todo.days(command.list),
+      resolved: () => this.#todo.resolved(),
+      backlog: () => this.#todo.backlog(),
+      walk: command => this.#todo.walk(command.list, command.date),
       bulk: command => this.todoBulk(command.list, command.items, command.action),
       putDown: command => this.todoPutDown(command.list, command.item, command.docket),
       matterFor: command => this.matterFor(command.item),
-      chosen: command => this.#todo.todoChosen(command.list, command.date),
-      choose: command => this.#todo.todoChoose(command.list, command.date, command.item, command.chosen),
-      finishWalk: command => this.#todo.todoFinishWalk(command.list, command.date, command.drop),
+      chosen: command => this.#todo.chosen(command.list, command.date),
+      choose: command => this.#todo.choose(command.list, command.date, command.item, command.chosen),
+      finishWalk: command => this.#todo.finishWalk(command.list, command.date, command.drop),
       }),
     ]
   }
@@ -288,7 +288,7 @@ export class AgendaService implements Serves {
     // **Dockets: what is coming.** A step already on the list is the other
     // source's business, which `horizonOf` is what enforces.
     for (const docket of await this.#store.corpus.list('docket')) {
-      for (const matter of await this.#docket.docketMatters(docket)) {
+      for (const matter of await this.#docket.matters(docket)) {
         for (const step of matterHorizon(matter, window, addDays, this.#day.zone)) {
           rows.push({
             on: step.on,
@@ -313,8 +313,8 @@ export class AgendaService implements Serves {
     // items, which is the live set — an undone item carries forward, so a
     // deadline that has gone by is still in front of somebody, and that is
     // precisely the row H8 asks the horizon to keep showing.
-    const list = await this.#todo.todoList()
-    for (const item of await this.#todo.todoItems(list, this.#day.today)) {
+    const list = await this.#todo.list()
+    for (const item of await this.#todo.items(list, this.#day.today)) {
       if (item.due === null || !isLive(item.status)) continue
       if (!inHorizon(item.due, window)) continue
       rows.push({
@@ -349,7 +349,7 @@ export class AgendaService implements Serves {
    */
   async matterFor(item: string): Promise<{ docket: DocumentId; matter: string } | null> {
     for (const docket of await this.#store.corpus.list('docket')) {
-      for (const one of await this.#docket.docketMatters(docket)) {
+      for (const one of await this.#docket.matters(docket)) {
         if (one.id === null) continue
         if (one.steps.some(step => step.made === item)) return { docket, matter: one.id }
       }
@@ -458,7 +458,7 @@ export class AgendaService implements Serves {
    */
   async todoPutDown(list: DocumentId, item: string, docket?: DocumentId): Promise<string | null> {
     await this.#day.ready()
-    const found = (await this.#todo.todoItems(list, this.#day.today)).find(one => one.id === item)
+    const found = (await this.#todo.items(list, this.#day.today)).find(one => one.id === item)
     // **Already put down is already housed.** The provenance check below only
     // catches a task a docket MADE; one that was put down has a matter nothing
     // points at, so asking twice would make a second copy of it — which is the
@@ -481,11 +481,11 @@ export class AgendaService implements Serves {
     // **Its subjects and its owner come with it**, being facts about the thing
     // rather than about the list it was on; the due date does not, because a
     // deadline you have just declined is not one.
-    const made = await this.#docket.docketAdd(where, withoutMarks(found), { mode: 'task' })
+    const made = await this.#docket.add(where, withoutMarks(found), { mode: 'task' })
     await this.#store.mutate(async () =>
       this.#store.corpus.use(where, doc => (doc as DocketDocument).cameFrom(made, item)))
-    for (const tag of found.tags) await this.#docket.docketTag(where, made, tag)
-    if (found.owner !== null) await this.#docket.docketSetOwner(where, made, found.owner)
+    for (const tag of found.tags) await this.#docket.tag(where, made, tag)
+    if (found.owner !== null) await this.#docket.setOwner(where, made, found.owner)
     // **And the line is handed over**, last, so it names a docket that exists.
     // One direction, one instant: from here the matter is the docket's, the line
     // is a record of what happened, and nothing on the task list can act on it.
@@ -507,7 +507,7 @@ export class AgendaService implements Serves {
    */
   async #finished(item: string): Promise<void> {
     for (const docket of await this.#store.corpus.list('docket')) {
-      for (const matter of await this.#docket.docketMatters(docket)) {
+      for (const matter of await this.#docket.matters(docket)) {
         const step = matter.steps.find(one => one.made === item)
         if (step?.id === undefined || step.id === null || matter.id === null) continue
         await this.#store.mutate(async () =>
@@ -530,7 +530,7 @@ export class AgendaService implements Serves {
   async #reconcileDockets(): Promise<void> {
     await this.#day.ready()
     const today = this.#day.today
-    const list = await this.#todo.todoList()
+    const list = await this.#todo.list()
 
     /**
      * Which of the items dockets made are still being asked of somebody.
@@ -547,7 +547,7 @@ export class AgendaService implements Serves {
      * waiting*, and none of them means *ask again*.
      */
     const live = new Set(
-      (await this.#todo.todoItems(list, today))
+      (await this.#todo.items(list, today))
         .filter(one => isLive(one.status))
         .flatMap(one => (one.id === null ? [] : [one.id])),
     )
@@ -560,9 +560,9 @@ export class AgendaService implements Serves {
         ?? nameOf(docket as string)
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
-      for (const id of (await this.#docket.docketMatters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
+      for (const id of (await this.#docket.matters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
         if (await this.#advanceDocket(docket, id, today, live)) touched = true
-        const matter = (await this.#docket.docketMatters(docket)).find(one => one.id === id)
+        const matter = (await this.#docket.matters(docket)).find(one => one.id === id)
         if (matter === undefined) continue
         for (const step of matter.steps) {
           if (step.id === null || step.kind !== 'task') continue
@@ -598,7 +598,7 @@ export class AgendaService implements Serves {
               spellTag(domain),
               matter.owner === null ? null : spellOwner(matter.owner),
             ]
-            const item = await this.#todo.todoAdd(list, [step.text, ...marks, `DUE ${due}`]
+            const item = await this.#todo.add(list, [step.text, ...marks, `DUE ${due}`]
               .filter(one => one !== null && one !== '')
               .join(' '))
             // **The matter is a TAG, not a prefix.** On the list a step's text
@@ -625,7 +625,7 @@ export class AgendaService implements Serves {
             // their decision as one they ticked. Taking any of them back would
             // be overruling somebody — which is what the finished-item rule was
             // always really about, stated too narrowly.
-            await this.#todo.todoRemove(list, step.made)
+            await this.#todo.remove(list, step.made)
             await this.#setStepMade(docket, id, step.id, null)
             touched = true
           }
@@ -659,7 +659,7 @@ export class AgendaService implements Serves {
   ): Promise<boolean> {
     let moved = false
     for (let guard = 0; guard < 500; guard += 1) {
-      const matter = (await this.#docket.docketMatters(docket)).find(one => one.id === id)
+      const matter = (await this.#docket.matters(docket)).find(one => one.id === id)
       // **A recurrence is an interval OR a list**, and this asked only about the
       // interval — so a listed matter never moved on at all, which is the one
       // thing a list is for.

@@ -48,7 +48,7 @@ test('THE POINT: a function runs when its key changes, and the caller waits', as
   await table.changed('docket:house')
   order.push('caller resumed')
   // **The verb's promise has to mean the work is done.** Fire-and-forget was
-  // tried: `docketActivate` resolved before the task it implied existed, so a
+  // tried: `docket.activate` resolved before the task it implied existed, so a
   // caller reading the list straight afterwards got the old answer.
   assert.deepEqual(order, ['pass', 'caller resumed'])
 })
@@ -159,7 +159,7 @@ test('AN OUTSIDE WRITE DURING A PASS STILL WAITS', { timeout: 5_000 }, async () 
   // and other work genuinely interleaves in that window, because the pass awaits
   // its own writes and the queue serves other writers meanwhile. So a boolean
   // tells a second window's write *you are inside the work*, and it returns
-  // without waiting: `docketActivate` resolving before the task it implied
+  // without waiting: `docket.activate` resolving before the task it implied
   // existed, which is the reported bug, reproduced under a race.
   //
   // Async context asks the narrower question that is the real one: *is this call
@@ -181,7 +181,7 @@ test('AN ANSWER MEANS THE WORK IS DONE, however the runs fell', { timeout: 15_00
   // and *`#running` was cleared* got a promise that was already resolving — so
   // the caller was told its work was done when it had not begun. Nothing was
   // lost, since the next trigger picked the key up; the *answer* was wrong, and
-  // an early answer here is the `docketActivate` bug (D77).
+  // an early answer here is the `docket.activate` bug (D77).
   //
   // Stated as the contract rather than as the race: after `changed` answers, the
   // pass has seen the state as it was when we asked. Run enough times to land in

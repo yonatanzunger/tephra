@@ -118,7 +118,8 @@ may call which* a question with an answer.
 | **W** — infrastructure | `Notebook`, `Repository` and its git implementation, layout, atomic write, the lock, the watcher, themes | the filesystem |
 | **X lower** — per-document objects | `SegmentedDocument` and its kinds, `DocumentWindow`, `Segment`, and the parsing beneath them — frontmatter, markers, text-edits, anomalies, comments, day-clock | W |
 | **X upper** — whole-corpus objects | `Corpus` and `CorpusIndex`, **peers**: both built over the notebook, both reaching the same per-document objects, neither over the other. `Scanner` sits above the index | X lower, W |
-| **the services** | `main/services/` — a DAG of them (D83). The foundation is `Bus`, `CorpusService` (the store and the one mutation queue), `DurabilityService` (the three write tiers), `DayService`, `FixedPoints` (running derived state to a fixed point) and `change-keys.ts` (what a change is called). `DocumentService` still holds everything not yet split out. **All Electron-free**, checked by directory | X, W |
+| **the services** | `main/services/` — a DAG of them (D83). **Foundation:** `Bus`, `CorpusService` (the store and the one mutation queue), `DurabilityService` (the three write tiers), `DayService`, `FixedPoints` (running derived state to a fixed point), `change-keys.ts` (what a change is called), `serves.ts` (how a service declares its channels). **Domain:** `Dockets` and `Tasks` (the two stores), comments, nav, history, search. **Composing:** `AgendaService` (D84 — the horizon, reconciliation, the transfers). `DocumentService` holds the text contract, the file lifecycle and UI state. **All Electron-free**, checked by directory | X, W |
+| **the shell** | `main/shell/` — `FrameService` (which window this is, opening, revealing, closing, importing), the menu, printing, the `tephra://` scheme, verification mode, and `ipc.ts` doing the wiring. **This tier may use Electron, which is the point of naming it** (D83 as amended) | the services |
 | **the boundary** | `CHANNEL` + payload types, `preload` | — |
 | **X mirror** | `RemoteDocument`, `RemoteWindow` — a local copy, so coordinates answer synchronously | the boundary |
 | **Z** — features and UI | `Pane`, the editor, the surfaces, the frame | the mirror |
@@ -129,10 +130,19 @@ may call which* a question with an answer.
 > does the work is simply **acyclic**. Every service file names its tier and its
 > dependencies in its opening comment (D83).
 >
-> **The domain and composing services are still to come** — one per IPC channel
-> group, with the horizon, the reconciler and the transfer gestures above them.
-> `service-layers.md` has the plan and the progress; `DocumentService` is what
-> has not moved yet.
+> **Done 2026-09-14.** `DocumentService` went 2,805 → 1,238 lines across eight
+> steps, bottom-up; `service-layers.md` has the plan and what each step actually
+> cost. The load-bearing move was the same one four times over — **lower things
+> emit, higher things subscribe** — which is what lets `Dockets` and `Tasks` be
+> peers that have never heard of each other.
+>
+> **Why the shell tier is a tier and not an exemption.** The rule was written as
+> *no service imports Electron*, which is a rule about a layer dressed as a rule
+> about all services. What it buys is that three integration suites drive the
+> services under plain Node; what it costs is one distortion, `navOpen`'s split
+> — and under the amendment that split is the tier boundary rather than a special
+> case. `FrameService` needed no exemption at all: its window-sender verbs want
+> the window's **id**, which is what `Windows` has always matched on.
 
 **X lives in main, not in a hidden renderer** (D37). One consequence shapes
 everything else: the renderer holds a *mirror* of X — `RemoteDocument` and

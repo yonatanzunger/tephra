@@ -77,7 +77,7 @@ export class Tasks {
    * not carry an empty directory for one, and the first time you open the list
    * is a perfectly good moment to decide you have one.
    */
-  async todoList(): Promise<DocumentId> {
+  async list(): Promise<DocumentId> {
     await this.#day.ready()
     // **Named, not searched for** (D55 as amended, MT7). This used to return
     // whichever root-level `.todo` came first, which with two lists means one
@@ -115,7 +115,7 @@ export class Tasks {
    * today, and for an overall one there is nothing to carry, so it adopts and
    * stops.
    */
-  async todoToday(id: DocumentId): Promise<SegmentKey> {
+  async today(id: DocumentId): Promise<SegmentKey> {
     await this.#day.ready()
     const today = this.#day.today
     await this.#store.corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds))
@@ -133,10 +133,10 @@ export class Tasks {
    * constrain the format for — "if flow 3's designated set is persisted per
    * day, this is nearly free" — and D55 persisted it, so here is the bill.
    */
-  async todoDays(id: DocumentId): Promise<readonly DateKey[]> {
+  async days(id: DocumentId): Promise<readonly DateKey[]> {
     return this.#store.corpus.use(id, async doc => [...(await doc.keys())] as DateKey[], { mode: 'read' })
   }
-  async todoItems(id: DocumentId, date: DateKey): Promise<readonly TodoItem[]> {
+  async items(id: DocumentId, date: DateKey): Promise<readonly TodoItem[]> {
     return this.#store.corpus.use(id, doc => (doc as TodoDocument).itemsOn(date), { mode: 'read' })
   }
 
@@ -149,15 +149,15 @@ export class Tasks {
    * on reorient: the ritual is offered and never required (H10), so choosing has
    * to be a thing you can simply do.
    */
-  async todoChosen(id: DocumentId, date: DateKey): Promise<readonly string[]> {
+  async chosen(id: DocumentId, date: DateKey): Promise<readonly string[]> {
     return this.#store.corpus.use(id, doc => (doc as TodoDocument).chosenOn(date), { mode: 'read' })
   }
-  async todoChoose(id: DocumentId, date: DateKey, item: string, chosen: boolean): Promise<void> {
+  async choose(id: DocumentId, date: DateKey, item: string, chosen: boolean): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as TodoDocument).choose(date, item, chosen)))
     this.#touched()
   }
-  async todoAdd(id: DocumentId, text: string): Promise<string> {
+  async add(id: DocumentId, text: string): Promise<string> {
     const made = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as TodoDocument).add(text, this.#day.today, this.#takenIds)),
     )
@@ -166,11 +166,11 @@ export class Tasks {
   }
 
   /** Rewrite what is written under an item. Nothing in a note is parsed. */
-  async todoSetNotes(id: DocumentId, item: string, notes: readonly string[]): Promise<void> {
+  async setNotes(id: DocumentId, item: string, notes: readonly string[]): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).setNotes(item, notes)))
     this.#touched()
   }
-  async todoRemove(id: DocumentId, item: string): Promise<void> {
+  async remove(id: DocumentId, item: string): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).remove(item)))
     this.#touched()
   }
@@ -193,35 +193,35 @@ export class Tasks {
    * is and it lives here (D62). The index knows which day a file is; it does
    * not know which day it is now, and should not.
    */
-  async todoResolved(): Promise<Record<string, readonly ResolvedItem[]>> {
+  async resolved(): Promise<Record<string, readonly ResolvedItem[]>> {
     const byTag = await this.#store.index.resolvedByTag(this.#day.today, RESOLVED_DAYS)
     return Object.fromEntries(byTag)
   }
 
   /** Everything put down and not picked up again (T14). */
-  async todoBacklog(): Promise<readonly ResolvedItem[]> {
+  async backlog(): Promise<readonly ResolvedItem[]> {
     return this.#store.index.backlog()
   }
 
   /** Every tag that has ever been on a task (T6). The full set; live is today's. */
-  async todoTags(): Promise<readonly string[]> {
+  async tags(): Promise<readonly string[]> {
     return this.#store.index.todoTags()
   }
 
   /** What the walk knows about a day (T11). A read: it decides nothing. */
-  async todoWalk(id: DocumentId, date: DateKey): Promise<WalkState> {
+  async walk(id: DocumentId, date: DateKey): Promise<WalkState> {
     return this.#store.corpus.use(id, doc => (doc as TodoDocument).walkOf(date), { mode: 'read' })
   }
 
   /** End a pass. Serialised with every other write, for the reason D37 gives. */
-  async todoFinishWalk(id: DocumentId, date: DateKey, drop: readonly string[]): Promise<number> {
+  async finishWalk(id: DocumentId, date: DateKey, drop: readonly string[]): Promise<number> {
     const dropped = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as TodoDocument).finishWalk(date, drop)),
     )
     this.#touched()
     return dropped
   }
-  async todoEdit(id: DocumentId, item: string, text: string): Promise<void> {
+  async edit(id: DocumentId, item: string, text: string): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).edit(item, text)))
     this.#touched()
   }
