@@ -367,6 +367,12 @@ export class FixedPoints {
   /** Shared, so a write inside ANY function's work is known to be re-entrant. */
   readonly #inPass = new AsyncLocalStorage<true>()
 
+  /** Set while a `defer` is running, so its writes are held rather than run. */
+  readonly #batching = new AsyncLocalStorage<true>()
+
+  /** What a `defer` has reported, to be run when it finishes. */
+  readonly #held = new Set<string>()
+
   readonly #gate: Gate = work => {
     const next = this.#turnstile.then(work, work)
     this.#turnstile = next.then(
@@ -406,6 +412,41 @@ export class FixedPoints {
   }
 
   /**
+   * Do this, and let nothing reconcile until it is finished.
+   *
+   * **For a verb whose writes are only jointly consistent.** Resolving a task
+   * writes twice: the item's status, and the `done` stamp on the step that made
+   * it. Each is reported, and a pass that ran between them would see a world
+   * that never really existed — an item resolved whose step is not done, which
+   * reads as *nobody is waiting for this any more* and advances the matter from
+   * the wrong date.
+   *
+   * **Reordering does not fix it**, which is worth saying because it is the
+   * obvious idea: stamping `done` first lets a pass settle the instance and
+   * clear the stamp before the item is marked at all. The writes are not wrong
+   * in either order — what is wrong is being read halfway.
+   *
+   * Keys reported inside are collected and run afterwards, so nothing is lost
+   * and the verb still ends with derived state true. Uses the same async context
+   * as the re-entrancy question, and for the same reason: the question is *am I
+   * inside something*, and only the context can answer it.
+   */
+  async defer<T>(work: () => Promise<T>): Promise<T> {
+    if (this.#batching.getStore() === true) return work()
+    const done = await this.#batching.run(true, work)
+    // Whatever the work reported, now — and waited for, so a verb that has
+    // returned has finished, derived state included (D77).
+    const woken = [...this.#held]
+    this.#held.clear()
+    await Promise.all(
+      [...this.#runners.values()]
+        .filter(one => woken.some(key => one.matches(key)))
+        .map(one => one.note(woken.find(key => one.matches(key)) as string).catch(() => undefined)),
+    )
+    return done
+  }
+
+  /**
    * Something changed.
    *
    * **The key names the data, with reasonable specificity**, so triggers can be
@@ -427,6 +468,13 @@ export class FixedPoints {
   async changed(key: string): Promise<void> {
     const woken = [...this.#runners.values()].filter(one => one.matches(key))
     if (woken.length === 0) return
+    // **Inside a `defer`: held, not run.** The verb is partway through a set of
+    // writes that are only jointly consistent, and a pass now would read the
+    // half of it that exists.
+    if (this.#batching.getStore() === true) {
+      this.#held.add(key)
+      return
+    }
     // Started either way: the work has to happen, whoever asked for it. What
     // differs is only whether this caller waits for it.
     const settling = woken.map(one => one.note(key).catch(() => undefined))

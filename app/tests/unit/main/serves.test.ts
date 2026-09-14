@@ -7,7 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { claim, serve, type Serves } from '../../../src/main/services/serves.ts'
+import { claim, serve, serveAsked, type Serves } from '../../../src/main/services/serves.ts'
 
 const serving = (...served: ReturnType<typeof serve>[]): Serves => ({ serves: () => served })
 
@@ -19,7 +19,7 @@ test('A SERVICE DECLARES ITS CHANNELS, and they are collected', () => {
   )
   const channels = claim([comments])
   assert.deepEqual([...channels.keys()], ['tephra:doc:comments', 'tephra:doc:addComment'])
-  channels.get('tephra:doc:addComment')?.('c7')
+  channels.get('tephra:doc:addComment')?.answer('c7')
   assert.deepEqual(calls, ['add c7'])
 })
 
@@ -59,6 +59,26 @@ test('THE ARGUMENTS ARE A CLAIM, not a fact, and the cast is in one place', () =
   // where a reader looking for *where do we trust the other process* finds it.
   const seen: unknown[] = []
   const one = serving(serve('k', (a: number, b: string) => void seen.push([a, b])))
-  claim([one]).get('k')?.(7, 'seven')
+  claim([one]).get('k')?.answer(7, 'seven')
   assert.deepEqual(seen, [[7, 'seven']])
+})
+
+test('A CHANNEL MAY ASK WHICH WINDOW IS ASKING, as a number', () => {
+  // **A number, not a `WebContents`** — which is what keeps Electron out of a
+  // service. Search needs it because a query's cursor belongs to the window
+  // that opened it: two windows searching at once are two walks through the
+  // corpus, and a shared cursor would have them stealing each other's place.
+  const seen: unknown[] = []
+  const one: Serves = {
+    serves: () => [serveAsked('s', (asker: number, q: string) => void seen.push([asker, q]))],
+  }
+  const served = claim([one]).get('s')
+  assert.equal(served?.wantsAsker, true, 'the wiring is told to pass it')
+  served?.answer(12, 'boiler')
+  assert.deepEqual(seen, [[12, 'boiler']])
+})
+
+test('and an ordinary channel is not told, which is the default', () => {
+  const one: Serves = { serves: () => [serve('k', () => 1)] }
+  assert.equal(claim([one]).get('k')?.wantsAsker, undefined)
 })

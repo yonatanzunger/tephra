@@ -212,7 +212,7 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   await service.flush()
   await service.repository?.save('second')
 
-  const report = await service.restore(first)
+  const report = await service.pastVersions.restore(first)
   assert.equal(report.version, first)
   const now = await readFile(join(root, dayFile(today)), 'utf8')
   assert.match(now, /The good version\./)
@@ -223,10 +223,10 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   // Four: opening the notebook is itself a version, then first, second, and
   // the restore. Nothing was rewritten — which is the promise the purge
   // procedure depends on too.
-  const versions = await service.versions()
+  const versions = await service.pastVersions.versions()
   assert.equal(versions.length, 4)
   assert.match(versions[0]?.reason ?? '', /^Restored to/)
-  assert.match((await service.readDay(versions[1]!.id, today)) ?? '', /regrettable/)
+  assert.match((await service.pastVersions.readDay(versions[1]!.id, today)) ?? '', /regrettable/)
 })
 
 // ── what a path means, which is what File ▸ Open… asks (MC6) ───────────────

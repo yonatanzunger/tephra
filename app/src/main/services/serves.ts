@@ -34,6 +34,17 @@ export type Answer = (...args: readonly unknown[]) => unknown
 export interface Served {
   readonly channel: string
   readonly answer: Answer
+  /**
+   * Whether the answer wants to know **which window** asked, as its first
+   * argument.
+   *
+   * **A number, not a `WebContents`**, which is what keeps this from dragging
+   * Electron into a service. Search needs it because a query's cursor belongs to
+   * the window that opened it — two windows searching at once are two walks
+   * through the corpus, and a shared cursor would have them stealing each
+   * other's place.
+   */
+  readonly wantsAsker?: true
 }
 
 /** A service that answers the renderer. */
@@ -63,22 +74,34 @@ export function serve<A extends readonly unknown[]>(
 }
 
 /**
+ * Declare a channel whose answer is told which window asked.
+ *
+ * The asker arrives first, before whatever the renderer sent.
+ */
+export function serveAsked<A extends readonly unknown[]>(
+  channel: string,
+  answer: (asker: number, ...args: A) => unknown,
+): Served {
+  return { channel, answer: answer as Answer, wantsAsker: true }
+}
+
+/**
  * Every channel claimed, by whom, with collisions refused.
  *
  * **Separated from the wiring so it can be tested**: `ipc.ts` imports Electron
  * and cannot run under plain Node, and the part worth testing is this — who
  * claims what, and what happens when two services claim the same thing.
  */
-export function claim(services: readonly Serves[]): ReadonlyMap<string, Answer> {
-  const claimed = new Map<string, Answer>()
+export function claim(services: readonly Serves[]): ReadonlyMap<string, Served> {
+  const claimed = new Map<string, Served>()
   for (const service of services) {
-    for (const { channel, answer } of service.serves()) {
-      if (claimed.has(channel)) {
+    for (const served of service.serves()) {
+      if (claimed.has(served.channel)) {
         throw new Error(
-          `two services claim the channel ${channel} — each belongs to exactly one (D83)`,
+          `two services claim the channel ${served.channel} — each belongs to exactly one (D83)`,
         )
       }
-      claimed.set(channel, answer)
+      claimed.set(served.channel, served)
     }
   }
   return claimed

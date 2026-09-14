@@ -385,3 +385,55 @@ test('ONE FUNCTION DIVERGING LEAVES ANOTHER WORKING', { timeout: 5_000 }, async 
   await table.changed('calm')
   assert.equal(calm, 1, 'ran once and settled')
 })
+
+test('A DEFERRED ACT IS NEVER READ HALFWAY', { timeout: 5_000 }, async () => {
+  // **Why `defer` exists.** Resolving a task writes twice — the item's status,
+  // and the `done` stamp on the step that made it — and each write is reported.
+  // A pass running between them sees a world that never really existed: an item
+  // resolved whose step is not done, which reads as *nobody is waiting for this
+  // any more* and advances the matter from the wrong date.
+  //
+  // **Reordering does not fix it**, which is the obvious idea and worth stating:
+  // stamping first lets a pass settle the instance and clear the stamp before
+  // the item is marked at all. The writes are not wrong in either order — what
+  // is wrong is being read halfway.
+  const table = new FixedPoints()
+  const world = { status: 'open', stamped: false }
+  const seen: string[] = []
+  table.register(
+    fn('p', '^k', async () => void seen.push(`${world.status}/${world.stamped}`)),
+  )
+
+  await table.defer(async () => {
+    world.status = 'done'
+    await table.changed('k:item')
+    await new Promise(r => setTimeout(r, 5)) // room for a pass to slip in
+    world.stamped = true
+    await table.changed('k:step')
+  })
+
+  assert.deepEqual(seen, ['done/true'], 'the half-written world was never read')
+})
+
+test('and the deferred keys are still run, so nothing is lost', { timeout: 5_000 }, async () => {
+  const table = new FixedPoints()
+  const woken: string[] = []
+  table.register(fn('a', '^a$', async () => void woken.push('a')))
+  table.register(fn('b', '^b$', async () => void woken.push('b')))
+  await table.defer(async () => {
+    await table.changed('a')
+    await table.changed('b')
+  })
+  assert.deepEqual(woken.sort(), ['a', 'b'], 'both ran, after the act finished')
+})
+
+test('and nesting a deferral is harmless', { timeout: 5_000 }, async () => {
+  const table = new FixedPoints()
+  let ran = 0
+  table.register(fn('p', '^k$', async () => void ran++))
+  await table.defer(async () => {
+    await table.defer(async () => void (await table.changed('k')))
+    assert.equal(ran, 0, 'the inner one did not release early')
+  })
+  assert.equal(ran, 1)
+})

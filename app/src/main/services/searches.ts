@@ -16,12 +16,12 @@
 // offset — because which file a day lives in is the floor's business and not
 // something the surface should have to know (D54).
 
-import { dayFile, STREAM_DIR } from './w/layout.ts'
-import { parseQuery } from '../shared/query-text.ts'
-import { EVERYWHERE } from '../shared/search-api.ts'
-import type { DateKey, DocumentId, SegmentKey } from '../shared/document-api.ts'
-import type { SearchBatch, SearchOpened, SearchRequest } from '../shared/ipc.ts'
-import type { Cursor, Located, QueryId, Search } from '../shared/search-api.ts'
+import { dayFile, STREAM_DIR } from '../w/layout.ts'
+import { parseQuery } from '../../shared/query-text.ts'
+import { EVERYWHERE } from '../../shared/search-api.ts'
+import type { DateKey, DocumentId, SegmentKey } from '../../shared/document-api.ts'
+import type { SearchBatch, SearchOpened, SearchRequest } from '../../shared/ipc.ts'
+import type { Cursor, Located, QueryId, Search } from '../../shared/search-api.ts'
 
 /** One owner's cursors. A window id, in practice. */
 type Owner = number

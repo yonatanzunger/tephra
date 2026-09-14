@@ -77,6 +77,8 @@ import { DurabilityService } from './durability-service.ts'
 import { DayService } from './day-service.ts'
 import { CommentsService } from './comments-service.ts'
 import { NavService } from './nav-service.ts'
+import { HistoryService } from './history-service.ts'
+import { SearchService } from './search-service.ts'
 import type { Serves } from './serves.ts'
 
 /**
@@ -171,7 +173,6 @@ export class DocumentService {
     return this.#store.index
   }
 
-  readonly #search: Scanner
   /**
    * The windows, and what keeps each one's document open.
    *
@@ -210,6 +211,10 @@ export class DocumentService {
   readonly #comments: CommentsService
   /** What the sidebar asks, extracted (D52, D83). */
   readonly #nav: NavService
+  /** Reading the past and putting it back, extracted (D32, D83). */
+  readonly #history: HistoryService
+  /** Searching the corpus, extracted — and it owns the Scanner (D65, D83). */
+  readonly #search: SearchService
 
   readonly #notebook: Notebook
 
@@ -230,7 +235,6 @@ export class DocumentService {
     this.#durable = new DurabilityService(this.#store, options)
     // Beside the index rather than in the core: only search uses the Scanner,
     // so it belongs to the search service when that is split out (D83).
-    this.#search = new Scanner(notebook, this.#index)
     this.#day = new DayService(this.#store, this.#durable, this.#bus, this.#fixed, options)
     this.#systemZone = options.systemZone ?? systemZone
     // **The one upward edge left, inverted.** Every poll has to re-offer the
@@ -242,6 +246,8 @@ export class DocumentService {
     this.#registerReconcilers()
     this.#comments = new CommentsService(this.#store, this.#durable, this.#day)
     this.#nav = new NavService(this.#store, this.#day)
+    this.#history = new HistoryService(this.#store, this.#durable)
+    this.#search = new SearchService(this.#store)
   }
 
   /**
@@ -253,7 +259,7 @@ export class DocumentService {
    * up to `index.ts` and this class is finished.
    */
   services(): readonly Serves[] {
-    return [this.#comments, this.#nav]
+    return [this.#comments, this.#nav, this.#history, this.#search]
   }
 
   /**
@@ -271,6 +277,14 @@ export class DocumentService {
 
   get nav(): NavService {
     return this.#nav
+  }
+
+  get pastVersions(): HistoryService {
+    return this.#history
+  }
+
+  get searches(): SearchService {
+    return this.#search
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -613,9 +627,6 @@ export class DocumentService {
     return this.#durable.history
   }
 
-  async versions(limit = 50): Promise<readonly Version[]> {
-    return (await this.history?.versions(limit)) ?? []
-  }
 
 
   /** The corpus index (D52) — what the sidebar asks, and what repairs it. */
@@ -623,40 +634,13 @@ export class DocumentService {
     return this.#index
   }
 
-  /** v1's answer to a query, and not the only possible one (D65, D23). */
-  get search(): Search {
-    return this.#search
-  }
 
   /** Every written day in a range, as prose — what printing and export read. */
   async proseIn(from: DateKey, to: DateKey): Promise<readonly DayProse[]> {
     return (await this.#stream).proseIn(from, to)
   }
 
-  async readDay(version: VersionId, date: DateKey): Promise<string | null> {
-    return (await this.history?.readDay(version, date)) ?? null
-  }
 
-  /**
-   * Put the stream back the way it was at a version.
-   *
-   * **Flushed immediately, and a version taken straight away.** A restore that
-   * lived only in memory would be undone by a crash, and the one thing someone
-   * doing a restore cannot afford is for it not to have happened. Committing it
-   * at once also makes the restore itself a point to come back FROM, which is
-   * what makes "the way back from a bad restore is another restore" true.
-   */
-  async restore(version: VersionId): Promise<RestoreReport> {
-    const history = this.history
-    if (history === null) throw new Error('this notebook has no history to restore from')
-    // Through the Corpus, which is what knows which documents are open: a
-    // restore that wrote files under one would be undone by its buffer (MC7).
-    const report = await this.#serial(() => history.restore(version, this.#corpus))
-    this.#durable.unsaved()
-    await this.flush()
-    await this.#durable.saveVersionNamed(`Restored to ${version.slice(0, 7)}`)
-    return report
-  }
 
 
 
@@ -1014,16 +998,29 @@ export class DocumentService {
     this.#touched()
   }
 
+  /**
+   * Answer an item, and let the step that made it hear.
+   *
+   * **Deferred as one act, because it writes twice** — the item's status here
+   * and the `done` stamp below — and the two are only jointly consistent. Since
+   * every write is reported and wakes the docket clause (D83), a pass running
+   * between them would see an item resolved whose step is not done, read that as
+   * *nobody is waiting for this any more*, and advance the matter from the wrong
+   * date. Reordering does not help: stamping first lets a pass settle the
+   * instance and clear the stamp before the item is marked at all.
+   */
   async todoSetStatus(id: DocumentId, item: string, status: TodoStatus, note?: string): Promise<void> {
-    await this.#serial(async () =>
-      this.#corpus.use(id, doc => (doc as TodoDocument).setStatus(item, status, note)),
-    )
+    await this.#fixed.defer(async () => {
+      await this.#serial(async () =>
+        this.#corpus.use(id, doc => (doc as TodoDocument).setStatus(item, status, note)),
+      )
     // **Completion flows back to whatever asked for it** (H7a). Finishing the
     // task is the act a person performs; the step it came from has to hear,
     // because that is what unblocks the next one and what a recurrence measures
     // from. Without this the chain only advances if somebody also went to the
     // docket and said so, which is asking them to do it twice.
-    if (status === 'done') await this.#finished(item)
+      if (status === 'done') await this.#finished(item)
+    })
     // **And putting one down flows back too**, which finishing had covered and
     // nothing else did. *Nevermind* on a generated task left the step pointing
     // at an item nobody could see any more and never done — so a recurring

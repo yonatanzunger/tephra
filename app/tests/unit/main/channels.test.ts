@@ -84,8 +84,16 @@ const keysOf = (counts: Map<string, number>): Set<string> => new Set(counts.keys
 /**
  * What answers a channel in main: a hand-written handler, a `ipcMain.on` for the
  * fire-and-forget ones, or a service's own declaration (D83).
+ *
+ * **`serveAsked` as well as `serve`**, and forgetting it is how this test first
+ * earned its keep: the search service declared `searchOpen` with the variant
+ * that is told which window asked, the pattern did not match it, and the test
+ * reported a channel the renderer asks for and nothing answers. A false alarm —
+ * and the *right* false alarm, because the alternative to a pattern that can
+ * miss is no test at all. The honesty guard at the foot fired with it, which is
+ * what it is for.
  */
-const ANSWERS = /ipcMain\.(?:handle|on)\(\s*CHANNEL\.(\w+)|serve\(\s*CHANNEL\.(\w+)/g
+const ANSWERS = /ipcMain\.(?:handle|on)\(\s*CHANNEL\.(\w+)|serve(?:Asked)?\(\s*CHANNEL\.(\w+)/g
 
 /** What the renderer asks for: a reply, or a message with no reply. */
 const ASKS = /ipcRenderer\.(?:invoke|send)\(\s*CHANNEL\.(\w+)/g

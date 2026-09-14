@@ -9,7 +9,6 @@ import { DocumentService } from './services/document-service.ts'
 import { claim, type Serves } from './services/serves.ts'
 import { printPassage } from './print.ts'
 import { verifyMode } from './verify-mode.ts'
-import { Searches } from './searches.ts'
 import type { Attached, Base, Clipboard, DayProse, ImageAttachment, PrintJob, SearchRequest } from '../shared/ipc.ts'
 import type { QueryId } from '../shared/search-api.ts'
 import type { Followed, Reference } from '../shared/nav-api.ts'
@@ -35,8 +34,16 @@ export { DocumentService }
  * a time. What is left in `registerDocumentIpc` is what has not moved yet.
  */
 function wire(services: readonly Serves[]): void {
-  for (const [channel, answer] of claim(services)) {
-    ipcMain.handle(channel, (_event, ...args: unknown[]) => answer(...args))
+  for (const [channel, served] of claim(services)) {
+    ipcMain.handle(channel, (event, ...args: unknown[]) =>
+      // **The asker is a number, and only when asked for.** A service may not
+      // import Electron, so the one thing it can be told about the caller is an
+      // id — which is all anybody needs: it says *which window*, and a window is
+      // what a search cursor belongs to.
+      served.wantsAsker === true
+        ? served.answer(event.sender.id, ...args)
+        : served.answer(...args),
+    )
   }
 }
 
@@ -98,24 +105,17 @@ export function registerDocumentIpc(service: DocumentService): void {
   })
   ipcMain.handle(CHANNEL.proseIn, (_e, from: DateKey, to: DateKey) => service.proseIn(from, to))
 
-  // Search. **Three messages rather than one**, because the answer to a query
-  // over twenty years is not a value (D65): `open` narrows and returns a handle,
-  // `next` pulls as far as it must, `close` stops. The cursor lives in
-  // `Searches`, keyed to the window that asked, so a window closing takes its
-  // searches with it.
-  const searches = new Searches(service.search)
-  ipcMain.handle(CHANNEL.searchOpen, (e, request: SearchRequest) =>
-    searches.open(e.sender.id, request),
-  )
-  ipcMain.handle(CHANNEL.searchNext, (_e, id: QueryId, count: number) => searches.next(id, count))
-  ipcMain.handle(CHANNEL.searchClose, (_e, id: QueryId) => searches.close(id))
+  // Search is `services/search-service.ts` now and declares its own channels —
+  // including `searchOpen`, which is told which window asked, because a cursor
+  // belongs to the window that opened it (D83).
+  //
   // **The id is taken while the window is alive.** Reading `webContents.id`
   // inside `closed` reaches a destroyed object and throws — and the window that
   // found this was the hidden one printing makes, so the failure was a PDF that
   // came out fine and a main process that fell over on the way back.
   app.on('browser-window-created', (_event, created) => {
     const owner = created.webContents.id
-    created.on('closed', () => searches.closeFor(owner))
+    created.on('closed', () => service.searches.forget(owner))
   })
 
   // The sidebar is `services/nav-service.ts` now, and declares its own channels.
@@ -372,11 +372,7 @@ export function registerDocumentIpc(service: DocumentService): void {
       service.importText(at, text, original),
   )
 
-  ipcMain.handle(CHANNEL.versions, (_e, limit?: number) => service.versions(limit))
-  ipcMain.handle(CHANNEL.readDay, (_e, version: VersionId, date: DateKey) =>
-    service.readDay(version, date),
-  )
-  ipcMain.handle(CHANNEL.restore, (_e, version: VersionId) => service.restore(version))
+  // Reading the past is `services/history-service.ts` now (D32, D83).
   if (verifyMode()) ipcMain.handle('tephra:verify:diagnose', () => service.diagnose())
 
   /**
