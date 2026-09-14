@@ -140,7 +140,45 @@ export function markAt(docWindow: DocumentWindow, at: number, box: DOMRect): Mar
     else if (from <= at && to >= at) covers.push({ name: span.name, span: span.span })
   }
 
-  return { box, anchor: anchor === null ? null : anchor.name, tags: [...opens, ...covers] }
+  // **A marker is one of three things, and this used to know about two.** A
+  // commented range opens with a handle exactly as a tagged one does — the
+  // rail's own code says so, taking `from - 1` as the mark's position — so a
+  // comment's marker drew a handle that resolved to nothing, and the panel said
+  // as much. Reported from use.
+  //
+  // Asked of the prose rather than of `spans('comment')`, because a span
+  // carries the thread's id and the panel wants the thread: the prose
+  // annotation already holds it, and looking the id up again would be a second
+  // path to something this one has in its hand.
+  const comments: MarkInfo['comments'][number][] = []
+  for (const item of docWindow.prose.annotations) {
+    if (item.kind !== 'comment') continue
+    const from = item.at.from as number
+    const to = item.at.to as number
+    if (from !== at + 1 && !(from <= at && to >= at)) continue
+    const first = item.thread.messages[0]
+    comments.push({
+      id: item.thread.id as string,
+      // One line of it. The whole message is in the rail beside the text, and
+      // repeating it here would be the margin's job done twice.
+      opening: opening(first?.body ?? ''),
+      author: first?.author ?? '',
+      resolved: item.thread.resolved,
+    })
+  }
+
+  return {
+    box,
+    anchor: anchor === null ? null : anchor.name,
+    tags: [...opens, ...covers],
+    comments,
+  }
+}
+
+/** The first line of a message, short enough to sit in a row. */
+function opening(body: string): string {
+  const line = body.split('\n').map(l => l.trim()).find(l => l !== '') ?? ''
+  return line.length > 60 ? `${line.slice(0, 59)}…` : line
 }
 
 /**

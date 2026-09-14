@@ -8,6 +8,11 @@
 // It is also the only place the subjects past the third are visible. The extent
 // stacks three rules deep and no further, so "what is this passage" is a
 // question the list answers and the underlines cannot.
+//
+// **All three kinds of marker, now.** A handle stands for a bookmark, a tagged
+// range or a commented one, and this panel knew about two of them — so clicking
+// a comment's marker said *nothing resolves here* about a mark the editor had
+// drawn itself.
 
 import { useEffect, useRef } from 'react'
 import { tagSlot } from '../../../shared/tags.ts'
@@ -83,10 +88,32 @@ export function MarkPanel({
         </div>
       ))}
 
-      {mark.anchor === null && mark.tags.length === 0 && (
+      {/* **A comment is a marker too**, which this panel did not know: a
+          commented range opens with a handle exactly as a tagged one does, so
+          clicking one produced *nothing resolves here* about a mark the editor
+          had drawn itself. Reported from use.
+
+          Named, not reproduced. The thread's messages are in the rail beside
+          the text (D50) and printing them again here would be the margin's job
+          done twice — what the panel answers is *what is this mark*. */}
+      {mark.comments.map(comment => (
+        <div className="mark-row" key={comment.id}>
+          <span className="mark-kind">{comment.resolved ? 'Resolved' : 'Comment'}</span>
+          <span className="mark-name" title={comment.opening}>
+            {comment.opening === '' ? 'an empty note' : comment.opening}
+          </span>
+          {comment.author !== '' && <span className="mark-who">{comment.author}</span>}
+        </div>
+      ))}
+
+      {mark.anchor === null && mark.tags.length === 0 && mark.comments.length === 0 && (
         <div className="mark-row">
           <span className="mark-kind">Marker</span>
-          <span className="mark-name">nothing resolves here</span>
+          {/* **Says what happened, not merely that nothing did.** Every marker
+              is a bookmark, a tag or a comment, so reaching this line means one
+              lost the thing it pointed at rather than that markers can be
+              meaningless. */}
+          <span className="mark-name">this one has lost what it pointed to</span>
         </div>
       )}
     </div>

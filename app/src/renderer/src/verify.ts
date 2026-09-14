@@ -4746,6 +4746,219 @@ export async function runVerify(request: string): Promise<void> {
       await settle(2500)
     }
 
+    if (scene === 'tag-region') {
+      // A subject stretched over whole paragraphs, which is the case that sent
+      // tags to the margin: the underline landed on every line of the section,
+      // and three deep where subjects overlapped. Reported from use.
+      const answer = async (item: string, text: string): Promise<boolean> => {
+        if (!(await window.tephra.clickMenu(item))) return false
+        await settle(400)
+        const input = document.querySelector('.prompt input') as HTMLInputElement | null
+        if (input === null) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, text)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(900)
+        return true
+      }
+
+      const text = view.state.doc.toString()
+      const from = text.indexOf('Every market')
+      const to = text.indexOf('THE END')
+      say('span', to - from)
+      view.dispatch({ selection: { anchor: from, head: to } })
+      await settle(300)
+      say('tagged', await answer('Tag…', 'Shock limits'))
+      await window.tephra.doc.flush()
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(900)
+
+      // THE POINT: nothing under the words, and a rule beside them instead.
+      say('underlines', document.querySelectorAll('.tx-tag').length)
+      const spines = [...document.querySelectorAll('.tag-spine')] as HTMLElement[]
+      say('spines', spines.length)
+      {
+        const one = spines[0]
+        const rule = one?.getBoundingClientRect()
+        // **Measured against a LINE, not against `.cm-content`.** The band is
+        // that element's own padding, so its border box starts at the band's
+        // left edge — comparing with it asks whether the spine is left of the
+        // space reserved for the spine, which is not the question. A line sits
+        // inside the padding and so begins where the text actually begins.
+        const column = document.querySelector('.cm-line')?.getBoundingClientRect()
+        say('spineBox', rule === undefined || column === undefined ? null : {
+          // Beside the text, not under it: entirely left of the first character.
+          leftOfText: Math.round(column.left - rule.right) >= 0,
+          // Narrow, and as tall as the region it marks rather than as tall as
+          // a line — which is the whole difference from an underline.
+          width: Math.round(rule.width),
+          tall: Math.round(rule.height) > 40,
+          // And it is in the band the layout reserves, not hanging in the text.
+          band: Math.round(
+            parseFloat(getComputedStyle(document.querySelector('.cm-content') as Element).paddingLeft),
+          ),
+          // **One unbroken rule over the whole region**, blank lines included.
+          // A region is a territory, so a spine that stopped at each paragraph
+          // break would be claiming several small ones instead of one large.
+          top: Math.round(rule.top),
+          height: Math.round(rule.height),
+          region: (() => {
+            const lines = [...document.querySelectorAll('.cm-line')] as HTMLElement[]
+            const first = lines.find(l => (l.textContent ?? '').includes('Every market'))
+            const last = lines.find(l => (l.textContent ?? '').includes('work without it'))
+            const a = first?.getBoundingClientRect()
+            const b = last?.getBoundingClientRect()
+            return a === undefined || b === undefined
+              ? null
+              : { top: Math.round(a.top), height: Math.round(b.bottom - a.top) }
+          })(),
+        })
+      }
+
+      await shot()
+
+      // AND IT IS THE HANDLE: a wide tag's own mark is off screen at the top of
+      // the region, so this is the only way to reach the panel that renames or
+      // removes one.
+      spines[0]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+      await settle(700)
+      const panel = document.querySelector('.mark-panel')
+      say('panel', panel === null ? null : {
+        opened: true,
+        named: [...panel.querySelectorAll('.mark-name')].map(n => n.textContent),
+        offers: [...panel.querySelectorAll('button')].map(b => b.textContent),
+      })
+      await settle(1800)
+    }
+
+    if (scene === 'mark-panel') {
+      // Reported from use: clicking a marker showed a panel saying *nothing
+      // resolves here*, for a mark the editor had itself drawn.
+      const answer = async (item: string, text: string): Promise<boolean> => {
+        if (!(await window.tephra.clickMenu(item))) return false
+        await settle(400)
+        const input = document.querySelector('.prompt input') as HTMLInputElement | null
+        if (input === null) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(input, text)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(120)
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(900)
+        return true
+      }
+      const text = view.state.doc.toString()
+      const from = text.indexOf('Klein, Crawford')
+      view.dispatch({ selection: { anchor: from, head: from + 'Klein, Crawford and Alchian'.length } })
+      await settle(300)
+      say('tagged', await answer('Tag…', 'House Deal'))
+      await window.tephra.doc.flush()
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(900)
+
+      // A tagged range is written with TWO markers, so it draws two handles.
+      const handles = [...document.querySelectorAll('.tx-handle')] as HTMLElement[]
+      say('handles', handles.length)
+      const asked: unknown[] = []
+      for (let i = 0; i < handles.length; i++) {
+        handles[i]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        await settle(500)
+        const panel = document.querySelector('.mark-panel')
+        asked.push({
+          at: i,
+          names: [...(panel?.querySelectorAll('.mark-name') ?? [])].map(n => n.textContent),
+          kinds: [...(panel?.querySelectorAll('.mark-kind') ?? [])].map(n => n.textContent),
+        })
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await settle(300)
+      }
+      say('resolved', asked)
+
+      // And a BOOKMARK's marker, which resolves by a different rule in
+      // `markAt` — the tag's span begins after its marker, the anchor's is
+      // asked for AT it.
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(300)
+      say('bookmarked', await answer('Bookmark…', 'The opening'))
+      await window.tephra.doc.flush()
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
+      await settle(900)
+      const all = [...document.querySelectorAll('.tx-handle')] as HTMLElement[]
+      say('handlesNow', all.length)
+      const afterBookmark: unknown[] = []
+      for (let i = 0; i < all.length; i++) {
+        all[i]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        await settle(500)
+        const panel = document.querySelector('.mark-panel')
+        afterBookmark.push({
+          at: i,
+          names: [...(panel?.querySelectorAll('.mark-name') ?? [])].map(n => n.textContent),
+          kinds: [...(panel?.querySelectorAll('.mark-kind') ?? [])].map(n => n.textContent),
+        })
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await settle(300)
+      }
+      say('resolvedWithBookmark', afterBookmark)
+      say('anchorSpans', (await window.tephra.doc.spans({ kind: 'anchor' })).length)
+
+      // And a COMMENT's marker, which `markAt` does not ask about at all.
+      const said = view.state.doc.toString()
+      const at = said.indexOf('property of the participant')
+      view.dispatch({ selection: { anchor: at, head: at + 'property of the participant'.length } })
+      await settle(300)
+      // **No dialog** — the note opens in the margin ready to type in (D47), so
+      // this is typed where a person types it rather than into a prompt.
+      say('commented', await window.tephra.clickMenu('Comment…'))
+      await settle(1200)
+      const composer = document.querySelector('.composer textarea') as HTMLTextAreaElement | null
+      say('composerOpened', composer !== null)
+      if (composer !== null) {
+        const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+        set?.call(composer, 'Is this the right word for it?')
+        composer.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(200)
+        composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(1200)
+      }
+      await window.tephra.doc.flush()
+      view.dispatch({ selection: { anchor: 0 } })
+      await settle(1200)
+      const every = [...document.querySelectorAll('.tx-handle')] as HTMLElement[]
+      say('handlesWithComment', every.length)
+      const afterComment: unknown[] = []
+      for (let i = 0; i < every.length; i++) {
+        every[i]?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        await settle(500)
+        const panel = document.querySelector('.mark-panel')
+        afterComment.push({
+          at: i,
+          names: [...(panel?.querySelectorAll('.mark-name') ?? [])].map(n => n.textContent),
+          kinds: [...(panel?.querySelectorAll('.mark-kind') ?? [])].map(n => n.textContent),
+          who: [...(panel?.querySelectorAll('.mark-who') ?? [])].map(n => n.textContent),
+        })
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await settle(300)
+      }
+      say('resolvedWithComment', afterComment)
+
+      // The comment's marker is the reported case, so its panel is the one the
+      // picture is of — found by what it says rather than by its index, so the
+      // scene keeps meaning this even if the fixture gains another marker.
+      for (const handle of every) {
+        handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+        await settle(450)
+        const kind = document.querySelector('.mark-panel .mark-kind')?.textContent
+        if (kind === 'Comment') break
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        await settle(250)
+      }
+      say('photographed', document.querySelector('.mark-panel .mark-kind')?.textContent ?? null)
+      await shot()
+      await settle(1500)
+    }
+
     if (scene === 'bookmark-bold') {
       // The reported case exactly: bookmark a boldfaced phrase at the very
       // start of its line, which is where a comment would otherwise swallow

@@ -189,6 +189,15 @@ interface Extent {
   readonly to: number
   readonly slot: number
   readonly depth: number
+  /**
+   * The subject, carried through rather than looked up again.
+   *
+   * The underline does not need it — a rule is silent — but the spine does, to
+   * name what was clicked, and re-deriving it by matching offsets back to the
+   * original spans would be a second computation of something this function
+   * already had in its hand.
+   */
+  readonly name: string
 }
 
 /**
@@ -213,7 +222,7 @@ export function stack(
       ends[depth] = span.to
     }
     if (depth >= MAX_DEPTH) continue
-    out.push({ from: span.from, to: span.to, slot: tagSlot(span.name), depth })
+    out.push({ from: span.from, to: span.to, slot: tagSlot(span.name), depth, name: span.name })
   }
   return out
 }

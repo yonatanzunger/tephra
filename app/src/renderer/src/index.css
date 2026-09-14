@@ -130,6 +130,14 @@ body {
   max-width: 100%;
   margin: 0;
   padding-right: var(--gutter);
+  /* **The spine band, reserved rather than borrowed.** `.frame-reading` already
+     keeps 0.3in between the nav's edge and the first character, and painting
+     there was the obvious idea — but that padding is outside CodeMirror's
+     scroller, so anything drawn in it would sit still while the text scrolled
+     past. The band is reserved here instead, inside the scroller, which widens
+     the left inset by a little and leaves the measure untouched: the box is
+     content-box, so padding adds to the width rather than eating the column. */
+  padding-left: var(--spine-band);
 }
 
 /* Below the width where the gutter fits beside the text, it folds: marginal
@@ -1430,6 +1438,9 @@ body {
 .mark-row { display: flex; align-items: center; gap: .5rem; }
 .mark-row .mark-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mark-kind { color: rgb(var(--text-muted)); font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; }
+/* Who said it, at the end of the row — quiet, because the row is identifying
+   the mark rather than reading the thread out. */
+.mark-who { flex: 0 0 auto; color: rgb(var(--text-muted)); font-size: .72rem; }
 .mark-swatch {
   flex: 0 0 auto; width: .75rem; height: .2rem; border-radius: 1px;
   background: rgb(var(--tag));
@@ -1456,6 +1467,39 @@ body {
    Drawn over the band `.cm-content` reserves as padding-right, so notes
    appearing and disappearing move no line of text. That is D42's invariant,
    and it is the reason the gutter was reserved from the very first frame. */
+/* ── tagged regions: a spine in the left band (D50) ──────────────────────── */
+
+/* Wide enough for three lanes and a gap, which is `stack()`'s maximum depth.
+   Past that a passage has more subjects than a margin can show and the panel is
+   the honest answer, which is the rule the underlines already follow. */
+:root { --spine-band: 1.35rem; }
+
+.spine-host {
+  position: absolute; top: 0; left: 0; height: 100%;
+  width: var(--spine-band);
+  pointer-events: none;
+}
+
+.tag-spine {
+  position: absolute;
+  /* Lane 0 sits nearest the text, so the common case — one tag, no overlap — is
+     closest to what it marks. The same ordering the stacked rules use. */
+  right: calc(4px + var(--tag-lane) * 6px);
+  width: 3px;
+  appearance: none;
+  padding: 0; border: 0; border-radius: 2px;
+  background: rgb(var(--tag));
+  /* Quieter than an underline on purpose: it runs the whole height of a region,
+     so what was a brief mark under a phrase would otherwise become a long bright
+     bar down the page — the same too-much that sent the underline to the margin. */
+  opacity: .55;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: opacity .12s, width .12s;
+}
+.tag-spine:hover, .tag-spine:focus-visible {
+  opacity: 1; width: 5px; outline: none;
+}
 .rail-host {
   position: absolute; top: 0; height: 100%; width: 0;
   left: calc(var(--measure) + 0.9rem);

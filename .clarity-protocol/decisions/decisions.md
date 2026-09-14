@@ -3959,3 +3959,56 @@ dialects.
 > overriding somebody's own about their name. The sans face and the absence of a
 > chip are difference enough.
 
+
+---
+
+## D82: A tag's notation follows its extent — a phrase is underlined, a region gets a spine
+
+**Date:** 2026-09-13
+**Status:** decided
+**Extends:** D50 (one placement policy), D44 (the mark is silent until asked).
+**Source:** reported from use — *underlining is visually very jarring when
+tagging more than a handful of words, and a very common thing I'm doing is
+trying to tag entire sections of text, to subject-tag areas of the notebook.*
+
+**Decision.** `place()` decides a tag's slot from **how much text it covers**, not
+from its kind alone. Under `REGION` characters it goes in the flow and is drawn
+as the thin rule under the words it has always been; over `REGION` it goes to a
+new `spine` slot and is drawn as a coloured rule in a band reserved to the left
+of the text. Paper has no band, so a surface that paginates turns a spine back
+into a margin note — the same substitution footnotes already make on a screen.
+
+**Why extent is the right question.** Two different acts wear the same notation.
+Tagging a few words *points* at them, and an underline says exactly that.
+Tagging three paragraphs *claims territory*, and the same underline then lands on
+every line of the section — three deep where subjects overlap, because the
+underline's own virtue is that it stacks. The notation was never wrong; it was
+being asked to do a job one size larger than the one it was designed for.
+
+**Why characters and not lines.** A rule that asked *does this wrap?* would be a
+rule about the window: widen it and a region silently becomes a phrase. The
+extent of a span is a fact about the document, which is what lets the decision
+live in `place()` with all the others rather than in whichever renderer happens
+to know its own geometry. The threshold is a round number to be moved once
+somebody has lived with it, not a quantity anything is derived from.
+
+**The band is reserved, not borrowed.** `.frame-reading` already keeps 0.3in
+between the nav's edge and the first character, and painting in it was the
+obvious idea — but that padding is outside CodeMirror's scroller, so anything
+drawn there would sit still while the text scrolled past. The band is reserved on
+`.cm-content` instead, inside the scroller; the box is content-box, so it widens
+the left inset and leaves the measure untouched.
+
+**The spine is a handle, which fixes something else.** Clicking one opens the
+mark panel by dispatching the very event the mark widget dispatches. That is not
+a convenience: a tag's mark is one character at the start of its range, so for
+exactly the widest tags it sits off the top of the screen, and the panel — the
+only place a tag can be renamed or removed — was in practice unreachable. A
+spine is reachable anywhere along its length.
+
+> **It stays silent** (D44). A coloured rule and no text, with the subject in the
+> tooltip and in the panel, so a tagged passage still reads as prose rather than
+> prose with metadata stapled to it. Printing the subject down the band was
+> considered and deferred: at three lanes there is no room for three labels, and
+> *what am I inside of* is better answered by a running head than by a caption
+> that only appears where a region happens to begin.

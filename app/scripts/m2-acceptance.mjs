@@ -147,6 +147,104 @@ console.log('— tagging —')
   check('untagging restores the file byte for byte', (await readFile(dayPath(root), 'utf8')) === before)
 }
 
+console.log('— what a marker resolves to —')
+{
+  // Reported from use: clicking a marker produced a panel saying *nothing
+  // resolves here*, about a mark the editor had drawn itself.
+  const body =
+    '**Intrinsic S** is a property of the participant, not of any\nrelationship. ' +
+    'This distinguishes the mechanism from the hold-up\nproblem of Klein, Crawford and Alchian.\n'
+  const root = await notebook(body)
+  const r = report(await launch('mark-panel', root))
+
+  check('a tag resolves from its own marker', r.tagged === true
+    && r.resolved?.[0]?.names?.[0] === 'House Deal', JSON.stringify(r.resolved))
+  check('and so does a bookmark', r.bookmarked === true
+    && r.resolvedWithBookmark?.some(m => m.kinds?.includes('Bookmark')) === true,
+    JSON.stringify(r.resolvedWithBookmark))
+  check(
+    'THE ONE THAT LIED: a comment resolves from its marker too',
+    // A commented range opens with a handle exactly as a tagged one does, and
+    // `markAt` asked about anchors and tags only — so the third kind of marker
+    // drew a mark that stood for nothing.
+    r.commented === true && r.composerOpened === true
+      && r.resolvedWithComment?.some(m => m.kinds?.includes('Comment')) === true,
+    JSON.stringify(r.resolvedWithComment),
+  )
+  check(
+    'naming the note and who wrote it, rather than reading it out',
+    // The thread's messages are in the rail (D50); the panel identifies.
+    r.resolvedWithComment?.some(m =>
+      m.names?.[0] === 'Is this the right word for it?' && m.who?.[0] === 'zunger') === true,
+    JSON.stringify(r.resolvedWithComment),
+  )
+  check(
+    'and NO marker in the fixture resolves to nothing',
+    // The general form of the report: every handle drawn stands for something.
+    Array.isArray(r.resolvedWithComment)
+      && r.resolvedWithComment.every(m => !m.kinds?.includes('Marker')),
+    JSON.stringify(r.resolvedWithComment),
+  )
+  check('and the picture is of the case that was reported', r.photographed === 'Comment')
+}
+
+console.log('— a tagged region —')
+{
+  // Reported from use: underlining is jarring once a subject covers more than a
+  // handful of words, and what the notebook is actually FOR is subject-tagging
+  // whole areas. A rule under the words is a word-scale device; over three
+  // paragraphs the same notation lands on every line of them.
+  const body =
+    'Every market participant has a finite shock limit S(t): the largest sudden\n' +
+    'loss it can absorb. The limit is not a property of any one relationship,\n' +
+    'which is what makes it awkward to price: it moves when anything else in\n' +
+    'the portfolio moves, and the counterparty cannot see it moving.\n\n' +
+    'That opacity is the whole difficulty. A limit nobody can observe is a\n' +
+    'limit nobody can contract on, so the mechanism has to work without it.\n\n' +
+    'THE END\n'
+  const root = await notebook(body)
+  const r = report(await launch('tag-region', root))
+
+  check('the subject went on, over a span well past a phrase', r.tagged === true && r.span > 160, `span=${r.span}`)
+  check(
+    'THE POINT: nothing under the words',
+    r.underlines === 0,
+    `underlines=${r.underlines}`,
+  )
+  check('and a spine beside them instead', r.spines === 1, `spines=${r.spines}`)
+  check(
+    'entirely left of the text, in the band the layout reserves',
+    r.spineBox?.leftOfText === true && r.spineBox?.band > 0,
+    JSON.stringify(r.spineBox),
+  )
+  check(
+    'narrow, and as tall as the region rather than as tall as a line',
+    r.spineBox?.width >= 2 && r.spineBox?.width <= 8 && r.spineBox?.tall === true,
+    JSON.stringify(r.spineBox),
+  )
+  check(
+    'one unbroken rule covering the region exactly, blank lines included',
+    // Measured, because it was seven pixels short at each end when it asked
+    // `coordsAtPos` for character boxes instead of asking for line blocks.
+    r.spineBox?.region !== null && r.spineBox?.top === r.spineBox?.region?.top
+      && r.spineBox?.height === r.spineBox?.region?.height,
+    JSON.stringify(r.spineBox),
+  )
+  check(
+    'THE ONE THAT WAS UNREACHABLE: clicking it opens the panel',
+    // A wide tag's own mark sits at the top of the region, usually off screen,
+    // so this was in practice the hardest kind of tag to rename or remove.
+    r.panel?.opened === true && r.panel?.named?.includes('Shock limits') === true,
+    JSON.stringify(r.panel),
+  )
+  check(
+    'and the panel offers exactly rename and remove',
+    Array.isArray(r.panel?.offers) && r.panel.offers.includes('Rename')
+      && r.panel.offers.includes('Remove'),
+    JSON.stringify(r.panel?.offers),
+  )
+}
+
 {
   const root = await notebook(
     'Every market participant has a finite shock limit S(t): the largest sudden\nloss it can absorb.\n',

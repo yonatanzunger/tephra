@@ -25,13 +25,20 @@ export interface Presentation {
   readonly date: 'absent' | 'seam' | 'pageHeader'
   readonly heading: 'inline'
   readonly anchor: 'absent' | 'margin'
-  readonly tag: 'absent' | 'inline' | 'margin'
+  /**
+   * `byExtent` is the screen's answer, and it is a fourth value rather than a
+   * renderer's private choice **because it is a placement decision** — which is
+   * this module's whole job (D50). What is new is that the question needs a
+   * second thing about the annotation besides its kind: how much of the
+   * document it covers.
+   */
+  readonly tag: 'absent' | 'inline' | 'margin' | 'byExtent'
   readonly comment: 'absent' | 'inline' | 'margin' | 'footnote' | 'endOfSection'
 }
 
 /** Desktop: the rail is where a comment goes, because there is room for it. */
 export const DESKTOP: Presentation = {
-  date: 'seam', heading: 'inline', anchor: 'margin', tag: 'inline', comment: 'margin',
+  date: 'seam', heading: 'inline', anchor: 'margin', tag: 'byExtent', comment: 'margin',
 }
 
 /** Mobile: the same renderer, and the only difference is where there is room (Q10). */
@@ -57,7 +64,29 @@ export const CLEAN: Presentation = {
  * day (D50). That substitution happens HERE rather than in either renderer,
  * because it is a decision and not a drawing.
  */
-export type Slot = 'none' | 'flow' | 'margin' | 'foot' | 'section' | 'head'
+export type Slot = 'none' | 'flow' | 'margin' | 'spine' | 'foot' | 'section' | 'head'
+
+/**
+ * How much text a tag has to cover before it stops being a phrase.
+ *
+ * **Two different acts wear the same notation.** Tagging a few words points at
+ * them — *these words* — and an underline is exactly right for that. Tagging
+ * three paragraphs claims territory, and the same underline then lands on every
+ * line of the section: reported from use as visually jarring, and it is the
+ * notation's own virtue that does it, since overlapping subjects stack into
+ * three rules under every line.
+ *
+ * **Counted in characters, and deliberately not in lines.** A rule that asked
+ * *does this wrap?* would be a rule about the window: widen it and a region
+ * silently becomes a phrase, which is a notation that changes while you are not
+ * looking at it. The extent of a span is a fact about the document, so the
+ * decision can live here (D50) instead of in whichever renderer happens to know
+ * its own geometry.
+ *
+ * Roughly two lines at a reading measure. A round number that can be moved once
+ * somebody has lived with it, not a threshold anything is derived from.
+ */
+export const REGION = 160
 
 export interface Placed<At extends Anchored> {
   readonly annotation: Annotation<At>
@@ -100,6 +129,15 @@ export function place<At extends Anchored>(
     .sort((a, b) => a.at.from - b.at.from || a.at.to - b.at.to)
     .map(annotation => {
       let slot = SLOT_OF[how[annotation.kind]] ?? 'none'
+      // A phrase points and a region claims, so they are drawn differently.
+      if (how[annotation.kind] === 'byExtent') {
+        slot = (annotation.at.to as number) - (annotation.at.from as number) > REGION
+          ? 'spine'
+          : 'flow'
+      }
+      // Paper has a margin for a tag but no spine to draw one in; a surface
+      // that paginates is asked for the name and not for the extent.
+      if (surface.paginates && slot === 'spine') slot = 'margin'
       if (!surface.paginates && (slot === 'foot' || slot === 'head')) slot = 'section'
       const cue = slot === 'foot' || slot === 'section' ? String(++numbered) : null
       return { annotation, slot, cue }

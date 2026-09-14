@@ -35,6 +35,7 @@ import { rebuildWidgets, widgetExtensions } from './widgets.ts'
 import { contextMenu, markAt, readSelection, reportSelection, type Selection } from './range-commands.ts'
 import type { MarkInfo } from '../../annotations.ts'
 import { retag, tagExtents } from './tags.ts'
+import { tagSpines } from './tag-spines.ts'
 import { commentExtents, recomment } from './comment-anchors.ts'
 import type { CommentAnchor } from '../../annotations.ts'
 import { richPaste } from './paste.ts'
@@ -132,6 +133,15 @@ export function bindEditor(options: BindOptions): Binding {
   // would be a second answer to a question that already has one (D54).
   const behaviour = optionsFor(docWindow.document.meta)
 
+  // **The spines' home, made before the view that paints into it.** Inside
+  // `.cm-scroller` for the same reason the rail is: a spine marks a stretch of
+  // text, so it has to scroll with that text rather than be recomputed every
+  // frame the reader moves. This is also why the band it sits in is reserved on
+  // `.cm-content` — the breathing room `.frame-reading` keeps between the nav
+  // and the first character is outside the scroller, and cannot scroll.
+  const spineHost = document.createElement('div')
+  spineHost.className = 'spine-host'
+
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
@@ -189,7 +199,7 @@ export function bindEditor(options: BindOptions): Binding {
         widgetExtensions(),
         codeBlocks(),
         listLayout(),
-        ...(behaviour.annotations ? [tagExtents(docWindow)] : []),
+        ...(behaviour.annotations ? [tagExtents(docWindow), tagSpines(docWindow, spineHost)] : []),
         ...(behaviour.days ? [dayBoundaries(docWindow)] : []),
         ...(behaviour.annotations
           ? [commentExtents(docWindow, anchors => options.onCommentAnchors?.(anchors))]
@@ -247,6 +257,7 @@ export function bindEditor(options: BindOptions): Binding {
   // the answer that comes back a moment later.
   // The rail's home. Inside `.cm-scroller`, so notes scroll with the text and
   // nothing has to recompute their positions as the reader moves.
+  view.scrollDOM.append(spineHost)
   const railHost = document.createElement('div')
   railHost.className = 'rail-host'
   view.scrollDOM.append(railHost)

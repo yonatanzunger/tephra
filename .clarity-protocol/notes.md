@@ -1291,3 +1291,90 @@ at the top is not a section but a definition — everything above the first head
 — so it has no position to exchange and nothing can be placed above it. Nudging
 the first section up is therefore `false`, the same answer a matter at the top of
 its own section gives, and not an error.
+
+## 57. The notation was right; it was being asked to do a job one size larger
+
+Tags have been drawn as thin coloured rules under the words since D44, and the
+reasoning behind that drawing is good: overlapping subjects compose honestly —
+three subjects are three stacked rules, where three tints would multiply into a
+fourth colour meaning nothing — and a rule under the text can be properly
+saturated because it does not have to stay legible *behind* anything.
+
+Every word of that survives contact with the report that underlining is jarring.
+What changed was not the argument but the size of the thing being marked: a rule
+under the words says *these words*, and a subject stretched over whole sections
+says *this territory*. Applied at that scale the notation's own virtue turns on
+it — the stacking that made three subjects legible under a phrase puts three
+underlines beneath every line of a section.
+
+**The useful shape here is that the fix was not to replace the notation.** Both
+acts still happen, so both notations stay, and the only new thing is a question
+asked before choosing between them: how much does this cover? That question
+turned out to have an obvious home. `place()` already owned *where does each
+annotation go* for every kind and every surface (D50), and it had never needed
+to know anything about an annotation except its kind. It does now, and the
+policy absorbed it without any renderer learning a second way to decide.
+
+**The threshold is deliberately not a layout question.** *Does this wrap?* is the
+intuitive test and it is a test about the window: widen it and a region silently
+becomes a phrase, which is a notation that changes while nobody is looking at it.
+Extent in characters is a fact about the document, which is exactly what lets the
+decision stay in `place()` instead of migrating into whichever renderer happens
+to know its own geometry.
+
+## 58. The drawing was seven pixels short, and the check that would have caught it was the one I nearly skipped
+
+The first spine asked `coordsAtPos` for the top of its region and the bottom of
+it. That is the call the comment rail makes, so it looked like the established
+idiom — but the rail wants the position of *one anchor* and a spine wants the
+extent of *many lines*, and `coordsAtPos` answers with the box of the character
+at that position. A character box sits inside its line box by half the leading
+at each end, so the rule came out seven pixels short top and bottom: floating
+inside the paragraphs rather than covering them.
+
+Seven pixels at each end is invisible in a screenshot, and I had already looked
+at one and called it right. What found it was measuring the spine against the
+region it claimed to cover and printing both numbers — 175/225 against 168/239 —
+which is the habit note 50 records for a different reason: **ask the question
+numerically, because a rendering that is nearly right looks exactly right.**
+
+`view.lineBlockAt` is the call that wants whole lines, and switching to it paid
+twice. The second payment was unexpected: `coordsAtPos` answers null outside the
+rendered viewport, so the first version clipped every region to the part of it
+CodeMirror had built — and a region is precisely the thing that begins above the
+screen and ends below it. The height map has a position for every line, estimated
+out of view and refined as the reader arrives, so the correct geometry call also
+deleted the clipping, the two fade-out classes that dressed up the clipping, and
+the reasoning I had written to justify them.
+
+## 59. Three kinds of marker, two of them asked about
+
+A handle in the prose stands for one of three things: a bookmark, the start of a
+tagged range, or the start of a commented one. `markAt` resolved the first two
+and had no clause for the third, so clicking a comment's marker produced a panel
+saying **nothing resolves here** — about a mark the editor had itself drawn, one
+line away from a rail note showing the very comment it could not name.
+
+**The gap was invisible from either side.** The renderer draws a handle for every
+handle character in the buffer, which is a purely textual rule and therefore
+complete by construction. The panel resolves handles through the annotation
+lists, which is a semantic rule and was complete only over the kinds someone had
+remembered. Neither file is wrong on its own; the disagreement lives in the space
+between a rule over *characters* and a rule over *meanings*, and nothing
+type-checks that space.
+
+**What made it hard to find was that the obvious suspects were innocent.** A
+tagged range writes two markers, `tag-start` and `tag-end`, so the first
+hypothesis was that clicking the closing one resolved to nothing — plausible,
+tidy, and wrong: only one handle is drawn per tag. The bookmark's rule is
+genuinely different from the tag's (`begin === at` against `begin === at + 1`),
+so that was the second guess, and it was also wrong. Both were disproved in about
+a minute each by a scene that clicks **every** handle on the page and prints what
+each one says, which is the check that should have been written first: the report
+was *a marker resolved to nothing*, and the question that matches it is not *does
+this marker work* but *which markers do not*.
+
+**The fallback line was part of the problem.** *Nothing resolves here* describes
+the code's state rather than the world's, and it reads as though a marker might
+legitimately mean nothing. Every marker stands for something, so reaching that
+line means one lost what it pointed at — which is what it now says.

@@ -1,4 +1,12 @@
-// What a tagged range looks like: thin coloured rules under the text.
+// What a tagged PHRASE looks like: thin coloured rules under the text.
+//
+// **A phrase, now, and not every tag.** A rule under the words says *these
+// words*, which is right for a handful of them and wrong for a subject
+// stretched over whole sections — there it lands on every line, three deep
+// where subjects overlap. `place()` decides which of the two a tag is, by its
+// extent (D50), and the wide ones are drawn by `tag-spines.ts` instead. This
+// file needs no test for that: it already draws only what is placed in the
+// flow, so the region tags simply stopped arriving.
 //
 // **Underlines rather than a tint**, for two reasons that turned out to be the
 // same one. Overlapping subjects compose honestly — three subjects are three

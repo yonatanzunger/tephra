@@ -90,7 +90,7 @@ rather than one enum for all of them.
 |---|---|---|
 | **day** | `absent` · `seam` (a rule across the measure, dates either side) · `pageHeader` (a running head, paper only) | `seam` on screen, `days.ts` |
 | **anchor** | `absent` · `margin` (a mark in the reserved gutter) | on screen it is inline today — a handle in the text (D44) |
-| **tag** | `absent` · `inline` (the stacked underlines) · `margin` (a vertical rule with the subject beside it) | `inline` on screen, `tags.ts` |
+| **tag** | `absent` · `inline` (the stacked underlines) · `margin` (the subject beside the passage, on paper) · `byExtent` (D82: `inline` under a phrase, `spine` over a region) | `byExtent` on screen — `tags.ts` for the rules, `tag-spines.ts` for the band |
 | **comment** | `absent` · `inline` (as mobile shows it) · `margin` (the rail) · `footnote` · `endOfSection` | `margin` on screen, `Rail.tsx`; `inline` is Q10's mobile arrangement |
 
 ```ts
@@ -164,7 +164,10 @@ A third renderer — an export, a mobile view, a filtered view — is then a
   the paper renderer needs the same pass rather than a fresh one.
 - **A tag in the margin is a range, not a point.** It needs a vertical rule with
   an extent and a label beside it, which is a different primitive from a note
-  aligned to a line.
+  aligned to a line. *(Built on screen as the spine, D82 — and the label was the
+  part that did not survive: three lanes leave no room for three captions, so the
+  rule is silent and the subject lives in the tooltip and the panel, which is
+  what D44 already said about marks.)*
 - **Not every payload survives every slot.** A comment thread in a footnote
   cannot show its reactions or its assignee; what a treatment *drops* should be
   in the design rather than discovered on paper.
