@@ -4012,3 +4012,67 @@ spine is reachable anywhere along its length.
 > considered and deferred: at three lanes there is no room for three labels, and
 > *what am I inside of* is better answered by a running head than by a caption
 > that only appears where a region happens to begin.
+
+---
+
+## D83: The main process is layered, every file says which layer it is on, and services follow the channels
+
+**Date:** 2026-09-13
+**Status:** decided; **not yet built** — the plan is `solution/service-layers.md`
+**Constrains:** every future service in `main/`. **Extends:** D77 (reconciliation),
+D78 (the horizon is its own object), D37 (X lives in main).
+**Source:** `DocumentService` at 2,805 lines and 150 members, and the observation
+that the structure wanted already existed in `ipc.ts`.
+
+**Decision.** `DocumentService` is split into services that follow the **IPC
+channel boundary** — each channel registered by exactly one service, a service
+free to own several — over a new **`CoreService`**, on explicit layers:
+
+| layer | what | may call |
+|---|---|---|
+| 2 | composing services — horizon, reconciliation, transfers | core + layer 1 |
+| 1 | domain services — one kind of thing each, and its channels | core |
+| 0 | `CoreService` — store, write path, durability, the day, the bus | X, W |
+
+with `Corpus` and `CorpusIndex` as **peers** in X-upper beneath core, and
+`Scanner` beside them but owned by the search service, since only search uses it.
+
+> **Call down, never sideways, never up**, and **every file names its layer in
+> its opening comment** — so what a file may legitimately reach is legible before
+> reading a line of it.
+
+**Why the channel boundary.** It is already a real boundary: everything crossing
+it is plain data, so each contract is narrow and testable by construction. The
+shape is proven twice in-tree — `docket` and `todo` are single channels carrying
+a command union — against 69 one-per-verb channels that cost four file edits
+apiece to extend.
+
+**Why layers rather than peers.** Because **docket and todo already call each
+other**: `todoPutDown` reaches into docket, and the docket reconciler reaches into
+todo. A flat set of services would be mutually dependent on day one. Layering
+breaks the cycle honestly — neither knows the other, and the three flows that
+genuinely span both move up to where spanning is the job. That layer-2 list is
+not arbitrary: the horizon, the reconciler and the transfer gestures are the
+three features that generated the most design discussion in the fortnight before
+this, and they are the three that were structurally homeless. D78 already said
+the horizon is its own object *implemented by* its sources; this gives the
+sentence somewhere to live.
+
+**The one inversion.** `#wrote()` calls `reconcile()` today, and reconciliation
+is layer 2 while core is layer 0 — so core cannot call it. Services **register**
+passes with core instead, and core runs them serialised and never re-entrantly
+without knowing what they do. D77 calls `reconcile()` *make all derived state
+true again*, with dockets as its **first clause**; registration turns that phrase
+from a comment into the structure, and the second clause becomes a registration
+rather than an edit to the reconciler.
+
+**What core must not give up.** One mutation queue, shared by every service.
+**Idempotence has to hold concurrently, not merely repeatedly** (note 51, where
+two overlapping passes generated the same task). Per-service queues would break
+that silently, and a data race is the failure this project's tests are worst at
+catching.
+
+> **`tephra:win:` is two different words** and is fixed on the way: `CHANNEL.edit`
+> is a text window, `CHANNEL.windowInfo` is an OS window (MC6). The vocabulary
+> splits into **text** for the buffer and **frame** for the OS window, before the
+> ambiguity is baked into a service name.

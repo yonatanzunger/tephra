@@ -52,18 +52,23 @@ import { LOCAL } from './w/layout.ts'
 import { parseUiState, type UiState } from '../shared/ui-state.ts'
 import { addDays, asDateKey, compareDateKeys, dateKeyAt } from '../shared/dates.ts'
 import { StreamDocument } from './x/documents/kinds/stream.ts'
-import { CorpusIndex } from './x/documents/corpus-index.ts'
+import type { CorpusIndex } from './x/documents/corpus-index.ts'
 import { Scanner } from './x/documents/search.ts'
 import type { Search } from '../shared/search-api.ts'
-import { Corpus, STREAM_ID } from './x/documents/corpus.ts'
+import { STREAM_ID, type Corpus } from './x/documents/corpus.ts'
 import { Filesets } from './x/fileset.ts'
 import { applyEdits } from './x/text-edits.ts'
 import type { LocalWindow } from './x/window.ts'
+import { CoreService, type MessageSink } from './core-service.ts'
 
-/** Anything that can carry a pushed message to a renderer. */
-export interface MessageSink {
-  send(channel: string, message: unknown): void
-}
+/**
+ * Anything that can carry a pushed message to a renderer.
+ *
+ * **Declared by the core now** (D83) and re-exported here so that nothing
+ * importing it has to move while the layers are being separated.
+ */
+export type { MessageSink }
+
 
 /**
  * The file-write tier (D32 M2): quiescence OR a ceiling, never quiescence alone.
@@ -144,22 +149,37 @@ export interface ServiceOptions {
 }
 
 export class DocumentService {
-  readonly #corpus: Corpus
   /**
-   * The stream, borrowed once and held for as long as the service lives.
+   * **Layer 0, held rather than inherited** (D83).
    *
-   * **Held because it is watched, not instead of borrowing it.** The service is
-   * what keeps the stream open — every window over it, the write tiers, the
-   * journal — so it takes a watch at construction and the Corpus may never let
-   * go of it. The borrow below is how it gets the reference the first time; the
-   * watch is what makes keeping it safe (D54).
-   *
-   * A promise rather than a value because opening is asynchronous in general,
-   * even where this kind's construction is not. Documents OTHER than this one
-   * are borrowed per operation and tracked by nobody, which is MC3 onward.
+   * The store, the one mutation queue and the bus live here now. What is left in
+   * this class is layer 1 and layer 2 work that has not been split out yet, and
+   * it reaches the corpus **only** through this — a second path to a document
+   * would be a second path around the queue.
    */
-  readonly #stream: Promise<StreamDocument>
-  readonly #index: CorpusIndex
+  readonly #core: CoreService
+
+  /**
+   * The core's parts under the names this class has always called them.
+   *
+   * **Forwarders, so that extracting the core moved no call site.** There are
+   * sixty-eight `#serial` calls alone; rewriting them in the same change that
+   * moves the queue would have meant proving two things at once, with the
+   * acceptance suites unable to say which of them had gone wrong. These go away
+   * as each service is split out and starts naming `#core` directly.
+   */
+  get #corpus(): Corpus {
+    return this.#core.corpus
+  }
+
+  get #stream(): Promise<StreamDocument> {
+    return this.#core.stream
+  }
+
+  get #index(): CorpusIndex {
+    return this.#core.index
+  }
+
   readonly #search: Scanner
   readonly #filesets: Filesets
   /**
@@ -172,18 +192,6 @@ export class DocumentService {
    */
   readonly #windows = new Map<WindowId, { window: LocalWindow; release: Unsubscribe }>()
   #nextId: WindowId = 1
-
-  /**
-   * Every mutation of a document chains onto this; reads do not.
-   *
-   * **Named for what it orders, because this class holds more than one queue.**
-   * It is not *the* queue: `#reconciliationPassQueue` is the other, and they
-   * order different things at different grains — this one puts individual edits
-   * in sequence, that one keeps whole reconciliation passes from overlapping.
-   * A single pass makes many mutations and they interleave with everybody
-   * else's through here quite happily.
-   */
-  #documentMutationQueue: Promise<unknown> = Promise.resolve()
 
   #flushTimer: ReturnType<typeof setTimeout> | null = null
   #dirtySince: number | null = null
@@ -255,16 +263,11 @@ export class DocumentService {
 
   constructor(notebook: Notebook, options: ServiceOptions = {}) {
     this.#notebook = notebook
-    this.#corpus = new Corpus(notebook)
-    this.#corpus.watch(STREAM_ID) // the stream is open for as long as the app is
-    this.#stream = this.#corpus.use(STREAM_ID, async doc => doc as StreamDocument)
-    // The two point at each other by construction order: the index reads days
-    // through the document so a loaded one answers from memory, and the
-    // document answers corpus-wide questions through the index (D52).
-    // The index is handed a way to REACH the stream rather than the stream
-    // itself: opening is asynchronous in general, and a constructor cannot wait.
-    // In MC3 this becomes the Corpus, and the closure goes away.
-    this.#index = new CorpusIndex(notebook, () => this.#stream)
+    // **The core first**, because everything below this line reaches through it:
+    // the corpus, the index and the stream are its, and so is the queue (D83).
+    this.#core = new CoreService(notebook)
+    // Beside the index rather than in the core: only search uses the Scanner,
+    // so it belongs to the search service when that is split out (D83).
     this.#search = new Scanner(notebook, this.#index)
     this.#filesets = new Filesets(this.#corpus)
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
@@ -349,7 +352,7 @@ export class DocumentService {
         // it is announced as itself and whoever cares re-asks (D53).
         const elsewhere = changes.map(c => c.rel).filter(rel => parseDayFile(rel) === null)
         if (elsewhere.length > 0) {
-          for (const sink of this.#sinks) sink.send(CHANNEL.corpusChanged, elsewhere)
+          this.#core.announce(CHANNEL.corpusChanged, elsewhere)
         }
         // Nothing to collect: the commit scans for itself. All that is needed
         // is that a commit becomes worth scheduling, and that the message
@@ -360,7 +363,7 @@ export class DocumentService {
     })
 
     this.#corpus.onDiverged((_id, divergence) => {
-      for (const sink of this.#sinks) sink.send(CHANNEL.diverged, divergence)
+      this.#core.announce(CHANNEL.diverged, divergence)
     })
   }
 
@@ -397,15 +400,9 @@ export class DocumentService {
   }
 
   /** Run `work` after everything already queued, and before anything queued later. */
+  /** The core's queue, under the name this class's sixty-eight callers use. */
   #serial<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.#documentMutationQueue.then(work, work)
-    // Keep the chain alive even when a link rejects, or one failed edit would
-    // wedge every edit after it.
-    this.#documentMutationQueue = next.then(
-      () => undefined,
-      () => undefined,
-    )
-    return next
+    return this.#core.mutate(work)
   }
 
   /**
@@ -674,7 +671,7 @@ export class DocumentService {
     // A zone change can put the calendar past the writing day, which is an
     // ordinary boundary and crossed the ordinary way.
     await this.crossTheDay()
-    for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, this.#clock.writingDay)
+    this.#core.announce(CHANNEL.dayRolled, this.#clock.writingDay)
   }
 
   /**
@@ -731,7 +728,7 @@ export class DocumentService {
     const key = notice === null ? null : `${notice.notebook} ${notice.system}`
     if (key === this.#offered) return
     this.#offered = key
-    for (const sink of this.#sinks) sink.send(CHANNEL.zoneNotice, notice)
+    this.#core.announce(CHANNEL.zoneNotice, notice)
   }
 
   /**
@@ -771,7 +768,7 @@ export class DocumentService {
     // event (D62).
     if (writing !== this.#announced) {
       this.#announced = writing
-      for (const sink of this.#sinks) sink.send(CHANNEL.dayRolled, writing)
+      this.#core.announce(CHANNEL.dayRolled, writing)
       // **Unattended, at the boundary** (H5): reconciliation is not contingent on
       // anybody doing a thing, because the whole point is that it happens while
       // nobody is looking. Failures are swallowed here on purpose — a
@@ -2630,22 +2627,13 @@ export class DocumentService {
 
   // ── pushing to the renderer ────────────────────────────────
 
-  #sinks: MessageSink[] = []
-
-  /**
-   * Where pushed messages go. An interface rather than a BrowserWindow so this
-   * whole class stays free of Electron — which is what lets its serial queue,
-   * the part most likely to be subtly wrong, be tested in plain Node.
-   */
+  /** Where pushed messages go — the core's bus (D83). */
   addSink(sink: MessageSink): () => void {
-    this.#sinks.push(sink)
-    return () => {
-      this.#sinks = this.#sinks.filter(s => s !== sink)
-    }
+    return this.#core.addSink(sink)
   }
 
   #broadcast(message: WindowChangedMessage): void {
-    for (const sink of this.#sinks) sink.send(CHANNEL.windowChanged, message)
+    this.#core.announce(CHANNEL.windowChanged, message)
   }
 
   /**
@@ -2696,13 +2684,11 @@ export class DocumentService {
    * which keeps a docket from redrawing every time anybody types in the stream.
    */
   #changed(id: DocumentId): void {
-    for (const sink of this.#sinks) {
-      sink.send(CHANNEL.documentsChanged, { documents: [id] })
-    }
+    this.#core.changed(id)
   }
 
   #broadcastReset(id: WindowId): void {
-    for (const sink of this.#sinks) sink.send(CHANNEL.windowReset, { id })
+    this.#core.announce(CHANNEL.windowReset, { id })
   }
 }
 

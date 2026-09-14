@@ -1378,3 +1378,34 @@ this marker work* but *which markers do not*.
 the code's state rather than the world's, and it reads as though a marker might
 legitimately mean nothing. Every marker stands for something, so reaching that
 line means one lost what it pointed at — which is what it now says.
+
+## 60. The manual first, then the system that matches it
+
+The service split was designed by writing its documentation before any of it
+existed: the layer table, the core's interface, the channel grouping, the order
+of work. Three things came out of that which would not have come out of writing
+the code first.
+
+**The cycle was found by the table, not by the compiler.** Listing which service
+owns which verb made `todoPutDown → docketAdd` and `reconcileDockets → todoAdd`
+sit two rows apart, and a flat set of peer services was dead on the page. Found
+in the editor, it would have been found halfway through a migration.
+
+**The layer-2 list wrote itself and then justified itself.** Asking *what is left
+over once each service owns one kind of thing* produced exactly three residents —
+the horizon, the reconciler, the transfers — and those are the three features
+that generated the most design discussion in the preceding fortnight. A list
+arrived at mechanically, agreeing with a list arrived at by argument, is the
+strongest evidence a structure is real rather than tidy.
+
+**Writing the core's interface found the inversion.** `#wrote()` calls
+`reconcile()`, and putting the two on a layer diagram makes core call upward,
+which the rule forbids. The fix — services register passes and core runs them
+knowing nothing about them — turns D77's *dockets are its first clause* from a
+sentence in a comment into the actual shape of the code. That is a design
+improvement, and it was produced by the document being unable to say something
+false.
+
+**The discipline generalises**: write the manual, make the manual clear, then
+build the system that matches it. A manual that is hard to write is describing a
+structure that is hard to hold, and it is much cheaper to notice that in prose.

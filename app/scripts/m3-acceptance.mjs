@@ -2292,6 +2292,14 @@ console.log('\n\u2014 capture from the stream \u2014')
 
   // **Committed**: the row opens in the list prefilled from the selection, and
   // once it is committed the words point at the task they became.
+  //
+  // **Known to flake, 2026-09-13.** This is the only check in the suite that
+  // waits on a SECOND window booting — the driver gives it 12s to boot, claim,
+  // commit and send the answer back, and on a loaded machine that is sometimes
+  // not enough. It then reports an empty list and unlinked prose, which looks
+  // exactly like a broken capture rather than like a slow boot. Seen failing
+  // once and passing on the next run with no change in between; if it fails,
+  // re-run before believing it.
   const kept = report(await launch('capture', await week([prose])))
   check('a selection can be taken from mid-sentence', kept.selected === 'call the surveyor about the boundary')
   check(

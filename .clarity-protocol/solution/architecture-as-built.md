@@ -102,6 +102,27 @@ flowchart TB
   NB -. "file changed on disk" .-> SD
 ```
 
+### The layers, named
+
+Reading up from the disk. **W** and **X** were always layers; what was implicit
+until now is that **X has two halves**, and saying so is what makes *which layer
+may call which* a question with an answer.
+
+| layer | what is on it | reaches |
+|---|---|---|
+| **W** — infrastructure | `Notebook`, `Repository` and its git implementation, layout, atomic write, the lock, the watcher, themes | the filesystem |
+| **X lower** — per-document objects | `SegmentedDocument` and its kinds, `DocumentWindow`, `Segment`, and the parsing beneath them — frontmatter, markers, text-edits, anomalies, comments, day-clock | W |
+| **X upper** — whole-corpus objects | `Corpus` and `CorpusIndex`, **peers**: both built over the notebook, both reaching the same per-document objects, neither over the other. `Scanner` sits above the index | X lower, W |
+| **the service** | `DocumentService` — the serial queue, the write tiers, every verb the app can do. **Electron-free** | X, W |
+| **the boundary** | `CHANNEL` + payload types, `preload` | — |
+| **X mirror** | `RemoteDocument`, `RemoteWindow` — a local copy, so coordinates answer synchronously | the boundary |
+| **Z** — features and UI | `Pane`, the editor, the surfaces, the frame | the mirror |
+
+> **The service layer is being split** into a `CoreService` with domain and
+> composing services above it, each following the IPC channels — decided in D83,
+> planned in `service-layers.md`, **not yet built.** This table describes the one
+> service that exists today; it gains rows as that work lands.
+
 **X lives in main, not in a hidden renderer** (D37). One consequence shapes
 everything else: the renderer holds a *mirror* of X — `RemoteDocument` and
 `RemoteWindow` — which keeps a local copy of the text so that coordinates can be
