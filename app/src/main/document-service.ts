@@ -72,6 +72,7 @@ import type { LocalWindow } from './x/window.ts'
 import { Bus, type MessageSink } from './bus.ts'
 import { CorpusService } from './corpus-service.ts'
 import { DurabilityService } from './durability-service.ts'
+import { DayService } from './day-service.ts'
 
 /**
  * Anything that can carry a pushed message to a renderer.
@@ -178,12 +179,6 @@ export class DocumentService {
   #nextId: WindowId = 1
 
 
-  /** The day the app believes it is in, and the poll that keeps it honest. */
-  #clock: DayClock
-  /** The day through which every earlier one is known to be closed off. */
-  #closedThrough: DateKey | null = null
-  /** The last writing day anybody was told about. */
-  #announced: DateKey | null = null
   /**
    * A system zone somebody has already declined to adopt.
    *
@@ -204,10 +199,8 @@ export class DocumentService {
    */
   #offered: string | null | undefined = undefined
   readonly #systemZone: () => string
-  readonly #seeded: Promise<void>
-  readonly #idleMs: number | undefined
-  #dayTimer: ReturnType<typeof setInterval> | null = null
-  readonly #now: () => Date
+  /** What day it is, and what zone that is computed in (D62, D63, D83). */
+  readonly #day: DayService
 
   readonly #notebook: Notebook
 
@@ -225,25 +218,15 @@ export class DocumentService {
     // so it belongs to the search service when that is split out (D83).
     this.#search = new Scanner(notebook, this.#index)
     this.#filesets = new Filesets(this.#corpus)
-    this.#now = options.now ?? (() => new Date())
-    this.#idleMs = options.idleMs
-    // Seeded properly once the stream can be asked what the newest day is; a
-    // clock with no seed is on today, which is right for a notebook with
-    // nothing in it and is corrected by `#seedTheClock` for one that has.
-    this.#clock = new DayClock(null, { now: this.#now, ...(this.#idleMs === undefined ? {} : { idleMs: this.#idleMs }) })
-    // **Seeding is I/O and a constructor is not**, so the clock starts on today
-    // and is corrected the moment the corpus can be read. Every door into this
-    // object awaits `#seeded` first, so nothing can observe the wrong answer —
-    // which is not hypothetical: the first draft raced, and a caller asking the
-    // date immediately got the unseeded one.
-    // What the unseeded clock says is the baseline. **If the seed moves the
-    // writing day, that IS a boundary** — the app was closed when it happened
-    // and this is the moment it is noticed — so it has to be announced like any
-    // other, which it will be, because it will differ from this.
-    this.#announced = this.#clock.writingDay
-    this.#seeded = this.#seedTheClock()
+    this.#day = new DayService(this.#store, this.#durable, this.#bus, options)
     this.#systemZone = options.systemZone ?? systemZone
-    this.#watchTheClock(options.dayCheckMs ?? DAY_CHECK_MS)
+    // **The two upward edges, inverted.** Crossing a boundary has to reconcile
+    // what derives from the day, and every poll has to re-offer the zone — both
+    // of which live above the day service, so it announces and these subscribe
+    // (D83). Awaited for the roll, because the boundary is not crossed until the
+    // derived state agrees with it.
+    this.#day.onRolled(() => this.reconcile().then(() => undefined))
+    this.#day.onChecked(() => this.#tellAboutTheZone())
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -279,8 +262,24 @@ export class DocumentService {
   }
 
   /** Run `work` after everything already queued, and before anything queued later. */
-  /** The core's queue, under the name this class's sixty-eight callers use. */
-  #serial<T>(work: () => Promise<T>): Promise<T> {
+  /**
+   * The corpus service's queue, under the name this class's callers use — and
+   * **the one gate on the day being real**.
+   *
+   * A synchronous `today` is a lie until the clock is seeded, because the day
+   * cannot be known without reading the newest written day and the notebook's
+   * zone. The old comment claimed every door awaited the seed; six of about a
+   * hundred and fifty did, and `todoAdd` was not among them — so a write racing
+   * startup could file an item under the guessed day while every later read
+   * looked under the real one, and the item simply was not there.
+   *
+   * **Gated here because every mutation already comes through here**, and a
+   * hundred and fifty remembered `await`s is exactly the arrangement that was
+   * already wrong. Reads are deliberately not gated: a read that is a day stale
+   * corrects itself on the next poll, and a write does not.
+   */
+  async #serial<T>(work: () => Promise<T>): Promise<T> {
+    await this.#day.ready()
     return this.#store.mutate(work)
   }
 
@@ -293,7 +292,7 @@ export class DocumentService {
    * "not applicable", said in the one vocabulary the wire has for it.
    */
   async info(id: DocumentId = STREAM_ID): Promise<DocumentInfo> {
-    await this.#seeded
+    await this.#day.ready()
     return this.#corpus.use(
       id,
       async doc => ({
@@ -313,7 +312,7 @@ export class DocumentService {
   }
 
   async openWindow(request: ReadRequest): Promise<WindowSnapshot> {
-    await this.#seeded
+    await this.#day.ready()
     const docId = request.doc ?? STREAM_ID
     const window = await this.#corpus.use(
       docId,
@@ -373,7 +372,7 @@ export class DocumentService {
       await window.edit(request.edits, request.origin)
       // The idle rule's only input, and it is free here: every keystroke
       // already passes through this method (D62).
-      if (request.origin === 'user') this.#clock.wrote()
+      if (request.origin === 'user') this.#day.wrote()
       this.#durable.writeSoon()
       return {
         generation: window.generation,
@@ -442,103 +441,32 @@ export class DocumentService {
 
   // ── the day, which changes whether or not anyone is looking ──
 
-  /**
-   * What day the app is filing into.
-   *
-   * **One place decides this.** `StreamDocument.today()` reads the system clock
-   * afresh, which is right for a static helper and wrong for an app that has to
-   * agree with itself: the service polls, announces, and answers from what it
-   * announced, so a window opened at 23:59 and the message that arrives at
-   * 00:00 cannot disagree about which day it is now.
-   */
+  /** What day the app is filing into — the day service's (D62, D83). */
   get today(): DateKey {
-    return this.#clock.writingDay
+    return this.#day.today
   }
 
-  /**
-   * The moment to stamp a completion with.
-   *
-   * **The same clock that answers `today`**, which is the point: a stamp taken
-   * from the wall while the day came from the service is two sources of truth
-   * about the same instant, and they disagree exactly when it matters — under a
-   * frozen clock in a test, and for the thirty seconds either side of midnight
-   * that D62 exists to keep coherent.
-   */
+  /** The moment to stamp a completion with: the same clock that answers `today`. */
   get #moment(): number {
-    return Math.floor(this.#now().getTime() / 1000)
+    return this.#day.moment
   }
 
-  /**
-   * What the calendar says, as against what the notebook is writing into (D62).
-   *
-   * The interface counts from this — a due date's *in three days*, the
-   * sidebar's marker — while the filing date is `today` above. They differ
-   * exactly while somebody is still writing past midnight, and a band that
-   * still says *tomorrow* at 00:30 is telling the truth about the evening they
-   * are still in.
-   */
+  /** What the calendar says, as against what the notebook is writing into. */
   get clockDay(): DateKey {
-    return this.#clock.clockDay
-  }
-
-  /**
-   * Notice midnight, and say so.
-   *
-   * **Polled rather than scheduled to the boundary**, for the case a scheduled
-   * timer is worst at: a laptop asleep at midnight wakes at nine, and a timer
-   * set for the boundary fires late and alone while a poll simply notices on
-   * its next tick. Thirty seconds is far below what anyone would perceive and
-   * far above what it costs.
-   *
-   * The announcement is all main does. Where the caret should go is the
-   * renderer's — it is the only side that knows whether someone is in the
-   * middle of a sentence (D35: the editor reports facts, Z owns policy).
-   */
-  /**
-   * What day the notebook was on when it was last closed.
-   *
-   * **Read from the corpus, because the ordinary case is an app that was not
-   * running** (D62). The newest day with a file, and when that file was last
-   * written, is enough to reconstruct the answer — after a close, a crash, a
-   * sleeping laptop or a week away, none of which a live timer survives.
-   */
-  async #seedTheClock(): Promise<void> {
-    const { zone } = await readSettings(this.#notebook)
-    const stream = await this.#stream
-    const days = await stream.dates()
-    const newest = days[days.length - 1]
-    const stamp = newest === undefined ? null : await this.#notebook.stamp(dayFile(newest))
-    this.#clock = new DayClock(
-      newest === undefined ? null : { day: newest, writtenAt: stamp?.mtime ?? 0 },
-      { now: this.#now, zone, ...(this.#idleMs === undefined ? {} : { idleMs: this.#idleMs }) },
-    )
+    return this.#day.clockDay
   }
 
   /** What zone this notebook's dates are computed in (D63). */
   get zone(): string {
-    return this.#clock.zone
+    return this.#day.zone
   }
 
-  /**
-   * Say where you are now, and keep it with the notebook.
-   *
-   * **Chosen, never detected.** The system's zone is offered when it differs
-   * and applied only here, because a zone that changes itself is what D38
-   * rightly rejected — travel would otherwise re-date the day you are in.
-   */
+  /** Say where you are now, and keep it with the notebook (D63). */
   async setZone(zone: string): Promise<void> {
-    if (!isKnownZone(zone)) throw new Error(`this machine does not know the zone ${zone}`)
-    await this.#seeded
-    await writeSettings(this.#notebook, { zone })
-    this.#clock.moveTo(zone)
-    this.#touched()
+    await this.#day.setZone(zone)
     // A zone somebody chose is not a zone somebody declined.
     this.#declined = null
     this.#tellAboutTheZone()
-    // A zone change can put the calendar past the writing day, which is an
-    // ordinary boundary and crossed the ordinary way.
-    await this.crossTheDay()
-    this.#bus.announce(CHANNEL.dayRolled, this.#clock.writingDay)
   }
 
   /**
@@ -598,66 +526,9 @@ export class DocumentService {
     this.#bus.announce(CHANNEL.zoneNotice, notice)
   }
 
-  /**
-   * Cross a boundary if there is one to cross, and say so.
-   *
-   * **Main does the infrastructural half before it announces**, which is what
-   * keeps three windows from racing to do it and what means no window ever
-   * sees a half-crossed boundary (D62). The announcement is still all the
-   * renderer gets: where the caret should go is the renderer's, because it is
-   * the only side that knows whether somebody is mid-sentence (D35).
-   */
+  /** Cross a boundary if there is one to cross, and say so (D62). */
   async crossTheDay(): Promise<void> {
-    await this.#seeded
-    const advanced = this.#clock.tick()
-    const writing = this.#clock.writingDay
-
-    // **Not "did it just advance" — "is every day before this one closed".**
-    // The tick is an edge and the invariant is a level, which is the whole
-    // shape of D62; asking the edge missed the commonest case of all, an app
-    // opened the next morning where the seed had already moved the writing day
-    // and no tick was ever going to fire.
-    if (this.#closedThrough === null || compareDateKeys(writing, this.#closedThrough) > 0) {
-      const stream = await this.#stream
-      const before = (await stream.dates()).filter(day => compareDateKeys(day, writing) < 0)
-      const last = before[before.length - 1]
-      if (last !== undefined && (await this.#serial(() => stream.endDay(last)))) this.#touched()
-      // A memo, not the truth: the files are the truth, and this only saves the
-      // scan on the ninety-nine polls out of a hundred with nothing to do.
-      this.#closedThrough = writing
-    }
-
-    // **Announced when it DIFFERS, not when it just moved.** Using the tick's
-    // edge lost the announcement whenever the seed landed after a boundary had
-    // already passed: the seeded clock was born on the new day, so nothing ever
-    // "advanced" and nobody was told. The same level-rather-than-edge mistake
-    // this design was written to avoid, made in the one place that was still an
-    // event (D62).
-    if (writing !== this.#announced) {
-      this.#announced = writing
-      this.#bus.announce(CHANNEL.dayRolled, writing)
-      // **Unattended, at the boundary** (H5): reconciliation is not contingent on
-      // anybody doing a thing, because the whole point is that it happens while
-      // nobody is looking. Failures are swallowed here on purpose — a
-      // background pass that throws must not take the day roll with it, and the
-      // next pass will try again, since nothing depends on this one having run.
-      // **Awaited, though**: the boundary is not crossed until the state that
-      // derives from the new day agrees with it, which is the same
-      // no-half-crossed-boundary rule the rest of this method is built on.
-      await this.reconcile().catch(() => undefined)
-    }
-
-    // The same poll notices the machine moving. Changing the system zone is not
-    // an event anything reports, so noticing it means looking — and the thing
-    // that already looks at the clock every thirty seconds is this.
-    this.#tellAboutTheZone()
-    void advanced
-  }
-
-  #watchTheClock(everyMs: number): void {
-    this.#dayTimer = setInterval(() => void this.crossTheDay(), everyMs)
-    // The clock must never be the reason a process stays alive.
-    this.#dayTimer.unref?.()
+    return this.#day.crossTheDay()
   }
 
   // ── durability, which is the core's (D32, D83) ───────────────
@@ -1030,6 +901,7 @@ export class DocumentService {
    * is a perfectly good moment to decide you have one.
    */
   async todoList(): Promise<DocumentId> {
+    await this.#day.ready()
     // **Named, not searched for** (D55 as amended, MT7). This used to return
     // whichever root-level `.todo` came first, which with two lists means one
     // silently wins — and `tasks.todo` is *the* task list the way
@@ -1067,6 +939,7 @@ export class DocumentService {
    * stops.
    */
   async todoToday(id: DocumentId): Promise<SegmentKey> {
+    await this.#day.ready()
     const today = this.today
     await this.#corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds))
     this.#touched()
@@ -1483,7 +1356,7 @@ export class DocumentService {
    * are the same image.
    */
   async attachImage(request: ImageAttachment): Promise<Attached> {
-    await this.#seeded
+    await this.#day.ready()
     // **Written by the floor**, because writing files is the floor's job and an
     // attachment is the one kind of corpus content with no document to write it
     // (`x/documents/attachments.ts`). The layering test is what said so.
@@ -1506,7 +1379,7 @@ export class DocumentService {
    * its own relative links (Spike B).
    */
   async linkBase(base: Base): Promise<string> {
-    await this.#seeded
+    await this.#day.ready()
     const file = fileOfBase(base.kind === 'day' ? base : base, this.today)
     return file.split('/').slice(0, -1).join('/')
   }
@@ -1885,6 +1758,7 @@ export class DocumentService {
    * horizon's two sources are kept disjoint to avoid.
    */
   async todoPutDown(list: DocumentId, item: string, docket?: DocumentId): Promise<string | null> {
+    await this.#day.ready()
     const found = (await this.todoItems(list, this.today)).find(one => one.id === item)
     // **Already put down is already housed.** The provenance check below only
     // catches a task a docket MADE; one that was put down has a matter nothing
@@ -2083,6 +1957,7 @@ export class DocumentService {
   }
 
   async #reconcileDocketsOnce(): Promise<{ made: readonly string[]; withdrawn: readonly string[] }> {
+    await this.#day.ready()
     const today = this.today
     const list = await this.todoList()
     const made: string[] = []
@@ -2294,6 +2169,7 @@ export class DocumentService {
    * against both or it is built wrong.
    */
   async horizon(from: DateKey, to: DateKey): Promise<readonly HorizonRow[]> {
+    await this.#day.ready()
     const window: HorizonWindow = { from, to }
     const rows: HorizonRow[] = []
 

@@ -10,7 +10,7 @@
 
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
@@ -111,4 +111,57 @@ test('and the service files into the new day afterwards, not the old one', async
   after = (await svc.info()).today
   assert.notEqual(after, before)
   assert.equal(after, dateKeyAt(clock.at()))
+})
+
+// ── the day has to be REAL before anything writes with it ───────────────────
+
+test('THE SEED LANDS BEFORE A WRITE PICKS A DAY', async t => {
+  // **The claim above this code used to be false.** It said *every door into
+  // this object awaits `#seeded` first, so nothing can observe the wrong
+  // answer*; six of about a hundred and fifty actually did, and `todoAdd`,
+  // `todoToday` and `todoList` were not among them.
+  //
+  // The day cannot be known without I/O — it takes the newest written day, that
+  // file's mtime and the notebook's zone — so a synchronous `today` is a guess
+  // until the seed lands. A write racing startup filed its item under the guess
+  // while every later read looked under the real day, and the item simply was
+  // not there: no error, nothing in the file, an empty list.
+  const root = await mkdtemp(join(tmpdir(), 'tephra-seed-'))
+  // **A notebook whose newest written day is not the calendar day**, which is
+  // what makes the guess and the truth differ at all. Written before the
+  // service exists, so the seed has something to find.
+  await mkdir(join(root, 'notebook.stream', '2026', '03'), { recursive: true })
+  await writeFile(
+    join(root, 'notebook.stream', '2026', '03', '2026-03-09.md'),
+    '---\ndate: 2026-03-09\n---\n\nWriting late.\n',
+  )
+  const nb = await Notebook.open({ root, lock: false, watch: false })
+  const svc = new DocumentService(nb, {
+    history: false,
+    now: () => new Date('2026-03-10T09:00:00Z'),
+    dayCheckMs: 24 * 60 * 60_000,
+  })
+  t.after(async () => {
+    await svc.stop()
+    await nb.close()
+  })
+
+  // **Nothing is awaited that would seed it first.** The other suites' helper
+  // happens to call `info()`, which does await the seed — which is why this was
+  // invisible everywhere except in the running app.
+  const list = await svc.todoList()
+  const made = await svc.todoAdd(list, 'Ring the dentist')
+
+  // The day the write used and the day a read looks under are the same day.
+  const today = await svc.todoToday(list)
+  const items = await svc.todoItems(list, today)
+  // **What the days ARE is the informative thing**, not what `today` says now:
+  // by the time this line runs the seed has landed, so the service and the read
+  // agree and only the file disagrees. The first version of this message
+  // printed the same date twice and explained nothing.
+  const days = await svc.todoDays(list).catch(() => [])
+  assert.ok(
+    items.some(one => one.id === made),
+    `filed under a day nothing reads back: read ${String(today)}, list holds ${JSON.stringify(days)}`,
+  )
 })

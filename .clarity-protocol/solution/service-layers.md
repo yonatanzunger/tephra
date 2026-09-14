@@ -1,7 +1,8 @@
 # Service layers — splitting `DocumentService`
 
-**Status: designed 2026-09-13; the core's store, queue, bus and write tiers are
-built.**
+**Status: designed 2026-09-13; the whole foundation is built** — `Bus`,
+`CorpusService`, `DurabilityService`, `DayService` — with the reconciler
+inversion (1d) still to come.
 `architecture-as-built.md` describes what *is*; this describes what we are going
 to do, and each piece moves into that file as it lands. Decided in D83. Progress
 is tracked under *Order of work* at the foot — **1a is done**, and nothing above
@@ -241,7 +242,23 @@ leave the file without a single design decision.
        version tier there is something to commit.
      - The history *reads* — `versions`, `readDay`, `restore` — stayed put.
        They are the history service's, layer 1, not durability.
-   - **1c** — the day: `today`, `zone`, the roll.
+   - **1c done, 2026-09-13** — `DayService`: the clock, the seed, the poll, the
+     boundary, `today` / `clockDay` / `moment` / `zone`. **Two upward edges were
+     inverted on the way out**: crossing a boundary has to reconcile what derives
+     from the day, and every poll has to re-offer the zone — both far above the
+     day — so the service emits `onRolled` (awaited, because the boundary is not
+     crossed until derived state agrees with it) and `onChecked`, and the callers
+     subscribe. The **zone offer** — `zoneNotice`, `dismissZone`, `askZoneNotice`
+     — deliberately stayed behind: D63 says the zone is offered and never
+     applied, so the offer is session UI state and belongs to the app service.
+     The `zone` itself went, being an input to date arithmetic.
+     - **And it closed a real defect** (note 61). The comment above the clock
+       claimed *every door awaits `#seeded` first*; six of ~150 did, and
+       `todoAdd` was not among them, so a write racing startup filed under the
+       guessed day while every read looked under the real one. Gated at the
+       mutation queue — the one place every write already passes through — plus
+       five doors that read the day before queueing. Pinned by *THE SEED LANDS
+       BEFORE A WRITE PICKS A DAY*, which fails without the gate.
    - **1d** — the reconciler inversion: `reconciles(name, pass)`.
 2. **`registerIpc`**, so a service can claim its own channels and the 74-case
    switch in `ipc.ts` can shrink a service at a time.

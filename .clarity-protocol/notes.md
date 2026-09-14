@@ -1409,3 +1409,41 @@ false.
 **The discipline generalises**: write the manual, make the manual clear, then
 build the system that matches it. A manual that is hard to write is describing a
 structure that is hard to hold, and it is much cheaper to notice that in prose.
+
+## 61. The comment said every door; six doors did
+
+Above the day clock stood this: *"Seeding is I/O and a constructor is not, so the
+clock starts on today and is corrected the moment the corpus can be read. **Every
+door into this object awaits `#seeded` first, so nothing can observe the wrong
+answer** — which is not hypothetical: the first draft raced."*
+
+Six of about a hundred and fifty members awaited it. `todoAdd`, `todoToday` and
+`todoList` did not, and all three read the day.
+
+**The comment was true when it was written**, which is what makes this worth
+recording. It described an invariant that held over the doors existing at the
+time, and then a year of ordinary work added doors — none of which was wrong to
+add, and no single one of which was the mistake. An invariant stated in prose and
+maintained by memory decays silently in exactly this way: nothing ever fails, the
+sentence stays on the screen, and it goes from description to aspiration without
+anyone editing it.
+
+**The symptom was invisible from every angle except the running app.** A write
+racing startup filed its item under the guessed day while every later read looked
+under the real one. No error, no anomaly, nothing in the wrong file — the item
+simply was not anywhere the app would look. And the integration helper happened
+to call `info()`, which *is* one of the six, so the suites were safe by accident
+and only the acceptance suite ever saw it — intermittently, in a two-window
+scene, where it read as a slow boot.
+
+**The fix is a gate, not more discipline.** Every mutation already passes through
+one place — the mutation queue — so the wait went there, plus five doors that
+read the day before queueing anything. Reads are deliberately *not* gated: a read
+that is a day stale corrects itself on the next poll, and a write does not.
+**Where an invariant cannot be enforced in one place it should not be claimed in
+prose**; the honest version of the old comment would have been a list of which
+doors were safe, and a list nobody could keep is the signal to find the gate.
+
+> Related: note 50's rule that a rendering which is nearly right looks exactly
+> right. This is the same failure one layer down — an invariant that is nearly
+> maintained reads exactly like one that is.

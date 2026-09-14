@@ -126,11 +126,14 @@ const NOT_THE_NOTEBOOK = ['system-zone.ts']
  * everything above a way to reach documents without ever naming a file.
  * `durability-service.ts` is here for the other reason: the write tiers ARE the
  * notebook's storage discipline, so the log and the repository are its to make.
+ * `day-service.ts` reads the notebook's settings and one day file's mtime, which
+ * is what the day is seeded FROM — there is no document to ask for either.
  * `document-service.ts` is still here because it is still being split; it leaves
  * this list when the last of it has moved into a service.
  */
 const COMPOSITION = [
-  'index.ts', 'corpus-service.ts', 'durability-service.ts', 'document-service.ts', 'print.ts',
+  'index.ts', 'corpus-service.ts', 'durability-service.ts', 'day-service.ts',
+  'document-service.ts', 'print.ts',
 ]
 
 test('only the floor touches storage', async () => {
