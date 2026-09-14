@@ -73,9 +73,10 @@ import { Bus, type MessageSink } from './bus.ts'
 import { CorpusService } from './corpus-service.ts'
 import { documentKey, ASKED_KEY } from './change-keys.ts'
 import { FixedPoints, type RunReport } from './fixed-point.ts'
-import { serve, type Served, type Serves } from './serves.ts'
 import { DurabilityService } from './durability-service.ts'
 import { DayService } from './day-service.ts'
+import { CommentsService } from './comments-service.ts'
+import type { Serves } from './serves.ts'
 
 /**
  * Anything that can carry a pushed message to a renderer.
@@ -130,7 +131,7 @@ export interface ServiceOptions {
   readonly history?: boolean
 }
 
-export class DocumentService implements Serves {
+export class DocumentService {
   /**
    * **The foundation, held rather than inherited** (D83).
    *
@@ -205,6 +206,8 @@ export class DocumentService implements Serves {
   readonly #systemZone: () => string
   /** What day it is, and what zone that is computed in (D62, D63, D83). */
   readonly #day: DayService
+  /** Margin notes, extracted (D47, D83). */
+  readonly #comments: CommentsService
 
   readonly #notebook: Notebook
 
@@ -236,6 +239,19 @@ export class DocumentService implements Serves {
     // up like any other change.
     this.#day.onChecked(() => this.#tellAboutTheZone())
     this.#registerReconcilers()
+    this.#comments = new CommentsService(this.#store, this.#durable)
+  }
+
+  /**
+   * The services split out so far, for `ipc.ts` to wire (D83).
+   *
+   * **This class builds them because it owns the foundation**, which nothing
+   * else can reach yet. As groups move out they are constructed here and added
+   * to this list; when the last one has gone, what builds the foundation moves
+   * up to `index.ts` and this class is finished.
+   */
+  services(): readonly Serves[] {
+    return [this.#comments]
   }
 
   // ── UI state: where the reader was ─────────────────────────
@@ -1268,82 +1284,17 @@ export class DocumentService implements Serves {
     this.#touched()
   }
 
-  // ── comments (D47) ─────────────────────────────────────────
-
-  /**
-   * The channels this service answers on (D83).
-   *
-   * **The comment channels only, so far.** They are the first group to declare
-   * themselves rather than being dispatched by a case in `ipc.ts`'s switch, and
-   * they are next to be extracted into a service of their own — so this is the
-   * channels moving one step ahead of the code, and the extraction has that much
-   * less to do. Every other channel is still in the switch and will arrive here
-   * with its service.
-   */
-  serves(): readonly Served[] {
-    return [
-      serve(CHANNEL.comments, () => this.comments()),
-      serve(CHANNEL.startComment, (span: Span, body: string) => this.startComment(span, body)),
-      serve(CHANNEL.addComment, (id: CommentId, body: string) => this.addComment(id, body)),
-      serve(CHANNEL.editComment, (id: CommentId, at: number, body: string) =>
-        this.editComment(id, at, body),
-      ),
-      serve(CHANNEL.deleteComment, (id: CommentId, at: number) => this.deleteComment(id, at)),
-      serve(CHANNEL.setCommentResolved, (id: CommentId, on: boolean) =>
-        this.setCommentResolved(id, on),
-      ),
-      serve(CHANNEL.setCommentAssignee, (id: CommentId, to: string | null) =>
-        this.setCommentAssignee(id, to),
-      ),
-      serve(CHANNEL.reactToComment, (id: CommentId, at: number, emoji: string, on: boolean) =>
-        this.reactToComment(id, at, emoji, on),
-      ),
-    ]
-  }
-
+  // ── comments: extracted (D47, D83) ─────────────────────────
   //
-  // Serial like every mutation, and flushed on the ordinary schedule. Reading
-  // is not serialised: a thread list is derived from bodies already in memory.
-
-  async comments(): Promise<readonly CommentThread[]> {
-    return (await this.#stream).comments()
-  }
-
-  async startComment(span: Span, body: string): Promise<CommentId> {
-    const id = await this.#serial(async () => (await this.#stream).startComment(span, body))
-    this.#touched()
-    return id
-  }
-
-  async addComment(id: CommentId, body: string): Promise<void> {
-    await this.#serial(async () => (await this.#stream).addComment(id, body))
-    this.#touched()
-  }
-
-  async editComment(id: CommentId, index: number, body: string): Promise<void> {
-    await this.#serial(async () => (await this.#stream).editComment(id, index, body))
-    this.#touched()
-  }
-
-  async deleteComment(id: CommentId, index: number): Promise<void> {
-    await this.#serial(async () => (await this.#stream).deleteComment(id, index))
-    this.#touched()
-  }
-
-  async setCommentResolved(id: CommentId, resolved: boolean): Promise<void> {
-    await this.#serial(async () => (await this.#stream).setCommentResolved(id, resolved))
-    this.#touched()
-  }
-
-  async setCommentAssignee(id: CommentId, to: string | null): Promise<void> {
-    await this.#serial(async () => (await this.#stream).setCommentAssignee(id, to))
-    this.#touched()
-  }
-
-  async reactToComment(id: CommentId, index: number, emoji: string, on: boolean): Promise<void> {
-    await this.#serial(async () => (await this.#stream).reactToComment(id, index, emoji, on))
-    this.#touched()
-  }
+  // The eight verbs and their channels are `services/comments-service.ts` now —
+  // the first group out, chosen as the pilot because it writes, so the move
+  // exercised the store, the queue and the write tiers rather than only the
+  // channel declaration. Nothing else in main called them, so nothing here
+  // forwards to them: the service is wired beside this one in `ipc.ts`.
+  //
+  // **This class no longer serves any channel of its own.** It will again as
+  // groups are moved out and the switch shrinks; what is left in the switch is
+  // what has not moved.
 
   /**
    * Something changed that has to reach the file tier.

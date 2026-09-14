@@ -42,10 +42,10 @@ function wire(services: readonly Serves[]): void {
 
 /** One service per notebook, one notebook per app. */
 export function registerDocumentIpc(service: DocumentService): void {
-  // **Declared channels first**, so a collision with a hand-written case below
-  // shows up as Electron refusing a second handler for one channel rather than
-  // as whichever won.
-  wire([service])
+  // **The extracted services first**, so a collision with a hand-written case
+  // below shows up as Electron refusing a second handler for one channel rather
+  // than as whichever silently won.
+  wire(service.services())
 
   ipcMain.handle(CHANNEL.open, (_e, id?: DocumentId) => service.info(id))
   ipcMain.handle(CHANNEL.read, (_e, request: ReadRequest) => service.openWindow(request))

@@ -355,12 +355,46 @@ system*](https://betterprogramming.pub/w-x-and-z-the-layers-of-a-system-568cf6b1
      completeness test buys the safety without the scatter, and catches the
      opposite failure a decorator cannot see.
 
-3. **Comments as the pilot** — 129 lines, 13 members, a clean domain, collapses
-   eight channels into one union, **and it writes documents**, so it exercises
-   the risky part (core access, the write path) while staying small enough to
-   throw away if the pattern comes out wrong. Deliberately not `nav`, which is
-   bigger and would delete more of the switch but is read-only and would prove
-   only the registration mechanism.
+3. **Comments as the pilot — done 2026-09-14.**
+   `services/comments-service.ts`, 120 lines: eight verbs and their eight
+   channels. Chosen because it **writes**, so the move exercised the store, the
+   one mutation queue and the write tiers rather than only the channel
+   declaration — `nav` would have deleted more of the switch and proved less.
+   - **Nothing else in main called the comment verbs**, so nothing forwards to
+     them and `DocumentService` lost them outright. It builds the service,
+     because it owns the foundation nothing else can reach yet, and exposes
+     `services()` for `ipc.ts` to wire. When the last group has gone, what
+     builds the foundation moves up to `index.ts`.
+   - **One deliberate behaviour difference**, stated because a move is supposed
+     to have none: the verbs used to pass through `DocumentService.#serial`,
+     which awaits the day being seeded. Comments are anchored to a *span* and
+     the span names its segment, so this service does not depend on `DayService`
+     and its writes do not wait on the clock. Nothing observable changes; a
+     comment written in the first moments of startup no longer waits for a fact
+     it does not use.
+   - **Eight channels, not one union.** `docket` and `todo` carry a command
+     union and these could too, but that is a change to the preload and the
+     renderer, and does not belong in a move.
+   - **A bug found and deliberately not fixed here** — see below.
+
+### Found while extracting: a comment's timestamp is wall-clock UTC
+
+`#newMessage` in `x/documents/segmented.ts` stamps a message with
+`new Date().toISOString().slice(0, 16)`. Everywhere else in the app both the
+instant and the zone come from `DayService` (D62, D63), and this is the **third**
+of that family — completion stamps taken from the wall clock while `today` came
+from the service, and `dueOn` computing in UTC so that a task finished at 17:42
+in a GMT+8 notebook came due *tomorrow*. Both were fixed by passing the clock
+and the zone in.
+
+Visible consequence: a comment written after midnight in a notebook whose zone is
+behind UTC is stamped with the previous day. And under a frozen test clock the
+stamp is the real time, so no test can assert on it.
+
+**Left alone on purpose.** Every step in this plan changes no behaviour, which is
+what lets the suites be the proof; a fix bundled into a move would spend that
+property. Worth noting that fixing it will give the comments service a reason to
+know the day after all.
 4. The rest, thin routers first.
 5. **Layer 2 last**, because it is the part the cycle lives in, and by then both
    its dependencies are behind interfaces.
