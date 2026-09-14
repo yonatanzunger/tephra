@@ -48,6 +48,29 @@ export function dateKeyAt(at: Date = new Date(), zone: string = DEFAULT_ZONE): D
   return `${of('year')}-${of('month')}-${of('day')}` as DateKey
 }
 
+/**
+ * The instant, to the minute, as the notebook's zone sees it.
+ *
+ * `2026-09-14T10:23` — the shape a comment's byline is written in. **Zone-aware,
+ * which the first version of it was not**: comments were stamped
+ * `new Date().toISOString().slice(0, 16)`, so one written after midnight in a
+ * notebook behind UTC carried the previous day, and under a frozen test clock
+ * the stamp was the real time. Third of a family — completion stamps were taken
+ * from the wall clock while `today` came from the service, and `dueOn` computed
+ * in UTC so a task finished at 17:42 in a GMT+8 notebook came due *tomorrow*.
+ *
+ * **No zone offset in the text.** The notebook has one zone (D63) and writes it
+ * in its settings, so repeating it on every byline would be noise in a file
+ * somebody reads — and a byline is read as *when I wrote this*, which is a local
+ * time by nature.
+ */
+export function stampAt(at: Date = new Date(), zone: string = DEFAULT_ZONE): string {
+  const parts = minuteFormatterFor(zone).formatToParts(at)
+  const of = (type: string): string => parts.find(part => part.type === type)?.value ?? ''
+  // `hourCycle: 'h23'` rather than `hour12: false`, which gives 24 for midnight.
+  return `${of('year')}-${of('month')}-${of('day')}T${of('hour')}:${of('minute')}`
+}
+
 /** Parse and validate. Null rather than a throw, since input may be a filename. */
 export function asDateKey(s: string): DateKey | null {
   if (!DATE_KEY.test(s)) return null
@@ -181,6 +204,24 @@ function formatterFor(zone: string): Intl.DateTimeFormat {
     day: '2-digit',
   })
   formatters.set(zone, made)
+  return made
+}
+
+/** The same, to the minute — a separate cache because a separate shape. */
+const minuteFormatters = new Map<string, Intl.DateTimeFormat>()
+function minuteFormatterFor(zone: string): Intl.DateTimeFormat {
+  const held = minuteFormatters.get(zone)
+  if (held !== undefined) return held
+  const made = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  minuteFormatters.set(zone, made)
   return made
 }
 

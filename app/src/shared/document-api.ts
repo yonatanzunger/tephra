@@ -629,8 +629,18 @@ export interface Document {
   // is an operation rather than ordinary typing.
   comments(): Promise<readonly CommentThread[]>
   commentsAt(at: DocumentPosition): Promise<readonly CommentThread[]>
-  startComment(span: Span, body: string): Promise<CommentId>
-  addComment(id: CommentId, body: string): Promise<void>
+  /**
+   * `at` is the instant to write in the byline, supplied by the caller.
+   *
+   * **The document does not know what time it is, on purpose.** The instant and
+   * the notebook's zone are both the day service's (D62, D63); read from
+   * `new Date()` here, in UTC, they stamped a comment written at 18:30 in a Los
+   * Angeles notebook as `2026-09-14T01:30` — tomorrow, and the wrong hour.
+   * Third of that family, after completion stamps and `dueOn`. Required rather
+   * than defaulted, so a caller cannot quietly get the wall clock back.
+   */
+  startComment(span: Span, body: string, at: string): Promise<CommentId>
+  addComment(id: CommentId, body: string, at: string): Promise<void>
   editComment(id: CommentId, index: number, body: string): Promise<void>
   /** Removing the last message removes the thread, anchors included. */
   deleteComment(id: CommentId, index: number): Promise<void>

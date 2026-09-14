@@ -236,10 +236,10 @@ export class RemoteDocument implements Document {
   commentsAt(_at: DocumentPosition): Promise<readonly CommentThread[]> {
     return this.#notYet('commentsAt')
   }
-  startComment(_span: Span, _body: string): Promise<CommentId> {
+  startComment(_span: Span, _body: string, _at: string): Promise<CommentId> {
     return this.#notYet('startComment')
   }
-  addComment(_id: CommentId, _body: string): Promise<void> {
+  addComment(_id: CommentId, _body: string, _at: string): Promise<void> {
     return this.#notYet('addComment')
   }
   editComment(_id: CommentId, _index: number, _body: string): Promise<void> {

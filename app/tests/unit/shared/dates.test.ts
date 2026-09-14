@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   dateKeyAt, asDateKey, dayLabel, weekdayOf, compareDateKeys, addDays, daysBetween,
-  msUntilNextDay, isKnownZone, DEFAULT_ZONE,
+  msUntilNextDay, isKnownZone, stampAt, DEFAULT_ZONE,
 } from '../../../src/shared/dates.ts'
 import type { DateKey } from '../../../src/shared/document-api.ts'
 
@@ -115,4 +115,37 @@ test('a label is only made from something shaped like a date', () => {
   assert.equal(dayLabel('AI-driven, market-shaping' as DateKey), 'AI-driven, market-shaping')
   assert.equal(dayLabel('content/uploads/2023-05-12-thing' as DateKey), 'content/uploads/2023-05-12-thing')
   assert.equal(dayLabel('**Introduction**' as DateKey), '**Introduction**')
+})
+
+// ── the byline's instant (D62, D63) ────────────────────────────────────────
+
+test('A BYLINE IS STAMPED IN THE NOTEBOOK\'S ZONE, not in UTC', () => {
+  // **The bug this replaced.** Comments were stamped
+  // `new Date().toISOString().slice(0, 16)`, so a comment written at 18:30 on
+  // the 13th in Los Angeles was written down as `2026-09-14T01:30` — tomorrow,
+  // and the wrong hour. Third of a family: completion stamps were taken from
+  // the wall clock while `today` came from the service, and `dueOn` computed in
+  // UTC so a task finished at 17:42 in a GMT+8 notebook came due *tomorrow*.
+  const at = new Date('2026-09-14T01:30:00Z')
+  assert.equal(at.toISOString().slice(0, 16), '2026-09-14T01:30', 'what UTC would have said')
+  assert.equal(stampAt(at, 'America/Los_Angeles'), '2026-09-13T18:30')
+  assert.equal(stampAt(at, 'Etc/GMT-8'), '2026-09-14T09:30')
+})
+
+test('and midnight is 00:00, which is the classic way to get this wrong', () => {
+  // `hour12: false` yields **24**:00 for midnight in several engines; `hourCycle:
+  // 'h23'` is the one that says 00. 16:00 UTC is exactly midnight in UTC+8.
+  assert.equal(stampAt(new Date('2026-09-14T16:00:00Z'), 'Etc/GMT-8'), '2026-09-15T00:00')
+  assert.equal(stampAt(new Date('2026-09-14T04:00:00Z'), 'Etc/GMT-8'), '2026-09-14T12:00')
+})
+
+test('and it agrees with dateKeyAt about which day it is', () => {
+  // Two functions that answer *which date is this instant in* must not differ,
+  // which is the whole reason the stamp is not assembled from two sources.
+  for (const zone of ['America/Los_Angeles', 'Etc/GMT-8', 'Europe/London']) {
+    for (const iso of ['2026-09-14T01:30:00Z', '2026-09-14T16:00:00Z', '2026-01-01T23:59:00Z']) {
+      const at = new Date(iso)
+      assert.equal(stampAt(at, zone).slice(0, 10), dateKeyAt(at, zone), `${zone} ${iso}`)
+    }
+  }
 })

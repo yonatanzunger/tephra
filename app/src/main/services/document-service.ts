@@ -239,7 +239,7 @@ export class DocumentService {
     // up like any other change.
     this.#day.onChecked(() => this.#tellAboutTheZone())
     this.#registerReconcilers()
-    this.#comments = new CommentsService(this.#store, this.#durable)
+    this.#comments = new CommentsService(this.#store, this.#durable, this.#day)
   }
 
   /**

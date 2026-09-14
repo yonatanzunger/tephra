@@ -1,4 +1,4 @@
-// **Domain. Depends on `CorpusService` and `DurabilityService`.**
+// **Domain. Depends on `CorpusService`, `DurabilityService` and `DayService`.**
 //
 // Margin notes on a passage of the notebook (D47): the threads, and the eight
 // verbs that change them.
@@ -14,21 +14,17 @@
 // rather than one command union like `docket` and `todo`; collapsing them is a
 // change to the preload and the renderer, and does not belong in a move.
 //
-// **No day.** Every other writing service needs to know what day it is; this one
-// does not, because a comment is anchored to a *span* and the span names its
-// segment. So it does not take `DayService`, and its writes do not wait on the
-// clock being seeded.
-//
-// > **A thread's timestamp does NOT come from here**, and should. `#newMessage`
-// > in `x/documents/segmented.ts` stamps `new Date().toISOString()` — the wall
-// > clock, in UTC — where the rest of the app takes both the instant and the zone
-// > from `DayService` (D62, D63). That is the third of a family: completion
-// > stamps and `dueOn` were both fixed the same way. Left alone deliberately, so
-// > that this move changes no behaviour and the suites can say so; fixing it
-// > will give this service a reason to know the day after all.
+// **No day — except for the byline.** A comment is anchored to a *span* and the
+// span names its segment, so this service does not need to know what day it is
+// to write one. But a message carries the instant it was written, and that came
+// from `new Date().toISOString()` in the document layer: the wall clock, in UTC,
+// so a comment written at 18:30 in a Los Angeles notebook was stamped
+// `2026-09-14T01:30`. Third of a family, after completion stamps and `dueOn`.
+// The instant and the zone are `DayService`'s, so that is what it takes it for.
 
 import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
+import type { DayService } from './day-service.ts'
 import { serve, type Served, type Serves } from './serves.ts'
 import { CHANNEL } from '../../shared/ipc.ts'
 import type { CommentId, CommentThread } from '../../shared/comments.ts'
@@ -38,9 +34,22 @@ export class CommentsService implements Serves {
   readonly #store: CorpusService
   readonly #durable: DurabilityService
 
-  constructor(store: CorpusService, durable: DurabilityService) {
+  /**
+   * For the byline, and for nothing else.
+   *
+   * **It gained this after the move, by fixing what the move found.** A comment
+   * is anchored to a span and the span names its segment, so this service does
+   * not need to know what *day* it is — but a message carries the instant it was
+   * written, and that instant and the zone it is read in are both this
+   * service's to supply (D62, D63). The document layer used to take them from
+   * `new Date()` in UTC.
+   */
+  readonly #day: DayService
+
+  constructor(store: CorpusService, durable: DurabilityService, day: DayService) {
     this.#store = store
     this.#durable = durable
+    this.#day = day
   }
 
   serves(): readonly Served[] {
@@ -91,11 +100,13 @@ export class CommentsService implements Serves {
   }
 
   async startComment(span: Span, body: string): Promise<CommentId> {
-    return this.#wrote(async () => (await this.#store.stream).startComment(span, body))
+    const at = this.#day.stamp
+    return this.#wrote(async () => (await this.#store.stream).startComment(span, body, at))
   }
 
   async addComment(id: CommentId, body: string): Promise<void> {
-    await this.#wrote(async () => (await this.#store.stream).addComment(id, body))
+    const at = this.#day.stamp
+    await this.#wrote(async () => (await this.#store.stream).addComment(id, body, at))
   }
 
   async editComment(id: CommentId, index: number, body: string): Promise<void> {

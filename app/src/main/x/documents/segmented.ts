@@ -899,7 +899,7 @@ export abstract class SegmentedDocument implements StoredDocument {
    * filled in is removed when the composer is dismissed, and removing the only
    * message removes the thread, so nothing is left behind.
    */
-  async startComment(span: Span, body: string): Promise<CommentId> {
+  async startComment(span: Span, body: string, at: string): Promise<CommentId> {
     const date = span.begin.segment as DateKey
     if ((span.end.segment as DateKey) !== date) {
       throw new Error('a comment covers one day at a time')
@@ -916,17 +916,17 @@ export abstract class SegmentedDocument implements StoredDocument {
     const placed = insertBlock(
       anchored.body,
       anchored.endsAt,
-      renderBlock(id, this.#newMessage(body)),
+      renderBlock(id, this.#newMessage(body, at)),
     )
     await this.writeBody(date, segment.body, placed)
     return id
   }
 
-  async addComment(id: CommentId, body: string): Promise<void> {
+  async addComment(id: CommentId, body: string, at: string): Promise<void> {
     if (body.trim() === '') throw new Error('a comment needs something in it')
     await this.#rewriteThread(id, (blocks, segment) => {
       const last = blocks[blocks.length - 1] as ThreadBlock
-      return insertBlockAt(segment.body, last.to, renderBlock(id, this.#newMessage(body)))
+      return insertBlockAt(segment.body, last.to, renderBlock(id, this.#newMessage(body, at)))
     })
   }
 
@@ -995,10 +995,21 @@ export abstract class SegmentedDocument implements StoredDocument {
     })
   }
 
-  #newMessage(body: string): CommentMessage {
+  /**
+   * A new message in a thread.
+   *
+   * **`at` is passed in, not read from the clock here.** This layer has no
+   * business knowing what time it is: the instant and the notebook's zone are
+   * both the day service's (D62, D63), and taking them from `new Date()` in UTC
+   * meant a comment written at 18:30 in a Los Angeles notebook was stamped
+   * `2026-09-14T01:30` — tomorrow, and the wrong hour. Third of that family,
+   * after completion stamps and `dueOn`. Required rather than defaulted, so a
+   * caller cannot quietly get the wall clock back.
+   */
+  #newMessage(body: string, at: string): CommentMessage {
     return {
       author: author(),
-      at: new Date().toISOString().slice(0, 16),
+      at,
       body: body.trim(),
       reactions: {},
       unknown: [],

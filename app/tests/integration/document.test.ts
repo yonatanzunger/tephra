@@ -793,15 +793,25 @@ async function commented(t: TestContext) {
 
 const fileOf = async (root: string) => readFile(join(root, dayFile(DAY)), 'utf8')
 
+/**
+ * The byline's instant, supplied rather than read from the clock.
+ *
+ * **Which is the whole point of it being a parameter.** The document layer used
+ * to stamp `new Date().toISOString().slice(0, 16)` — the wall clock, in UTC — so
+ * a comment written at 18:30 in a Los Angeles notebook was written down as
+ * `2026-09-14T01:30`, and no test could assert on the value at all. Now it can.
+ */
+const AT = '2026-03-10T14:07'
+
 test('a comment anchors a range and writes a thread into the file', async t => {
   const { doc, root, w, span } = await commented(t)
-  const id = await doc.startComment(span, 'This assumes the reader accepts it.')
+  const id = await doc.startComment(span, 'This assumes the reader accepts it.', AT)
   await doc.flush()
 
   const file = await fileOf(root)
   assert.match(file, new RegExp(`<!--tephra:comment-start ${id}-->`))
   assert.match(file, new RegExp(`<!--tephra:comment-end ${id}-->`))
-  assert.match(file, /> \*\*.+\*\* \d{4}-\d{2}-\d{2}T\d{2}:\d{2} <!--tephra:comment/)
+  assert.match(file, new RegExp(`> \\*\\*.+\\*\\* ${AT} <!--tephra:comment`))
   assert.match(file, /> This assumes the reader accepts it\./)
 
   // The gloss sits after the paragraph it is about, so a plain reader gets
@@ -812,7 +822,7 @@ test('a comment anchors a range and writes a thread into the file', async t => {
 
 test('the body is NOT in the buffer, and the prose is otherwise untouched', async t => {
   const { doc, w, span } = await commented(t)
-  await doc.startComment(span, 'A note that must not appear in the text.')
+  await doc.startComment(span, 'A note that must not appear in the text.', AT)
   assert.equal(w.text.includes('A note that must not appear'), false, 'the body reached the buffer')
   assert.equal(w.text.includes('tephra:'), false)
   // One handle for the anchor's start; the end and the whole block are silent.
@@ -822,8 +832,8 @@ test('the body is NOT in the buffer, and the prose is otherwise untouched', asyn
 
 test('a thread reads back with its author, time and body', async t => {
   const { doc, span } = await commented(t)
-  const id = await doc.startComment(span, 'First thought.')
-  await doc.addComment(id, 'Second thought.')
+  const id = await doc.startComment(span, 'First thought.', AT)
+  await doc.addComment(id, 'Second thought.', AT)
 
   const threads = await doc.comments()
   assert.equal(threads.length, 1)
@@ -832,13 +842,15 @@ test('a thread reads back with its author, time and body', async t => {
   assert.equal(thread.resolved, false)
   assert.deepEqual(thread.messages.map(m => m.body), ['First thought.', 'Second thought.'])
   assert.ok(thread.messages.every(m => m.author !== ''))
-  assert.ok(thread.messages.every(m => /^\d{4}-\d{2}-\d{2}T/.test(m.at)))
+  // **The instant it was given, exactly** — not the shape of one. This could
+  // only be a pattern while the stamp came from the wall clock.
+  assert.deepEqual(thread.messages.map(m => m.at), [AT, AT])
 })
 
 test('editing a message changes that message and nothing else', async t => {
   const { doc, span } = await commented(t)
-  const id = await doc.startComment(span, 'First thought.')
-  await doc.addComment(id, 'Second thought.')
+  const id = await doc.startComment(span, 'First thought.', AT)
+  await doc.addComment(id, 'Second thought.', AT)
   const before = doc.currentGeneration()
 
   await doc.editComment(id, 0, 'First thought, reconsidered.')
@@ -851,8 +863,8 @@ test('editing a message changes that message and nothing else', async t => {
 
 test('resolving and assigning live on the thread, not on every message', async t => {
   const { doc, root, span } = await commented(t)
-  const id = await doc.startComment(span, 'A question.')
-  await doc.addComment(id, 'An answer.')
+  const id = await doc.startComment(span, 'A question.', AT)
+  await doc.addComment(id, 'An answer.', AT)
   await doc.setCommentResolved(id, true)
   await doc.setCommentAssignee(id, 'Rivka')
   await doc.flush()
@@ -871,7 +883,7 @@ test('resolving and assigning live on the thread, not on every message', async t
 
 test('reactions keep the order they were first used in', async t => {
   const { doc, span } = await commented(t)
-  const id = await doc.startComment(span, 'A thought.')
+  const id = await doc.startComment(span, 'A thought.', AT)
   for (const emoji of ['🎉', '👀', '👍']) await doc.reactToComment(id, 0, emoji, true)
 
   const reactions = (await doc.comments())[0]!.messages[0]!.reactions
@@ -885,8 +897,8 @@ test('reactions keep the order they were first used in', async t => {
 test('removing the last message removes the thread, anchors included', async t => {
   const original = dayText('2026-03-14', 'The premise is stated here.\n\nAnd the day continues.\n')
   const { doc, root, span } = await commented(t)
-  const id = await doc.startComment(span, 'A thought.')
-  await doc.addComment(id, 'Another.')
+  const id = await doc.startComment(span, 'A thought.', AT)
+  await doc.addComment(id, 'Another.', AT)
 
   await doc.deleteComment(id, 1)
   assert.equal((await doc.comments())[0]!.messages.length, 1, 'the thread survives its second message')
@@ -901,8 +913,8 @@ test('removing the last message removes the thread, anchors included', async t =
 
 test('deleting the first message carries the thread state to the next', async t => {
   const { doc, span } = await commented(t)
-  const id = await doc.startComment(span, 'First.')
-  await doc.addComment(id, 'Second.')
+  const id = await doc.startComment(span, 'First.', AT)
+  await doc.addComment(id, 'Second.', AT)
   await doc.setCommentResolved(id, true)
 
   await doc.deleteComment(id, 0)
@@ -941,7 +953,11 @@ test('a window built during a concurrent load still sees later edits', async t =
   ])
   const before = w.text
   const from = w.text.indexOf('premise')
-  await doc.startComment({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 7)) }, 'A note.')
+  await doc.startComment(
+    { begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 7)) },
+    'A note.',
+    AT,
+  )
 
   assert.notEqual(w.text, before, 'the window is rebuilding from an orphan')
   assert.equal([...w.text].filter(ch => ch === '￼').length, 1, 'the handle should have arrived')

@@ -391,10 +391,28 @@ Visible consequence: a comment written after midnight in a notebook whose zone i
 behind UTC is stamped with the previous day. And under a frozen test clock the
 stamp is the real time, so no test can assert on it.
 
-**Left alone on purpose.** Every step in this plan changes no behaviour, which is
-what lets the suites be the proof; a fix bundled into a move would spend that
-property. Worth noting that fixing it will give the comments service a reason to
-know the day after all.
+**Fixed 2026-09-14, as its own change** rather than inside the move — every step
+in this plan changes no behaviour, which is what lets the suites be the proof,
+and a fix bundled into a move spends that property.
+
+- `shared/dates.ts` gained **`stampAt(at, zone)`** → `2026-09-14T10:23`, beside
+  `dateKeyAt`. A separate `Intl` formatter, cached like the other, with
+  `hourCycle: 'h23'` — `hour12: false` yields **24**:00 for midnight in several
+  engines, which is the classic way to get this wrong.
+- `DayService` gained **`stamp`**, beside `moment`, for the same stated reason:
+  a stamp from the wall clock while everything else comes from the service is
+  two sources of truth about one instant.
+- `SegmentedDocument.startComment/addComment` take `at` as a **required**
+  parameter, so a caller cannot quietly get the wall clock back. The
+  `DocumentApi` interface and the renderer's mirror follow.
+- **The comments service therefore does know the day after all** — not to pick
+  one, but to write the byline.
+
+> **And the tests got better rather than merely longer.** *a thread reads back
+> with its author, time and body* could only assert the stamp's **shape**
+> (`/^\d{4}-\d{2}-\d{2}T/`) while it came from the wall clock; it now asserts the
+> exact instant it was given. The one thing a test could not see is the thing
+> the bug lived in.
 4. The rest, thin routers first.
 5. **Layer 2 last**, because it is the part the cycle lives in, and by then both
    its dependencies are behind interfaces.

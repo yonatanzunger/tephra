@@ -35,7 +35,7 @@ import type { DurabilityService } from './durability-service.ts'
 import type { Bus } from './bus.ts'
 import type { FixedPoints } from './fixed-point.ts'
 import { dayKey } from './change-keys.ts'
-import { compareDateKeys, isKnownZone } from '../../shared/dates.ts'
+import { compareDateKeys, isKnownZone, stampAt } from '../../shared/dates.ts'
 import type { DateKey, Unsubscribe } from '../../shared/document-api.ts'
 import { CHANNEL } from '../../shared/ipc.ts'
 
@@ -171,6 +171,20 @@ export class DayService {
    */
   get moment(): number {
     return Math.floor(this.#now().getTime() / 1000)
+  }
+
+  /**
+   * The instant to write in a byline — `2026-09-14T10:23`, in the notebook's
+   * zone.
+   *
+   * **Beside `moment`, and for the same reason.** A stamp taken from the wall
+   * clock while everything else came from this service is two sources of truth
+   * about one instant, and they disagree exactly when it matters: under a frozen
+   * clock in a test, and either side of midnight. A comment's byline was the
+   * third place that happened.
+   */
+  get stamp(): string {
+    return stampAt(this.#now(), this.zone)
   }
 
   /** Somebody typed; the writing day stays open while they are at it (D62). */
