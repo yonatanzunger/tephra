@@ -1,8 +1,14 @@
-// **Domain. Depends on `CorpusService`, `DurabilityService`, `DayService` and
-// `FixedPoints`.**
+// **The asked store of the agenda** (D84). Depends on `CorpusService`,
+// `DurabilityService`, `DayService` and `FixedPoints`.
 //
 // The task list: one line per item, carrying its text, its status, its tags, its
 // due date, its notes and its identity (MT3, D55, D56).
+//
+// **Formats and files, and nothing above them.** This is the agenda's *asked*
+// form — what is being requested of somebody now. Some of it is a projection of
+// standing work and some is native, typed by hand and belonging to no matter;
+// this store cannot tell the two apart and does not need to, because which is
+// which is a fact the docket holds (`step.made`).
 //
 // **A list is a document like any other**, which is why almost nothing here is
 // special: the verbs write lines and the ordinary machinery does the rest. What
@@ -10,17 +16,15 @@
 // until it is answered (D55, T11) — and that is why this service knows what day
 // it is where the comments service does not.
 //
-// **What is NOT here is anything that reaches into a docket.** Resolving an item
-// has to tell the step that asked for it, moving one down has to make a matter,
-// and finding which matter an item came from means reading every docket. All
-// three span two domains and sit above both (D83), which is what lets this
-// service and the docket's not know about each other.
+// **Nothing here reaches into a docket.** Resolving an item has to tell the step
+// that asked for it, moving one down has to make a matter, and finding which
+// matter an item came from means reading every docket — all operations on the
+// *pair*, so they belong to the construct and not to either store (D84).
 
 import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
 import type { DayService } from './day-service.ts'
 import type { FixedPoints } from './fixed-point.ts'
-import { documentKey } from './change-keys.ts'
 import type { TodoDocument } from '../x/documents/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../../shared/kinds/todo.ts'
 import { ONLY_SEGMENT, TASKS_ID, type DateKey, type DocumentId, type SegmentKey } from '../../shared/document-api.ts'
@@ -28,7 +32,7 @@ import { ONLY_SEGMENT, TASKS_ID, type DateKey, type DocumentId, type SegmentKey 
 /** How far back the resolved-by-tag question looks (T8's tail, MT6). */
 const RESOLVED_DAYS = 30
 
-export class TodoService {
+export class Tasks {
   readonly #store: CorpusService
   readonly #durable: DurabilityService
   readonly #day: DayService
@@ -57,15 +61,6 @@ export class TodoService {
   /** Every item id in the corpus — an id names an item, not a list. */
   readonly #takenIds = (): Promise<ReadonlySet<string>> => this.#store.index.itemIds()
 
-  /**
-   * Written to: the file tier is told, surfaces holding it re-read, and what
-   * derives from it is made true again — **awaited** (D77, D83).
-   */
-  async #wrote(id: DocumentId): Promise<void> {
-    this.#durable.touched()
-    this.#store.changed(id)
-    await this.#fixed.changed(documentKey(id))
-  }
 
 
   // ── the task list (MT3) ──────────────────────────────────────

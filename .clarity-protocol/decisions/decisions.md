@@ -4105,3 +4105,76 @@ catching.
 > is a text window, `CHANNEL.windowInfo` is an OS window (MC6). The vocabulary
 > splits into **text** for the buffer and **frame** for the OS window, before the
 > ambiguity is baked into a service name.
+
+---
+
+## D84: The agenda is one construct with two forms, and the dockets and the task list are its stores
+
+**Date:** 2026-09-14
+**Status:** decided; **not yet built**
+**Extends:** D68/D75/D76 (the docket), D55/D56 (a task item), D77
+(reconciliation), D78 (the horizon), D79 (putting one down), D83 (the service
+DAG). **Source:** asked while splitting `DocumentService` — *why don't these
+four commands delegate?*
+
+**Decision.** The dockets and the task list are **not two domains**. They are two
+forms of one construct — call it the **agenda** — and each is a store for one of
+the forms:
+
+| form | where it lives | what it is |
+|---|---|---|
+| **standing** | a step on a matter, in a docket | what is true about a domain, persistently |
+| **asked** | an item on a list | what is being requested of somebody *now* |
+
+A docket holds only standing work. A task list holds asked work, **some of it a
+projection of standing work and some of it native** — typed by hand, belonging to
+no matter, and primary.
+
+**`AgendaService`** is the user-visible construct. **`Dockets`** and **`Tasks`**
+are format-and-file level beneath it, named as plain nouns like `Bus`,
+`Searches` and `Filesets` rather than as services, because that is what they are.
+
+**The evidence, and why the two-domain reading was wrong.** Three stored
+cross-references, running **both** ways:
+
+- `Step.made` — the docket names the item it generated
+- `TodoItem.moved` — the item names the docket it went to
+- `Matter.from` — the matter names the task it came from
+
+Two stores each holding references *into* the other is one entity split across
+two tables. A correspondence between two domains would not need the arrows both
+ways.
+
+**What this explains that the two-domain reading did not.** Why reconciliation
+exists at all — it is the **projection function**, not an integration. Why D79's
+three acts were so hard to site (advance, skip, suspend): they are operations on
+the *pair*, and each attempt put them on one side. Why MH5's backlog wanted to
+become a docket — *backlogged* means **standing but not asked**, which is a form
+and not a place. Why the horizon reads both: it asks the one construct what is
+coming. And it predicts MH6's graveyard is a fourth form rather than a fifth
+store.
+
+**Three faces, not three services.** D83 listed the horizon, the reconciler and
+the transfers as separate residents of a composing tier. They are one service's
+three faces: **make it true** (reconcile), **change it** (transfer), **ask it**
+(horizon).
+
+> **What does NOT follow.** The stores are not merged: two formats, two grammars
+> and two surfaces are real, and the extraction demonstrated the verbs separate
+> cleanly — thirty-two and fifteen arms delegating without argument. And the task
+> list is **not** made purely derived: typed items are primary, which the
+> primary/derived table records and the reconciler's safety rests on.
+
+**Why not the other names.** `WorkService` — `work` is already fifteen parameter
+names in these services (`mutate(work)`, `defer(work)`), and the construct is
+broader than work anyway: `HorizonKind` is `task | status | due`, and a birthday
+is a matter and is not work. `CommitmentsService` — the most precise for the
+pair, and *owed* is established vocabulary (seventy-nine occurrences in these
+records), but long, awkward at `commitments.horizon(…)`, and a birthday is not a
+commitment either. `MattersService` — the best plain English, and *matter* is
+already this project's genus word for facts and tasks alike, but `Matter` is the
+docket-side type and a native typed item is not one.
+
+**An agenda holds what is coming as readily as what to do** — *the boiler service
+is due*, *Ada's birthday*, *ring the surveyor* — which is exactly the
+standing-plus-asked union, and is why it survived where the others did not.

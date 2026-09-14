@@ -79,8 +79,8 @@ import { CommentsService } from './comments-service.ts'
 import { NavService } from './nav-service.ts'
 import { HistoryService } from './history-service.ts'
 import { SearchService } from './search-service.ts'
-import { DocketService } from './docket-service.ts'
-import { TodoService } from './todo-service.ts'
+import { Dockets } from './dockets.ts'
+import { Tasks } from './tasks.ts'
 import { serve, serveKinds, type Served, type Serves } from './serves.ts'
 
 /**
@@ -218,9 +218,9 @@ export class DocumentService implements Serves {
   /** Searching the corpus, extracted — and it owns the Scanner (D65, D83). */
   readonly #search: SearchService
   /** Dockets, extracted (MH1, D68, D83). */
-  readonly #docket: DocketService
+  readonly #docket: Dockets
   /** The task list, extracted (MT3, D55, D83). */
-  readonly #todo: TodoService
+  readonly #todo: Tasks
 
   readonly #notebook: Notebook
 
@@ -238,7 +238,7 @@ export class DocumentService implements Serves {
     // is what keeps the edge from pointing upward (D83).
     this.#fixed = new FixedPoints()
     this.#store = new CorpusService(notebook, this.#bus, this.#fixed)
-    this.#durable = new DurabilityService(this.#store, options)
+    this.#durable = new DurabilityService(this.#store, this.#fixed, options)
     // Beside the index rather than in the core: only search uses the Scanner,
     // so it belongs to the search service when that is split out (D83).
     this.#day = new DayService(this.#store, this.#durable, this.#bus, this.#fixed, options)
@@ -254,8 +254,8 @@ export class DocumentService implements Serves {
     this.#nav = new NavService(this.#store, this.#day)
     this.#history = new HistoryService(this.#store, this.#durable)
     this.#search = new SearchService(this.#store)
-    this.#docket = new DocketService(this.#store, this.#durable, this.#day, this.#fixed)
-    this.#todo = new TodoService(this.#store, this.#durable, this.#day, this.#fixed)
+    this.#docket = new Dockets(this.#store, this.#durable, this.#day, this.#fixed)
+    this.#todo = new Tasks(this.#store, this.#durable, this.#day, this.#fixed)
   }
 
   /**
@@ -267,7 +267,7 @@ export class DocumentService implements Serves {
    * up to `index.ts` and this class is finished.
    */
   /**
-   * The task list's channel — declared here, and not by `TodoService`.
+   * The task list's channel — declared here, and not by `Tasks`.
    *
    * **A channel belongs to the service that can answer all of it**, and four of
    * these fifteen arms cannot live in the task list's service: `status` and
@@ -280,7 +280,7 @@ export class DocumentService implements Serves {
    * preference: a service declaring this channel is *required* to handle every
    * kind, so one that cannot reach those four could not declare it at all.
    *
-   * **The docket's channel went to `DocketService`**, where it belongs: every
+   * **The docket's channel went to `Dockets`**, where it belongs: every
    * one of its thirty-two arms delegates, so nothing kept it here but the order
    * things were done in.
    */
@@ -350,12 +350,12 @@ export class DocumentService implements Serves {
    * is a rename across some two hundred and fifty call sites and belongs in its
    * own change, not in the move that made it redundant.
    */
-  get docket(): DocketService {
+  get docket(): Dockets {
     return this.#docket
   }
 
   /** The task list service — its methods carry a `todo` prefix, as above. */
-  get todo(): TodoService {
+  get todo(): Tasks {
     return this.#todo
   }
 
@@ -1765,25 +1765,14 @@ export class DocumentService implements Serves {
    * write, instead of deciding per verb whether this one could have changed it
    * (D77). A verb that cannot is merely paying for a pass that finds nothing.
    */
+  /**
+   * Written to: dirty, announced, and reconciled — the durability service's now.
+   *
+   * **It was three lines here and three lines in every other service that
+   * writes.** One copy, where the cost of a write is already known (D83).
+   */
   async #wrote(id: DocumentId): Promise<void> {
-    this.#touched()
-    this.#changed(id)
-    // **Awaited, so the verb's promise means what it says.** Fired and
-    // forgotten, `docketActivate` resolved before the task existed — which is
-    // the bug this was written to fix, merely made harder to see: the list was
-    // empty for however long the pass took. A verb that has returned has
-    // finished, derived state included.
-    //
-    // **The corpus already reported this write**, unforgettably, and that report
-    // had nobody to hand a promise to. This is the same key again, and asking
-    // twice costs nothing — a key repeated inside one round is one key. What it
-    // buys is the waiting.
-    //
-    // **The reconciler's own writes need no exemption here**, which is the whole
-    // gain: the runner knows whether a call is descended from a pass, so a
-    // pass's writes are recorded for the next round instead of asking the pass
-    // to wait for itself (D83). The flag this method used to keep is gone.
-    await this.#fixed.changed(documentKey(id))
+    await this.#durable.wrote(id)
   }
 
 

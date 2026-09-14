@@ -1,25 +1,27 @@
-// **Domain. Depends on `CorpusService`, `DurabilityService`, `DayService` and
-// `FixedPoints`.**
+// **The standing store of the agenda** (D84). Depends on `CorpusService`,
+// `DurabilityService`, `DayService` and `FixedPoints`.
 //
 // A docket: the standing list of what is true about a domain, and every verb
 // that changes one (MH1, D68, D75, D76, D80).
+//
+// **Formats and files, and nothing above them.** This is one of the agenda's two
+// stores — the *standing* form, where a step says what happens and when. What
+// follows from a step is `AgendaService`'s: this one writes dockets and reports
+// that it did, and has never heard of a task.
 //
 // **A matter is a heading with things under it.** Its schedule says when it comes
 // round, its steps say what happens and in what order, and nothing here sorts
 // itself: the order is the one somebody arranged (D75).
 //
-// **What is NOT here is anything that crosses into the task list.** Generating a
-// task from a step, taking a completion back to the step that asked for it, and
-// moving a task down onto a docket all span two domains, so they sit above both
-// (D83) — which is what lets this service and the task list's not know about
-// each other. This one writes dockets; what follows from that is somebody
-// else's business, and it says so by reporting the write and waiting.
+// **Nothing here crosses to the asked form.** Generating a task from a step,
+// taking a completion back to the step that asked for it, and moving a task down
+// onto a docket are all operations on the *pair*, so they belong to the construct
+// and not to either store (D84).
 
 import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
 import type { DayService } from './day-service.ts'
 import type { FixedPoints } from './fixed-point.ts'
-import { documentKey } from './change-keys.ts'
 import { serveKinds, type Served, type Serves } from './serves.ts'
 import { CHANNEL, type DocketCommand } from '../../shared/ipc.ts'
 import type { DocketDocument } from '../x/documents/kinds/docket.ts'
@@ -33,7 +35,7 @@ import type { DateKey, DocumentId } from '../../shared/document-api.ts'
 import { ONLY_SEGMENT } from '../../shared/document-api.ts'
 import type { DocketRow } from '../../shared/ipc.ts'
 
-export class DocketService implements Serves {
+export class Dockets implements Serves {
   readonly #store: CorpusService
   readonly #durable: DurabilityService
   readonly #day: DayService
@@ -107,16 +109,6 @@ export class DocketService implements Serves {
     this.#durable.touched()
   }
 
-  /**
-   * Written to: the file tier is told, surfaces holding it re-read, and what
-   * derives from it is made true again — **awaited**, so a verb that has
-   * returned has finished, derived state included (D77, D83).
-   */
-  async #wrote(id: DocumentId): Promise<void> {
-    this.#durable.touched()
-    this.#store.changed(id)
-    await this.#fixed.changed(documentKey(id))
-  }
 
 
   // ── dockets (MH1, D68) ─────────────────────────────────────
@@ -179,7 +171,7 @@ export class DocketService implements Serves {
           this.#store.corpus.use(id, doc => (doc as DocketDocument).setAfter(made, first)))
       }
     }
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
     return made
   }
 
@@ -190,7 +182,7 @@ export class DocketService implements Serves {
     }
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setMode(matter, mode)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** The date of the next instance, or none — which is the whole of *inactive*. */
@@ -201,7 +193,7 @@ export class DocketService implements Serves {
     }
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setStart(matter, said)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** How often it comes round. `every` as typed: `90d`, `1m on 31`, or nothing. */
@@ -212,14 +204,14 @@ export class DocketService implements Serves {
     }
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setEvery(matter, said)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Which step's completion starts the next instance, or none (D76, Qa). */
   async docketSetAfter(id: DocumentId, matter: string, after: string | null): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setAfter(matter, after)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Move a recurring matter on to its next instance. */
@@ -231,32 +223,32 @@ export class DocketService implements Serves {
   }
   async docketRename(id: DocumentId, matter: string, name: string): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).rename(matter, name)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
   async docketSetOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
   async docketSetLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
   async docketTag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).tagMatter(matter, subject)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
   async docketUntag(id: DocumentId, matter: string, subject: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).untagMatter(matter, subject)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** The prose under a matter. Nothing in it is parsed (D56's rule, carried). */
   async docketSetNotes(id: DocumentId, matter: string, notes: readonly string[]): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setNotes(matter, notes)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   // ── sections on a docket (MH1) ──────────────────────────────
@@ -268,20 +260,20 @@ export class DocketService implements Serves {
   async docketAddSection(id: DocumentId, name: string): Promise<string> {
     const made = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).addSection(name)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
     return made
   }
   async docketRenameSection(id: DocumentId, name: string, to: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).renameSection(name, to)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Take the heading away and keep everything that was under it. */
   async docketRemoveSection(id: DocumentId, name: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).removeSection(name)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /**
@@ -339,7 +331,7 @@ export class DocketService implements Serves {
     }
 
     await this.docketRemove(from, matter)
-    await this.#wrote(to)
+    await this.#durable.wrote(to)
     return made
   }
 
@@ -352,7 +344,7 @@ export class DocketService implements Serves {
   ): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).moveMatter(matter, section, before)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** One place up or down inside its own section. False at the ends. */
@@ -380,7 +372,7 @@ export class DocketService implements Serves {
   ): Promise<string> {
     const made = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).addStep(matter, when, text, kind)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
     return made
   }
 
@@ -393,7 +385,7 @@ export class DocketService implements Serves {
   ): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).editStep(matter, step, text)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Reschedule one step. `when` as typed, parsed here. */
@@ -405,7 +397,7 @@ export class DocketService implements Serves {
   ): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setStepWhen(matter, step, when)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Change a step's kind — the only way to author a `reschedule` (D76). */
@@ -417,12 +409,12 @@ export class DocketService implements Serves {
   ): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setStepKind(matter, step, kind)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
   async docketRemoveStep(id: DocumentId, matter: string, step: string): Promise<void> {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).removeStep(matter, step)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Stamp a step done, or undo that. What a dependency reads (D76). */
@@ -435,7 +427,7 @@ export class DocketService implements Serves {
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc =>
         (doc as DocketDocument).completeStep(matter, step, done ? this.#day.moment : null)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /**
@@ -448,7 +440,7 @@ export class DocketService implements Serves {
   async docketActivate(id: DocumentId, matter: string): Promise<DateKey> {
     const when = await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).activate(matter, this.#day.today)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
     return when
   }
 
@@ -457,7 +449,7 @@ export class DocketService implements Serves {
     const today = this.#day.today
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setDates(matter, dates, today)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /** Stop work on it, keeping what it has already done (D76). */
@@ -475,11 +467,11 @@ export class DocketService implements Serves {
     // every docket write reports its key and waits for the pass (D83), the
     // second call was doing the work twice — and it was the last thing keeping
     // this verb from being an ordinary one.
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
   async docketRemove(id: DocumentId, matter: string): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).remove(matter)))
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /**
@@ -495,7 +487,7 @@ export class DocketService implements Serves {
       const taken = await this.#store.corpus.use(id, doc => (doc as DocketDocument).remove(matter))
       await this.#store.corpus.use(to, doc => (doc as DocketDocument).adopt(taken))
     })
-    await this.#wrote(id)
+    await this.#durable.wrote(id)
   }
 
   /**

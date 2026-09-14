@@ -26,6 +26,8 @@ import type { Repository } from '../w/repository.ts'
 import { StreamHistory } from '../x/history.ts'
 import { applyEdits } from '../x/text-edits.ts'
 import type { CorpusService } from './corpus-service.ts'
+import type { FixedPoints } from './fixed-point.ts'
+import { documentKey } from './change-keys.ts'
 import type { DateKey, DocumentId, VersionId } from '../../shared/document-api.ts'
 import { STREAM_ID } from '../../shared/document-api.ts'
 
@@ -69,6 +71,7 @@ export interface DurabilityOptions {
 
 export class DurabilityService {
   readonly #corpus: CorpusService
+  readonly #fixed: FixedPoints
 
   /** Something is unwritten or unversioned; the tiers have work to do. */
   #unsavedWork = false
@@ -105,8 +108,9 @@ export class DurabilityService {
   readonly #walPending = new Map<DocumentId, WalRecord[]>()
   #walTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(corpus: CorpusService, options: DurabilityOptions = {}) {
+  constructor(corpus: CorpusService, fixed: FixedPoints, options: DurabilityOptions = {}) {
     this.#corpus = corpus
+    this.#fixed = fixed
     this.#walBatchMs = options.walBatchMs ?? WAL_BATCH_MS
     this.#quiesceMs = options.quiesceMs ?? QUIESCE_MS
     this.#maxIntervalMs = options.maxIntervalMs ?? MAX_INTERVAL_MS
@@ -176,6 +180,27 @@ export class DurabilityService {
   touched(): void {
     this.#unsavedWork = true
     this.#scheduleFlush()
+  }
+
+  /**
+   * A document was written to: the whole of what that means.
+   *
+   * Mark the notebook dirty, tell whoever is holding that document to re-read,
+   * and report the change so that what derives from it is made true again —
+   * **awaited**, so a verb that has returned has finished, derived state
+   * included (D77, D83).
+   *
+   * **One place, because it was four.** Every service that writes had its own
+   * copy of these three lines, and a three-line invariant copied four times is
+   * the shape note 61 records decaying: the fourth copy is where somebody marks
+   * dirty and forgets to announce, and the surface holding that document shows
+   * yesterday's answer with nothing to say so. It belongs here because this is
+   * the service that already knows what a write costs.
+   */
+  async wrote(id: DocumentId): Promise<void> {
+    this.touched()
+    this.#corpus.changed(id)
+    await this.#fixed.changed(documentKey(id))
   }
 
   /** The same, for the version tier's much longer clock (D32). */

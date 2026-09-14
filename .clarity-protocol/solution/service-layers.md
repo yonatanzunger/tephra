@@ -455,8 +455,78 @@ and a fix bundled into a move spends that property.
        enormous class and now says twice what the accessor says once; stripping
        it is a rename across some four hundred call sites and belongs in its own
        change rather than in the move that made it redundant.
-   - Still to do: **layer 2** — reconciliation, the horizon, and the transfers —
+   - Still to do: **the agenda** (D84) — which is what layer 2 turned out to be —
      and then the shell tier below.
+
+## The agenda, and what sits at each level (D84)
+
+Not *layers* with numbers: **one logical service powered by two lower ones.**
+
+### `AgendaService` — the user-visible construct
+
+Everything that is about the construct rather than about a file. Declares the
+channels, because it is the only thing that can answer all of them.
+
+- **make it true** — `reconcile()`, and the pass registered with `FixedPoints`:
+  `#reconcileDockets`, `#advanceDocket`, `#setStepMade`. This is the projection
+  function from standing to asked.
+- **change it** — `todoSetStatus` and `todoBulk` (resolving an item stamps the
+  step that asked for it), `todoPutDown` (an item becomes a matter), `#finished`.
+- **ask it** — `horizon(from, to)`, `matterFor(item)`.
+- **later** — MH5's review flow and MH6's graveyard land here, being features of
+  the construct rather than of the docket.
+
+### `Dockets` — the standing store
+
+The thirty-two verbs now in `docket-service.ts`, plus `#takenMatterIds` and
+`scheduleFor`. Knows the matter grammar, the block format, and how to rewrite one
+matter without disturbing its neighbours. Knows nothing about a task.
+
+### `Tasks` — the asked store
+
+The fifteen verbs now in `todo-service.ts`, plus `#takenIds`. Knows the line
+grammar, the day a list is filed under, and carrying an item forward. Knows
+nothing about a matter.
+
+### The sanity check found three things
+
+**1. Who declares the `docket` channel — settled.** `AgendaService` does, and so
+does the task list's: **the composite construct declares the user-facing verbs.**
+All thirty-two docket arms delegate today, so `Dockets` *could* serve that one —
+but a store with channels contradicts *formats and files*, and a channel is a
+thing the renderer has a name for, which makes it the user-visible construct's.
+The cost is thirty-two one-line delegations, paid on purpose: those arms are the
+agenda's verbs which happen to be implemented by a store today, and a verb that
+later has to touch the task list then changes in one place without the channel
+moving.
+
+**2. `#wrote` was written four times — fixed 2026-09-14.** `DurabilityService`
+now has `wrote(id)`; the four copies are one call each, and `CommentsService`'s
+same-named helper — which mutates and touches but deliberately neither announces
+nor reports — was renamed `#mutated`, because two operations sharing one name is
+how the wrong one gets called.
+
+Originally: `#wrote` was written four times — in `document-service`, `docket-service`,
+`todo-service` and (a variant) `comments-service`: mark dirty, announce the
+document, report the key. Triplication of a three-line invariant is the shape
+note 61 records decaying. It has an obvious home: **`DurabilityService`**, which
+already depends on `CorpusService` (and so reaches the bus) and can take
+`FixedPoints` without a cycle. `durable.wrote(id)` would replace all four.
+
+**3. `Store` is the wrong suffix — renamed 2026-09-14** to `Dockets` and `Tasks`
+(`dockets.ts`, `tasks.ts`), not `DocketStore`/`TodoStore`. Every service already calls
+`CorpusService` `#store`; a `DocketStore` beside `this.#store` would be two
+meanings of one word. Plain nouns match the existing idiom — `Bus`, `Searches`,
+`Filesets`, `Corpus` — and say *not a service* by their shape.
+
+### And one thing the check confirmed
+
+**The stores never learn that the agenda exists.** A store writes; the corpus
+reports the key; `FixedPoints` wakes the agenda's pass. So the projection is
+driven entirely by the inversion — *lower things emit, higher things subscribe* —
+and `Dockets` has no reference to `Tasks`, nor either to `AgendaService`. That is
+the property that makes the whole arrangement worth the move, and it already
+works: it is how reconciliation is triggered today.
 
 ### The shell tier, which this plan had not named
 

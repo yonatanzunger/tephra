@@ -92,8 +92,14 @@ export class CommentsService implements Serves {
    * `touched` itself carries: nine copies were nine chances for the next one to
    * do the work and forget to say so, leaving a document that saves only when
    * something else happens to save.
+   *
+   * **Named `#mutated` and not `#wrote`**, because it is not the same act:
+   * `DurabilityService.wrote` also announces the document and reports the change
+   * for reconciliation, and a comment has never done either — the threads are
+   * read from the rail, and nothing derives from them. Two operations sharing
+   * one name is how the wrong one gets called.
    */
-  async #wrote<T>(work: () => Promise<T>): Promise<T> {
+  async #mutated<T>(work: () => Promise<T>): Promise<T> {
     const done = await this.#store.mutate(work)
     this.#durable.touched()
     return done
@@ -101,31 +107,31 @@ export class CommentsService implements Serves {
 
   async startComment(span: Span, body: string): Promise<CommentId> {
     const at = this.#day.stamp
-    return this.#wrote(async () => (await this.#store.stream).startComment(span, body, at))
+    return this.#mutated(async () => (await this.#store.stream).startComment(span, body, at))
   }
 
   async addComment(id: CommentId, body: string): Promise<void> {
     const at = this.#day.stamp
-    await this.#wrote(async () => (await this.#store.stream).addComment(id, body, at))
+    await this.#mutated(async () => (await this.#store.stream).addComment(id, body, at))
   }
 
   async editComment(id: CommentId, index: number, body: string): Promise<void> {
-    await this.#wrote(async () => (await this.#store.stream).editComment(id, index, body))
+    await this.#mutated(async () => (await this.#store.stream).editComment(id, index, body))
   }
 
   async deleteComment(id: CommentId, index: number): Promise<void> {
-    await this.#wrote(async () => (await this.#store.stream).deleteComment(id, index))
+    await this.#mutated(async () => (await this.#store.stream).deleteComment(id, index))
   }
 
   async setCommentResolved(id: CommentId, resolved: boolean): Promise<void> {
-    await this.#wrote(async () => (await this.#store.stream).setCommentResolved(id, resolved))
+    await this.#mutated(async () => (await this.#store.stream).setCommentResolved(id, resolved))
   }
 
   async setCommentAssignee(id: CommentId, to: string | null): Promise<void> {
-    await this.#wrote(async () => (await this.#store.stream).setCommentAssignee(id, to))
+    await this.#mutated(async () => (await this.#store.stream).setCommentAssignee(id, to))
   }
 
   async reactToComment(id: CommentId, index: number, emoji: string, on: boolean): Promise<void> {
-    await this.#wrote(async () => (await this.#store.stream).reactToComment(id, index, emoji, on))
+    await this.#mutated(async () => (await this.#store.stream).reactToComment(id, index, emoji, on))
   }
 }
