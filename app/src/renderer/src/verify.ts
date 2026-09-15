@@ -1197,6 +1197,85 @@ export async function runVerify(request: string): Promise<void> {
       await settle(800)
     }
 
+    if (scene === 'fields') {
+      // **The fields are the item now** (D85, MT8), so the gestures that change
+      // one are their own — a tag comes off at its chip, a date and an owner at
+      // the row's menu. Setting either is still typing, which the row's field
+      // reads with the entry grammar; what typing cannot do is take one off.
+      await pane.goTo({ kind: 'document', id: await window.tephra.todo.which() })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const rows = (): HTMLElement[] => [...document.querySelectorAll('.todo-row')] as HTMLElement[]
+      const seen = (sel: string): string[] =>
+        [...document.querySelectorAll(sel)].map(e => (e.textContent ?? '').trim())
+      const menu = async (row: number, label: string): Promise<boolean> => {
+        const box = rows()[row]?.getBoundingClientRect()
+        rows()[row]?.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true,
+          clientX: Math.round((box?.left ?? 0) + 90),
+          clientY: Math.round((box?.top ?? 0) + 10),
+        }))
+        await settle(400)
+        const entry = [...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '').trim().startsWith(label),
+        ) as HTMLElement | null
+        entry?.click()
+        await settle(900)
+        return entry !== null
+      }
+
+      // **The sentence without its annotation**, which is what a row's words
+      // are: `for` sits inside the text span, where words attached to a sentence
+      // go (`todo-reason` is its neighbour), so reading the span gets both.
+      say('rows', [...document.querySelectorAll('.todo-row .todo-text')].map(e => {
+        const copy = e.cloneNode(true) as HTMLElement
+        copy.querySelector('.todo-for')?.remove()
+        return (copy.textContent ?? '').trim()
+      }))
+      // **What a docket generated says it is for**, and it carries ONE tag.
+      say('for', seen('.todo-for'))
+      say('tags', seen('.todo-tag'))
+      say('dues', seen('.todo-due'))
+      say('owners', seen('.todo-owner'))
+
+      // A tag comes off at its chip — the row's text no longer holds it, so
+      // deleting it from the sentence is not a thing that can be done.
+      ;(document.querySelector('.todo-tag') as HTMLElement | null)?.click()
+      await settle(1200)
+      say('tagsAfterClick', seen('.todo-tag'))
+
+      // A date comes off at the menu. Setting one is `DUE friday` in the field.
+      say('menuEntries', seen('.row-menu button'))
+      say('clearedDue', await menu(0, 'No due date'))
+      say('duesAfter', seen('.todo-due'))
+
+      // And an owner, both ways round. **Taken off first**, because the row
+      // arrives with one: the entry reads *Reassign (AV)…* while somebody has
+      // it and *Who has this…* while nobody does, which is the menu saying what
+      // it will do rather than what the field is called.
+      say('clearedOwner', await menu(0, 'Nobody has this'))
+      say('ownersCleared', seen('.todo-owner'))
+      say('askedOwner', await menu(0, 'Who has this'))
+      const field = document.querySelector('.todo-owner-field') as HTMLInputElement | null
+      say('ownerFieldOpen', field !== null)
+      if (field !== null) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, 'Sam')
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        await settle(1200)
+      }
+      say('ownersAfterTyping', seen('.todo-owner'))
+
+      // **And the file says the same thing**, which is the half a screen cannot
+      // show: fields under the checkbox, and the sentence alone on its line.
+      await window.tephra.doc.flush()
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(600)
+    }
+
     if (scene === 'notes') {
       // **Prose about the item, not more task.** Indented continuation lines,
       // which is markdown's own way of attaching a paragraph to a list item —

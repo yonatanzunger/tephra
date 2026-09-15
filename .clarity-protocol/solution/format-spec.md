@@ -133,21 +133,60 @@ forking anything. **Two shapes of one format** (D55 as amended): a `.todo`
 *directory* is a daily list, carried and walked; a single `.todo.md` is an
 overall list, which does not turn over daily and so has nothing to carry.
 
-Everything an item is lives in its line (D56), which is what keeps the file
-sensible to a plain reader and to `grep`:
+**An item is a record, and the file holds it as fields** (D85) — the way a docket
+holds a matter, so the notebook has one dialect and not two:
 
 ```markdown
-- [ ] Call the surveyor #house DUE 2026-09-14 <!--tephra:item 7f3a1b2c 1756684800 1756771200-->
+- [/] Approve Paola's proposal
+  tags: #lima
+  for: House Bootstrap / Initiate Remodel
+  due: 2026-09-13
+  owner: AV
   the number is in the email from Tuesday
+  <!--tephra:item 7f3a1b2c 1756684800 1756771200-->
 ```
+
+> **Identity in comments, data in fields, prose bare.**
+
+**The checkbox stays a marker**, not a `status:` field: it is status in markdown's
+own vocabulary, so the file reads as a checklist and changing one by hand is one
+character. `[ ]` not started, `[/]` in progress, `[?]` blocked, `[x]` done, `[-]`
+nevermind, `[>]` transferred to a docket.
+
+**Field order is fixed** — `tags`, `for`, `due`, `owner`, `moved`, `reason` —
+which is what makes writing an unchanged record a no-op in the bytes, so a due
+date moving touches one line of the history rather than rewriting the item.
+
+| field | what it says |
+|---|---|
+| `tags` | subjects, written as they are inline: `#lima #'Kia Repairs'` (T5, T6) |
+| `for` | the context the sentence was written against — a docket's section and matter (MT8). Explanatory text, repaired by reconciliation, never edited by hand |
+| `due` | `YYYY-MM-DD`, always absolute: a relative date is resolved the instant it is recognised (T16) |
+| `owner` | who has this (D81) |
+| `moved` | which docket it was transferred to, beside `[>]` (MH5) |
+| `reason` | why it is blocked, and only while it is (T4) |
 
 **The marker carries identity and two timestamps** — created, and last touched —
 because those cannot be backfilled (`goal/scope.md`'s rule) and because an item
 is copied forward verbatim on every carry, so one id appears in many days with
-the status it had on each. **The newest instance is what the item IS.**
+the status it had on each. **The newest instance is what the item IS.** It is on
+its own line so that the sentence's line changes only when the sentence does.
 
-**Notes are indented continuation lines** (D56 as amended), parsed as prose and
-nothing else: no tags, no dates, no nested items.
+**Notes are bare indented lines** (D56 as amended), parsed as prose and nothing
+else: no tags, no dates, no nested items. A line whose key this format does not
+know, or whose value does not parse, **is prose** — so a note reading *due:
+whenever we get round to it* stays a note rather than being absorbed and lost.
+
+### Two parsers, and only one has an inverse
+
+> **structure → string → structure is the identity.** string → structure → string
+> is not, and is not attempted.
+
+The field form above is read and written by one pair that round-trips. The
+**entry grammar** is the other reader: `#tag`, `DUE friday`, `OWNER Sam` typed
+into a field — or into a file by hand — read into a record and never written back
+that way. It is what those notations were always for, and it is why an old file
+needs no migration beyond **reading it and writing it**.
 
 ## Sections
 

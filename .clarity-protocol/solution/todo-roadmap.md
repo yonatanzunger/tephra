@@ -774,7 +774,7 @@ than something built here.
 list is what is needed first; the directory arrives while MT4–MT6 are still
 ahead, so anything that wants it has it.
 
-## MT8 — an item is a record, and `for:` says what it is for *(planned, D85)*
+## MT8 — an item is a record, and `for:` says what it is for *(done, D85)*
 
 **Asked from use 2026-09-14**, from a complaint about the by-tag view and a
 question that turned out to be underneath it.
@@ -838,6 +838,47 @@ It saves a version first (D32's `saveVersionNamed`, so the way back is a
 restore), it is idempotent, and it reports counts per day. Deleted once the
 notebook is converted; its one real transform — a matter-named tag becoming
 `for:` — belongs to reconciliation, where it goes on being exercised.
+
+### What building it taught
+
+- **The line was load-bearing in a place nobody had listed.** There were no wire
+  verbs for `due`, `tag`, `untag` or `owner` — the row changed them by rewriting
+  the item's *text*, because the line was authoritative. Once the text held only
+  the sentence, setting a field still worked (the entry grammar reads `DUE
+  friday`) and **clearing one silently stopped working**, because omission must
+  not mean deletion or editing a sentence would drop every field. Four verbs, and
+  the gestures that use them: a tag comes off at its chip, a date and an owner at
+  the row's menu.
+- **The tests could not have caught that**, and did not: they call
+  `doc.setDue(id, null)` directly, so there was no channel to notice was missing.
+  The acceptance suite could have, and now does — seven checks that drive the
+  chip and the menu from outside.
+- **`Tasks.make(record)` beside `Tasks.add(string)`.** The reconciler knows every
+  field for certain, so composing a string for the entry grammar to take apart
+  again was two chances to be wrong.
+- **The screenshot was the only instrument that saw the last two faults**, which
+  is the third time this project has recorded that. The annotation was rendered
+  at `.8em` of 20px prose — nearly as loud as the task's own words — and giving it
+  `white-space: nowrap` to stop the row wrapping made the *sentence* break
+  mid-phrase instead (*Approve Paola's / proposal*), which is exactly the wrong
+  thing to protect. It is `--row-note`, like the owner beside it, and it yields
+  first.
+- **And the geometry checks earned their keep**: `font: inherit` on the new chip
+  button set it to the prose size, caught by the check that measures a tag
+  against a due date, which share one size on purpose.
+- **A section earns its place by distinguishing something**, so it is in the
+  annotation only when the docket has more than one. Written after a real
+  notebook read *House Bootstrap / Initiate Remodel* on every row — where that
+  docket does have a second section (Travel), so the rule holds and simply does
+  not shorten this notebook.
+
+### Measured on the real notebook
+
+Migrated a copy of `~/Tephra` (200 items, one `--write`), opened it, and looked:
+`LIMA` is **one group of 5** where it had been `Initiate Remodel` (2) +
+`Transfer utilities` (3) + `lima` (5) — ten rows for five items. Reconciliation
+converted the generated items in place, in two rounds, with no separate migration
+code for it.
 
 ### What is NOT in MT8
 

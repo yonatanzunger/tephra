@@ -167,6 +167,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * of.
    */
   const [addCaret, setAddCaret] = useState<number | null>(null)
+  /** The item whose owner is being typed, if any (D85's field verbs). */
+  const [owning, setOwning] = useState<string | null>(null)
   /** Which group the open add row belongs to, or null for the foot of the list. */
   const [addIn, setAddIn] = useState<string | null>(null)
   /**
@@ -776,6 +778,20 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
           act(window.tephra.todo.setStatus(list, item.id, 'blocked', note))
         }
       }}
+      {...(item.id === null || past
+        ? {}
+        : {
+          onUntag: (tag: string) => {
+            act(window.tephra.todo.untag(list, item.id as string, tag))
+          },
+          owning: owning === item.id,
+          onOwnerDone: (name: string | null) => {
+            setOwning(null)
+            if (name === null) return
+            const said = name.trim()
+            act(window.tephra.todo.setOwner(list, item.id as string, said === '' ? null : said))
+          },
+        })}
       onMenu={e => {
         e.preventDefault()
         e.stopPropagation()
@@ -833,7 +849,14 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               else act(window.tephra.todo.setStatus(list, id, status))
             }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id),
               dockets,
-              where => act(window.tephra.todo.putDown(list, id, where)))),
+              where => act(window.tephra.todo.putDown(list, id, where)),
+              {
+                item,
+                today,
+                onDue: due => act(window.tephra.todo.setDue(list, id, due)),
+                onOwner: () => setOwning(id),
+                onNobody: () => act(window.tephra.todo.setOwner(list, id, null)),
+              })),
           ],
         })
       }}
@@ -1155,6 +1178,15 @@ function statusItems(
   onNote: () => void,
   dockets: readonly { id: DocumentId; title: string }[] = [],
   onPutDown?: (docket?: DocumentId) => void,
+  fields?: {
+    /** What the item says now, so an entry can offer to undo it. */
+    readonly item: TodoItem
+    /** What day it is, for the one date worth a menu entry. Null on a list with no days. */
+    readonly today: DateKey | null
+    readonly onDue: (due: DateKey | null) => void
+    readonly onOwner: () => void
+    readonly onNobody: () => void
+  },
 ): readonly MenuEntry[] {
   // **Backlogged is not among them any more** (MH5). `[>]` means *transferred to
   // a docket*, so it is the consequence of a move rather than a state you set —
@@ -1188,6 +1220,35 @@ function statusItems(
       ...dockets
         .filter(one => one.id !== BACKLOG_DOCKET)
         .map(one => ({ label: `Move to ${one.title}`, onChoose: () => onPutDown(one.id) })),
+    ]),
+    /**
+     * **The fields a text edit can no longer clear** (D85, MT8).
+     *
+     * Setting one is still typing: `DUE friday` or `OWNER Sam` in the row's own
+     * field is read by the entry grammar and lands in the record. What typing
+     * cannot do any more is take one OFF — the field holds the sentence, and a
+     * date not retyped is not a date withdrawn — so clearing is a verb, and a
+     * verb belongs where the other deliberate acts are.
+     *
+     * A tag is the exception and needs no entry: its chip is right there on the
+     * row, and clicking it takes it off.
+     */
+    ...(fields === undefined ? [] : [
+      'rule' as const,
+      ...(fields.item.due !== null
+        ? [{ label: 'No due date', onChoose: () => fields.onDue(null) }]
+        : fields.today === null
+          ? []
+          // **One date, and it is the only one worth an entry.** Every other
+          // date is easier to say by typing it — `DUE friday`, `DUE 12/3` — and
+          // the picker in the row's own field offers the rest. What typing
+          // cannot do is take a date off, which is the entry below.
+          : [{ label: 'Due today', onChoose: () => fields.onDue(fields.today) }]),
+      { label: fields.item.owner === null ? 'Who has this\u2026' : `Reassign (${fields.item.owner})\u2026`,
+        onChoose: fields.onOwner },
+      ...(fields.item.owner === null
+        ? []
+        : [{ label: 'Nobody has this', onChoose: fields.onNobody }]),
     ]),
     'rule' as const,
     {
@@ -1232,6 +1293,9 @@ function Row({
   onChoose,
   picked = false,
   onTextTarget,
+  onUntag,
+  owning = false,
+  onOwnerDone,
 }: {
   item: TodoItem
   today: DateKey | null
@@ -1244,6 +1308,20 @@ function Row({
   onStatus: (status: TodoStatus) => void
   onBlocked: (note: string | null) => void
   onMenu: (e: React.MouseEvent) => void
+  /**
+   * Take a tag off, from the chip that shows it (D85, MT8).
+   *
+   * **A verb, because omission is no longer deletion.** The row's text field used
+   * to hold the whole line, so deleting `#house` from it was how you untagged;
+   * the field holds the sentence now, and a tag not retyped is not a tag
+   * withdrawn. So the chip that shows it is what takes it off — the docket's
+   * matter row has answered this the same way since MH1.
+   */
+  onUntag?: (tag: string) => void
+  /** Whether who-has-this is being typed here. The surface owns it, as it owns `blocking`. */
+  owning?: boolean
+  /** Null for cancelled; an empty string means nobody. */
+  onOwnerDone?: (name: string | null) => void
   /**
    * The tag of the group this row is sitting under, if it is in one.
    *
@@ -1357,17 +1435,42 @@ function Row({
           ) : (
             <Prose text={item.text} />
           )}
+          {/* **What it is FOR, inside the sentence's own span** (D85, MT8).
+              Context rather than a facet: *find the right team* means nothing
+              without knowing whether the matter is defeating a supervillain or
+              building an outhouse. It goes here, where `todo-reason` already
+              goes, because it is *words attached to the sentence* — a flex item
+              of its own made the row wrap and cost it its alignment with the add
+              row, which is a fair thing for the layout to have objected to. */}
+          {item.for !== null && (
+            <span className="todo-for" title={`for ${item.for}`}>{item.for}</span>
+          )}
           {item.reason !== null && <span className="todo-reason">{item.reason}</span>}
         </span>
       )}
 
       {chips.length > 0 && (
         <span className="todo-tags">
-          {chips.map(tag => (
-            <span key={tag} className="pill label todo-tag">
-              {tag}
-            </span>
-          ))}
+          {chips.map(tag =>
+            onUntag === undefined ? (
+              <span key={tag} className="pill label todo-tag">
+                {tag}
+              </span>
+            ) : (
+              <button
+                key={tag}
+                type="button"
+                className="pill label todo-tag"
+                title={`Take #${tag} off this`}
+                onClick={e => {
+                  e.stopPropagation()
+                  onUntag(tag)
+                }}
+              >
+                {tag}
+              </button>
+            ),
+          )}
         </span>
       )}
 
@@ -1383,8 +1486,19 @@ function Row({
         <span className="todo-moved">moved to {item.moved}</span>
       )}
 
-      {item.owner !== null && (
-        <span className="todo-owner" title={`${item.owner} has this`}>{item.owner}</span>
+      {owning && onOwnerDone !== undefined ? (
+        // **In the owner's own place**, so the row does not jump: the field is
+        // the same box the name was drawn in.
+        <NoteField
+          initial={item.owner ?? ''}
+          placeholder="who has this"
+          className="todo-owner-field"
+          onDone={onOwnerDone}
+        />
+      ) : (
+        item.owner !== null && (
+          <span className="todo-owner" title={`${item.owner} has this`}>{item.owner}</span>
+        )
       )}
 
 
@@ -1501,9 +1615,14 @@ function Notes({
 function NoteField({
   initial,
   onDone,
+  placeholder = 'what happened',
+  className = 'todo-note-field',
 }: {
   initial: string
   onDone: (text: string | null) => void
+  /** **One small field, two uses**: a note, and who has this (D85's field verbs). */
+  placeholder?: string
+  className?: string
 }): React.JSX.Element {
   const [value, setValue] = useState(initial)
   const field = useRef<HTMLInputElement>(null)
@@ -1520,9 +1639,9 @@ function NoteField({
   return (
     <input
       ref={field}
-      className="todo-note-field"
+      className={className}
       value={value}
-      placeholder="what happened"
+      placeholder={placeholder}
       spellCheck={false}
       onChange={e => setValue(e.currentTarget.value)}
       onBlur={e => finish(e.currentTarget.value)}

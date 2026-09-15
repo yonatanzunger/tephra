@@ -339,6 +339,21 @@ const tephra = {
     /** The committed row edit: text, tags and date together, one edit (D56). */
     edit: (list: DocumentId, item: string, text: string): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'edit', list, item, text }),
+    /**
+     * One field, set or cleared (D85).
+     *
+     * **A verb each, because omission is not deletion.** The row's text field
+     * holds the sentence, so clearing a date or taking a tag off cannot be done
+     * by not retyping it.
+     */
+    setDue: (list: DocumentId, item: string, due: DateKey | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'due', list, item, due }),
+    tag: (list: DocumentId, item: string, name: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'tag', list, item, name }),
+    untag: (list: DocumentId, item: string, name: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'untag', list, item, name }),
+    setOwner: (list: DocumentId, item: string, owner: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.todo, { kind: 'owner', list, item, owner }),
     /** The lines written under an item. Nothing in them is parsed (T16 does not apply). */
     setNotes: (list: DocumentId, item: string, notes: readonly string[]): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.todo, { kind: 'notes', list, item, notes }),

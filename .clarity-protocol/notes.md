@@ -1532,3 +1532,40 @@ the day boundary. Naming behaviour *data* is the same vagueness that made
 > Related: note 61's rule, seen from the other side. That one was about a comment
 > that stayed true while the code drifted; this is about a *name* doing the same
 > thing, and the fix is identical — say it where the compiler can hold you to it.
+
+## 64. The line was authoritative in one place nobody had listed
+
+**2026-09-15, MT8.** An item's fields moved out of its text and into lines of
+their own (D85). The model already had the fields — `tags`, `due`, `owner`,
+`status` — so the change looked like a serialization change: a new writer, a
+lenient reader, round-trip tests as the gate. Typecheck passed, 1,156 tests
+passed, two hundred items from the real notebook round-tripped exactly.
+
+**And clearing a due date had silently stopped working.**
+
+There was no IPC verb for `due`, or for `tag`, `untag` or `owner`. The row
+changed them by rewriting the item's **text**: the field held `ring the bank
+#house DUE 2026-09-14`, the date picker stripped `DUE …` from that string and
+appended a new one, and *deleting it from the text* was how you cleared it. With
+the record authoritative the field holds only the sentence — so setting still
+worked, because the entry grammar reads `DUE friday` out of anything you type,
+and taking one off became impossible. My own merge rule made it so, correctly:
+omission cannot mean deletion, or editing a sentence would drop every field.
+
+**Nothing in the test suite could see it.** The unit and integration tests call
+`doc.setDue(id, null)` directly — there was no channel to notice was missing, and
+a verb that does not exist has no test that fails. What would have caught it is a
+check that drives the *gesture* from outside, which is what the acceptance suite
+is for and what it now has.
+
+**The lesson is about what a refactor's blast radius includes.** I looked for
+callers of the fields and found them all. I did not ask *how does a person change
+this field*, which is a different question with a different answer — and in this
+case the answer was **by editing text**, which is exactly the thing being taken
+away. A capability that is implemented by a coincidence of representation has no
+symbol to grep for.
+
+> Related: note 62's silent door, one layer up. That was a message sent into a
+> channel with no listener; this is a *gesture* with no verb. Both are failures
+> of a kind the type system cannot see, because in both the missing thing is an
+> absence rather than a mistake.

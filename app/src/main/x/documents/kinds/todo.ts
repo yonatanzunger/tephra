@@ -458,7 +458,7 @@ export class TodoDocument extends SegmentedDocument {
    * moment of noticing: status is *not started*, ctime is now, and the tags and
    * the due date are whatever the string already said (T13, T16).
    */
-  async add(text: string, key: SegmentKey, elsewhere?: TakenIds): Promise<string> {
+  async add(text: string | Partial<TodoItem>, key: SegmentKey, elsewhere?: TakenIds): Promise<string> {
     const date = this.#key(key)
     await this.carry(key, elsewhere)
     const now = nowSeconds()
@@ -467,11 +467,15 @@ export class TodoDocument extends SegmentedDocument {
     // **Flattened first.** A quick-add box and a share sheet both hand over
     // whatever was selected, and an item is a line — a newline in the middle of
     // one would silently become two items, the second of them unmarked.
-    const flat = resolveDue(text.replace(/\s*\n\s*/g, ' ').trim(), date)
-    // **The entry grammar**, which is what that string is (D85): whatever it
-    // says as `#tag`, `DUE <date>` or `OWNER <name>` becomes a field, and the
-    // rest is the sentence.
-    const item: TodoItem = { ...parseEntry(flat), id, ctime: now, mtime: now }
+    // **A string is an entry, a record is already one** (D85). A person types a
+    // string and the entry grammar reads it; the docket reconciler composes a
+    // record, because it knows each field for certain and joining them into a
+    // string for this to take apart again would be two chances to be wrong.
+    const said: Partial<TodoItem> =
+      typeof text === 'string'
+        ? parseEntry(resolveDue(text.replace(/\s*\n\s*/g, ' ').trim(), date))
+        : text
+    const item: TodoItem = { ...EMPTY, ...said, id, ctime: now, mtime: now }
 
     const body = await this.bodyOf(date)
     // Appended after what is WRITTEN, not at the end of the file: a day may end
@@ -517,6 +521,25 @@ export class TodoDocument extends SegmentedDocument {
       // the grammar reads by (T4).
       reason: status === 'blocked' ? (reason ?? item.reason) : null,
     }))
+  }
+
+  /** Who has it, or nobody (D81). A field, like the date (D85). */
+  async setOwner(id: string, owner: string | null): Promise<boolean> {
+    const said = owner === null ? null : owner.trim()
+    return this.#rewrite(id, item => ({ ...item, owner: said === '' ? null : said }))
+  }
+
+  /**
+   * What this item is *for* — the context its sentence was written against.
+   *
+   * **Written by reconciliation, not by a person** (D85, MT8): the docket owns
+   * the matter a generated step belongs to, so a pass repairs this the way it
+   * repairs anything else derived. The sentence is the person's and is never
+   * touched by it.
+   */
+  async setFor(id: string, said: string | null): Promise<boolean> {
+    const value = said === null ? null : said.trim()
+    return this.#rewrite(id, item => ({ ...item, for: value === '' ? null : value }))
   }
 
   /** Give it a date, or take one away. A field, so there is nothing to cut (D85). */

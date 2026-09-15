@@ -165,7 +165,57 @@ export class Tasks {
     return made
   }
 
+  /**
+   * An item from a **record** rather than from a typed string (D85, MT8).
+   *
+   * What the docket reconciler uses: it knows every field for certain, so it
+   * says so, where `add` has to read a string somebody typed.
+   */
+  async make(id: DocumentId, fields: Partial<TodoItem>): Promise<string> {
+    const made = await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as TodoDocument).add(fields, this.#day.today, this.#takenIds)),
+    )
+    this.#touched()
+    return made
+  }
+
   /** Rewrite what is written under an item. Nothing in a note is parsed. */
+  /**
+   * One field of an item, set or cleared (D85, MT8).
+   *
+   * **A verb each, because omission is not deletion.** The row's text field
+   * holds the sentence, so clearing a date or taking a tag off cannot be done by
+   * not retyping it — which is what the line being authoritative used to allow.
+   */
+  async setDue(id: DocumentId, item: string, due: DateKey | null): Promise<void> {
+    await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).setDue(item, due)))
+    this.#touched()
+  }
+
+  async tag(id: DocumentId, item: string, name: string): Promise<void> {
+    await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).tagItem(item, name)))
+    this.#touched()
+  }
+
+  async untag(id: DocumentId, item: string, name: string): Promise<void> {
+    await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).untagItem(item, name)))
+    this.#touched()
+  }
+
+  async setOwner(id: DocumentId, item: string, owner: string | null): Promise<void> {
+    await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).setOwner(item, owner)))
+    this.#touched()
+  }
+
+  /** What an item is for — reconciliation's to write, never a person's (MT8). */
+  async setFor(id: DocumentId, item: string, said: string | null): Promise<boolean> {
+    const changed = await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as TodoDocument).setFor(item, said)),
+    )
+    if (changed) this.#touched()
+    return changed
+  }
+
   async setNotes(id: DocumentId, item: string, notes: readonly string[]): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as TodoDocument).setNotes(item, notes)))
     this.#touched()

@@ -2099,11 +2099,12 @@ test('and the horizon reads the same clock, or it would disagree with the list',
   ])
 })
 
-test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', async t => {
+test('A GENERATED ITEM SAYS WHAT IT IS FOR, and carries one tag', async t => {
   // On the list a step's text stands alone, and *find a general mechanic* says
-  // nothing about which car. The first cut wrote the matter's name into the
-  // title; a tag is what that fact actually is — drawn as a chip, groupable in
-  // the by-tag view, and removable without editing the sentence.
+  // nothing about which car. Three answers have been tried: the matter written
+  // into the title (words in the sentence, unfilterable), the matter as a TAG
+  // (which doubled every row in the by-tag view), and this — **the docket is the
+  // tag, the matter is what the item is FOR** (D85, MT8).
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const id = await service.library.newDocument('The house', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
@@ -2112,18 +2113,95 @@ test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', as
 
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
-  // **The text is the sentence** (D85); the tags and the date are fields.
+  // **The text is the sentence** (D85); everything else is a field.
   assert.deepEqual(items.map(one => one.text).sort(), ['Kia repairs', 'find a general mechanic'])
-  // **The docket always; the matter only where it adds something.** The seeded
-  // step's text IS the matter's name (D76), so tagging it with that says one
-  // thing twice — a chip repeating the sentence beside it reads as a fault.
-  assert.deepEqual(items.map(one => [...one.tags].sort()).sort(), [
-    ['Kia repairs', 'The house'],
-    ['The house'],
-  ])
-  // And they are real tags, not text that looks like one.
-  assert.deepEqual([...new Set(items.flatMap(one => one.tags))].sort(),
-    ['Kia repairs', 'The house'])
+  // **ONE tag, so it appears once.** The docket is a word you think in and the
+  // grouping somebody actually pivots on; the matter is structure.
+  assert.deepEqual(items.map(one => [...one.tags]).sort(), [['The house'], ['The house']])
+  // **And the matter is the context**, except where the step already says it:
+  // the seeded step's text IS the matter's name (D76), and an annotation
+  // repeating the sentence beside it reads as a fault.
+  assert.deepEqual(
+    items.map(one => [one.text, one.for]).sort(),
+    [['Kia repairs', null], ['find a general mechanic', 'Kia repairs']],
+  )
+})
+
+test('AND THE ROWS STOP DOUBLING, which is what the tag cost', async t => {
+  // The measure the complaint was actually about: a real notebook drew thirteen
+  // items as eighteen rows, because every generated item appeared under its
+  // matter as well as its docket. One tag each means rows === items.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  for (const name of ['Initiate remodel', 'Transfer utilities']) {
+    const matter = await service.docket.add(id, name, { mode: 'task' })
+    await service.docket.addStep(id, matter, '+0d', `first step of ${name}`)
+    await service.docket.addStep(id, matter, '+0d', `second step of ${name}`)
+    await service.docket.activate(id, matter)
+  }
+  const list = await service.todo.list()
+  const items = await service.todo.items(list, service.today)
+  const rows = items.flatMap(one => (one.tags.length === 0 ? ['(untagged)'] : [...one.tags]))
+  assert.equal(rows.length, items.length, `${items.length} items drawn as ${rows.length} rows`)
+  assert.deepEqual([...new Set(rows)], ['The house'], 'all under the one group')
+})
+
+test('AND A RENAME REPAIRS THE CONTEXT, which the matter tag never did', async t => {
+  // A matter renamed left every item it generated saying a name that no longer
+  // existed, with nothing to fix it. `for` is derived, so a pass makes it true
+  // again (D77) — and the pass writes the FIELD and never the sentence.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
+  await service.docket.addStep(id, kia, '+0d', 'book the garage')
+  await service.docket.activate(id, kia)
+  const list = await service.todo.list()
+  const before = (await service.todo.items(list, service.today))
+    .find(one => one.text === 'book the garage')
+  assert.equal(before?.for, 'Kia repairs')
+
+  await service.docket.rename(id, kia, 'Kia repairs (2026)')
+  await service.agenda.reconcile()
+  const after = (await service.todo.items(list, service.today))
+    .find(one => one.text === 'book the garage')
+  assert.equal(after?.for, 'Kia repairs (2026)', 'repaired')
+  assert.equal(after?.text, 'book the garage', 'and the sentence is untouched')
+})
+
+test('AND A SECTION IS PART OF IT, but only when there is more than one', async t => {
+  // All three levels were on screen when the step was written — docket, section,
+  // matter — so all three are the context it needs. The docket is the tag; the
+  // other two are the `for`.
+  //
+  // **And a lone section says nothing.** Seen on a real notebook: every item
+  // read *House Bootstrap / Initiate Remodel* on a docket with exactly one
+  // section, so the first half was noise on every row and pushed three of five
+  // rows onto a second line. A section earns its place by telling the matter
+  // apart from one somewhere else.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const id = await service.library.newDocument('Lima', undefined, 'docket')
+  await service.docket.addSection(id, 'House Bootstrap')
+  const one = await service.docket.add(id, 'Transfer utilities', { mode: 'task' }, 'House Bootstrap')
+  await service.docket.addStep(id, one, '+0d', 'find last paid receipts')
+  await service.docket.activate(id, one)
+
+  const list = await service.todo.list()
+  const lone = (await service.todo.items(list, service.today))
+    .find(item => item.text === 'find last paid receipts')
+  assert.equal(lone?.for, 'Transfer utilities', 'one section, so it adds nothing')
+
+  // A second section, and now the first one distinguishes something.
+  await service.docket.addSection(id, 'Paperwork')
+  const two = await service.docket.add(id, 'File the deeds', { mode: 'task' }, 'Paperwork')
+  await service.docket.addStep(id, two, '+0d', 'find last paid receipts')
+  await service.docket.activate(id, two)
+  await service.agenda.reconcile()
+
+  const both = (await service.todo.items(list, service.today))
+    .filter(item => item.text === 'find last paid receipts')
+    .map(item => item.for)
+    .sort()
+  assert.deepEqual(both, ['House Bootstrap / Transfer utilities', 'Paperwork / File the deeds'])
 })
 
 test("and a name with an apostrophe is tagged too — Ada's birthday", async t => {
@@ -2279,10 +2357,10 @@ test('and the horizon does not show it twice, the two sources staying disjoint',
     [['2026-03-10', 'due', 'Change the water filter']], 'once, as a dated task')
 })
 
-test("and a matter's own tag is dropped only when the STEP already says it", async t => {
+test("and the context is dropped only when the STEP already says it", async t => {
   // The rule is about redundancy, not about single-step matters: a matter with
-  // three steps whose first repeats its name drops it on that one and keeps it
-  // on the others, because that is where the fact is and is not.
+  // two steps, one of which repeats its name, annotates the other and leaves
+  // that one alone — because that is where the fact is and is not.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
   const id = await service.library.newDocument('Burrow', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
@@ -2292,10 +2370,10 @@ test("and a matter's own tag is dropped only when the STEP already says it", asy
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
   assert.deepEqual(
-    items.map(one => [one.text, [...one.tags].sort()]).sort(),
+    items.map(one => [one.text, one.for, [...one.tags]]).sort(),
     [
-      ['Kia repairs', ['Burrow']],
-      ['book the garage', ['Burrow', 'Kia repairs']],
+      ['Kia repairs', null, ['Burrow']],
+      ['book the garage', 'Kia repairs', ['Burrow']],
     ],
   )
 })

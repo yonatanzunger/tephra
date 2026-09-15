@@ -813,6 +813,36 @@ export type TodoCommand =
       readonly note?: string
     }
   | { readonly kind: 'edit'; readonly list: DocumentId; readonly item: string; readonly text: string }
+  /**
+   * One field of an item, set or cleared — the panel's verbs (D85, MT8).
+   *
+   * **These exist because the line stopped being authoritative.** A due date was
+   * changed by rewriting the item's text: the field held `ring the bank #house
+   * DUE 2026-09-14`, so the date picker stripped `DUE …` from that string and
+   * appended a new one, and deleting it from the text was how you cleared it.
+   * With the record authoritative the text is only the sentence, so **omission
+   * cannot mean deletion** — otherwise editing a sentence would silently drop
+   * every field — and taking a date or a tag off needs a verb of its own.
+   */
+  | {
+      readonly kind: 'due'
+      readonly list: DocumentId
+      readonly item: string
+      readonly due: DateKey | null
+    }
+  | { readonly kind: 'tag'; readonly list: DocumentId; readonly item: string; readonly name: string }
+  | {
+      readonly kind: 'untag'
+      readonly list: DocumentId
+      readonly item: string
+      readonly name: string
+    }
+  | {
+      readonly kind: 'owner'
+      readonly list: DocumentId
+      readonly item: string
+      readonly owner: string | null
+    }
   /** The lines written UNDER an item — progress, who was called. Nothing is parsed. */
   | {
       readonly kind: 'notes'

@@ -1200,8 +1200,13 @@ console.log('\n\u2014 the task list \u2014')
   )
   check(
     'the file is the file it appears to be: a markdown task list',
-    /^- \[.\] .* <!--tephra:item [0-9a-z]{8} \d+ \d+-->$/m.test(today),
-    JSON.stringify(today.split('\n').find(l => l.startsWith('- '))),
+    // **A checkbox line and its fields under it** (D85). Still a markdown task
+    // list to anything that reads one — the fields and the identity are
+    // markdown's own continuation lines, indented into the item above.
+    /^- \[.\] \S.*\n(?: {2}\S.*\n)* {2}<!--tephra:item [0-9a-z]{8} \d+ \d+-->$/m.test(today),
+    JSON.stringify(today.split('\n').slice(
+      today.split('\n').findIndex(l => l.startsWith('- ')),
+    ).slice(0, 3)),
   )
   check(
     "and the task list's days are not mistaken for the notebook's",
@@ -1549,6 +1554,84 @@ console.log('\n— notes under an item —')
   check('nothing errored on the way', N.appError === 'none', String(N.appError))
 }
 
+// ── an item's fields, and the gestures that change one ──────────
+//
+// **D85 moved the fields out of the sentence** — `tags:`, `due:`, `owner:`,
+// `for:` are lines of their own under the checkbox — and that changed what a
+// gesture has to be. Setting a field is still typing: `DUE friday` or `OWNER
+// Sam` in the row's own field is read by the entry grammar and lands in the
+// record. **Taking one off cannot be**, because the field holds the sentence
+// and a date not retyped is not a date withdrawn. So a tag comes off at its
+// chip and the rest at the row's menu, and this is where that is asserted from
+// outside.
+console.log('\n— an item\'s fields —')
+{
+  const root = await week(['Today.\n'])
+  const [fy, fm] = DAY.split('-')
+  await mkdir(join(root, 'tasks.todo', fy, fm), { recursive: true })
+  // Written in the FIELD form, which is also the assertion that the app reads it.
+  await writeFile(
+    join(root, 'tasks.todo', fy, fm, `${DAY}.md`),
+    `---\ntephra: 1\ndate: ${DAY}\nkind: todo\n---\n` +
+      '- [ ] approve the proposal\n' +
+      '  tags: #lima #urgent\n' +
+      `  for: House Bootstrap / Initiate Remodel\n` +
+      `  due: ${DAY}\n` +
+      '  owner: AV\n' +
+      '  <!--tephra:item bbbb1111 100 100-->\n' +
+      '- [ ] renew the permit\n' +
+      '  <!--tephra:item bbbb2222 100 100-->\n',
+  )
+
+  const F = report(await launch('fields', root))
+  const file = await readFile(join(root, 'tasks.todo', fy, fm, `${DAY}.md`), 'utf8')
+  check(
+    'THE FIELD FORM READS: the sentence is the row, and the fields are beside it',
+    Array.isArray(F.rows) && F.rows[0] === 'approve the proposal' &&
+      JSON.stringify(F.tags) === JSON.stringify(['lima', 'urgent']) &&
+      JSON.stringify(F.owners) === JSON.stringify(['AV']) &&
+      Array.isArray(F.dues) && F.dues.length === 1,
+    `${JSON.stringify(F.rows)} · tags ${JSON.stringify(F.tags)} · owners ${JSON.stringify(F.owners)}`,
+  )
+  check(
+    // The thing this whole change was for: *find the right team* means nothing
+    // without the matter it belongs to, and the matter was a tag until a real
+    // notebook drew thirteen items as eighteen rows.
+    'AND IT SAYS WHAT IT IS FOR, without that being a tag',
+    JSON.stringify(F.for) === JSON.stringify(['House Bootstrap / Initiate Remodel']),
+    JSON.stringify(F.for),
+  )
+  check(
+    'A TAG COMES OFF AT ITS CHIP, which is the only way left to take one off',
+    JSON.stringify(F.tagsAfterClick) === JSON.stringify(['urgent']),
+    JSON.stringify(F.tagsAfterClick),
+  )
+  check(
+    'A DATE COMES OFF AT THE MENU, because omission is not deletion',
+    F.clearedDue === true && JSON.stringify(F.duesAfter) === JSON.stringify([]),
+    `${F.clearedDue} · ${JSON.stringify(F.duesAfter)}`,
+  )
+  check(
+    // Off at the menu, then on by typing — and the entry says which it will do:
+    // *Reassign (AV)…* while somebody has it, *Who has this…* while nobody does.
+    'and an owner both ways round: taken off at the menu, typed back into the row',
+    F.clearedOwner === true && JSON.stringify(F.ownersCleared) === JSON.stringify([]) &&
+      F.askedOwner === true && F.ownerFieldOpen === true &&
+      JSON.stringify(F.ownersAfterTyping) === JSON.stringify(['Sam']),
+    `cleared ${JSON.stringify(F.ownersCleared)} · opened ${F.ownerFieldOpen} · ` +
+      `typed ${JSON.stringify(F.ownersAfterTyping)}`,
+  )
+  check(
+    // The other half of the pair that comes apart: what a screen shows and what
+    // the file holds. The sentence is alone on its line, the fields are under it.
+    'AND THE FILE SAYS THE SAME: the sentence alone, the fields under it',
+    /^- \[ \] approve the proposal$/m.test(file) && /^ {2}tags: #urgent$/m.test(file) &&
+      !/^ {2}due:/m.test(file) && /^ {2}owner: Sam$/m.test(file),
+    JSON.stringify(file.split('\n').slice(5, 10)),
+  )
+  check('nothing errored on the way', F.appError === 'none', String(F.appError))
+}
+
 // ── print prints what you are looking at ──────────
 //
 // **Reported from use.** ⌘P asked the stream for its extent whatever was on
@@ -1702,7 +1785,8 @@ console.log('\n— the pivots and the drawer —')
     // is why how much you have put down is visible without opening it.
     'THE DRAWER: counted before it is opened, and holding what nothing else shows',
     V.drawerLabel === '\u25b8 Backlog2' &&
-      JSON.stringify(V.drawer) === JSON.stringify(['someday, a pond', 'someday, the loft #house']),
+      // The text is the sentence; the tag is a field (D85).
+      JSON.stringify(V.drawer) === JSON.stringify(['someday, a pond', 'someday, the loft']),
     `${JSON.stringify(V.drawerLabel)} \u00b7 ${JSON.stringify(V.drawer)}`,
   )
   check(
@@ -1959,7 +2043,7 @@ console.log('\n— the link directory —')
     // them meant — so the line leads and the destination follows.
     'THE SENTENCE LEADS, and it reads as one: no markers, no markup, no bullet',
     Array.isArray(L.where) &&
-      L.where.some(w => String(w) === "Review Steve's bio draft #career") &&
+      L.where.some(w => String(w) === "Review Steve's bio draft") &&
       !L.where.some(w => /tephra:item|\]\(|^- \[/.test(String(w))),
     JSON.stringify(L.where),
   )

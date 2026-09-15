@@ -2612,6 +2612,43 @@ body {
   color: rgb(var(--text-muted) / .9);
 }
 
+/* The owner's editor, in the owner's own box so the row does not jump when it
+   opens. Sized like the name it replaces rather than like a text field. */
+.todo-owner-field {
+  flex: 0 0 auto; width: 8rem;
+  font-family: var(--font-ui); font-size: var(--row-note);
+  margin-top: var(--note-lift);
+  background: transparent; color: rgb(var(--text));
+  border: 1px solid rgb(var(--text-muted) / .5); border-radius: 3px;
+  padding: 0 .25em;
+}
+
+/* **What the item is FOR** (D85, MT8): the context its sentence was written
+   against — a docket's section and matter, which were all on screen when
+   somebody wrote the step.
+
+   Quieter than the owner and closer to the words, because it is not a fact about
+   the task but the setting the task's own sentence needs to make sense. It sits
+   next to the prose rather than out among the chips for the same reason: the
+   chips are things you filter by, and this is something you read. */
+.todo-for {
+  /* **No `nowrap`**, and that was tried: holding the annotation whole made the
+     task's own words break mid-phrase instead — *Approve Paola's / proposal* —
+     which is exactly the wrong thing to give up. It flows after the sentence and
+     yields first, the way `todo-reason` beside it does. */
+  margin-left: .5rem;
+  font-family: var(--font-ui); font-size: var(--row-note);
+  color: rgb(var(--text-muted) / .8);
+}
+
+/* A tag chip that can be taken off is still a chip — the button is there for the
+   gesture, not for the look, so it takes `.pill.label` and adds nothing but a
+   cursor. **Nothing else**: a `font: inherit` here set it to the 20px prose it
+   sits beside, which the acceptance suite caught by measuring it against the due
+   date (11.6px) — the two share one size on purpose. */
+button.todo-tag { cursor: pointer; }
+button.todo-tag:hover { --pill-ground: rgb(var(--text) / .14); }
+
 /* **A line that has been handed to a docket** (MH5). Greyed and inert: it is the
    record that the thing went, the way a finished row is the record that it was
    done — and nothing on this list can act on it, because this list does not own

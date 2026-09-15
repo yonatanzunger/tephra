@@ -4258,7 +4258,8 @@ standing-plus-asked union, and is why it survived where the others did not.
 ## D85: A task item is a record, and the file holds it as fields
 
 **Date:** 2026-09-15
-**Status:** decided; **not yet built** — the plan is MT8 in `solution/todo-roadmap.md`
+**Status:** decided and **built** (2026-09-15) — MT8 in `solution/todo-roadmap.md`
+has the plan and what building it taught
 **Amends:** **T16**, whose *left in the line* clause this supersedes; D81 (who has it
 is a marker — the principle survives, the storage changes); D56 (an item's
 identity). **Extends:** D31 (parse leniently, serialize precisely), D80 (the

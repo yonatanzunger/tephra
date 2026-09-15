@@ -63,7 +63,7 @@ import type { FixedPoints, RunReport } from './fixed-point.ts'
 import type { Dockets as DocketStore } from './dockets.ts'
 import type { Tasks } from './tasks.ts'
 import { serve, serveKinds, type Served, type Serves } from './serves.ts'
-import { dueOn, matterHorizon, addInterval, backInterval, instancesIn, NOT_STARTED, type Matter, type Step } from '../../shared/kinds/docket.ts'
+import { dueOn, matterHorizon, addInterval, backInterval, instancesIn, NOT_STARTED, type Matter, type Section, type Step } from '../../shared/kinds/docket.ts'
 import { CHANNEL, type DocketCommand, type TodoCommand } from '../../shared/ipc.ts'
 
 export class AgendaService implements Serves {
@@ -184,6 +184,13 @@ export class AgendaService implements Serves {
       backlog: () => this.#todo.backlog(),
       walk: command => this.#todo.walk(command.list, command.date),
       bulk: command => this.todoBulk(command.list, command.items, command.action),
+      // **One verb per field** (D85, MT8). The row's text field holds the
+      // sentence now, so a date cleared or a tag taken off cannot arrive as an
+      // omission from an edited string — see `TodoCommand`.
+      due: command => this.#todo.setDue(command.list, command.item, command.due),
+      tag: command => this.#todo.tag(command.list, command.item, command.name),
+      untag: command => this.#todo.untag(command.list, command.item, command.name),
+      owner: command => this.#todo.setOwner(command.list, command.item, command.owner),
       putDown: command => this.todoPutDown(command.list, command.item, command.docket),
       matterFor: command => this.matterFor(command.item),
       chosen: command => this.#todo.chosen(command.list, command.date),
@@ -563,6 +570,11 @@ export class AgendaService implements Serves {
       // back to the slug of them, which is the only other name a document has.
       const domain = (await this.#store.corpus.use(docket, doc => doc.titleOf(ONLY_SEGMENT)))
         ?? nameOf(docket as string)
+      // **Which section each matter is under**, for the context a generated item
+      // carries. Read once per docket rather than per step: a section name is
+      // explanatory text, and one that moves under a running pass is repaired by
+      // the next one (D77).
+      const sections = await this.#docket.sections(docket)
       // Re-read after each matter: advancing one rewrites the block, and what
       // this loop holds would be the version from before that.
       for (const id of (await this.#docket.matters(docket)).flatMap(m => (m.id === null ? [] : [m.id]))) {
@@ -585,27 +597,37 @@ export class AgendaService implements Serves {
             // happen, which for a run-up step is its own day and not the
             // occasion's. Being overdue afterwards is correct and is what H7a
             // asks for — outstanding is shown, never quietly reissued.
-            // **The DOCKET is always a tag; the matter only when it adds
-            // something.** The docket is the durable grouping — the house, work,
-            // games — so tagging with it is the conceptual link back to where the
-            // task came from, and it is the tag somebody would actually pivot on.
+            // **The DOCKET is a tag; the matter is what the item is FOR** (D85,
+            // MT8). The docket is the durable grouping — the house, work, games —
+            // and a word you actually think in, so it is a tag and it is the one
+            // somebody pivots on. The matter is *structure*, and it was a tag
+            // until a real notebook showed what that costs: thirteen items drawn
+            // as eighteen rows, because every generated item appeared under its
+            // matter as well as its docket, and a matter with more than a handful
+            // of live steps is a badly organised matter — so the group it makes
+            // can never be worth the doubling.
             //
-            // The matter is dropped when its name IS the step's text, which is
-            // the common single-step case (D76 seeds exactly that): *Change the
-            // water filter #'Change the water filter'* says one thing twice, and
-            // a chip repeating the sentence beside it reads as a fault.
+            // It is still needed, and for a different reason than grouping:
+            // *find the right team* means nothing without knowing whether the
+            // matter is defeating a supervillain or building an outhouse, and
+            // both can be live at once. That is context for the sentence, which
+            // is what `for` is.
+            //
             // **Whoever has the matter has the work it makes.** The owner is a
-            // fact about the task and travels as a marker rather than as words in
-            // its title, for the reason the matter's name became a tag: text in
-            // the sentence cannot be filtered on or taken off for a summary.
-            const marks = [
-              matter.name.trim() === step.text.trim() ? null : spellTag(matter.name),
-              spellTag(domain),
-              matter.owner === null ? null : spellOwner(matter.owner),
-            ]
-            const item = await this.#todo.add(list, [step.text, ...marks, `DUE ${due}`]
-              .filter(one => one !== null && one !== '')
-              .join(' '))
+            // fact about the task and travels as a field rather than as words in
+            // its title (D81): text in the sentence cannot be filtered on or
+            // taken off for a summary.
+            //
+            // **Composed once, as a record.** Every field is known for certain
+            // here, so joining them into a string for the entry grammar to take
+            // apart again would be two chances to be wrong.
+            const item = await this.#todo.make(list, {
+              text: step.text,
+              tags: [domain],
+              for: forWhat(matter, step.text, sections),
+              owner: matter.owner,
+              due,
+            })
             // **The matter is a TAG, not a prefix.** On the list a step's text
             // stands alone — *find a general mechanic* says nothing about which
             // car — and the first cut solved that by writing the matter's name
@@ -633,6 +655,33 @@ export class AgendaService implements Serves {
             await this.#todo.remove(list, step.made)
             await this.#setStepMade(docket, id, step.id, null)
             touched = true
+          } else if (step.made !== null && live.has(step.made)) {
+            // **The context is derived, so a pass makes it true again** (D77,
+            // D85). Rename a matter or move it between sections and every item
+            // it generated is describing a place that no longer exists — which
+            // the matter TAG had as a bug with nothing to fix it, and which this
+            // fixes by the same machinery as everything else here.
+            //
+            // **The sentence is the person's; the fields are the docket's.** A
+            // pass may write `for` and take off the tag it replaced, and must
+            // never touch the text — they may have edited it, and overruling
+            // them is what the exemptions above exist to prevent.
+            const item = (await this.#todo.items(list, today)).find(one => one.id === step.made)
+            if (item !== undefined) {
+              const wantsFor = forWhat(matter, step.text, sections)
+              if (item.for !== wantsFor) {
+                await this.#todo.setFor(list, step.made, wantsFor)
+                touched = true
+              }
+              // **And the matter's own tag comes off.** This is what converts the
+              // items generated before `for` existed — the same clause, run once
+              // on an old notebook and for ever after on nothing, which is why
+              // the migration needs no separate code to be wrong in its own way.
+              if (item.tags.includes(matter.name.trim())) {
+                await this.#todo.untag(list, step.made, matter.name.trim())
+                touched = true
+              }
+            }
           }
         }
       }
@@ -743,4 +792,42 @@ export class AgendaService implements Serves {
       pass: () => this.#reconcileDockets(),
     })
   }
+}
+
+/**
+ * What a generated item is **for**: where inside its docket the step came from.
+ *
+ * `Section / Matter`, or the matter alone — read outer to inner, so it reads as a
+ * place. The docket is not in it because the docket is the item's tag, and saying
+ * it twice on one row is the fault this replaced (D85, MT8).
+ *
+ * **The section only when there is more than one**, which is what *adds
+ * something* turns out to mean. Seen on a real notebook: every lima item read
+ * *House Bootstrap / Initiate Remodel*, and that docket has exactly one section
+ * — so the first half said nothing on every row and made three of five rows wrap
+ * onto a second line, which costs the list the thing it is for. A section earns
+ * its place when it distinguishes the matter from one somewhere else.
+ *
+ * **The matter is dropped when its name IS the step's text**, which is the
+ * common single-step case (D76 seeds exactly that): *Change the water filter ·
+ * Change the water filter* says one thing twice, and an annotation repeating the
+ * sentence beside it reads as a fault. The section still says something, so it
+ * stays.
+ *
+ * Explanatory text, not a reference — which is why there is no second field for
+ * the section and no separator to parse. What a person needs is the context they
+ * had on screen when they wrote the step.
+ */
+function forWhat(
+  matter: Matter,
+  step: string,
+  sections: readonly Section[],
+): string | null {
+  const within = sections.find(one => one.matters.some(m => m.id === matter.id))
+  const named = sections.filter(one => one.name.trim() !== '').length
+  const parts = [
+    named < 2 || within === undefined || within.name.trim() === '' ? null : within.name.trim(),
+    matter.name.trim() === step.trim() ? null : matter.name.trim(),
+  ].filter(one => one !== null)
+  return parts.length === 0 ? null : parts.join(' / ')
 }
