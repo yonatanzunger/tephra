@@ -241,7 +241,7 @@ test('THE COLD START: the first docket goes to `dockets/`, with no section named
   // `Dockets` listing only exists once a docket does, so there was no listing
   // to make one from. File ▸ New Docket is the door, and it names no section.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   assert.equal(id, 'dockets/the-house.docket.md')
   assert.equal(kindOf(id as string as RelPath), 'docket')
 })
@@ -251,19 +251,19 @@ test('and a file made FROM the dockets listing is a docket, with no kind named',
   // and nothing else; getting a markdown file out of the dockets listing would
   // be a surprise nobody asked for.
   const { service } = await serviced(t)
-  const id = await service.newDocument('Birthdays', 'dockets/_index.fileset.md')
+  const id = await service.library.newDocument('Birthdays', 'dockets/_index.fileset.md')
   assert.equal(id, 'dockets/birthdays.docket.md')
 })
 
 test('while a file made anywhere else is still ordinary markdown', async t => {
   const { service } = await serviced(t)
-  assert.equal(await service.newDocument('A thought'), 'notes/a-thought.md')
-  assert.equal(await service.newDocument('A list', undefined, 'todo'), 'notes/a-list.todo.md')
+  assert.equal(await service.library.newDocument('A thought'), 'notes/a-thought.md')
+  assert.equal(await service.library.newDocument('A list', undefined, 'todo'), 'notes/a-list.todo.md')
 })
 
 test('a new docket opens as an empty one, and can be worked at once', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   assert.deepEqual(await service.docket.matters(id), [])
   const matter = await service.docket.add(id, 'The oven is broken')
   const matters = await service.docket.matters(id)
@@ -275,7 +275,7 @@ test('a new docket opens as an empty one, and can be worked at once', async t =>
 
 test('and `when` is parsed in main, so a bad one is refused rather than stored', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await assert.rejects(
     () => service.docket.add(id, 'Something', { mode: 'event', start: 'next Tuesdayish' }),
     /not a date/,
@@ -286,8 +286,8 @@ test('and `when` is parsed in main, so a bad one is refused rather than stored',
 
 test('every docket is listed, by what it is CALLED', async t => {
   const { service } = await serviced(t)
-  await service.newDocument('The house', undefined, 'docket')
-  await service.newDocument('Speaking engagements', undefined, 'docket')
+  await service.library.newDocument('The house', undefined, 'docket')
+  await service.library.newDocument('Speaking engagements', undefined, 'docket')
   const rows = await service.docket.all()
   assert.deepEqual(rows.map(r => r.title), ['Speaking engagements', 'The house'])
 })
@@ -295,9 +295,9 @@ test('every docket is listed, by what it is CALLED', async t => {
 async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
   const root = await mkdtemp(join(tmpdir(), 'tephra-docket-svc-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const { DocumentService } = await import('../../src/main/services/document-service.ts')
+  const { NotebookService } = await import('../../src/main/services/notebook-service.ts')
   let clock = new Date(at)
-  const service = new DocumentService(nb, {
+  const service = new NotebookService(nb, {
     now: () => clock,
     history: false,
     // Never on its own: these tests move the day by hand, so the moment it
@@ -308,7 +308,7 @@ async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
     await service.stop()
     await nb.close()
   })
-  await service.info()
+  await service.text.info()
   return {
     root,
     service,
@@ -375,40 +375,40 @@ test('THE BUG: a rename must not change what the document IS', async t => {
   // it actually did was take the kind off: the docket editor vanished and the
   // same file opened as raw text.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
-  const to = await service.renameDocument(id, 'The big house')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const to = await service.library.renameDocument(id, 'The big house')
   assert.equal(to, 'dockets/the-big-house.docket.md')
   assert.equal(kindOf(to as string as RelPath), 'docket')
 })
 
 test('and an overall task list had the same bug, since MT7', async t => {
   const { service } = await serviced(t)
-  const list = await service.newDocument('Blog posts', undefined, 'todo')
-  const to = await service.renameDocument(list, 'Posts to write')
+  const list = await service.library.newDocument('Blog posts', undefined, 'todo')
+  const to = await service.library.renameDocument(list, 'Posts to write')
   assert.equal(to, 'notes/posts-to-write.todo.md')
   assert.equal(kindOf(to as string as RelPath), 'todo')
 })
 
 test('a fileset and a plain note keep theirs too', async t => {
   const { service } = await serviced(t)
-  const note = await service.newDocument('A thought')
-  assert.equal(await service.renameDocument(note, 'A better thought'), 'notes/a-better-thought.md')
+  const note = await service.library.newDocument('A thought')
+  assert.equal(await service.library.renameDocument(note, 'A better thought'), 'notes/a-better-thought.md')
 })
 
 test('THE ORDER MATTERS: `.todo.md` ends with `.md`', async t => {
   // Which is why the suffixes are tried longest-first. A shorter match wins
   // otherwise and takes the kind off — the exact bug, one line further down.
   const { service } = await serviced(t)
-  const list = await service.newDocument('Ideas', undefined, 'todo')
-  assert.match(await service.renameDocument(list, 'Later'), /\.todo\.md$/)
+  const list = await service.library.newDocument('Ideas', undefined, 'todo')
+  assert.match(await service.library.renameDocument(list, 'Later'), /\.todo\.md$/)
 })
 
 test('renaming a docket keeps its matters, ids and all', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const matter = await service.docket.add(id, 'The oven is broken',
     { mode: 'event', start: '2026-10-14' })
-  const to = await service.renameDocument(id, 'The big house')
+  const to = await service.library.renameDocument(id, 'The big house')
   const matters = await service.docket.matters(to)
   assert.equal(matters.length, 1)
   assert.equal(matters[0]?.id, matter, 'a rename moves the file; it does not remake the contents')
@@ -566,7 +566,7 @@ test('and setting one later is how a conversation actually goes', async t => {
 
 test('an impossible date never reaches the file', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   for (const said of ['2026-02-30', '2026-13-01', '2026-11-14..2026-11-12']) {
     await assert.rejects(
       () => service.docket.add(id, 'A thing', { mode: 'event', start: said }),
@@ -1441,7 +1441,7 @@ test('EVERY MATTER IS BORN WITH A STEP, explicitly rather than by inference', as
   // reason about from the file alone. The step is written down; the surface
   // folds it away so it does not read as an echo of the matter's own name.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const made = await service.docket.add(id, 'Fix the skylight', { mode: 'task' })
   const matter = (await service.docket.matters(id)).find(one => one.id === made)
   assert.equal(matter?.steps.length, 1)
@@ -1451,7 +1451,7 @@ test('EVERY MATTER IS BORN WITH A STEP, explicitly rather than by inference', as
 
 test('and an event is born with a reminder, which is the other axis', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const made = await service.docket.add(id, 'The ACM talk', { mode: 'event', start: '2026-11-12' })
   const matter = (await service.docket.matters(id)).find(one => one.id === made)
   assert.equal(matter?.steps[0]?.kind, 'status')
@@ -1462,7 +1462,7 @@ test('and renaming a matter leaves its steps alone, which is the simple rule', a
   // name would mean a rule about when they are still the same thing, which is
   // the kind of inference this design keeps refusing.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const made = await service.docket.add(id, 'Fix the skylight', { mode: 'task' })
   await service.docket.rename(id, made, 'Fix the roof light')
   const matter = (await service.docket.matters(id)).find(one => one.id === made)
@@ -1475,7 +1475,7 @@ test('and renaming a matter leaves its steps alone, which is the simple rule', a
 test('THE POINT OF THE PHASE: a docket puts work on the list', async t => {
   // Until now a docket described work and produced none.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   // **Activating is enough**: the pass it asks for is part of the act, and a
   // second one afterwards finds nothing left to do (MH4's fix).
@@ -1492,7 +1492,7 @@ test('IDEMPOTENCE: running it again makes nothing', async t => {
   // consults a *last run* date, which is what goes wrong when the app was not
   // running at midnight.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const first = await onList(service)
@@ -1510,7 +1510,7 @@ test('THE LONG ABSENCE: a month away yields one task, not thirty', async t => {
   // *A path that fires once every few years is broken when it fires*, so this
   // forces the absence rather than waiting for a holiday to produce one.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   for (let day = 0; day < 30; day += 1) await service.agenda.reconcile()
@@ -1520,7 +1520,7 @@ test('THE LONG ABSENCE: a month away yields one task, not thirty', async t => {
 
 test('a matter nobody started generates nothing, which is what inactive MEANS', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.agenda.reconcile()
   assert.deepEqual(await onList(service), [], 'nothing was generated')
@@ -1528,7 +1528,7 @@ test('a matter nobody started generates nothing, which is what inactive MEANS', 
 
 test('and a step still waiting on another does not come due', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   const first = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
   await service.docket.addStep(id, car, 'then', 'have the car fixed')
@@ -1543,7 +1543,7 @@ test('THE CHAIN FIRES: finishing one brings the next', async t => {
   // Which is the phase's end condition, in one test: press activate, the first
   // step is on today's list; finish it, and the next appears.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   const shop = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
   await service.docket.addStep(id, car, 'then', 'have the car fixed')
@@ -1557,7 +1557,7 @@ test('THE CHAIN FIRES: finishing one brings the next', async t => {
 
 test('a step records what it made, which is how it knows not to again', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const made = await onList(service)
@@ -1567,7 +1567,7 @@ test('a step records what it made, which is how it knows not to again', async t 
 
 test('and a reminder is authored but inert, there being no horizon yet', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const talk = await service.docket.add(id, 'The ACM talk',
     { mode: 'event', start: service.today })
   await service.docket.activate(id, talk)
@@ -1581,7 +1581,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   // somebody goes to the docket and says so as well — asking them to do it
   // twice, and the half they would forget is the invisible one.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.addStep(id, car, 'then', 'have the car fixed')
   await service.docket.activate(id, car)
@@ -1603,7 +1603,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
 
 test('and a task nothing generated flows back to nothing, quietly', async t => {
   const { service } = await serviced(t)
-  await service.newDocument('The house', undefined, 'docket')
+  await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const mine = await service.todo.add(list, 'something I typed myself')
   await service.agenda.todoSetStatus(list, mine, 'done')
@@ -1613,7 +1613,7 @@ test('and a task nothing generated flows back to nothing, quietly', async t => {
 
 test('SUSPEND WITHDRAWS what it put on the list, and only that', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   await service.agenda.reconcile()
@@ -1629,7 +1629,7 @@ test('SUSPEND WITHDRAWS what it put on the list, and only that', async t => {
 
 test('and it leaves a finished one alone, because finishing it was true', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const [made] = await onList(service)
@@ -1644,7 +1644,7 @@ test('and it leaves a finished one alone, because finishing it was true', async 
 
 test('and re-activating generates afresh, having withdrawn the last lot', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   await service.agenda.reconcile()
@@ -1666,7 +1666,7 @@ test('and re-activating generates afresh, having withdrawn the last lot', async 
 
 test('A RECURRING TASK ADVANCES when the step its clock reads is finished', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const filter = await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: service.today })
   const step = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
@@ -1689,7 +1689,7 @@ test('and does NOT generate the next one until its day comes round', async t => 
   // The advance and the generation are separate questions, and running them in
   // the same pass is what makes it tempting to conflate them.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: service.today })
   const list = await service.todo.list()
@@ -1706,7 +1706,7 @@ test('THE LONG ABSENCE, calendar-driven: a year away yields ONE birthday', async
   // it would do it at the moment somebody came back from a sabbatical, which is
   // exactly when nobody is reading the list carefully.
   const { service, on } = await serviced(t, '2020-01-01T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, 'Ada’s birthday',
     { mode: 'recurring-event', every: '1y', start: '2020-03-14' })
   const first = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
@@ -1730,7 +1730,7 @@ test('THE LONG ABSENCE, completion-driven: a year away yields ONE, not none', as
   // that treated *behind* as the trigger would find nothing to do and say
   // nothing about it. Being owed since 2020 must read as owed now.
   const { service, on } = await serviced(t, '2020-01-01T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Sharpen the mower blade',
     { mode: 'recurring-task', every: '6m', start: '2020-04-01' })
 
@@ -1748,7 +1748,7 @@ test('AN OUTSTANDING INSTANCE IS OVERDUE, not reissued (H7a)', async t => {
   // The rule that makes the long absence yield one rather than thirty, stated
   // on its own: a matter with something still owed does not move on.
   const { service, on } = await serviced(t, '2026-03-02T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, 'The quarterly report',
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docket.addStep(id, day, '3d', 'write it')
@@ -1770,7 +1770,7 @@ test('AN OUTSTANDING INSTANCE IS OVERDUE, not reissued (H7a)', async t => {
 
 test('and once it is settled it catches up in one step, to the CURRENT instance', async t => {
   const { service, on } = await serviced(t, '2026-03-02T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, 'The quarterly report',
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docket.addStep(id, day, '3d', 'write it')
@@ -1790,7 +1790,7 @@ test('a recurring EVENT with nothing owed rolls forward on its own', async t => 
   // Which is the birthday that only wants to be known about: no task step, so
   // nothing can be outstanding, so the calendar is the only thing deciding.
   const { service, on } = await serviced(t, '2026-03-01T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Ada’s birthday',
     { mode: 'recurring-event', every: '1y', start: '2026-03-14' })
 
@@ -1804,7 +1804,7 @@ test('THE CLAMP, exercised by the tick: the 31st keeps meaning the 31st', async 
   // pass that actually advances instances carries the anchor through, which is
   // where a month-end matter would quietly drift to the 28th and stay there.
   const { service, on } = await serviced(t, '2026-01-31T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Read the meter',
     { mode: 'recurring-task', every: '1m', start: '2026-01-31' })
   const list = await service.todo.list()
@@ -1828,7 +1828,7 @@ test('IDEMPOTENCE OVER THE WHOLE PASS: thirty runs leave one answer', async t =>
   // Which is the property the design is for, stated where it can fail: advance,
   // generate and withdraw all in one pass, run until the machine is bored.
   const { service, on } = await serviced(t, '2026-03-01T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const report = await service.docket.add(id, 'The quarterly report',
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docket.addStep(id, report, '3d', 'write it')
@@ -1848,7 +1848,7 @@ test('AND IT WITHDRAWS, because a reconciler that only adds is an event handler'
   // argument for the shape: one rule about what should be true, rather than a
   // bespoke undo beside every verb that can make it false.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   await service.agenda.reconcile()
@@ -1866,7 +1866,7 @@ test('AND IT WITHDRAWS, because a reconciler that only adds is an event handler'
 
 test('and withdrawing does not touch what a person typed, or what is done', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const made = await onList(service)
@@ -1884,7 +1884,7 @@ test('AND A MATTER WITH NO INTERVAL NEVER ADVANCES, however long it sits', async
   // The one-off is the case a loop gets wrong: finishing it must not schedule
   // another one, and the pass must not spin looking for the next.
   const { service, on } = await serviced(t, '2026-03-01T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'Fix the skylight',
     { mode: 'task', start: '2026-03-01' })
   const made = await onList(service)
@@ -1907,7 +1907,7 @@ test('THE WEDGE: nevermind on a generated task must not silence the matter', asy
   // quiet* failure MH3b has two tests for, through a door neither watched:
   // both assumed an item is either finished or left alone.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todo.list()
@@ -1924,7 +1924,7 @@ test('and SKIPPING counts from the day it was SCHEDULED, not from today', async 
   // did not happen* says nothing about when the next one is owed: an air filter
   // skipped in March is due in June, not three months after you gave up on it.
   const { service, on } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todo.list()
@@ -1939,7 +1939,7 @@ test('and SKIPPING counts from the day it was SCHEDULED, not from today', async 
 
 test('whereas DOING it counts from the day it was done, which is the other verb', async t => {
   const { service, on } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todo.list()
@@ -1953,7 +1953,7 @@ test('whereas DOING it counts from the day it was done, which is the other verb'
 
 test('and BACKLOG resolves it too, an item nobody can see being owed by nobody', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-10' })
   const list = await service.todo.list()
@@ -1967,7 +1967,7 @@ test('A RECURRING EVENT IS NOT WEDGED BY IT EITHER, owed meaning STILL asked', a
   // step rather than the list, so a dropped run-up task held the event on an
   // instance for ever — H7a's overdue rule turned into a trap.
   const { service, on } = await serviced(t, '2026-03-02T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, 'The quarterly report',
     { mode: 'recurring-event', every: '3m', start: '2026-03-05' })
   await service.docket.addStep(id, day, '3d', 'write it')
@@ -1986,7 +1986,7 @@ test('AND A DROPPED ITEM IS LEFT ALONE, dropping it being their decision too', a
   // item somebody had deliberately put down — overruling them. What it was
   // always really about is not taking back what is no longer being asked.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const list = await service.todo.list()
@@ -2013,7 +2013,7 @@ test('THE BUG: activating a matter puts its first step on the list NOW', async t
   // nothing prompted the same thought for the twenty-six verbs that never had
   // one. A list of *the writes that count* is the wrong shape (D77).
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
   await service.docket.addStep(id, kia, 'then', 'repair group 1 items')
 
@@ -2026,7 +2026,7 @@ test('THE BUG: activating a matter puts its first step on the list NOW', async t
 
 test('and every other schedule verb does the same, which is the general rule', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const talk = await service.docket.add(id, 'The ACM talk', { mode: 'task' })
   const list = await service.todo.list()
 
@@ -2044,7 +2044,7 @@ test('and the pass does not summon itself for every step it generates', async t 
   // reconciles* has to exempt its own. It converges either way — the second
   // pass finds nothing — but a rule that relies on that is relying on luck.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   for (const name of ['One', 'Two', 'Three']) {
     const made = await service.docket.add(id, name, { mode: 'task' })
     await service.docket.activate(id, made)
@@ -2068,7 +2068,7 @@ test('THE EVENING BUG: a step done after 4pm unblocks the next one TODAY', async
   const { service } = await serviced(t, '2026-03-11T01:42:00Z') // 2026-03-10 17:42 in zone
   assert.equal(service.today, '2026-03-10', 'the notebook is still on the tenth')
 
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
   await service.docket.addStep(id, kia, 'then', 'repair group 1 items')
   await service.docket.activate(id, kia)
@@ -2084,7 +2084,7 @@ test('THE EVENING BUG: a step done after 4pm unblocks the next one TODAY', async
 
 test('and the horizon reads the same clock, or it would disagree with the list', async t => {
   const { service } = await serviced(t, '2026-03-11T01:42:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
   await service.docket.addStep(id, kia, '+2d', 'collect it')
   await service.docket.activate(id, kia)
@@ -2105,7 +2105,7 @@ test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', as
   // title; a tag is what that fact actually is — drawn as a chip, groupable in
   // the by-tag view, and removable without editing the sentence.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
   await service.docket.addStep(id, kia, '+0d', 'find a general mechanic')
   await service.docket.activate(id, kia)
@@ -2129,7 +2129,7 @@ test("and a name with an apostrophe is tagged too — Ada's birthday", async t =
   // mangled; refusing is an absurd thing to do to a name that ordinary, and the
   // grammar grew the escape the query field already used for quoted phrases.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, "Ada's birthday", { mode: 'task' })
   await service.docket.activate(id, day)
   const list = await service.todo.list()
@@ -2143,7 +2143,7 @@ test('and the way back exists: an item says which matter made it', async t => {
   // **One direction stored, both traversable** (D79). The step records what it
   // made; the reverse is a question rather than a second copy that could drift.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
   await service.docket.activate(id, kia)
   const made = (await service.docket.matters(id))[0]?.steps[0]?.made as string
@@ -2165,7 +2165,7 @@ test('and the way back exists: an item says which matter made it', async t => {
 
 test('THE POINT: a matter can have its instances listed rather than computed', async t => {
   const { service } = await serviced(t, '2026-09-13T09:00:00Z')
-  const id = await service.newDocument('Games', undefined, 'docket')
+  const id = await service.library.newDocument('Games', undefined, 'docket')
   const game = await service.docket.add(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.setDates(id, game, ['2026-09-20', '2026-10-04', '2026-10-18'] as DateKey[])
 
@@ -2177,7 +2177,7 @@ test('THE POINT: a matter can have its instances listed rather than computed', a
 
 test('and they arrive out of order, because nobody agrees sessions in order', async t => {
   const { service } = await serviced(t, '2026-09-13T09:00:00Z')
-  const id = await service.newDocument('Games', undefined, 'docket')
+  const id = await service.library.newDocument('Games', undefined, 'docket')
   const game = await service.docket.add(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.setDates(id, game,
     ['2026-10-18', '2026-09-20', '2026-10-04', '2026-09-20'] as DateKey[])
@@ -2187,7 +2187,7 @@ test('and they arrive out of order, because nobody agrees sessions in order', as
 
 test('THE HORIZON READS THE LIST, rather than computing a sequence', async t => {
   const { service } = await serviced(t, '2026-09-13T09:00:00Z')
-  const id = await service.newDocument('Games', undefined, 'docket')
+  const id = await service.library.newDocument('Games', undefined, 'docket')
   const game = await service.docket.add(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.setDates(id, game, ['2026-09-20', '2026-10-04', '2026-11-29'] as DateKey[])
 
@@ -2198,7 +2198,7 @@ test('THE HORIZON READS THE LIST, rather than computing a sequence', async t => 
 
 test('AND IT ADVANCES TO THE NEXT ONE WRITTEN DOWN, not to a computed date', async t => {
   const { service, on } = await serviced(t, '2026-09-13T09:00:00Z')
-  const id = await service.newDocument('Games', undefined, 'docket')
+  const id = await service.library.newDocument('Games', undefined, 'docket')
   const game = await service.docket.add(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.setDates(id, game, ['2026-09-20', '2026-10-04'] as DateKey[])
 
@@ -2213,7 +2213,7 @@ test('and running out of dates leaves it with NO DATE, which is the honest state
   // *no date yet* already means — and it puts the matter back in front of
   // somebody at the moment they would know the answer.
   const { service, on } = await serviced(t, '2026-09-13T09:00:00Z')
-  const id = await service.newDocument('Games', undefined, 'docket')
+  const id = await service.library.newDocument('Games', undefined, 'docket')
   const game = await service.docket.add(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.setDates(id, game, ['2026-09-20'] as DateKey[])
 
@@ -2227,7 +2227,7 @@ test('and running out of dates leaves it with NO DATE, which is the honest state
 
 test('and setting an interval afterwards clears the list, both being one answer', async t => {
   const { service } = await serviced(t, '2026-09-13T09:00:00Z')
-  const id = await service.newDocument('Games', undefined, 'docket')
+  const id = await service.library.newDocument('Games', undefined, 'docket')
   const game = await service.docket.add(id, 'The campaign', { mode: 'recurring-event' })
   await service.docket.setDates(id, game, ['2026-09-20', '2026-10-04'] as DateKey[])
   await service.docket.setEvery(id, game, '2w')
@@ -2241,7 +2241,7 @@ test('A GENERATED TASK CARRIES ITS DUE DATE, which the schedule already knew', a
   // about the rhythm it belongs to — *change the water filter every 120 days* is
   // not the same kind of thing as a note to self.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the water filter',
     { mode: 'recurring-task', every: '120d', start: '2026-03-10' })
 
@@ -2253,7 +2253,7 @@ test('A GENERATED TASK CARRIES ITS DUE DATE, which the schedule already knew', a
 
 test('and a RUN-UP step is due on its own day, not on the occasion it leads to', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, 'The ACM talk',
     { mode: 'event', start: '2026-03-17' })
   await service.docket.addStep(id, day, '7d', 'write the slides')
@@ -2268,7 +2268,7 @@ test('and the horizon does not show it twice, the two sources staying disjoint',
   // A due date is the task list's source; the step that made it is no longer the
   // docket's. Without this the same commitment would be counted twice.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the water filter',
     { mode: 'recurring-task', every: '120d', start: '2026-03-10' })
 
@@ -2282,7 +2282,7 @@ test("and a matter's own tag is dropped only when the STEP already says it", asy
   // three steps whose first repeats its name drops it on that one and keeps it
   // on the others, because that is where the fact is and is not.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('Burrow', undefined, 'docket')
+  const id = await service.library.newDocument('Burrow', undefined, 'docket')
   const kia = await service.docket.add(id, 'Kia repairs', { mode: 'task' })
   await service.docket.addStep(id, kia, '+0d', 'book the garage')
   await service.docket.activate(id, kia)
@@ -2302,8 +2302,8 @@ test('and every generated task carries its DOCKET, which is the link back', asyn
   // The docket is the durable grouping — the house, work, games — so it is the
   // tag somebody would actually pivot the list on.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const house = await service.newDocument('The house', undefined, 'docket')
-  const work = await service.newDocument('Work', undefined, 'docket')
+  const house = await service.library.newDocument('The house', undefined, 'docket')
+  const work = await service.library.newDocument('Work', undefined, 'docket')
   const boiler = await service.docket.add(house, 'Service the boiler', { mode: 'task' })
   const talk = await service.docket.add(work, 'The ACM talk', { mode: 'task' })
   await service.docket.activate(house, boiler)
@@ -2322,7 +2322,7 @@ test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
   // `OWNER Sam` rather than as words in the title, so the list can be asked
   // *what does Sam have* and a summary can take it off again.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const tap = await service.docket.add(id, 'Fix the dripping tap', { mode: 'task' })
   await service.docket.setOwner(id, tap, 'Sam')
   await service.docket.activate(id, tap)
@@ -2335,7 +2335,7 @@ test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
 
 test('and a matter with no owner generates a task with none, not an empty one', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const tap = await service.docket.add(id, 'Fix the dripping tap', { mode: 'task' })
   await service.docket.activate(id, tap)
   const list = await service.todo.list()
@@ -2387,7 +2387,7 @@ test('and a task a DOCKET made is not given a second home', async t => {
   // It has a matter already; putting it down is that matter's business (D79),
   // and a misc entry beside it would be one commitment in two places.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const tap = await service.docket.add(id, 'Fix the tap', { mode: 'task' })
   await service.docket.activate(id, tap)
   const list = await service.todo.list()
@@ -2410,7 +2410,7 @@ test('and somewhere else, when the answer is already known', async t => {
   // Naming a docket at the moment of backlogging stays available for when you
   // do know; it is never required.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const house = await service.newDocument('The house', undefined, 'docket')
+  const house = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'repaint the shed')
   await service.agenda.todoPutDown(list, item, house)
@@ -2472,7 +2472,7 @@ test('UNDO CANNOT REACH A MOVE, because a transfer is not text you typed', async
   // **Undo reaches past it**, to the edit before — here, the line's creation.
   // That is the point: the transfer is not on the stack at all, so there is no
   // half-undone state to repair and nothing for a reconciler to notice.
-  await service.undo(list)
+  await service.text.undo(list)
   const live = (await service.todo.items(list, service.today))
     .filter(one => one.id === item && isLive(one.status))
   assert.deepEqual(live, [], 'nothing came back to the list')
@@ -2484,7 +2484,7 @@ test('and the line says where it went, in the file and not only on screen', asyn
   // R26: a day file reading `[>] fix the tap` without saying where it went is a
   // worse record than one that says.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const house = await service.newDocument('The house', undefined, 'docket')
+  const house = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'repaint the shed')
   await service.agenda.todoPutDown(list, item, house)
@@ -2501,7 +2501,7 @@ test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
   // `OWNER Sam` rather than as words in the title, so the list can be asked
   // *what does Sam have* and a summary can take it off again.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const tap = await service.docket.add(id, 'Fix the dripping tap', { mode: 'task' })
   await service.docket.setOwner(id, tap, 'Sam')
   await service.docket.activate(id, tap)
@@ -2514,7 +2514,7 @@ test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
 
 test('and a matter with no owner generates a task with none, not an empty one', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const tap = await service.docket.add(id, 'Fix the dripping tap', { mode: 'task' })
   await service.docket.activate(id, tap)
   const list = await service.todo.list()
@@ -2566,7 +2566,7 @@ test('and a task a DOCKET made is not given a second home', async t => {
   // It has a matter already; putting it down is that matter's business (D79),
   // and a misc entry beside it would be one commitment in two places.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const tap = await service.docket.add(id, 'Fix the tap', { mode: 'task' })
   await service.docket.activate(id, tap)
   const list = await service.todo.list()
@@ -2589,7 +2589,7 @@ test('and somewhere else, when the answer is already known', async t => {
   // Naming a docket at the moment of backlogging stays available for when you
   // do know; it is never required.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const house = await service.newDocument('The house', undefined, 'docket')
+  const house = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'repaint the shed')
   await service.agenda.todoPutDown(list, item, house)
@@ -2638,7 +2638,7 @@ test('A MATTER MOVES BETWEEN DOCKETS, carrying what it is', async t => {
   // Which is what reverses a move from the task list, and what the review does
   // when it files something out of the backlog into the domain it belongs to.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const house = await service.newDocument('The house', undefined, 'docket')
+  const house = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'repaint the shed #outside OWNER Sam')
   const made = await service.agenda.todoPutDown(list, item) as string
@@ -2761,7 +2761,7 @@ test('PRIMARY IS UNTOUCHABLE: a typed task is nobody else\'s business', async t 
   const { service } = await serviced(t)
   const list = await service.todo.list()
   const mine = await service.todo.add(list, 'Ring the dentist')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   // Suspending withdraws what the docket made — and only that.
@@ -2776,7 +2776,7 @@ test('and text identical to a generated one is still typed, not adopted', async 
   // what says so: two items reading the same, one owned and one not.
   const { service } = await serviced(t)
   const list = await service.todo.list()
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const mine = await service.todo.add(list, 'The car needs fixing')
@@ -2787,7 +2787,7 @@ test('and text identical to a generated one is still typed, not adopted', async 
 
 test('DERIVED IS RECOVERABLE FROM PRIMARY: the step names what it made', async t => {
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const list = await service.todo.list()
@@ -2808,7 +2808,7 @@ test('A RESOLVED ITEM IS A FACT ABOUT THE PAST: reconcile leaves it alone', asyn
   // and the reconciler's business is only what is still being asked.
   for (const answer of ['done', 'dropped'] as const) {
     const { service } = await serviced(t)
-    const id = await service.newDocument('The house', undefined, 'docket')
+    const id = await service.library.newDocument('The house', undefined, 'docket')
     const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
     await service.docket.activate(id, car)
     const list = await service.todo.list()
@@ -2830,7 +2830,7 @@ test('A DOCKET WRITE TRIGGERS A PASS, with nobody remembering to ask', async t =
   // claim is the same one D77 made and must survive the move: the verb has not
   // returned until what derives from it is true.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.activate(id, car)
   const list = await service.todo.list()
@@ -2854,7 +2854,7 @@ test('AND SO DOES A TASK-LIST WRITE, because the clause reads the list', async t
   // and an invariant kept by memory at one door out of many (note 61). The
   // trigger says it once instead, and this is what proves the move kept it.
   const { service } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const filter = await service.docket.add(id, 'Change the filter', {
     mode: 'recurring-task',
     every: '30d',
@@ -2882,7 +2882,7 @@ test('and a real flow stays far below the divergence threshold', async t => {
   // since MT5c. This records what an ordinary flow actually reaches, so the
   // number can be argued about from evidence.
   const { service, on } = await serviced(t)
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'Change the filter', {
     mode: 'recurring-task',
     every: '30d',

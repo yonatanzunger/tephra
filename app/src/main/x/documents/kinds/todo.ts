@@ -123,7 +123,7 @@ export class TodoDocument extends SegmentedDocument {
    * The segment a caller means, whichever shape this list is (MT7).
    *
    * **An overall list has ONE segment and callers pass a date anyway**, because
-   * `DocumentService` asks every list to work in the writing day and does not
+   * `NotebookService` asks every list to work in the writing day and does not
    * know the difference — which is right, and is why normalising belongs here.
    *
    * Getting this wrong is silent and expensive: `load` ignores the key for an

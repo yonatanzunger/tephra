@@ -1,15 +1,16 @@
 // The layering, asserted rather than remembered.
 //
-// Two rules live here. The first is that the service stays Electron-free, which
-// is what lets the integration suites drive it under plain node. The second is
-// the invariant stack (D54): a layer may use the one below it and no lower, and
-// the floor under X's documents is `x/documents/`.
+// Two rules live here. The first is that the services stay Electron-free — and
+// that they do not import the shell tier either, which is the same rule one
+// indirection out — which is what lets the integration suites drive them under
+// plain node. The second is the invariant stack (D54): a layer may use the one
+// below it and no lower, and the floor under X's documents is `x/documents/`.
 //
 // Both are the same kind of rule — invisible while it holds, and broken by an
 // import added for a perfectly good local reason. A comment saying so did not
 // prevent the third breakage of the first rule, so both are tests.
 //
-// `DocumentService` orchestrates X and W and is deliberately free of Electron,
+// `NotebookService` orchestrates X and W and is deliberately free of Electron,
 // which is what lets three integration suites drive it under plain node. That
 // property has now been broken three times, by three different imports, each
 // added for a good local reason:
@@ -35,8 +36,8 @@ const src = (rel: string): string => join(here, '../../../src', rel)
 /**
  * Files that must run under plain node.
  *
- * Not "everything in main" — `index.ts`, `ipc.ts`, `menu.ts` and `print.ts` ARE
- * the Electron layer and importing it is their job. These are the ones with
+ * Not "everything in main" — `index.ts` and everything under `main/shell/` ARE
+ * the Electron tier and importing it is their job (D83). These are the ones with
  * tests that construct them directly.
  *
  * **Every service is node-only too**, and that is checked by directory below
@@ -79,6 +80,26 @@ test('NO SERVICE imports electron, and the rule is the directory', async () => {
     'a service must run under plain node — whatever it needs is passed in by the ' +
       'layer that already has it. See the header of this file.',
   )
+})
+
+test('AND NO SERVICE IMPORTS THE SHELL, which is the same rule twice', async () => {
+  // **The tier edge, stated as a direction.** The rule above says a service may
+  // not import Electron; this says it may not import the tier that does. Without
+  // it the rule is one indirection from being false — a service importing
+  // `shell/print.ts` imports `electron` without the word appearing, which is
+  // exactly how `verify-mode` broke it the third time.
+  //
+  // It is also the property the two composition roots exist for: `ShellService`
+  // holds `NotebookService`, and nothing holds a reference back.
+  const offenders: string[] = []
+  for (const rel of await sources('main/services')) {
+    const text = await readFile(src(`main/services/${rel}`), 'utf8')
+    for (const m of text.matchAll(/^\s*import[^\n]*from\s*'([^']+)'/gm)) {
+      const from = m[1] as string
+      if (/(^|\/)shell\//.test(from)) offenders.push(`services/${rel} imports ${from}`)
+    }
+  }
+  assert.deepEqual(offenders, [], 'the shell depends on the services, never the other way (D83)')
 })
 
 for (const rel of NODE_ONLY) {
@@ -151,13 +172,13 @@ const NOT_THE_NOTEBOOK = ['system-zone.ts']
  * notebook's storage discipline, so the log and the repository are its to make.
  * `day-service.ts` reads the notebook's settings and one day file's mtime, which
  * is what the day is seeded FROM — there is no document to ask for either.
- * `document-service.ts` is still here because it is still being split; it leaves
+ * `notebook-service.ts` is still here because it is still being split; it leaves
  * this list when the last of it has moved into a service.
  */
 const COMPOSITION = [
   'index.ts', 'shell/print.ts',
   'services/corpus-service.ts', 'services/durability-service.ts',
-  'services/day-service.ts', 'services/document-service.ts',
+  'services/day-service.ts', 'services/notebook-service.ts',
 ]
 
 

@@ -11,11 +11,12 @@
 // the machine's — two windows disagreeing about it is not a state this can
 // represent — and where you are is the window's.
 //
-// Electron lives here, and deliberately: `DocumentService` stays free of it so
-// the integration suites can drive it under plain node (`layering.test.ts`).
+// Electron lives here, and deliberately: this is the shell tier, and everything
+// under `main/services/` stays free of Electron so the integration suites can
+// drive it under plain node (`layering.test.ts`, D83).
 
 import type { BrowserWindow, WebContents } from 'electron'
-import type { DocumentService } from '../services/document-service.ts'
+import type { NotebookService } from '../services/notebook-service.ts'
 import { attachWindow } from './ipc.ts'
 import { setMenuTargets } from './menu.ts'
 import { STREAM_ID, type DocumentId } from '../../shared/document-api.ts'
@@ -34,7 +35,7 @@ interface Entry {
 }
 
 export class Windows {
-  readonly #service: DocumentService
+  readonly #service: NotebookService
   readonly #make: () => BrowserWindow
   readonly #entries = new Map<number, Entry>()
   #nextId = 1
@@ -46,7 +47,7 @@ export class Windows {
 
   #saving: ReturnType<typeof setTimeout> | null = null
 
-  constructor(service: DocumentService, make: () => BrowserWindow) {
+  constructor(service: NotebookService, make: () => BrowserWindow) {
     this.#service = service
     this.#make = make
   }
@@ -58,7 +59,7 @@ export class Windows {
    * being restored, and the platform decides which of them comes forward.
    */
   async restore(): Promise<void> {
-    const saved = await this.#service.loadUiState()
+    const saved = await this.#service.session.loadUiState()
     this.#theme = saved.theme
     this.#listView = saved.listView
     this.#searchWidth = saved.searchWidth
@@ -208,7 +209,7 @@ export class Windows {
     // `closed` fires before the app quits, and a file saying "no windows" reads
     // on the next launch as "nothing to restore".
     if (state.windows.length === 0) return
-    await this.#service.saveUiState(state)
+    await this.#service.session.saveUiState(state)
   }
 
   /**
@@ -237,7 +238,7 @@ export class Windows {
     this.#saving = setTimeout(() => {
       this.#saving = null
       const state = this.snapshot()
-      if (state.windows.length > 0) void this.#service.saveUiState(state)
+      if (state.windows.length > 0) void this.#service.session.saveUiState(state)
     }, 400)
   }
 }

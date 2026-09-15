@@ -16,7 +16,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/services/document-service.ts'
+import { NotebookService } from '../../src/main/services/notebook-service.ts'
 import { CHANNEL } from '../../src/shared/ipc.ts'
 import type { ZoneNotice } from '../../src/shared/ipc.ts'
 
@@ -28,7 +28,7 @@ async function fixture(t: TestContext, start = HOME) {
   let machine = start
   const root = await mkdtemp(join(tmpdir(), 'tephra-zone-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const svc = new DocumentService(nb, {
+  const svc = new NotebookService(nb, {
     history: false,
     systemZone: () => machine,
     dayCheckMs: 24 * 60 * 60_000,
@@ -37,7 +37,7 @@ async function fixture(t: TestContext, start = HOME) {
     await svc.stop()
     await nb.close()
   })
-  await svc.setZone(HOME)
+  await svc.session.setZone(HOME)
 
   // Two windows, which is where the bug lived. Each takes what main sends it.
   const heard: ZoneNotice[][] = [[], []]
@@ -53,13 +53,13 @@ async function fixture(t: TestContext, start = HOME) {
 
 test('a machine in the same zone as the notebook has nothing to say', async t => {
   const { svc } = await fixture(t)
-  assert.equal(svc.zoneNotice, null)
+  assert.equal(svc.session.zoneNotice, null)
 })
 
 test('THE OFFER: moving the machine names both zones, in one direction', async t => {
   const { svc, fly } = await fixture(t)
   fly(AWAY)
-  assert.deepEqual(svc.zoneNotice, { notebook: HOME, system: AWAY })
+  assert.deepEqual(svc.session.zoneNotice, { notebook: HOME, system: AWAY })
 })
 
 test('THE BUG: every window is told the same thing, at the same time', async t => {
@@ -86,9 +86,9 @@ test('taking it moves the notebook, and the offer goes away everywhere', async t
   fly(AWAY)
   await svc.crossTheDay()
 
-  await svc.setZone(AWAY)
+  await svc.session.setZone(AWAY)
   assert.equal(svc.zone, AWAY, 'the notebook files there now')
-  assert.equal(svc.zoneNotice, null)
+  assert.equal(svc.session.zoneNotice, null)
   assert.deepEqual(heard[0]?.at(-1), null, 'and both windows were told to put the row away')
   assert.deepEqual(heard[1]?.at(-1), null)
 })
@@ -100,8 +100,8 @@ test('declining it is shared too: dismissing in one window dismisses in both', a
   fly(AWAY)
   await svc.crossTheDay()
 
-  svc.dismissZone()
-  assert.equal(svc.zoneNotice, null, 'and the notebook did not move')
+  svc.session.dismissZone()
+  assert.equal(svc.session.zoneNotice, null, 'and the notebook did not move')
   assert.equal(svc.zone, HOME)
   assert.deepEqual(heard[1]?.at(-1), null)
 
@@ -116,14 +116,14 @@ test('a window that learned by ASKING is still told to put the row away', async 
   // and told nobody. The row stayed up over a notebook that had already moved.
   const { svc, heard, fly } = await fixture(t)
   fly(AWAY)
-  assert.deepEqual(svc.askZoneNotice(), { notebook: HOME, system: AWAY })
+  assert.deepEqual(svc.session.askZoneNotice(), { notebook: HOME, system: AWAY })
 
   // And asking on behalf of one window answers for all of them, which is the
   // same defect seen from the other side: a window opening between two polls
   // learns something main had no reason to look for yet.
   assert.deepEqual(heard[1]?.at(-1), { notebook: HOME, system: AWAY })
 
-  await svc.setZone(AWAY)
+  await svc.session.setZone(AWAY)
   assert.deepEqual(heard[0]?.at(-1), null, 'and the row is taken down everywhere')
   assert.deepEqual(heard[1]?.at(-1), null)
 })
@@ -131,15 +131,15 @@ test('a window that learned by ASKING is still told to put the row away', async 
 test('but declining Jerusalem is not declining everywhere else', async t => {
   const { svc, fly } = await fixture(t)
   fly(AWAY)
-  svc.dismissZone()
-  assert.equal(svc.zoneNotice, null)
+  svc.session.dismissZone()
+  assert.equal(svc.session.zoneNotice, null)
 
   fly('Europe/Zurich')
-  assert.deepEqual(svc.zoneNotice, { notebook: HOME, system: 'Europe/Zurich' }, 'a new place asks again')
+  assert.deepEqual(svc.session.zoneNotice, { notebook: HOME, system: 'Europe/Zurich' }, 'a new place asks again')
 })
 
 test('a zone this build cannot compute in is not offered', async t => {
   const { svc, fly } = await fixture(t)
   fly('Mars/Olympus_Mons')
-  assert.equal(svc.zoneNotice, null)
+  assert.equal(svc.session.zoneNotice, null)
 })

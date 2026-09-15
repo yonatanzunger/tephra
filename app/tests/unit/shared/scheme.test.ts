@@ -56,7 +56,7 @@ test('and an empty base means the notebook root, which is the safe answer', () =
 
 /**
  * **The bug this pins**: three copies of this rule lived in `App.tsx`,
- * `document-service.ts` and `x/fileset.ts`, and MH1 found them apart the way
+ * `notebook-service.ts` and `x/fileset.ts`, and MH1 found them apart the way
  * such things always are — a docket showed in the sidebar as `house.docket`
  * while the titlebar called it *The house*, because only some of the copies had
  * learned the new suffix.

@@ -145,8 +145,16 @@ export async function runVerify(request: string): Promise<void> {
         say('rowOpen', row() !== null)
         say('prefilled', row()?.value ?? '')
         // `arg` says which half is being driven: committed, or abandoned.
+        // **Which of the two causes**, on the next failure (m3's capture check,
+        // flaked seven times). `mounts` rising across the key press means the
+        // surface remounted and the row went with it; `doneSaw` with an empty
+        // `wanted` means it committed nothing. Read them before theorising.
+        say('mountsBefore', (window as unknown as { __todoMounts?: number }).__todoMounts ?? -1)
         key(arg === 'escape' ? 'Escape' : 'Enter')
+        say('valueAfterKey', row()?.value ?? 'gone')
         await settle(2500)
+        say('mountsAfter', (window as unknown as { __todoMounts?: number }).__todoMounts ?? -1)
+        say('doneSaw', JSON.stringify((window as unknown as { __doneSaw?: unknown }).__doneSaw ?? null))
         say('rowGone', row() === null)
         say('leftBehind', document.querySelectorAll('.todo-row:not(.todo-adding)').length)
         // **The WRITER's side, which was the gap.** The reader's report said the

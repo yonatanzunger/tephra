@@ -2320,13 +2320,30 @@ console.log('\n\u2014 capture from the stream \u2014')
   //   - **Not the second window failing to boot**: it opened, and its row
   //     arrived prefilled, both asserted and both passing in the failure.
   //
-  // **What is left**, unproven: the commit does not complete. Every symptom fits
-  // `todo.add` hanging — no item, no error, and `settle` never called, so the
-  // driver never gets its link and times out after twelve seconds. `addResolves`
-  // is the probe that would settle it: it races a write from the committing
-  // window against four seconds. On healthy runs it says `resolved`. **No
-  // failing run has been caught with it in place yet** — when one is, that field
-  // is the answer.
+  // **`todo.add` hanging was the next theory, and the probe killed it too.** Two
+  // failures were caught during the service refactor (2026-09-14) with
+  // `addResolves` in place:
+  //
+  //     addResolves="resolved" afterProbe=["probe: does a write resolve"]
+  //
+  // A write from the committing window resolves in milliseconds, and the list
+  // afterwards holds the probe and nothing else. So **the captured item was never
+  // added at all** — the commit did not hang, it did not happen. `settle` is
+  // never reached, which is why the driver waits twelve seconds for a link that
+  // is not coming.
+  //
+  // **And it is not the refactor**, which is what those two failures looked like
+  // at first, arriving as they did in the first run after `capture` moved into a
+  // service of its own: the committed baseline was re-run and passed, and the
+  // refactor then passed five times in a row.
+  //
+  // **What is left, and the discriminator for it.** Nothing but `Todo.tsx`'s
+  // `onDone` clears the row, so a vanished row with no item has exactly two
+  // causes — it fired with **empty text**, or the surface **remounted** between
+  // the claim and the key press, taking `adding` with it. Those look identical
+  // from out here, so the scene now reports `mounts` across the key press and
+  // `doneSaw`, the text the handler was actually given. On a healthy run they
+  // read `1->1` and the captured sentence. **Read them before theorising.**
   //
   // Read the numbers before theorising. Two hypotheses died here already, both
   // plausible, both about the wrong half of the system.
@@ -2347,7 +2364,10 @@ console.log('\n\u2014 capture from the stream \u2014')
       ` list=${JSON.stringify(kept['w2.listHere'])}` +
       ` error=${JSON.stringify(kept['w2.errorHere'])}` +
       ` addResolves=${JSON.stringify(kept['w2.addResolves'])}` +
-      ` afterProbe=${JSON.stringify(kept['w2.afterProbe'])}`,
+      ` afterProbe=${JSON.stringify(kept['w2.afterProbe'])}` +
+      ` mounts=${JSON.stringify(kept['w2.mountsBefore'])}->${JSON.stringify(kept['w2.mountsAfter'])}` +
+      ` valueAfterKey=${JSON.stringify(kept['w2.valueAfterKey'])}` +
+      ` doneSaw=${JSON.stringify(kept['w2.doneSaw'])}`,
   )
   check(
     'and the words now point at the task they became',

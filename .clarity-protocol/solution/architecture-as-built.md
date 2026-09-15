@@ -15,7 +15,7 @@ the horizon, reorientation — are building on top of it and are tracked in
 >
 > - **A fourth document kind, `docket`** (MH1, D68, D72) with a surface of its
 >   own, and a grammar in `shared/kinds/docket.ts` beside the task-item one.
-> - **A reconciler** (MH3b, D77). `DocumentService.reconcile()` brings *all*
+> - **A reconciler** (MH3b, D77). `AgendaService.reconcile()` brings *all*
 >   derived state into agreement with what it derives from — dockets are its
 >   first clause, not its subject. It is deliberately named for the whole job.
 > - **A fourth contract, the horizon** (MH2, D78) — `shared/horizon-api.ts`. Its
@@ -47,8 +47,8 @@ flowchart TB
       GIT["GitRepository<br/><i>main/w/git-repository.ts</i><br/>one implementation"]
       WBITS["layout · atomic · lock · watcher · themes<br/><i>main/w/</i>"]
     end
-    SVC["DocumentService<br/><i>main/document-service.ts</i><br/>serial queue, write tiers<br/><b>Electron-free</b>"]
-    MENU["menu · scheme · ipc · windows · searches · print<br/><i>main/</i>"]
+    SVC["the services<br/><i>main/services/</i><br/>foundation · domain · composing<br/>composed by <b>NotebookService</b><br/><b>Electron-free</b>"]
+    SHELL["frame · desktop · capture · menu · scheme · print · ipc<br/><i>main/shell/</i><br/>composed by <b>ShellService</b>"]
   end
 
   subgraph BRIDGE["The process boundary"]
@@ -118,8 +118,8 @@ may call which* a question with an answer.
 | **W** — infrastructure | `Notebook`, `Repository` and its git implementation, layout, atomic write, the lock, the watcher, themes | the filesystem |
 | **X lower** — per-document objects | `SegmentedDocument` and its kinds, `DocumentWindow`, `Segment`, and the parsing beneath them — frontmatter, markers, text-edits, anomalies, comments, day-clock | W |
 | **X upper** — whole-corpus objects | `Corpus` and `CorpusIndex`, **peers**: both built over the notebook, both reaching the same per-document objects, neither over the other. `Scanner` sits above the index | X lower, W |
-| **the services** | `main/services/` — a DAG of them (D83). **Foundation:** `Bus`, `CorpusService` (the store and the one mutation queue), `DurabilityService` (the three write tiers), `DayService`, `FixedPoints` (running derived state to a fixed point), `change-keys.ts` (what a change is called), `serves.ts` (how a service declares its channels). **Domain:** `Dockets` and `Tasks` (the two stores), comments, nav, history, search. **Composing:** `AgendaService` (D84 — the horizon, reconciliation, the transfers). `DocumentService` holds the text contract, the file lifecycle and UI state. **All Electron-free**, checked by directory | X, W |
-| **the shell** | `main/shell/` — `FrameService` (which window this is, opening, revealing, closing, importing), the menu, printing, the `tephra://` scheme, verification mode, and `ipc.ts` doing the wiring. **This tier may use Electron, which is the point of naming it** (D83 as amended) | the services |
+| **the services** | `main/services/` — a DAG of them (D83). **Foundation:** `Bus`, `CorpusService` (the store and the one mutation queue), `DurabilityService` (the three write tiers), `DayService`, `FixedPoints` (running derived state to a fixed point), `change-keys.ts` (what a change is called), `serves.ts` (how a service declares its channels). **Domain:** `TextService` (a window over a buffer), `MarksService` (bookmarks, subjects, branches), `LibraryService` (documents as files), `IntakeService` (what arrives from outside), `SessionService` (the day, the zone offer, where the reader was), comments, nav, history, search, and `Dockets`/`Tasks` (the two stores, which answer no channel). **Composing:** `AgendaService` (D84 — the horizon, reconciliation, the transfers). `NotebookService` composes all of it and answers nothing. **All Electron-free**, checked by directory — and so is the rule that none of them imports `main/shell/` | X, W |
+| **the shell** | `main/shell/` — `FrameService` (which window this is, opening, revealing, closing, importing), `DesktopService` (the clipboard, the dialog, the printer, the emoji panel, opening a path), `CaptureService` (a task caught in one window and made in another), composed by `ShellService`; plus the menu, printing, the `tephra://` scheme, verification mode and its channels, and `ipc.ts` doing the wiring. **This tier may use Electron, which is the point of naming it** (D83 as amended) | the services |
 | **the boundary** | `CHANNEL` + payload types, `preload` | — |
 | **X mirror** | `RemoteDocument`, `RemoteWindow` — a local copy, so coordinates answer synchronously | the boundary |
 | **Z** — features and UI | `Pane`, the editor, the surfaces, the frame | the mirror |
@@ -130,11 +130,24 @@ may call which* a question with an answer.
 > does the work is simply **acyclic**. Every service file names its tier and its
 > dependencies in its opening comment (D83).
 >
-> **Done 2026-09-14.** `DocumentService` went 2,805 → 1,238 lines across eight
-> steps, bottom-up; `service-layers.md` has the plan and what each step actually
+> **Done 2026-09-14.** `DocumentService` went 2,805 lines to `NotebookService` at
+> 355 across eleven steps, bottom-up; `service-layers.md` has the plan and what each step actually
 > cost. The load-bearing move was the same one four times over — **lower things
 > emit, higher things subscribe** — which is what lets `Dockets` and `Tasks` be
 > peers that have never heard of each other.
+>
+> **Two composition roots, one per side of the tier line.** `NotebookService`
+> builds the foundation and the ten Electron-free services and answers no channel
+> of its own; `ShellService` builds the three that need the machine. It holds the
+> notebook root and **nothing holds a reference back**, so the tier edge is
+> structural rather than remembered — stated twice in `layering.test.ts`, because
+> *no service imports electron* is one indirection away from false and the
+> indirection is how it broke last time.
+>
+> **Every channel is declared by the service that owns it.** `ipc.ts` is 75 lines
+> and holds no verb, no state and no knowledge of what a channel means; the one
+> decision it makes is which door to register at, and the declaration says
+> (`serves.ts`, `told`).
 >
 > **Why the shell tier is a tier and not an exemption.** The rule was written as
 > *no service imports Electron*, which is a rule about a layer dressed as a rule
@@ -191,15 +204,15 @@ both projects, for that reason.
 
 | Looking for | It is here |
 |---|---|
-| Typing reaches the file | `bind.ts` → `RemoteWindow.edit` → IPC → `DocumentService.edit` → `DocumentWindow.edit` → the document's `replace` → `Segment` → `Notebook.write` |
+| Typing reaches the file | `bind.ts` → `RemoteWindow.edit` → IPC → `TextService.edit` → `DocumentWindow.edit` → the document's `replace` → `Segment` → `Notebook.write` |
 | An edit crossing midnight is split | `DocumentWindow.#toDocumentEdits` — property-tested over every range |
 | Which day owns a boundary offset | `DocumentWindow.#segmentAt`; the later day owns it |
 | Undo and redo | `SegmentedDocument.#stepBack` / `redo`; both directions derived there |
-| Work is saved to history | `DocumentService` commit tier → `Repository.save` |
+| Work is saved to history | `DurabilityService` commit tier → `Repository.save` |
 | Reading an old version | `StreamHistory.readDay` → `Repository.contentAt` |
 | Undo that lands off-screen | `App.tsx`, the `revealing` wrapper — navigates to it |
 | External edits are adopted | `Notebook` watcher → the document; divergence is surfaced, never resolved (D12) |
-| Text is written to disk | `DocumentService` write tiers — quiescence **and** a ceiling |
+| Text is written to disk | `DurabilityService` write tiers — quiescence **and** a ceiling |
 | The window never moves | `frame/metrics.ts` + `Frame.tsx` (D42) |
 | Type is decided | `shared/theme.ts` + `theme/useTheme.ts`; files in `config/themes/` |
 | Markup is hidden or revealed | `editor/kinds/markdown/widgets.ts` — and see **Q11**, unresolved |
@@ -214,12 +227,12 @@ both projects, for that reason.
 | **Every link in the corpus** | `CorpusIndex.links()` → `frame/Links.tsx` (R10a, D60) |
 | **A matter's grammar, and when a step is due** | `shared/kinds/docket.ts` — `parseMatter`, `dueOn`, `addInterval`; four modes over `start`/`every`/`after` (D68, D72, D76) |
 | **A docket rewritten one matter at a time** | `main/x/documents/kinds/docket.ts` — block-scoped edits, so a verb disturbs nothing around it |
-| **Derived state made true again** | `DocumentService.reconcile()` — one idempotent pass, run at startup, at the day boundary, and whenever an item resolves. Named for the whole job; dockets are its first clause (D77) |
-| **What is bearing down** | `DocumentService.horizon()` over `shared/horizon-api.ts`; the docket contributes through `matterHorizon`, the task list through its due dates (D78) |
+| **Derived state made true again** | `AgendaService.reconcile()` — one idempotent pass, run at startup, at the day boundary, and whenever an item resolves. Named for the whole job; dockets are its first clause (D77) |
+| **What is bearing down** | `AgendaService.horizon()` over `shared/horizon-api.ts`; the docket contributes through `matterHorizon`, the task list through its due dates (D78) |
 | **The day's selection** | `TodoDocument.chosenOn` / `choose` — a mark in the day's frontmatter beside `walked`, so it cannot travel (H9) |
 | **One act on many items** | `TodoDocument.bulk` — a single `replace`, therefore a single undo step |
 | **A search** | `shared/query-text.ts` parses; `Scanner` in `main/x/documents/search.ts` narrows, orders and scans; `main/searches.ts` holds the cursors; `frame/Find.tsx` walks and `frame/Results.tsx` lists (D65, D66) |
-| **An image arrives** | the editor's paste/drop handler → `DocumentService.attachImage` → `x/documents/attachments.ts`; the link is inserted by the ordinary edit path (R7) |
+| **An image arrives** | the editor's paste/drop handler → `IntakeService.attachImage` → `x/documents/attachments.ts`; the link is inserted by the ordinary edit path (R7) |
 | **An image is displayed** | `shared/scheme.ts`'s `imageSrc` → `tephra://notebook/…`, served by `main/scheme.ts` |
 | **Printing** | `renderer/src/print/` builds the page, `main/print.ts` renders it; the base for relative links is a `Base` (day or document) |
 | **Comments in the margin** | `main/x/comments.ts` → `frame/Rail.tsx`, anchored by markers |
@@ -243,7 +256,7 @@ nothing primary may be touched by anything except the person who wrote it.
 
 **The boundary is a stored link, not a guess.** A step records the id of the item
 it made (`step.made`), so `reconcile()` withdraws only what it can name, and
-`DocumentService.matterFor` reads the same link the other way for a surface
+`AgendaService.matterFor` reads the same link the other way for a surface
 asking *where did this come from*. Nothing matches on text or on tags — two items
 reading identically, one generated and one typed, are told apart correctly.
 

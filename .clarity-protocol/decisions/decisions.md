@@ -4141,11 +4141,44 @@ Electron object crosses the boundary.** The tier's licence is spent on one line:
 pushing `revealed` to the window it just revealed, because a window already open
 has no mount to react to and a hidden one never sees focus.
 
-**Built 2026-09-14.** `DocumentService` 2,805 → 1,238 lines; `ipc.ts` 471 → 342
-with hand-written handlers 74 → 48; eleven services, two stores, the agenda
-(D84), and the shell tier. `tests/unit/main/channels.test.ts` relates the three
-sides of a channel that nothing else related, which is what made the extractions
-safe to do one at a time.
+**Amended 2026-09-14, second pass: every channel belongs to a service, and there
+are two composition roots.** The first pass left twenty-four handlers in `ipc.ts`
+— the ones that had no service yet. Asked one at a time, none of them belonged
+there:
+
+> **Every IPC channel is declared by a service.** `ipc.ts` walks the
+> declarations and registers them; it holds no verb, no state, and no knowledge
+> of what any channel means.
+
+Five more domain services (`TextService`, `MarksService`, `LibraryService`,
+`IntakeService`, `SessionService`) and two shell ones (`DesktopService`,
+`CaptureService`). `ipc.ts` is **471 → 75 lines**.
+
+**And the tier line got an object on each side.** `DocumentService` became
+**`NotebookService`** — the Electron-free root: it answers no channel, builds the
+foundation and the ten services over it, and owns the notebook's lifecycle — with
+**`ShellService`** as its parallel above the line, building the three that need
+the machine.
+
+> `ShellService` holds `NotebookService`; **nothing holds a reference back.** The
+> tier edge is structural rather than remembered, and the layering test states it
+> twice: no service imports `electron`, and **no service imports `main/shell/`**.
+
+The second half of that is not redundant — it is the rule one indirection out,
+and an indirection is how the rule broke the third time (`verify-mode.ts` imports
+`app`, so importing `verifyEnv` imports Electron without the word appearing).
+
+**Not `DataService`**, which would have been the tidier symmetry: that side holds
+the ordering guarantee on edits, reconciliation to a fixed point, the day
+boundary and the agenda. Naming behaviour *data* is the same vagueness that made
+`CoreService` into four objects.
+
+**Built 2026-09-14.** `DocumentService` 2,805 → `NotebookService` 355 lines;
+`ipc.ts` 471 → 75; sixteen services across four tiers, two stores, and two
+composition roots. `tests/unit/main/channels.test.ts` relates the three sides of
+a channel that nothing else related, which is what made the extractions safe to
+do one at a time — and `serves.ts`'s `told` records the one regression it could
+not see.
 
 ---
 

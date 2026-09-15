@@ -129,6 +129,11 @@ export class AgendaService implements Serves {
     return [
       // Reconciliation's own door, off the docket's union (D77, D83).
       serve(CHANNEL.reconcile, () => this.reconcile()),
+      // **The third face, which was answered in `ipc.ts` until now** (D84): make
+      // it true, change it, **ask it**. The handler there was a bare forward
+      // into this method — the only one of the three the composite did not
+      // declare, and for no reason beyond the order the extractions happened in.
+      serve(CHANNEL.horizon, (from: DateKey, to: DateKey) => this.horizon(from, to)),
       serveKinds<DocketCommand>(CHANNEL.docket, {
       list: () => this.#docket.all(),
       matters: command => this.#docket.matters(command.docket),

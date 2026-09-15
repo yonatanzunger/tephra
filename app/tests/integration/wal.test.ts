@@ -11,7 +11,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/services/document-service.ts'
+import { NotebookService } from '../../src/main/services/notebook-service.ts'
 import { dayFile, walFile } from '../../src/main/w/layout.ts'
 import type { WindowPosition, DateKey } from '../../src/shared/document-api.ts'
 import { pt } from '../support/text.ts'
@@ -22,7 +22,7 @@ const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
 
 async function session(t: TestContext, root: string, options = {}) {
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const svc = new DocumentService(nb, {
+  const svc = new NotebookService(nb, {
     walBatchMs: 10,
     // Long enough that the file tier will NOT rescue us: whatever survives has
     // to have survived through the log.
@@ -44,10 +44,10 @@ async function session(t: TestContext, root: string, options = {}) {
   return { nb, svc }
 }
 
-async function type(svc: DocumentService, text: string): Promise<DateKey> {
-  const info = await svc.info()
-  const w = await svc.openWindow({ first: info.today, last: info.today })
-  await svc.edit({
+async function type(svc: NotebookService, text: string): Promise<DateKey> {
+  const info = await svc.text.info()
+  const w = await svc.text.openWindow({ first: info.today, last: info.today })
+  await svc.text.edit({
     id: w.id,
     edits: [{ from: wp(w.text.length), to: wp(w.text.length), insert: pt(text) }],
     origin: 'user',

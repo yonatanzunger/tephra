@@ -19,9 +19,9 @@ import { withoutMarks } from '../../src/shared/kinds/todo.ts'
 async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
   const root = await mkdtemp(join(tmpdir(), 'tephra-horizon-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const { DocumentService } = await import('../../src/main/services/document-service.ts')
+  const { NotebookService } = await import('../../src/main/services/notebook-service.ts')
   let clock = new Date(at)
-  const service = new DocumentService(nb, {
+  const service = new NotebookService(nb, {
     now: () => clock,
     history: false,
     dayCheckMs: 24 * 60 * 60_000,
@@ -30,7 +30,7 @@ async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
     await service.stop()
     await nb.close()
   })
-  await service.info()
+  await service.text.info()
   return {
     root,
     service,
@@ -85,7 +85,7 @@ test('THE POINT OF THE PHASE: dated matters and dated tasks are one list', async
   // Built against both sources from the start, which `notes.md` records failing
   // six times over when a view is built against one and fitted to the second.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'The ACM talk', { mode: 'event', start: '2026-03-20' })
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'file the return DUE 2026-03-15')
@@ -109,7 +109,7 @@ test('AND THE TWO SOURCES DO NOT OVERLAP: a generated step is on the list, not h
   // that has generated *is* the item in front of you; a horizon row beside it
   // would be the same thing said again in a place that means *not yet*.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   // **A step that is not due yet**, so there is something on the horizon to
   // watch cross over. Activating generates whatever is due *as part of the act*
@@ -144,7 +144,7 @@ test('A ROW IS THE SHORT LINE: no link markup, no tags, no due date', async t =>
   // surface in the app had been assembling this for itself, which is why it is
   // now one function (`shortLine`) at the top of `plain.ts`'s ladder.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   await service.todo.add(list,
     "Review Steve's [bio draft](https://docs.google.com/document/d/1t8me/edit) #career DUE 2026-03-15")
@@ -165,7 +165,7 @@ test('A REMINDER FINALLY HAS SOMEWHERE TO GO (H6), which MH3a left inert', async
   // The phase's other end condition: awareness with no task is a thing no TODO
   // item can express, and until now it was authored and went nowhere.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const day = await service.docket.add(id, 'Ada’s birthday',
     { mode: 'recurring-event', every: '1y', start: '2026-11-15' })
   await service.docket.addStep(id, day, '90d', 'work out what the plan is', 'status')
@@ -188,7 +188,7 @@ test('A STANDING MATTER IS NOT ON THE HORIZON AT ALL, having no date to be on', 
   // H7b's third kind. Giving it a date is the point of the review, and a horizon
   // that guessed one would be inventing a commitment.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Repaint the house', { mode: 'task' })
   assert.deepEqual(await service.agenda.horizon('2020-01-01' as DateKey, '2030-01-01' as DateKey), [])
 })
@@ -196,7 +196,7 @@ test('A STANDING MATTER IS NOT ON THE HORIZON AT ALL, having no date to be on', 
 test('AND NOR IS A STEP WHOSE ANTECEDENT IS UNFINISHED', async t => {
   // Not shown as undated, not guessed at: its moment has not been earned.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
   await service.docket.addStep(id, car, 'then', 'have the car fixed')
   await service.docket.activate(id, car)
@@ -213,7 +213,7 @@ test('A RECURRENCE SWEEPS ITS INSTANCES, and each row says which one it is', asy
   // Two occurrences of one recurrence can land in one window, and an unlabelled
   // pair of them is worse than either alone.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Pay the water bill',
     { mode: 'recurring-event', every: '1m', start: '2026-03-15' })
   const rows = await service.agenda.horizon('2026-03-01' as DateKey, '2026-06-01' as DateKey)
@@ -225,7 +225,7 @@ test('and the sweep keeps the anchored day, rather than drifting off a clamp', a
   // The same rule the tick obeys, in the place it would be quietly reimplemented:
   // a horizon that swept from a clamped February would show the 28th for ever.
   const { service } = await serviced(t, '2026-01-05T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Read the meter',
     { mode: 'recurring-event', every: '1m', start: '2026-01-31' })
   const rows = await service.agenda.horizon('2026-01-01' as DateKey, '2026-05-01' as DateKey)
@@ -237,7 +237,7 @@ test('A COMPLETION-DRIVEN RECURRENCE SHOWS ONE INSTANCE, not a guessed sequence'
   // The next one depends on a day that has not happened. Sweeping it would be
   // asserting when somebody is going to get round to something.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'Change the air filter',
     { mode: 'recurring-task', every: '3m', start: '2026-03-20' })
   const rows = await service.agenda.horizon('2026-03-01' as DateKey, '2027-03-01' as DateKey)
@@ -246,7 +246,7 @@ test('A COMPLETION-DRIVEN RECURRENCE SHOWS ONE INSTANCE, not a guessed sequence'
 
 test('THE WINDOW RUNS BEHIND AS WELL AS AHEAD, because overdue is bearing down too', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   await service.docket.add(id, 'The ACM talk', { mode: 'event', start: '2026-03-06' })
   const list = await service.todo.list()
   await service.todo.add(list, 'file the return DUE 2026-03-02')
@@ -256,7 +256,7 @@ test('THE WINDOW RUNS BEHIND AS WELL AS AHEAD, because overdue is bearing down t
 
 test('and a finished task is off it, an item being dated only while it is live', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  await service.newDocument('The house', undefined, 'docket')
+  await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'file the return DUE 2026-03-15')
   assert.equal((await service.agenda.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)).length, 1)
@@ -267,8 +267,8 @@ test('and a finished task is off it, an item being dated only while it is live',
 test('AND IT IS DATE-ORDERED ACROSS DOCKETS, which is the restored spreadsheet', async t => {
   // What no single docket's view can give: every major commitment in one list.
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const house = await service.newDocument('The house', undefined, 'docket')
-  const work = await service.newDocument('Work', undefined, 'docket')
+  const house = await service.library.newDocument('The house', undefined, 'docket')
+  const work = await service.library.newDocument('Work', undefined, 'docket')
   await service.docket.add(house, 'The boiler service', { mode: 'event', start: '2026-03-25' })
   await service.docket.add(work, 'The ACM talk', { mode: 'event', start: '2026-03-18' })
   await service.docket.add(house, 'The survey', { mode: 'event', start: '2026-03-12' })
@@ -280,7 +280,7 @@ test('AND IT IS DATE-ORDERED ACROSS DOCKETS, which is the restored spreadsheet',
 
 test('and a suspended matter drops off it, which is what suspending MEANS', async t => {
   const { service } = await serviced(t, '2026-03-10T09:00:00Z')
-  const id = await service.newDocument('The house', undefined, 'docket')
+  const id = await service.library.newDocument('The house', undefined, 'docket')
   const talk = await service.docket.add(id, 'The ACM talk', { mode: 'event', start: '2026-03-20' })
   assert.equal((await service.agenda.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)).length, 1)
   await service.docket.suspend(id, talk)

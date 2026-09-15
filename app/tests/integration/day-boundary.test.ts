@@ -12,7 +12,7 @@ import { mkdtemp, mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/services/document-service.ts'
+import { NotebookService } from '../../src/main/services/notebook-service.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
 import type { DateKey, ProseText, WindowPosition } from '../../src/shared/document-api.ts'
 
@@ -50,7 +50,7 @@ async function notebook(
   }
   const nb = await Notebook.open({ root, lock: false, watch: false })
   let clock = new Date(at)
-  const svc = new DocumentService(nb, {
+  const svc = new NotebookService(nb, {
     now: () => clock,
     history: false,
     // Never on its own: these tests drive the boundary by hand so the moment it
@@ -62,15 +62,15 @@ async function notebook(
     await nb.close()
   })
   // The seed is read asynchronously at construction; let it land.
-  await svc.info()
+  await svc.text.info()
   return {
     root,
     svc,
     set: (to: string) => (clock = new Date(to)),
     async type(text: string): Promise<void> {
-      const info = await svc.info()
-      const w = await svc.openWindow({ first: info.today, last: info.today })
-      await svc.edit({
+      const info = await svc.text.info()
+      const w = await svc.text.openWindow({ first: info.today, last: info.today })
+      await svc.text.edit({
         id: w.id,
         edits: [{ from: w.text.length as WindowPosition, to: w.text.length as WindowPosition, insert: text as ProseText }],
         origin: 'user',
@@ -124,7 +124,7 @@ test('the terminator is not in anybody\'s undo stack', async t => {
   // Undo with nothing of the person's own to undo must not reach back and pull
   // the day open again: a terminator you can undo into a mid-line day is a
   // control with no meaning (D62).
-  await svc.undo()
+  await svc.text.undo()
   assert.ok((await fileOn(YESTERDAY)).endsWith('\n'), 'still closed')
 })
 

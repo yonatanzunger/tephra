@@ -92,7 +92,7 @@ after it disagree about where the machine is, forever. Shipped that way, and
 found in a morning: two windows side by side, one offering to move the notebook
 to Jerusalem and the other offering to move it to Los Angeles. Main reads
 `/etc/localtime` instead, which goes to the operating system every time, and
-pushes one notice to every window. `DocumentService` owns whether there is an
+pushes one notice to every window. `SessionService` owns whether there is an
 offer, and owns the answer as well — **taking it or declining it in one window
 settles it in all of them**, because three windows each asking the same question
 is the same defect as three windows asking different ones. Asking on the way in
@@ -149,7 +149,7 @@ running; the corpus is the authority on the way in.
 ## One owner
 
 **`DayClock`, in main.** It holds the notebook's zone and both dates. It is the
-only place that can answer the question: it sees every edit — `DocumentService.edit` is on the path of every keystroke, so
+only place that can answer the question: it sees every edit — `TextService.edit` is on the path of every keystroke, so
 *when did writing last happen* is a field rather than a protocol — and it holds
 the set of windows, so *across all windows* is already its question.
 

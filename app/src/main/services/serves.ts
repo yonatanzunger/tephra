@@ -128,6 +128,33 @@ export function serveKinds<C extends { readonly kind: string }>(
 }
 
 /**
+ * A command union whose arms are also told **which window** asked.
+ *
+ * `serveKinds` and `serveAsked`, composed — because capture needs both and
+ * neither alone will do. A capture is a gesture *between two windows*: the words
+ * come from a selection in one, the item is made in another, and the sentence is
+ * given back to the first, so every arm needs to know who is on the line. And it
+ * is one channel with three kinds, so it wants the exhaustiveness the map gives.
+ *
+ * The asker arrives first, as it does in `serveAsked`; the command is narrowed,
+ * as it is in `serveKinds`.
+ */
+export function serveAskedKinds<C extends { readonly kind: string }>(
+  channel: string,
+  handlers: {
+    readonly [K in C['kind']]: (asker: number, command: Extract<C, { readonly kind: K }>) => unknown
+  },
+): Served {
+  return serveAsked(channel, (asker: number, command: C) => {
+    const handle = handlers[command.kind as C['kind']] as
+      | ((asker: number, c: C) => unknown)
+      | undefined
+    if (handle === undefined) throw new Error(`${channel} has no case for ${command.kind}`)
+    return handle(asker, command)
+  })
+}
+
+/**
  * Every channel claimed, by whom, with collisions refused.
  *
  * **Separated from the wiring so it can be tested**: `ipc.ts` imports Electron

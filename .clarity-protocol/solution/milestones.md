@@ -571,7 +571,7 @@ the filename, so the same typing renames the document.
 **Deferred within M3, deliberately.** Section reordering and deletion — which
 need `tephra:builtin/*` sentinels so the built-in sections can be positioned
 among the curated ones — and a `Pin to…` chooser, for which
-`DocumentService.documents()` already exists. Also **making the sidebar
+`NavService.documents()` already exists. Also **making the sidebar
 focusable**, which is what would finally put a key on a fileset's undo: ⌘Z goes
 to the focused document, and while the editor is the only focusable surface, the
 stream is the honest answer (MC4).
@@ -888,7 +888,7 @@ hears (D45).
 ### MH3b — a docket that keeps its own time ✓ *(built 2026-09-12)*
 
 **Recurrence fires, and the pass that fires it stopped being a pass.** MH3a's
-generation became one clause of `DocumentService.reconcile()`, which asks *what
+generation became one clause of `AgendaService.reconcile()`, which asks *what
 should be true?* rather than *what just happened* — D77. Advancing instances,
 generating what is due and withdrawing what is not all happen in the one
 operation, and nothing records when it last ran.

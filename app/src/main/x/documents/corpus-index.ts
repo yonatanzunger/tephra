@@ -737,8 +737,8 @@ function itemsIn(body: string): readonly IndexedItem[] {
  * **Dating is main's, and so is what a file BELONGS to.** The zone is the
  * notebook's (D63) and the index has neither it nor the layout's opinion about
  * which document a path is part of — it knows files and stamps.
- * `DocumentService` adds the day, the document and the name, which is where
- * both of those answers already live.
+ * `NavService` adds the day, the document and the name, which is where both of
+ * those answers already live.
  */
 type Undated = Omit<LinkAppearance, 'on' | 'doc' | 'segment' | 'source'>
 export type UndatedRow = Omit<LinkRow, 'appearances'> & { readonly appearances: readonly Undated[] }

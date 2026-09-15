@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService, type ServiceOptions } from '../../src/main/services/document-service.ts'
+import { NotebookService, type ServiceOptions } from '../../src/main/services/notebook-service.ts'
 import { StreamDocument } from '../../src/main/x/documents/kinds/stream.ts'
 import { dayFile } from '../../src/main/w/layout.ts'
 import {
@@ -33,9 +33,9 @@ async function fixture(t: TestContext, options: ServiceOptions = {}) {
     await service.stop()
     await nb.close()
   })
-  const service = new DocumentService(nb, options)
+  const service = new NotebookService(nb, options)
   const today = StreamDocument.today()
-  const snapshot = await service.openWindow({ first: today, last: today })
+  const snapshot = await service.text.openWindow({ first: today, last: today })
   return { service, snapshot, root, today, nb }
 }
 
@@ -56,7 +56,7 @@ test('edits apply in the order they were composed, not the order they finish', a
   let at = 0
   for (const ch of 'abcdefghij') {
     pending.push(
-      service.edit({
+      service.text.edit({
         id: snapshot.id,
         edits: [{ from: wp(at), to: wp(at), insert: pt(ch) }],
         origin: 'user',
@@ -69,16 +69,16 @@ test('edits apply in the order they were composed, not the order they finish', a
   const last = acks[acks.length - 1] as { length: number }
   assert.equal(last.length, 10)
 
-  const window = await service.openWindow({ first: StreamDocument.today(), last: StreamDocument.today() })
+  const window = await service.text.openWindow({ first: StreamDocument.today(), last: StreamDocument.today() })
   assert.equal(window.text, 'abcdefghij', 'characters landed in composition order')
 })
 
 test('a failed edit does not wedge the queue behind it', async t => {
   const { service, snapshot } = await fixture(t)
   await assert.rejects(() =>
-    service.edit({ id: 9999 as never, edits: [], origin: 'user', generation: 1 as never }),
+    service.text.edit({ id: 9999 as never, edits: [], origin: 'user', generation: 1 as never }),
   )
-  const ack = await service.edit({
+  const ack = await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('still works') }],
     origin: 'user',
@@ -91,7 +91,7 @@ test('the ack reports the length main actually holds', async t => {
   // The renderer compares this against its own buffer; a wrong number here is
   // worse than none, because it would make the two silently disagree.
   const { service, snapshot } = await fixture(t)
-  const ack = await service.edit({
+  const ack = await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('twelve chars') }],
     origin: 'user',
@@ -106,31 +106,31 @@ test('pushed messages reach every attached sink and stop when detached', async t
   const detach = service.addSink({ send: channel => seen.push({ channel }) })
 
   // A change from elsewhere — not from this window — must be pushed out.
-  await service.undo()
-  await service.edit({
+  await service.text.undo()
+  await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('x') }],
     origin: 'user',
     generation: 1 as never,
   })
-  await service.undo()
+  await service.text.undo()
   assert.ok(seen.length > 0, 'undo reached the renderer')
 
   detach()
   const before = seen.length
-  await service.edit({
+  await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('y') }],
     origin: 'user',
     generation: 1 as never,
   })
-  await service.undo()
+  await service.text.undo()
   assert.equal(seen.length, before, 'a detached sink hears nothing')
 })
 
 test('flush writes through the service, and the file is on disk', async t => {
   const { service, snapshot, root, today } = await fixture(t)
-  await service.edit({
+  await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('persisted\n') }],
     origin: 'user',
@@ -147,7 +147,7 @@ test('a change is written without anyone asking, on quiescence', async t => {
   // so asking it to remember to save is asking the least reliable component to
   // own the most important guarantee.
   const { service, snapshot, root, today } = await fixture(t)
-  await service.edit({
+  await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('unprompted\n') }],
     origin: 'user',
@@ -166,7 +166,7 @@ test('continuous typing still reaches disk, because quiescence is not the only t
   const deadline = Date.now() + 5_600
   let at = 0
   while (Date.now() < deadline) {
-    await service.edit({
+    await service.text.edit({
       id: snapshot.id,
       edits: [{ from: wp(at), to: wp(at), insert: pt('x') }],
       origin: 'user',
@@ -193,7 +193,7 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   })
   await service.openHistory()
 
-  await service.edit({
+  await service.text.edit({
     id: snapshot.id,
     generation: snapshot.generation,
     edits: [{ from: wp(0), to: wp(0), insert: pt('The good version.\n') }],
@@ -202,8 +202,8 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
   await service.flush()
   const first = (await service.repository?.save('first')) as VersionId
 
-  const after = await service.openWindow({ first: today, last: today })
-  await service.edit({
+  const after = await service.text.openWindow({ first: today, last: today })
+  await service.text.edit({
     id: after.id,
     generation: after.generation,
     edits: [{ from: wp(0), to: wp(0), insert: pt('A regrettable addition.\n') }],
@@ -240,7 +240,7 @@ test('an absolute path inside the notebook resolves to the document it is', asyn
   await mkdir(join(root, 'notes'), { recursive: true })
   await writeFile(join(root, 'notes', 'offer.md'), '---\ntephra: 1\nkind: markdown\n---\nText.\n')
 
-  assert.equal(await service.documentAt(join(root, 'notes', 'offer.md')), 'notes/offer.md')
+  assert.equal(await service.library.documentAt(join(root, 'notes', 'offer.md')), 'notes/offer.md')
 })
 
 test('a path outside the notebook is not a document, and says so by being null', async t => {
@@ -251,7 +251,7 @@ test('a path outside the notebook is not a document, and says so by being null',
   await writeFile(outside, '# Not in the notebook\n')
   t.after(() => rm(outside, { force: true }))
 
-  assert.equal(await service.documentAt(outside), null)
+  assert.equal(await service.library.documentAt(outside), null)
 })
 
 test('and a file inside the notebook that is not a document is not one either', async t => {
@@ -259,7 +259,7 @@ test('and a file inside the notebook that is not a document is not one either', 
   await mkdir(join(root, 'attachments'), { recursive: true })
   await writeFile(join(root, 'attachments', 'scan.png'), 'not really a png')
 
-  assert.equal(await service.documentAt(join(root, 'attachments', 'scan.png')), null)
+  assert.equal(await service.library.documentAt(join(root, 'attachments', 'scan.png')), null)
 })
 
 test('the documents list names every document, the notebook first', async t => {
@@ -298,7 +298,7 @@ test('a file outside the notebook opens, and its id is its absolute path', async
   const { service } = await fixture(t)
   const path = await downloaded(t, 'spec.md', '# A spec\n\nDownloaded, not mine.\n')
 
-  const id = await service.documentForFile(path)
+  const id = await service.library.documentForFile(path)
   assert.equal(id, path, 'named by where it is, which is what tells it from a corpus path')
 })
 
@@ -307,9 +307,9 @@ test('and it opens READ-ONLY, refusing the edit rather than losing it later', as
   // when what was typed is the only copy.
   const { service } = await fixture(t)
   const path = await downloaded(t, 'spec.md', 'Downloaded.\n')
-  const id = (await service.documentForFile(path)) as DocumentId
+  const id = (await service.library.documentForFile(path)) as DocumentId
 
-  const meta = await service.info(id)
+  const meta = await service.text.info(id)
   assert.equal(meta.meta.readOnly, true, 'and it says so, so the surface can too')
   await assert.rejects(
     () =>
@@ -326,17 +326,17 @@ test('its KIND still comes from its name, so the right surface shows it', async 
   // happens to be unwritable, and the renderer picks its surface by kind.
   const { service } = await fixture(t)
   const path = await downloaded(t, 'reading.fileset.md', '- [A thing](../x.md)\n')
-  const id = (await service.documentForFile(path)) as DocumentId
+  const id = (await service.library.documentForFile(path)) as DocumentId
 
-  assert.equal((await service.info(id)).meta.kind, 'fileset')
+  assert.equal((await service.text.info(id)).meta.kind, 'fileset')
 })
 
 test('THE IMPORT: a copy comes in, and the original is left where it was', async t => {
   const { service, root } = await fixture(t)
   const path = await downloaded(t, 'spec.md', '# A spec\n\nWorth keeping.\n')
-  const outside = (await service.documentForFile(path)) as DocumentId
+  const outside = (await service.library.documentForFile(path)) as DocumentId
 
-  const brought = await service.importFile(outside)
+  const brought = await service.library.importFile(outside)
   await service.flush()
 
   assert.equal(brought, 'notes/spec.md')
@@ -350,9 +350,9 @@ test('THE IMPORT: a copy comes in, and the original is left where it was', async
 test('and the copy is writable, because being inside is what that means', async t => {
   const { service } = await fixture(t)
   const path = await downloaded(t, 'spec.md', 'Worth keeping.\n')
-  const brought = await service.importFile((await service.documentForFile(path)) as DocumentId)
+  const brought = await service.library.importFile((await service.library.documentForFile(path)) as DocumentId)
 
-  assert.equal((await service.info(brought)).meta.readOnly, undefined)
+  assert.equal((await service.text.info(brought)).meta.readOnly, undefined)
   await service.corpus.use(brought, async doc => {
     const at = doc.positionAt(ONLY_SEGMENT, 0)
     await doc.replace([{ span: { begin: at, end: at }, payload: 'Mine now. ' as never }], 'user')
@@ -364,10 +364,10 @@ test('importing the same file twice makes two notes, not one overwrite', async t
   // away whatever had been done to it since.
   const { service } = await fixture(t)
   const path = await downloaded(t, 'spec.md', 'Downloaded.\n')
-  const outside = (await service.documentForFile(path)) as DocumentId
+  const outside = (await service.library.documentForFile(path)) as DocumentId
 
-  assert.equal(await service.importFile(outside), 'notes/spec.md')
-  assert.equal(await service.importFile(outside), 'notes/spec-2.md')
+  assert.equal(await service.library.importFile(outside), 'notes/spec.md')
+  assert.equal(await service.library.importFile(outside), 'notes/spec-2.md')
 })
 
 test('importing something already inside the notebook is a no-op, not a copy', async t => {
@@ -375,7 +375,7 @@ test('importing something already inside the notebook is a no-op, not a copy', a
   await mkdir(join(root, 'notes'), { recursive: true })
   await writeFile(join(root, 'notes', 'mine.md'), '---\ntephra: 1\nkind: markdown\n---\nMine.\n')
 
-  assert.equal(await service.importFile('notes/mine.md' as DocumentId), 'notes/mine.md')
+  assert.equal(await service.library.importFile('notes/mine.md' as DocumentId), 'notes/mine.md')
 })
 
 // ── the file lifecycle (D13's update-references step, filled in) ───────────
@@ -385,11 +385,11 @@ test('a new document is a real file from the first keystroke', async t => {
   // file behind it would be the one losable thing in the app — and it would be
   // the newest thing, which is the worst one to lose.
   const { service, root } = await fixture(t)
-  const id = await service.newDocument()
+  const id = await service.library.newDocument()
 
   assert.equal(id, 'notes/untitled.md')
   assert.match(await readFile(join(root, 'notes', 'untitled.md'), 'utf8'), /^---\ntephra: 1\n/)
-  assert.equal(await service.newDocument(), 'notes/untitled-2.md', 'and the second is its own')
+  assert.equal(await service.library.newDocument(), 'notes/untitled-2.md', 'and the second is its own')
 })
 
 test('THE POINT: renaming rewrites the sections that pointed at it', async t => {
@@ -405,7 +405,7 @@ test('THE POINT: renaming rewrites the sections that pointed at it', async t => 
     '---\ntephra: 1\nkind: fileset\ntitle: The house\n---\n- [The offer](../notes/offer.md) — worth keeping\n',
   )
 
-  const to = await service.renameDocument('notes/offer.md' as DocumentId, 'Counter offer')
+  const to = await service.library.renameDocument('notes/offer.md' as DocumentId, 'Counter offer')
   await service.flush()
 
   assert.equal(to, 'notes/counter-offer.md')
@@ -430,7 +430,7 @@ test('the rewritten link is relative to the SECTION, not to the notebook', async
     '---\ntephra: 1\nkind: fileset\n---\n- [A](../../notes/a.md)\n',
   )
 
-  await service.renameDocument('notes/a.md' as DocumentId, 'Renamed')
+  await service.library.renameDocument('notes/a.md' as DocumentId, 'Renamed')
   await service.flush()
   const section = await readFile(join(root, 'sections', 'deep', 'nested.fileset.md'), 'utf8')
   assert.match(section, /\.\.\/\.\.\/notes\/renamed\.md/, 'two levels up, as it was')
@@ -442,7 +442,7 @@ test('a name already taken is not overwritten, it is numbered', async t => {
   await writeFile(join(root, 'notes', 'plan.md'), '---\ntephra: 1\nkind: markdown\n---\nThe plan.\n')
   await writeFile(join(root, 'notes', 'other.md'), '---\ntephra: 1\nkind: markdown\n---\nOther.\n')
 
-  assert.equal(await service.renameDocument('notes/other.md' as DocumentId, 'Plan'), 'notes/plan-2.md')
+  assert.equal(await service.library.renameDocument('notes/other.md' as DocumentId, 'Plan'), 'notes/plan-2.md')
   assert.match(await readFile(join(root, 'notes', 'plan.md'), 'utf8'), /The plan/, 'untouched')
 })
 
@@ -456,7 +456,7 @@ test('a rename carries unwritten edits with it', async t => {
     await doc.setBodyOf(ONLY_SEGMENT, 'Typed, not yet written.\n' as never)
   })
 
-  await service.renameDocument('notes/draft.md' as DocumentId, 'Kept')
+  await service.library.renameDocument('notes/draft.md' as DocumentId, 'Kept')
   assert.match(await readFile(join(root, 'notes', 'kept.md'), 'utf8'), /Typed, not yet written/)
 })
 
@@ -465,7 +465,7 @@ test('a duplicate is a second document; the original is left alone', async t => 
   await mkdir(join(root, 'notes'), { recursive: true })
   await writeFile(join(root, 'notes', 'plan.md'), '---\ntephra: 1\nkind: markdown\n---\nThe plan.\n')
 
-  const copy = await service.duplicateDocument('notes/plan.md' as DocumentId, 'Plan v2')
+  const copy = await service.library.duplicateDocument('notes/plan.md' as DocumentId, 'Plan v2')
   assert.equal(copy, 'notes/plan-v2.md')
   assert.match(await readFile(join(root, 'notes', 'plan-v2.md'), 'utf8'), /The plan/)
   assert.equal(existsSync(join(root, 'notes', 'plan.md')), true)
@@ -484,7 +484,7 @@ test('DELETING leaves the entry that named it dangling, and visibly (D7)', async
     '---\ntephra: 1\nkind: fileset\n---\n- [Was here](../notes/gone.md)\n',
   )
 
-  await service.deleteDocument('notes/gone.md' as DocumentId)
+  await service.library.deleteDocument('notes/gone.md' as DocumentId)
   await service.flush()
 
   assert.equal(existsSync(join(root, 'notes', 'gone.md')), false)
@@ -496,5 +496,5 @@ test('DELETING leaves the entry that named it dangling, and visibly (D7)', async
 
 test('the notebook itself cannot be deleted', async t => {
   const { service } = await fixture(t)
-  await assert.rejects(() => service.deleteDocument(STREAM_ID), /cannot be deleted/)
+  await assert.rejects(() => service.library.deleteDocument(STREAM_ID), /cannot be deleted/)
 })

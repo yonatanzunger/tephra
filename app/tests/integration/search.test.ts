@@ -48,7 +48,7 @@ async function corpus(
   }
   const notebook = await Notebook.open({ root, lock: false, watch: false })
   t.after(() => notebook.close())
-  // **One stream document, as the app composes it** (`document-service.ts` passes
+  // **One stream document, as the app composes it** (`notebook-service.ts` passes
   // `() => this.#stream`). A fresh one per call re-probes the day files it might
   // be made of, which is reads this test would then blame on the search.
   const stream = new StreamDocument(notebook)

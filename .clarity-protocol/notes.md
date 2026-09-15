@@ -1489,3 +1489,46 @@ unit tests can only relate what the code says; the acceptance suites are the onl
 place where what the two processes *do* is observed. That is twice now in a
 fortnight — note 58 measured pixels, this one opened a window — that the check
 which earned its keep was the slow one.
+
+## 63. Ask of every leftover *does this belong here?* and the file empties
+
+**2026-09-14, the second pass over `ipc.ts`.** The first pass extracted eleven
+services and left twenty-four hand-written handlers behind — the ones that had no
+service to go to. That looked like a natural resting point: what was left was
+what had nowhere else to be.
+
+It was not. Asked one at a time — *does this belong in a wiring file, or is there
+a service, existing or new, that should have it?* — **not one of the twenty-four
+belonged there.** One was simply misfiled (`horizon`, a bare forward into the
+composite that declares the other two faces of the same construct). Twenty were
+five real nouns nobody had named yet: a window over a buffer, marks over a span,
+documents as files, what arrives from outside, what this session knows. Three
+were the machine's own: the clipboard, the dialog, the printer. `ipc.ts` went from
+471 lines to 66.
+
+**What made the leftovers look homeless was that nobody had asked them to justify
+themselves.** Each handler was three lines forwarding into a 1,238-line class, and
+three lines never look like a problem. The question that dissolved them was not
+*what should this file contain* but *what is this verb about* — and every verb
+turned out to be about something, because a verb that was about nothing would not
+have been written.
+
+**Two smells worth keeping.** A method prefix that repeats its accessor
+(`service.docket.docketAdd`) says the class it lives in is not the class it
+belongs to — the prefix was carrying the information the type should have.
+And **mutable state in a registration function** — `waiting` and `claimed` lived
+as closure variables inside `registerDocumentIpc` — is a service that has not been
+written yet; state needs an object a reader can name.
+
+**And a name has to survive the refactor it describes.** `DocumentService`
+composed eleven services and answered no channel, so it was renamed
+`NotebookService`; `document()` returned the stream under a name that said
+document, and had no callers at all, so it went. The one I argued against was
+`DataService` — the tidier symmetry with `ShellService`, and a lie about a tier
+that holds the ordering guarantee on edits, reconciliation to a fixed point and
+the day boundary. Naming behaviour *data* is the same vagueness that made
+`CoreService` four objects instead of one.
+
+> Related: note 61's rule, seen from the other side. That one was about a comment
+> that stayed true while the code drifted; this is about a *name* doing the same
+> thing, and the fix is identical — say it where the compiler can hold you to it.

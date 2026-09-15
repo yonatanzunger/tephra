@@ -266,7 +266,8 @@ correct.
 ### Echo suppression — HELD
 
 `#originating` is set across `replace` in a `try/finally`, and every path that
-reaches it — edit, undo, redo, extend — is serialised by `DocumentService`, so
+reaches it — edit, undo, redo, extend — is serialised by the one mutation queue
+(`CorpusService`), so
 the flag cannot be cleared by one call while another is still relying on it. The
 renderer's half is symmetric: transactions carrying the `fromDocument` effect
 are not sent back. Reviewed, found sound, no change.
@@ -1007,7 +1008,7 @@ race was lost*.
 
 ### And the fix broke the layering a third time
 
-The obvious place to read `TEPHRA_QUIESCE_MS` was `DocumentService`, so that is
+The obvious place to read `TEPHRA_QUIESCE_MS` was the service itself, so that is
 where I put it — through `verifyEnv`, which imports `app` from Electron. The
 three suites that drive the service under plain node failed instantly, exactly as
 they had for `app.isPackaged` and for `shell`.

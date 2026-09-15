@@ -12,7 +12,7 @@ import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/services/document-service.ts'
+import { NotebookService } from '../../src/main/services/notebook-service.ts'
 import type { WindowPosition , VersionId } from '../../src/shared/document-api.ts'
 import { pt } from '../support/text.ts'
 
@@ -22,7 +22,7 @@ const wait = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms))
 async function service(t: TestContext, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-tier-'))
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const svc = new DocumentService(nb, {
+  const svc = new NotebookService(nb, {
     quiesceMs: 20,
     maxIntervalMs: 60,
     versionQuiesceMs: 120,
@@ -42,10 +42,10 @@ async function service(t: TestContext, options = {}) {
 }
 
 /** Open a window on today and type into it, as the renderer would. */
-async function type(svc: DocumentService, text: string): Promise<void> {
-  const info = await svc.info()
-  const opened = await svc.openWindow({ first: info.today, last: info.today })
-  await svc.edit({
+async function type(svc: NotebookService, text: string): Promise<void> {
+  const info = await svc.text.info()
+  const opened = await svc.text.openWindow({ first: info.today, last: info.today })
+  await svc.text.edit({
     id: opened.id,
     edits: [{ from: wp(opened.text.length), to: wp(opened.text.length), insert: pt(text) }],
     origin: 'user',
@@ -112,7 +112,7 @@ test('the committed file contains what was typed', async t => {
 
   const log = await svc.repository?.versions()
   const oid = log?.[0]?.id ?? ('' as VersionId)
-  const info = await svc.info()
+  const info = await svc.text.info()
   const [y, m] = info.today.split('-')
   const rel = `notebook.stream/${y}/${m}/${info.today}.md`
   const inCommit = await svc.repository?.contentAt(oid, rel as never)
@@ -132,7 +132,7 @@ test('the machine-local directory never reaches the history', async t => {
 async function watched(t: TestContext, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-ext-'))
   const nb = await Notebook.open({ root, lock: false, watch: true })
-  const svc = new DocumentService(nb, {
+  const svc = new NotebookService(nb, {
     quiesceMs: 20,
     maxIntervalMs: 60,
     versionQuiesceMs: 120,
@@ -145,7 +145,7 @@ async function watched(t: TestContext, options = {}) {
     await nb.close()
     await rm(root, { recursive: true, force: true })
   })
-  const info = await svc.info()
+  const info = await svc.text.info()
   const [y, m] = info.today.split('-')
   await mkdir(join(root, 'notebook.stream', y as string, m as string), { recursive: true })
   return { svc, root, today: info.today, rel: `notebook.stream/${y}/${m}/${info.today}.md` }

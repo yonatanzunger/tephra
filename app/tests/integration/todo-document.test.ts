@@ -617,7 +617,7 @@ test('and no walk is offered, because there is nothing that arrived', async t =>
 })
 
 test('EVERY VERB works on it, because the grammar is the same one', async t => {
-  // **Called with a DAY, which is how the service calls it.** `DocumentService`
+  // **Called with a DAY, which is how the service calls it.** `NotebookService`
   // asks every list to work in the writing day and does not know the shape —
   // which is right, and is exactly what the first cut of this test failed to
   // exercise: passing `ONLY_SEGMENT` here tested a call the app never makes,

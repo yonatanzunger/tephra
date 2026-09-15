@@ -14,7 +14,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
-import { DocumentService } from '../../src/main/services/document-service.ts'
+import { NotebookService } from '../../src/main/services/notebook-service.ts'
 import { msUntilNextDay, dateKeyAt } from '../../src/shared/dates.ts'
 
 /** A clock the test moves by hand, so no test waits for a real midnight. */
@@ -36,7 +36,7 @@ function fixture(t: TestContext, start: Date) {
     await svc.stop()
     await nb.close()
   })
-      const svc = new DocumentService(nb, {
+      const svc = new NotebookService(nb, {
         history: false,
         now: () => now,
         dayCheckMs: 5,
@@ -47,7 +47,7 @@ function fixture(t: TestContext, start: Date) {
 }
 
 /** Everything the renderer would hear. */
-function listen(svc: DocumentService): { of: (channel: string) => unknown[] } {
+function listen(svc: NotebookService): { of: (channel: string) => unknown[] } {
   const heard: { channel: string; value: unknown }[] = []
   svc.addSink({ send: (channel, value) => heard.push({ channel, value }) })
   return { of: channel => heard.filter(h => h.channel === channel).map(h => h.value) }
@@ -100,15 +100,15 @@ test('a machine asleep through midnight hears about it on waking', async t => {
 test('and the service files into the new day afterwards, not the old one', async t => {
   const clock = fixture(t, new Date('2026-08-28T06:59:00Z'))
   const { svc } = await clock.service()
-  const before = (await svc.info()).today
+  const before = (await svc.text.info()).today
 
   clock.move(msUntilNextDay(clock.at()) + 1_000)
   let after = before
   await until(() => {
-    void svc.info().then(info => (after = info.today))
+    void svc.text.info().then(info => (after = info.today))
     return after !== before
   })
-  after = (await svc.info()).today
+  after = (await svc.text.info()).today
   assert.notEqual(after, before)
   assert.equal(after, dateKeyAt(clock.at()))
 })
@@ -136,7 +136,7 @@ test('THE SEED LANDS BEFORE A WRITE PICKS A DAY', async t => {
     '---\ndate: 2026-03-09\n---\n\nWriting late.\n',
   )
   const nb = await Notebook.open({ root, lock: false, watch: false })
-  const svc = new DocumentService(nb, {
+  const svc = new NotebookService(nb, {
     history: false,
     now: () => new Date('2026-03-10T09:00:00Z'),
     dayCheckMs: 24 * 60 * 60_000,

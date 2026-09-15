@@ -3,16 +3,10 @@
 // Margin notes on a passage of the notebook (D47): the threads, and the eight
 // verbs that change them.
 //
-// **The first service split out of `DocumentService`** (D83), chosen as the
-// pilot because it is small, its domain is clean, and — the part that mattered —
-// **it writes**. A read-only service would have proved only that the channel
-// declaration works; this exercises the whole of it: the store, the one mutation
-// queue, and the write tiers.
-//
-// **Eight channels, declared not dispatched.** `serves()` is the list, and
-// `ipc.ts` wires it without knowing what any of them mean. They are still eight
-// rather than one command union like `docket` and `todo`; collapsing them is a
-// change to the preload and the renderer, and does not belong in a move.
+// **Eight channels, declared not dispatched.** `serves()` is the list, and the
+// wiring registers it without knowing what any of them mean. Eight rather than
+// one command union like `docket` and `todo`, which would be a change to the
+// preload and the renderer as well as to this file.
 //
 // **No day — except for the byline.** A comment is anchored to a *span* and the
 // span names its segment, so this service does not need to know what day it is

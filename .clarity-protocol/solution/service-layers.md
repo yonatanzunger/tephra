@@ -495,6 +495,53 @@ and a fix bundled into a move spends that property.
    two structural type literals in the docket suite name the methods they
    expect.
 
+10. **Everything lives in a service** — asked of the twenty-four handlers still
+   in `ipc.ts`: *do any of these belong here?* None did.
+   - **`horizon` was simply misfiled.** A bare forward into `AgendaService`,
+     which is the composite that declares the user-facing verbs (D84) — the only
+     one of its three faces it did not declare, for no reason but the order the
+     extractions happened in.
+   - **Five new domain services**, each a real noun rather than a bag of
+     leftovers: `TextService` (a window over a buffer — the *text* half of the
+     word D83 split, `FrameService` being the *frame* half), `MarksService`
+     (bookmarks, subjects, branches — everything written *over* a span),
+     `LibraryService` (documents as files), `IntakeService` (what arrives from
+     outside), `SessionService` (the day, the zone offer, where the reader was).
+   - **Two shell services**: `DesktopService` (the clipboard, the dialog, the
+     printer, the emoji panel, opening a path) and `CaptureService`. The second
+     is the argument for the whole exercise: `waiting` and `claimed` were
+     **mutable closure variables inside the registration function**, which is
+     state nobody can reason about.
+   - **`serveAskedKinds`**, the one mechanism that was missing: capture is a
+     union channel whose every arm needs to know which window asked.
+   - **The self-check channels became `shell/verify-ipc.ts`** — three of them,
+     scattered over two files behind three separate gates. `verify-mode.ts` says
+     *nobody audits a surface that has no name*; now the surface has one. The
+     menu channel kept its **second** gate: collecting them must not quietly hand
+     the narrow one the wide gate.
+   - `ipc.ts`: **471 → 75 lines**, and it holds no verbs, no Electron beyond
+     `ipcMain`/`BrowserWindow`, and no state.
+
+11. **Two composition roots, one per tier.** `DocumentService` became
+   **`NotebookService`** — it answers no channel, builds the foundation and the
+   ten Electron-free services, and owns the notebook's lifecycle — and
+   **`ShellService`** is its parallel above the tier line, building the three
+   that need the machine.
+   - **Not `DataService`**, which was the tidier symmetry and would have been a
+     lie: that side holds the ordering guarantee on edits, reconciliation to a
+     fixed point, the day boundary and the agenda. Naming behaviour *data* is the
+     vagueness that made `CoreService` four objects.
+   - **The pair makes the tier edge structural**: `ShellService` holds
+     `NotebookService` and nothing holds a reference back. The layering test now
+     says so twice — no service imports `electron`, **and no service imports
+     `main/shell/`**, which is the same rule one indirection out, and the
+     indirection is how the rule broke the third time.
+   - `document()` went rather than being renamed: it returned the stream under a
+     name that said document, and it had **no callers at all**.
+   - And the comments were swept. A file's comments describe what it is, not
+     what left it: `NotebookService` 1,238 → 355 lines, most of the difference
+     code and a good part of it pointers to services that had already moved.
+
 Nothing is left on this plan.
 
 ## The agenda, and what sits at each level (D84)

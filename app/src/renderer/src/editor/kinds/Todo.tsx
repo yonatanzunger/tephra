@@ -404,6 +404,13 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * forward, which covers both the list that had to be opened and the one that
    * was already sitting there.
    */
+  // **The other half of that discriminator**: a remount loses `adding` without
+  // this component ever being told, and looks identical to an empty commit.
+  useEffect(() => {
+    const w = window as unknown as { __todoMounts?: number }
+    w.__todoMounts = (w.__todoMounts ?? 0) + 1
+  }, [])
+
   useEffect(() => {
     const check = (): void => {
       void window.tephra.todo
@@ -670,6 +677,13 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
           setAdding(null)
           setAddIn(null)
           const wanted = text === null ? '' : text.trim()
+          // **What the row was actually committed with**, for the m3 capture
+          // check that has flaked seven times (`m3-acceptance.mjs`). Nothing but
+          // this handler clears `adding`, so a vanished row with no item has
+          // exactly two causes — it fired with empty text, or the surface
+          // remounted — and they are indistinguishable from outside. One object
+          // per commit, which is cheaper than another wrong theory.
+          ;(window as unknown as { __doneSaw?: unknown }).__doneSaw = { wanted, capturing }
           if (!capturing) {
             if (wanted !== '') act(window.tephra.todo.add(list, wanted))
             return

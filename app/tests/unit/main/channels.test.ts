@@ -7,7 +7,7 @@
 // cannot see either, because the three sides never refer to one another — only
 // to the same string constant.
 //
-// **Written before the service extractions, for them.** `DocumentService` is
+// **Written before the service extractions, for them.** `NotebookService` is
 // being split into a service per channel group (D83), and the likeliest way that
 // breaks something is a channel left behind: deleted from the switch in `ipc.ts`
 // and never declared by the service that took it. The acceptance suites would

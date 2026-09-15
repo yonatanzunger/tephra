@@ -6,6 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { clickMenuItem, installMenu, popRangeMenu, setMenuSelection } from './shell/menu.ts'
 import { verifyMode, verifyEnv } from './shell/verify-mode.ts'
+import { registerVerifyIpc } from './shell/verify-ipc.ts'
 import { author } from './x/comments.ts'
 import { join } from 'node:path'
 import { writeFileSync } from 'node:fs'
@@ -46,7 +47,9 @@ if (verifyMode()) {
       'oversized-window override and abrupt exit are all reachable. Never for ordinary use.',
   )
 }
-import { DocumentService, registerDocumentIpc, registerWindowIpc } from './shell/ipc.ts'
+import { wire } from './shell/ipc.ts'
+import { NotebookService } from './services/notebook-service.ts'
+import { ShellService } from './shell/shell-service.ts'
 import { Windows } from './shell/windows.ts'
 
 // app.getAppPath() rather than import.meta.url: the built main process is CJS,
@@ -289,7 +292,7 @@ async function openDocument(inNewWindow: boolean): Promise<void> {
   const path = picked.filePaths[0]
   if (picked.canceled || path === undefined) return
 
-  const id = await service.documentForFile(path)
+  const id = await service.library.documentForFile(path)
   if (id === null) {
     await dialog.showMessageBox({
       type: 'info',
@@ -342,7 +345,7 @@ async function reorient(): Promise<void> {
 
 async function newDocument(kind: 'markdown' | 'todo' | 'docket' = 'markdown'): Promise<void> {
   if (service === null) return
-  windows?.open({ kind: 'document', id: await service.newDocument(undefined, undefined, kind) })
+  windows?.open({ kind: 'document', id: await service.library.newDocument(undefined, undefined, kind) })
 }
 
 /**
@@ -366,7 +369,7 @@ async function importDocument(pick: boolean, asked?: DocumentId | null): Promise
     })
     const path = picked.filePaths[0]
     if (picked.canceled || path === undefined) return
-    id = await service.documentForFile(path)
+    id = await service.library.documentForFile(path)
   } else {
     // What the ASKING window is showing when a window asked, and the focused
     // one when the menu did. A window knows which it is; a menu does not.
@@ -388,7 +391,7 @@ async function importDocument(pick: boolean, asked?: DocumentId | null): Promise
     return
   }
 
-  const brought = await service.importFile(id)
+  const brought = await service.library.importFile(id)
   parent?.webContents.send(CHANNEL.openDocument, brought)
 }
 
@@ -403,7 +406,7 @@ ipcMain.handle('tephra:hello', () => ({
 }))
 
 let notebook: Notebook | null = null
-let service: DocumentService | null = null
+let service: NotebookService | null = null
 let windows: Windows | null = null
 
 /**
@@ -509,16 +512,16 @@ app.whenReady().then(async () => {
   notebook = opened
   // The file tier's quiescence is supplied HERE rather than read there:
   // reading it goes through the verify gate, which imports Electron, and
-  // `DocumentService` is deliberately free of Electron so that three
+  // `NotebookService` is deliberately free of Electron so that three
   // integration suites can drive it under plain node. That has now been broken
   // three times by three different imports; `tests/unit/main/no-electron.test.ts`
   // is what stops the fourth.
   const quiesce = Number(verifyEnv('TEPHRA_QUIESCE_MS'))
-  service = new DocumentService(
+  service = new NotebookService(
     notebook,
     Number.isFinite(quiesce) && quiesce > 0 ? { quiesceMs: quiesce } : {},
   )
-  registerDocumentIpc(service)
+  wire(service.services())
 
   // Seeded before the window opens, so the first launch already has a themes
   // directory to look at rather than an empty one that fills in later.
@@ -605,11 +608,8 @@ app.whenReady().then(async () => {
   )
   ipcMain.on(CHANNEL.contextMenu, () => popRangeMenu())
 
-  // Self-check only: lets a renderer scene pull a real menu item. Gated, because
-  // nothing in the shipped app should be able to drive the menu bar.
-  if (verifyEnv('TEPHRA_VERIFY') !== undefined) {
-    ipcMain.handle('tephra:verify:menu', (_e, label: string) => clickMenuItem(label))
-  }
+  // The self-check channels — this one included — are `shell/verify-ipc.ts`.
+  registerVerifyIpc(service.text, clickMenuItem)
 
   // D34's verification, in the environment that actually matters: not plain
   // Node but the BUNDLED main process, where electron-vite's CJS output and
@@ -624,7 +624,10 @@ app.whenReady().then(async () => {
 
   // The session, not a window: whatever was open last time comes back (MC6).
   windows = new Windows(service, createWindow)
-  registerWindowIpc(windows, id => void importDocument(false, id))
+  // **The shell root, built here because this is where the window factory is**
+  // (D83). It holds the notebook root; nothing holds a reference back, which is
+  // the tier edge made structural.
+  wire(new ShellService(service, windows, (id: DocumentId | null) => void importDocument(false, id)).services())
   await windows.restore()
 
   app.on('activate', () => {

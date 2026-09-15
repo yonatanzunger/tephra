@@ -25,7 +25,7 @@ export function slug(name: string): string {
  * What a document is NAMED, from its path — the other name it has.
  *
  * **Shared because four places wanted it and had three answers.** `App.tsx`,
- * `document-service.ts` and `x/fileset.ts` each carried a copy of this rule, and
+ * `notebook-service.ts` and `x/fileset.ts` each carried a copy of this rule, and
  * MH1 found them apart the way such things are always found: a docket appeared
  * in the sidebar as `house.docket` while the titlebar called it *The house*,
  * because only two of the three copies had learned the new suffix.
