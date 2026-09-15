@@ -29,7 +29,7 @@ import { SegmentedDocument } from '../segmented.ts'
 import { Segment } from '../../segment.ts'
 import { frontmatterFor, renderFrontmatter } from '../../frontmatter.ts'
 import {
-  isLive, itemBlock, itemLine, nowSeconds, parseItem, resolveDue, scanItems, spellMoved,
+  EMPTY, isLive, itemBlock, nowSeconds, parseEntry, resolveDue, scanItems, spellMoved,
   unusedItemId, type WalkState,
   type ScannedItem, type TodoItem, type TodoStatus,
 } from '../../../../shared/kinds/todo.ts'
@@ -414,26 +414,34 @@ export class TodoDocument extends SegmentedDocument {
     const edits: { span: Span; payload: DocumentText }[] = []
 
     for (const scanned of found) {
-      const resolved = resolveDue(scanned.item.text, date)
-      const needsId = scanned.item.id === null
-      if (!needsId && resolved === scanned.item.text) continue
-
-      let id = scanned.item.id
+      // **Resolve, then re-read** (D85). An unresolved `DUE FRIDAY` is left in
+      // the sentence by the entry grammar, because a relative date is not a
+      // date; resolving it makes one, and reading the sentence again is what
+      // lifts it out of the prose and into the field where dates live.
+      const said = parseEntry(resolveDue(scanned.item.text, date))
+      const item: TodoItem = {
+        ...scanned.item,
+        text: said.text,
+        due: said.due ?? scanned.item.due,
+        id: scanned.item.id,
+        ctime: scanned.item.ctime ?? now,
+        mtime: scanned.item.mtime ?? now,
+      }
+      let id = item.id
       if (id === null) {
         const pool = await taken()
         id = unusedItemId(pool)
         pool.add(id)
       }
-      const line = itemLine({
-        ...scanned.item,
-        text: resolved,
-        id,
-        ctime: scanned.item.ctime ?? now,
-        mtime: scanned.item.mtime ?? now,
-      })
+      const block = itemBlock({ ...item, id })
+      // **Written whenever the bytes would differ**, which is the whole test now
+      // that an item is a record: adoption is also how the old inline form
+      // becomes fields, so "nothing changed" cannot be asked of the text alone.
+      const body = await this.bodyOf(date)
+      if (block === body.slice(scanned.from, scanned.blockTo)) continue
       edits.push({
-        span: { begin: this.at(date, scanned.from), end: this.at(date, scanned.to) },
-        payload: line as DocumentText,
+        span: { begin: this.at(date, scanned.from), end: this.at(date, scanned.blockTo) },
+        payload: block as DocumentText,
       })
     }
     if (edits.length === 0) return 0
@@ -460,14 +468,16 @@ export class TodoDocument extends SegmentedDocument {
     // whatever was selected, and an item is a line — a newline in the middle of
     // one would silently become two items, the second of them unmarked.
     const flat = resolveDue(text.replace(/\s*\n\s*/g, ' ').trim(), date)
-    const parsed = parseItem(`- [ ] ${flat}`)
-    const item: TodoItem = { ...(parsed ?? EMPTY_ITEM), id, ctime: now, mtime: now }
+    // **The entry grammar**, which is what that string is (D85): whatever it
+    // says as `#tag`, `DUE <date>` or `OWNER <name>` becomes a field, and the
+    // rest is the sentence.
+    const item: TodoItem = { ...parseEntry(flat), id, ctime: now, mtime: now }
 
     const body = await this.bodyOf(date)
     // Appended after what is WRITTEN, not at the end of the file: a day may end
     // in blank lines, and pushing the item past them puts a gap in the list.
     const written = body.replace(/\s*$/, '')
-    const payload = `${written === '' ? '' : '\n'}${itemLine(item)}${body.slice(written.length).includes('\n') ? '' : '\n'}`
+    const payload = `${written === '' ? '' : '\n'}${itemBlock(item)}${body.slice(written.length).includes('\n') ? '' : '\n'}`
     await this.replace(
       [{ span: { begin: this.at(date, written.length), end: this.at(date, written.length) }, payload: payload as DocumentText }],
       'operation',
@@ -509,18 +519,9 @@ export class TodoDocument extends SegmentedDocument {
     }))
   }
 
-  /**
-   * Give it a date, or take one away.
-   *
-   * The date lives IN the line (T16), so this edits the text rather than a
-   * field beside it — which is what keeps the file what it appears to be.
-   */
+  /** Give it a date, or take one away. A field, so there is nothing to cut (D85). */
   async setDue(id: string, due: DateKey | null): Promise<boolean> {
-    return this.#rewrite(id, item => {
-      const without =
-        item.dueSpan === null ? item.text : cut(item.text, item.dueSpan.from, item.dueSpan.to)
-      return { ...item, text: due === null ? without : `${without} DUE ${due}`.trim() }
-    })
+    return this.#rewrite(id, item => ({ ...item, due }))
   }
 
   /**
@@ -535,17 +536,12 @@ export class TodoDocument extends SegmentedDocument {
    */
   async tagItem(id: string, name: string): Promise<boolean> {
     return this.#rewrite(id, item =>
-      item.tags.includes(name) ? item : { ...item, text: `${item.text} ${written(name)}`.trim() },
+      item.tags.includes(name) ? item : { ...item, tags: [...item.tags, name] },
     )
   }
 
   async untagItem(id: string, name: string): Promise<boolean> {
-    return this.#rewrite(id, item => {
-      const at = item.tags.indexOf(name)
-      const span = item.tagSpans[at]
-      if (at < 0 || span === undefined) return item
-      return { ...item, text: cut(item.text, span.from, span.to) }
-    })
+    return this.#rewrite(id, item => ({ ...item, tags: item.tags.filter(tag => tag !== name) }))
   }
 
   /**
@@ -558,7 +554,21 @@ export class TodoDocument extends SegmentedDocument {
    * into the line the cursor is in, on every keystroke.
    */
   async edit(id: string, text: string): Promise<boolean> {
-    return this.#rewrite(id, (item, date) => ({ ...item, text: resolveDue(text.trim(), date) }))
+    return this.#rewrite(id, (item, date) => {
+      const said = parseEntry(resolveDue(text.trim(), date))
+      // **What the string says wins; what it does not mention is left alone**
+      // (D85). The field being edited holds the sentence, so a tag the person
+      // did not retype is not a tag they deleted — taking one off is its own
+      // gesture, and omission must not be a silent delete.
+      return {
+        ...item,
+        text: said.text,
+        tags: said.tags.length === 0 ? item.tags : [...new Set([...item.tags, ...said.tags])],
+        due: said.due ?? item.due,
+        owner: said.owner ?? item.owner,
+        moved: said.moved ?? item.moved,
+      }
+    })
   }
 
   /**
@@ -666,7 +676,7 @@ export class TodoDocument extends SegmentedDocument {
           })
           continue
         }
-        const line = itemLine({
+        const block = itemBlock({
           ...found.item,
           status: action,
           // Same rule the single verb reads by: a reason is kept only where it
@@ -675,8 +685,8 @@ export class TodoDocument extends SegmentedDocument {
           mtime: nowSeconds(),
         })
         edits.push({
-          span: { begin: this.at(date, found.from), end: this.at(date, found.to) },
-          payload: line as DocumentText,
+          span: { begin: this.at(date, found.from), end: this.at(date, found.blockTo) },
+          payload: block as DocumentText,
         })
       }
     }
@@ -695,12 +705,16 @@ export class TodoDocument extends SegmentedDocument {
       if (found === undefined) continue
 
       const next = change(found.item, date)
-      const line = itemLine({ ...next, mtime: nowSeconds() })
+      // **The BLOCK, because the fields are part of the item** (D85). Every verb
+      // used to rewrite the line and leave what was under it alone; the fields
+      // are under it now, so the unit of replacement is the whole block — which
+      // also carries the notes through, since they are in the record.
+      const block = itemBlock({ ...next, mtime: nowSeconds() })
       const body = await this.bodyOf(date)
-      if (line === body.slice(found.from, found.to)) return true
+      if (block === body.slice(found.from, found.blockTo)) return true
 
       await this.replace(
-        [{ span: { begin: this.at(date, found.from), end: this.at(date, found.to) }, payload: line as DocumentText }],
+        [{ span: { begin: this.at(date, found.from), end: this.at(date, found.blockTo) }, payload: block as DocumentText }],
         origin,
       )
       return true
@@ -727,11 +741,6 @@ export class TodoDocument extends SegmentedDocument {
   async importText(): Promise<string> {
     throw new Error('importing into a todo list is not built yet')
   }
-}
-
-const EMPTY_ITEM: TodoItem = {
-  id: null, status: 'todo', ctime: null, mtime: null, owner: null, ownerSpan: null, moved: null, movedSpan: null,
-  text: '', tags: [], due: null, reason: null, notes: [], tagSpans: [], dueSpan: null,
 }
 
 /** How a tag is written down. The inverse of the grammar's two spellings. */

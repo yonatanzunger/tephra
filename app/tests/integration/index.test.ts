@@ -455,11 +455,10 @@ test('THE RESOLVED TAIL: what was finished under a tag, newest first', async t =
     '2026-03-02': ['- [-] reroof it #house <!--tephra:item aaaa3333 100 100-->'],
   })
   const byTag = await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)
-  assert.deepEqual(byTag.get('house')?.map(i => i.text), [
-    'fix the gate #house',
-    'paint the shed #house',
-    'reroof it #house',
-  ])
+  // **The text is the sentence** (D85); the tag is a field, which is why it is
+  // not repeated in what the row would draw.
+  assert.deepEqual(byTag.get('house')?.map(i => i.text),
+    ['fix the gate', 'paint the shed', 'reroof it'])
 })
 
 test('THE WINDOW: three days back, and the fourth is the scrub\'s business', async t => {
@@ -473,7 +472,7 @@ test('THE WINDOW: three days back, and the fourth is the scrub\'s business', asy
     '2026-03-01': ['- [x] four days back #house <!--tephra:item aaaa2222 100 100-->'],
   })
   const byTag = await index.resolvedByTag(RESOLVED, RESOLVED_DAYS)
-  assert.deepEqual(byTag.get('house')?.map(i => i.text), ['three days back #house'])
+  assert.deepEqual(byTag.get('house')?.map(i => i.text), ['three days back'])
 })
 
 test('and a LIVE item is not in it, however recent', async t => {
@@ -503,7 +502,7 @@ test('THE DRAWER: backlogged items, which nothing else can see', async t => {
     '2026-03-03': ['- [>] someday, the fence <!--tephra:item aaaa3333 100 100-->'],
   })
   const drawer = await index.backlog()
-  assert.deepEqual(drawer.map(i => i.text), ['someday, the fence', 'someday, the loft #house'])
+  assert.deepEqual(drawer.map(i => i.text), ['someday, the fence', 'someday, the loft'])
 })
 
 test('and a backlogged item is NOT in the resolved tail, because it is waiting', async t => {

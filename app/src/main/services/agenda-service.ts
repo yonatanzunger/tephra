@@ -49,7 +49,7 @@ import { flattenLinks } from '../../shared/links.ts'
 import { plainLine } from '../../shared/plain.ts'
 import { DocketDocument } from '../x/documents/kinds/docket.ts'
 import { TodoDocument } from '../x/documents/kinds/todo.ts'
-import { isLive, RESOLVED_DAYS, shortLine, spellOwner, withoutMarks } from '../../shared/kinds/todo.ts'
+import { isLive, RESOLVED_DAYS, shortLine, spellOwner } from '../../shared/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { addDays, asDateKey, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
@@ -486,7 +486,7 @@ export class AgendaService implements Serves {
     // **Its subjects and its owner come with it**, being facts about the thing
     // rather than about the list it was on; the due date does not, because a
     // deadline you have just declined is not one.
-    const made = await this.#docket.add(where, withoutMarks(found), { mode: 'task' })
+    const made = await this.#docket.add(where, found.text, { mode: 'task' })
     await this.#store.mutate(async () =>
       this.#store.corpus.use(where, doc => (doc as DocketDocument).cameFrom(made, item)))
     for (const tag of found.tags) await this.#docket.tag(where, made, tag)

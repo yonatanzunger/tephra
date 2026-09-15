@@ -14,7 +14,6 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { inHorizon, orderHorizon, type HorizonRow } from '../../src/shared/horizon-api.ts'
 import type { DateKey } from '../../src/shared/document-api.ts'
-import { withoutMarks } from '../../src/shared/kinds/todo.ts'
 
 async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
   const root = await mkdtemp(join(tmpdir(), 'tephra-horizon-'))
@@ -133,7 +132,7 @@ test('AND THE TWO SOURCES DO NOT OVERLAP: a generated step is on the list, not h
   const after = await service.agenda.horizon('2026-03-01' as DateKey, '2026-04-01' as DateKey)
   assert.deepEqual(after.map(one => one.kind), ['due', 'due'], 'the list\'s, not the docket\'s')
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks).sort(),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text).sort(),
     ['The car needs fixing', 'collect it'])
 })
 
@@ -205,7 +204,7 @@ test('AND NOR IS A STEP WHOSE ANTECEDENT IS UNFINISHED', async t => {
   const rows = await service.agenda.horizon('2026-03-01' as DateKey, '2027-01-01' as DateKey)
   assert.deepEqual(rows.map(one => one.kind), ['due'], 'the generated one, as a dated task')
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['The car needs fixing'])
 })
 

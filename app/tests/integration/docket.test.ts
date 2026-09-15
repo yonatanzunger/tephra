@@ -22,7 +22,7 @@ import type { DateKey, DocumentId } from '../../src/shared/document-api.ts'
 // **The prose, without the chips.** A generated item carries its matter as a
 // tag now, so raw `text` includes the mark — and what these claims are about is
 // what the line says.
-import { isLive, withoutMarks } from '../../src/shared/kinds/todo.ts'
+import { isLive } from '../../src/shared/kinds/todo.ts'
 
 const REL = 'house.docket.md' as RelPath
 const ID = REL as string as DocumentId
@@ -1482,7 +1482,7 @@ test('THE POINT OF THE PHASE: a docket puts work on the list', async t => {
   await service.docket.activate(id, car)
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
-  assert.deepEqual(items.map(withoutMarks), ['The car needs fixing'])
+  assert.deepEqual(items.map(one => one.text), ['The car needs fixing'])
   assert.deepEqual(items.flatMap(one => one.tags), ['The house'], 'tagged with its docket')
   await settled(service)
 })
@@ -1534,7 +1534,7 @@ test('and a step still waiting on another does not come due', async t => {
   await service.docket.addStep(id, car, 'then', 'have the car fixed')
   await service.docket.activate(id, car)
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['The car needs fixing'])
   void first
 })
@@ -1551,7 +1551,7 @@ test('THE CHAIN FIRES: finishing one brings the next', async t => {
   await service.agenda.reconcile()
   await service.docket.completeStep(id, car, shop, true)
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['The car needs fixing', 'have the car fixed'])
 })
 
@@ -1596,7 +1596,7 @@ test('COMPLETION FLOWS BACK: finishing the TASK advances the chain', async t => 
   // Resolving an item now asks the reconciler to look, so *tick it and the next
   // step appears* is one gesture — which is what the chain firing is supposed to
   // feel like, and what the explicit pass here used to be standing in for.
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['The car needs fixing', 'have the car fixed'])
   await settled(service)
 })
@@ -1719,7 +1719,7 @@ test('THE LONG ABSENCE, calendar-driven: a year away yields ONE birthday', async
   const matter = (await service.docket.matters(id))[0]
   assert.equal(matter?.when.start, '2026-03-14', 'the next one, not the thirtieth one')
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['buy a present'])
   void first
 })
@@ -1737,7 +1737,7 @@ test('THE LONG ABSENCE, completion-driven: a year away yields ONE, not none', as
   await on('2026-03-10')
   await service.agenda.reconcile()
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['Sharpen the mower blade'], 'still owed, and said so')
   const matter = (await service.docket.matters(id))[0]
   assert.equal(matter?.when.start, '2020-04-01',
@@ -1764,7 +1764,7 @@ test('AN OUTSTANDING INSTANCE IS OVERDUE, not reissued (H7a)', async t => {
   // undone item forward of its own accord, so *shown as overdue* is already
   // what happens — the rule above is only about not putting a second one
   // beside it. That is the whole of H7a, and the count is where it would fail.
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['write it'])
 })
 
@@ -1837,7 +1837,7 @@ test('IDEMPOTENCE OVER THE WHOLE PASS: thirty runs leave one answer', async t =>
   await on('2026-03-03')
   for (let run = 0; run < 30; run += 1) await service.agenda.reconcile()
   const list = await service.todo.list()
-  const texts = (await service.todo.items(list, service.today)).map(withoutMarks).sort()
+  const texts = (await service.todo.items(list, service.today)).map(one => one.text).sort()
   assert.deepEqual(texts, ['Fix the skylight', 'write it'])
   await settled(service) // and the thirty-first changes nothing
 })
@@ -2019,7 +2019,7 @@ test('THE BUG: activating a matter puts its first step on the list NOW', async t
 
   await service.docket.activate(id, kia)
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text),
     ['Kia repairs'], 'without anybody asking for a pass')
   assert.notEqual((await service.docket.matters(id))[0]?.steps[0]?.made, null)
 })
@@ -2050,7 +2050,7 @@ test('and the pass does not summon itself for every step it generates', async t 
     await service.docket.activate(id, made)
   }
   const list = await service.todo.list()
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks).sort(),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text).sort(),
     ['One', 'Three', 'Two'], 'one each, and none twice')
   await settled(service)
 })
@@ -2077,7 +2077,7 @@ test('THE EVENING BUG: a step done after 4pm unblocks the next one TODAY', async
   const first = (await service.docket.matters(id))[0]?.steps[0]
   await service.agenda.todoSetStatus(list, first?.made as string, 'done')
 
-  assert.deepEqual((await service.todo.items(list, service.today)).map(withoutMarks).sort(),
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text).sort(),
     ['Kia repairs', 'repair group 1 items'],
     'the next step is here now, not at midnight')
 })
@@ -2112,12 +2112,14 @@ test('A GENERATED ITEM IS TAGGED WITH ITS MATTER, rather than renamed by it', as
 
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
-  assert.deepEqual(items.map(one => one.text).sort(), [
-    // **The docket always; the matter only where it adds something.** The seeded
-    // step's text IS the matter's name (D76), so tagging it with that says one
-    // thing twice — a chip repeating the sentence beside it reads as a fault.
-    "Kia repairs #'The house' DUE 2026-03-10",
-    "find a general mechanic #'Kia repairs' #'The house' DUE 2026-03-10",
+  // **The text is the sentence** (D85); the tags and the date are fields.
+  assert.deepEqual(items.map(one => one.text).sort(), ['Kia repairs', 'find a general mechanic'])
+  // **The docket always; the matter only where it adds something.** The seeded
+  // step's text IS the matter's name (D76), so tagging it with that says one
+  // thing twice — a chip repeating the sentence beside it reads as a fault.
+  assert.deepEqual(items.map(one => [...one.tags].sort()).sort(), [
+    ['Kia repairs', 'The house'],
+    ['The house'],
   ])
   // And they are real tags, not text that looks like one.
   assert.deepEqual([...new Set(items.flatMap(one => one.tags))].sort(),
@@ -2134,7 +2136,7 @@ test("and a name with an apostrophe is tagged too — Ada's birthday", async t =
   await service.docket.activate(id, day)
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
-  assert.deepEqual(items.map(withoutMarks), ["Ada's birthday"])
+  assert.deepEqual(items.map(one => one.text), ["Ada's birthday"])
   assert.deepEqual(items.flatMap(one => one.tags), ['The house'],
     'the docket, the matter being what the step already says')
 })
@@ -2248,7 +2250,7 @@ test('A GENERATED TASK CARRIES ITS DUE DATE, which the schedule already knew', a
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
   assert.equal(items[0]?.due, '2026-03-10', 'the day the schedule says it should happen')
-  assert.deepEqual(items.map(withoutMarks), ['Change the water filter'])
+  assert.deepEqual(items.map(one => one.text), ['Change the water filter'])
 })
 
 test('and a RUN-UP step is due on its own day, not on the occasion it leads to', async t => {
@@ -2260,7 +2262,7 @@ test('and a RUN-UP step is due on its own day, not on the occasion it leads to',
 
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
-  assert.deepEqual(items.map(one => [withoutMarks(one), one.due]),
+  assert.deepEqual(items.map(one => [one.text, one.due]),
     [['write the slides', '2026-03-10']], 'the day it is meant to be done, not the 17th')
 })
 
@@ -2290,7 +2292,7 @@ test("and a matter's own tag is dropped only when the STEP already says it", asy
   const list = await service.todo.list()
   const items = await service.todo.items(list, service.today)
   assert.deepEqual(
-    items.map(one => [withoutMarks(one), [...one.tags].sort()]).sort(),
+    items.map(one => [one.text, [...one.tags].sort()]).sort(),
     [
       ['Kia repairs', ['Burrow']],
       ['book the garage', ['Burrow', 'Kia repairs']],
@@ -2312,7 +2314,7 @@ test('and every generated task carries its DOCKET, which is the link back', asyn
   const list = await service.todo.list()
   assert.deepEqual(
     (await service.todo.items(list, service.today))
-      .map(one => [withoutMarks(one), one.tags.join('')]).sort(),
+      .map(one => [one.text, one.tags.join('')]).sort(),
     [['Service the boiler', 'The house'], ['The ACM talk', 'Work']],
   )
 })
@@ -2330,7 +2332,7 @@ test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
   const list = await service.todo.list()
   const item = (await service.todo.items(list, service.today))[0]
   assert.equal(item?.owner, 'Sam')
-  assert.equal(withoutMarks(item as never), 'Fix the dripping tap')
+  assert.equal(item.text, 'Fix the dripping tap')
 })
 
 test('and a matter with no owner generates a task with none, not an empty one', async t => {
@@ -2362,7 +2364,7 @@ test('THE POINT: putting a task down gives it a home and leaves its line alone',
   // counts as resolved — so its history is continuous and its id still resolves.
   const line = (await service.todo.items(list, service.today)).find(one => one.id === item)
   assert.equal(line?.status, 'backlog')
-  assert.equal(withoutMarks(line as never), 'repaint the shed')
+  assert.equal(line.text, 'repaint the shed')
 
   // And it is a matter on the miscellaneous docket, undated and not started.
   const matters = await service.docket.matters(BACKLOG_DOCKET)
@@ -2409,7 +2411,7 @@ test('and putting down twice does not make two of it', async t => {
 test('and somewhere else, when the answer is already known', async t => {
   // Naming a docket at the moment of backlogging stays available for when you
   // do know; it is never required.
-  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const { service, root } = await serviced(t, '2026-03-10T09:00:00Z')
   const house = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'repaint the shed')
@@ -2483,7 +2485,7 @@ test('UNDO CANNOT REACH A MOVE, because a transfer is not text you typed', async
 test('and the line says where it went, in the file and not only on screen', async t => {
   // R26: a day file reading `[>] fix the tap` without saying where it went is a
   // worse record than one that says.
-  const { service } = await serviced(t, '2026-03-10T09:00:00Z')
+  const { service, root } = await serviced(t, '2026-03-10T09:00:00Z')
   const house = await service.library.newDocument('The house', undefined, 'docket')
   const list = await service.todo.list()
   const item = await service.todo.add(list, 'repaint the shed')
@@ -2491,9 +2493,14 @@ test('and the line says where it went, in the file and not only on screen', asyn
 
   const line = (await service.todo.items(list, service.today)).find(one => one.id === item)
   assert.equal(line?.moved, 'The house')
-  assert.match(line?.text ?? '', /MOVED 'The house'/)
-  // And it comes off for a summary, being a fact about the task and not its words.
-  assert.equal(withoutMarks(line as never), 'repaint the shed')
+  // **In the FILE, not only on screen** (MH5) — a day file reading `[>] repaint
+  // the shed` without saying where it went is a worse record than one that says.
+  // As a field now rather than a marker in the sentence (D85), so the sentence is
+  // what somebody wrote and nothing else.
+  await service.flush()
+  const onDisk = await readFile(join(root, `${list as string}/2026/03/2026-03-10.md`), 'utf8')
+  assert.match(onDisk, /moved: 'The house'/)
+  assert.equal(line?.text, 'repaint the shed')
 })
 
 test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
@@ -2509,7 +2516,7 @@ test("AN OWNER TRAVELS to the work the matter makes, as a marker", async t => {
   const list = await service.todo.list()
   const item = (await service.todo.items(list, service.today))[0]
   assert.equal(item?.owner, 'Sam')
-  assert.equal(withoutMarks(item as never), 'Fix the dripping tap')
+  assert.equal(item.text, 'Fix the dripping tap')
 })
 
 test('and a matter with no owner generates a task with none, not an empty one', async t => {
@@ -2541,7 +2548,7 @@ test('THE POINT: putting a task down gives it a home and leaves its line alone',
   // counts as resolved — so its history is continuous and its id still resolves.
   const line = (await service.todo.items(list, service.today)).find(one => one.id === item)
   assert.equal(line?.status, 'backlog')
-  assert.equal(withoutMarks(line as never), 'repaint the shed')
+  assert.equal(line.text, 'repaint the shed')
 
   // And it is a matter on the miscellaneous docket, undated and not started.
   const matters = await service.docket.matters(BACKLOG_DOCKET)
@@ -2671,7 +2678,7 @@ test('and ACTIVATING is how it comes back to the list, freshly', async t => {
 
   await service.docket.activate(BACKLOG_DOCKET, made)
   const items = await service.todo.items(list, service.today)
-  assert.deepEqual(items.filter(one => isLive(one.status)).map(withoutMarks), ['repaint the shed'])
+  assert.deepEqual(items.filter(one => isLive(one.status)).map(one => one.text), ['repaint the shed'])
   // And the old line is still the record of what happened to it.
   assert.equal(items.find(one => one.id === item)?.moved, 'Backlog')
 })
@@ -2767,7 +2774,7 @@ test('PRIMARY IS UNTOUCHABLE: a typed task is nobody else\'s business', async t 
   // Suspending withdraws what the docket made — and only that.
   await service.docket.suspend(id, car)
   const left = await service.todo.items(list, service.today)
-  assert.deepEqual(left.map(withoutMarks), ['Ring the dentist'])
+  assert.deepEqual(left.map(one => one.text), ['Ring the dentist'])
   assert.equal(left[0]?.id, mine, 'the same item, not a rebuilt lookalike')
 })
 
@@ -2836,7 +2843,7 @@ test('A DOCKET WRITE TRIGGERS A PASS, with nobody remembering to ask', async t =
   const list = await service.todo.list()
   // Not after a reconcile() — after the verb.
   assert.deepEqual(
-    (await service.todo.items(list, service.today)).map(withoutMarks),
+    (await service.todo.items(list, service.today)).map(one => one.text),
     ['The car needs fixing'],
   )
 })

@@ -7,11 +7,37 @@
 // assisted `#` completion produces character-for-character what a typist would
 // have produced, because both go through `itemLine` below.
 //
-// **The markers stay in the line** (T16, D20). A tag is `#house` where you can
-// see it; a due date is `DUE 2026-09-14` where you can see it; and the item's
-// identity is an HTML comment, invisible in any markdown renderer and present
-// in the bytes. Nothing here is a rendering of structure held somewhere else,
-// which is what keeps the file a file and hand-editing a supported act.
+// **An item is a record, and the file holds it as fields** (D85), the way a
+// docket holds a matter:
+//
+//     - [/] Review Melissa's proposal
+//       tags: #career
+//       due: 2026-09-13
+//       owner: AV
+//       Discuss with AV -- a $50k total cost is a lot!
+//       <!--tephra:item t3o1x3g5 1789012387 1789256926-->
+//
+// **Identity in comments, data in fields, prose bare** — the docket's own
+// division, so the notebook has one dialect and not two. The checkbox stays a
+// marker rather than becoming a `status:` field, because it is status in
+// markdown's own vocabulary: the file reads as a checklist, and changing one by
+// hand is one character.
+//
+// Nothing is a rendering of structure held somewhere else — the structure is in
+// the file, which is the clause of T16 that D85 keeps.
+//
+// ## Two parsers, and only one of them has an inverse
+//
+// > **structure → string → structure is the identity.** string → structure →
+// > string is **not**, and is not attempted.
+//
+// `parseBlock` reads the file and `itemBlock` writes it, and those two round-trip
+// — that is what makes every verb a block replacement rather than a rewrite of
+// the file. `parseEntry` is the other one: `#tag`, `DUE fri`, `OWNER Sam` typed
+// into a field, or into a file by hand, read into a record. It is **a parser with
+// no serializer**, which is what those notations were always for (T16 as
+// amended), and it is also why a hand-written line needs no migration: reading a
+// file and writing it back converts it.
 //
 // The one thing that is NOT here is what any of it means to a person: which
 // statuses carry forward, what a due date does to the order, when an id is
@@ -20,7 +46,7 @@
 import { flattenLinks } from '../links.ts'
 import type { DateKey } from '../document-api.ts'
 import { addDays, nowSeconds, weekdayOf } from '../dates.ts'
-import { NAME_BODY, readName, readTag, spellName, tagMark } from '../tags.ts'
+import { NAME_BODY, readName, readTag, spellName, spellTag, tagMark } from '../tags.ts'
 
 /**
  * What an item is, in the order era 1 wrote them on paper (T4).
@@ -81,12 +107,14 @@ export interface TodoItem {
   readonly ctime: number | null
   readonly mtime: number | null
   /**
-   * The prose, markers and all.
+   * The sentence, and nothing else (D85).
    *
-   * **Not stripped**, because the markers are part of what the line says — the
-   * renderer draws `#house` as a chip over the text that is there rather than
-   * over a gap where text used to be. `tags` and `due` say what they mean and
-   * where they are; this says what is written.
+   * No tags, no `DUE`, no `OWNER` — those are the fields below, and this is what
+   * a person wrote. It was *the prose, markers and all* until the record became
+   * authoritative, which is what four span fields and a slice in every verb were
+   * paying for.
+   *
+   * Links are left in it, live, where they were written.
    */
   readonly text: string
   readonly tags: readonly string[]
@@ -95,6 +123,19 @@ export interface TodoItem {
   readonly owner: string | null
   /** Where it went, for a line that has been transferred to a docket (MH5). */
   readonly moved: string | null
+  /**
+   * What this is *for* — the context the step's name was written against.
+   *
+   * **Provenance, not vocabulary** (D85). *Find the right team* means nothing
+   * without the matter it belongs to, and it could be defeating a supervillain or
+   * building an outhouse. The docket's own name stays a tag, because that is a
+   * word you think in; the matter is structure, and structure in the tag space is
+   * what made the by-tag view draw thirteen items as eighteen rows.
+   *
+   * Explanatory text rather than a reference: whatever reads best of the docket's
+   * path — the matter, and the section when it adds something.
+   */
+  readonly for: string | null
   /**
    * Why it is blocked, and **only when it is blocked** (T4).
    *
@@ -124,21 +165,6 @@ export interface TodoItem {
    * is what makes scrubbing back show what you knew then.
    */
   readonly notes: readonly string[]
-  /**
-   * Where each tag sits **within `text`**, in the same order as `tags`.
-   *
-   * Text-relative rather than line-relative, and that is the difference between
-   * `untag` being a slice and being an arithmetic problem: a verb has the text
-   * and wants to cut a piece out of it. A caller that needs body offsets — a
-   * row drawing chips — adds `ScannedItem.textFrom`, which is the one place
-   * that conversion is written down.
-   */
-  readonly tagSpans: readonly TextSpan[]
-  /** Where `DUE <date>` sits in `text`, for `setDue` to replace or clear. */
-  readonly dueSpan: TextSpan | null
-  /** Where `OWNER <name>` sits, for the same reason. */
-  readonly ownerSpan: TextSpan | null
-  readonly movedSpan: TextSpan | null
 }
 
 /** One item, and where its line is in the body. */
@@ -175,58 +201,14 @@ const MARK = /\s*<!--tephra:item\s+([0-9a-z]+)(?:\s+(\d+))?(?:\s+(\d+))?\s*-->\s
 const TAG = tagMark()
 
 /**
- * An item as one short line: no tags, no due date, no link markup.
+ * The item as one line of plain text: the sentence, with links flattened.
  *
- * **The top of the ladder `plain.ts` describes**, and the one every summarising
- * surface had been building for itself. `plainLine` takes off what
- * the app wrote; `flattenLinks` takes off what a caller cannot draw; this takes
- * off what a caller has already said *somewhere else on the row*. The rail
- * beside the task list, the horizon, a menu label — each shows the date in its
- * own column and has no room for a chip, so each was stripping spans by hand,
- * and the horizon's first cut simply forgot the link half and rendered a Google
- * Docs URL across three lines.
- *
- * **Here, because the grammar is here** (T16). It is done with the item's own
- * `tagSpans` and `dueSpan` rather than by re-matching, so there is exactly one
- * definition of where a tag ends — and a caller that only has a string is asking
- * a different question and should compose `flattenLinks(plainLine(text))`.
- *
- * **Not for a surface somebody edits.** The task list draws chips over the
- * markers where they sit, and must: they are part of what the line says, and a
- * row that hid them would be lying about the text underneath the caret.
+ * For somewhere with no room and no styling — a menu item, a docket's step
+ * summary, a window title. The fields are not in it, which is the point: a
+ * summary carries what somebody wrote and not the facts hung off it.
  */
 export function shortLine(item: TodoItem): string {
-  return flattenLinks(withoutMarks(item))
-}
-
-/**
- * The words, with the tags and the due date cut out and the links left alone.
- *
- * **The rung between**, and it exists because the task list needs exactly this:
- * the row draws `#house` and `DUE 2026-09-14` as chips of its own, positioned,
- * so the text under them must not contain them — but links inside that text are
- * still drawn live, in the sentence, where they were written.
- *
- * By spans rather than by re-matching, which is the whole reason this is here
- * and not in a module that only has a string: `tagSpans` and `dueSpan` are where
- * the grammar already said what it found, and a second regex would be a second
- * opinion about it.
- */
-export function withoutMarks(item: TodoItem): string {
-  const spans = [
-    ...item.tagSpans,
-    ...(item.dueSpan === null ? [] : [item.dueSpan]),
-    // **The owner comes off with the rest**, being the same kind of thing: a
-    // fact about the task rather than part of what somebody wrote. That is the
-    // whole argument for it being a marker — text in the sentence could not be
-    // taken off for a summary, and every surface would carry it whether it had
-    // room or not.
-    ...(item.ownerSpan === null ? [] : [item.ownerSpan]),
-    ...(item.movedSpan === null ? [] : [item.movedSpan]),
-  ].sort((a, b) => b.from - a.from)
-  let text = item.text
-  for (const span of spans) text = text.slice(0, span.from) + text.slice(span.to)
-  return text.replace(/\s{2,}/g, ' ').trim()
+  return flattenLinks(item.text)
 }
 
 /**
@@ -352,116 +334,266 @@ function absoluteFor(spelling: string, today: DateKey): DateKey | null {
   const candidate = `${thisYear}-${pad(month)}-${pad(day)}` as DateKey
   return candidate >= today ? candidate : (`${thisYear + 1}-${pad(month)}-${pad(day)}` as DateKey)
 }
+/**
+ * An item with nothing said about it.
+ *
+ * **Here rather than in the document module**, which is where it used to be: it
+ * is the record's own zero, every parse starts from it, and a second copy would
+ * be the field somebody forgot to add to one of them.
+ */
+export const EMPTY: TodoItem = {
+  id: null,
+  status: 'todo',
+  ctime: null,
+  mtime: null,
+  text: '',
+  tags: [],
+  due: null,
+  owner: null,
+  moved: null,
+  for: null,
+  reason: null,
+  notes: [],
+}
 
-export function parseItem(line: string): TodoItem | null {
-  const m = ITEM.exec(line)
-  if (m === null) return null
-  const status = BY_GLYPH.get(m[2] as string)
-  if (status === undefined) return null // a bracket we do not know is not an item
-
-  let rest = m[3] as string
-  let id: string | null = null
-  let ctime: number | null = null
-  let mtime: number | null = null
-  const mark = MARK.exec(rest)
-  if (mark !== null) {
-    id = mark[1] as string
-    ctime = mark[2] === undefined ? null : Number(mark[2])
-    mtime = mark[3] === undefined ? null : Number(mark[3])
-    rest = rest.slice(0, mark.index)
-  }
-
-  let text = rest.replace(/\s+$/, '')
-  let reason: string | null = null
-  if (status === 'blocked') {
-    const n = NOTE.exec(text)
-    if (n !== null) {
-      reason = (n[1] as string).trim()
-      text = text.slice(0, n.index)
-    }
-  }
+/**
+ * A string somebody typed, read into a record — the **entry grammar** (D85).
+ *
+ * `call the surveyor #house OWNER Sam DUE 2026-09-14` becomes a record whose
+ * `text` is *call the surveyor* and whose fields hold the rest. This is the path
+ * the add row takes, and the path anything typing a task somewhere else will
+ * take — a quick capture with no access to the list's own surface, which is the
+ * case that matters more later rather than less.
+ *
+ * **It has no inverse, deliberately.** Nothing reproduces the string: the record
+ * is written as fields, and `string → structure → string` is not a round trip
+ * anybody needs. So this is free to be lenient — markers anywhere in the
+ * sentence, in any order, and whatever it does not recognise stays prose.
+ *
+ * A relative date is NOT resolved here (`resolveDue` is a write and needs to
+ * know what day it is); an unresolved `DUE FRIDAY` reads as no date and stays in
+ * the sentence, where the next write will resolve it.
+ */
+export function parseEntry(typed: string): TodoItem {
+  let text = typed.replace(/\s+$/, '')
 
   const tags: string[] = []
-  const tagSpans: TextSpan[] = []
+  const cuts: TextSpan[] = []
   TAG.lastIndex = 0
   let t: RegExpExecArray | null
   while ((t = TAG.exec(text)) !== null) {
     tags.push(readTag(t).trim())
-    tagSpans.push({ from: t.index, to: t.index + t[0].length })
+    cuts.push({ from: t.index, to: t.index + t[0].length })
   }
 
   const d = DUE.exec(text)
   const o = OWNER.exec(text)
   const v = MOVED.exec(text)
+  for (const found of [d, o, v]) {
+    if (found !== null) cuts.push({ from: found.index, to: found.index + found[0].length })
+  }
+
+  // **Cut back to front**, so an earlier marker's offsets are still true when a
+  // later one has already gone.
+  for (const cut of [...cuts].sort((a, b) => b.from - a.from)) {
+    text = text.slice(0, cut.from) + text.slice(cut.to)
+  }
+
   return {
-    id,
-    status,
-    ctime,
-    mtime,
-    text,
+    ...EMPTY,
+    text: text.replace(/\s{2,}/g, ' ').trim(),
     tags,
     due: d === null ? null : ((d[1] as string) as DateKey),
     owner: o === null ? null : readName(o).trim(),
     moved: v === null ? null : readName(v).trim(),
-    reason,
-    // **The line is a line.** Notes live under it and are gathered by
-    // `scanItems`, which is the only caller that can see them.
-    notes: [],
-    tagSpans,
-    dueSpan: d === null ? null : { from: d.index, to: d.index + d[0].length },
-    ownerSpan: o === null ? null : { from: o.index, to: o.index + o[0].length },
-    movedSpan: v === null ? null : { from: v.index, to: v.index + v[0].length },
   }
 }
 
 /**
- * The inverse: an item, written out as the line it came from.
+ * A name in a field's value, read through the one grammar.
  *
- * **`parseItem(itemLine(x))` must equal `x`**, and the tests say so. That is
- * what makes every verb a line replacement rather than a rewrite of the file,
- * and it is what a shared grammar is for.
+ * `owner: AV` and `owner: 'Mary Jane'` are the same two forms a marker has, so
+ * the same `NAME_BODY` reads them — anchored, because a field's value is the
+ * whole of what it says.
  */
-export function itemLine(item: TodoItem, bullet = '- '): string {
-  const parts = [`${bullet}[${GLYPHS[item.status]}]`]
-  const body = item.text.replace(/\s+$/, '')
-  if (body !== '') parts.push(body)
-  if (item.status === 'blocked' && item.reason !== null && item.reason.trim() !== '') {
-    parts.push(`— ${item.reason.trim()}`)
+const NAME_ONLY = new RegExp(`^${NAME_BODY}$`)
+
+const readValueName = (value: string): string => {
+  const found = NAME_ONLY.exec(value.trim())
+  return found === null ? '' : readName(found).trim()
+}
+
+/** Every field a block may carry, and how to read one. */
+const FIELDS: Readonly<Record<string, (value: string, into: Mutable) => boolean>> = {
+  tags: (value, into) => {
+    const found: string[] = []
+    TAG.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = TAG.exec(value)) !== null) found.push(readTag(m).trim())
+    if (found.length === 0) return false
+    into.tags = found
+    return true
+  },
+  due: (value, into) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return false
+    into.due = value.trim() as DateKey
+    return true
+  },
+  owner: (value, into) => {
+    const said = readValueName(value)
+    if (said === '') return false
+    into.owner = said
+    return true
+  },
+  moved: (value, into) => {
+    const said = readValueName(value)
+    if (said === '') return false
+    into.moved = said
+    return true
+  },
+  for: (value, into) => {
+    if (value.trim() === '') return false
+    into.for = value.trim()
+    return true
+  },
+  reason: (value, into) => {
+    if (value.trim() === '') return false
+    into.reason = value.trim()
+    return true
+  },
+}
+
+/** A field line, or null if this line is prose. */
+const FIELD = /^([a-z]+):\s*(.*)$/
+
+/** What a parse builds up before it is frozen into a `TodoItem`. */
+type Mutable = { -readonly [K in keyof TodoItem]: TodoItem[K] }
+
+/**
+ * A block from the file — the checkbox line and everything indented under it.
+ *
+ * **Lenient in exactly one direction** (D85): the checkbox line's remainder is
+ * read by the entry grammar, so an item written the old way — markers inline —
+ * parses and comes back as fields on the next write. That is the whole of the
+ * migration.
+ *
+ * **A field line is one whose key is known AND whose value parses.** Anything
+ * else is prose, in order, so a note reading *due: whenever we get round to it*
+ * stays a note rather than being absorbed and lost.
+ */
+export function parseBlock(lines: readonly string[]): TodoItem | null {
+  const first = lines[0]
+  if (first === undefined) return null
+  const m = ITEM.exec(first)
+  if (m === null) return null
+  const status = BY_GLYPH.get(m[2] as string)
+  if (status === undefined) return null // a bracket we do not know is not an item
+
+  let rest = m[3] as string
+  const built: Mutable = { ...EMPTY, status }
+  const mark = MARK.exec(rest)
+  if (mark !== null) {
+    built.id = mark[1] as string
+    built.ctime = mark[2] === undefined ? null : Number(mark[2])
+    built.mtime = mark[3] === undefined ? null : Number(mark[3])
+    rest = rest.slice(0, mark.index)
+  }
+
+  // The sentence, plus whatever markers a hand-written line put in it.
+  const typed = parseEntry(rest)
+  built.text = typed.text
+  built.tags = typed.tags
+  built.due = typed.due
+  built.owner = typed.owner
+  built.moved = typed.moved
+
+  // **The blocked reason, only on a blocked line and only from the old form.**
+  // `reason:` is a field now; this is the trailing dash clause a hand-written
+  // line may still carry, and the edge it always had — *call the surveyor — the
+  // one from Tuesday* loses its clause if you block it — is why it became one.
+  if (status === 'blocked') {
+    const n = NOTE.exec(built.text)
+    if (n !== null) {
+      built.reason = (n[1] as string).trim()
+      built.text = built.text.slice(0, n.index).replace(/\s+$/, '')
+    }
+  }
+
+  const notes: string[] = []
+  for (const line of lines.slice(1)) {
+    const said = line.trim()
+    if (said === '') continue
+    if (MARK.test(said)) {
+      const own = MARK.exec(said)
+      if (own !== null) {
+        built.id = own[1] as string
+        built.ctime = own[2] === undefined ? null : Number(own[2])
+        built.mtime = own[3] === undefined ? null : Number(own[3])
+        continue
+      }
+    }
+    const field = FIELD.exec(said)
+    const read = field === null ? undefined : FIELDS[field[1] as string]
+    if (field !== null && read !== undefined && read(field[2] as string, built)) continue
+    notes.push(said)
+  }
+  built.notes = notes
+  return built
+}
+
+/**
+ * The inverse of `parseBlock`: the record, written out as it goes into the file.
+ *
+ * > **`parseBlock(itemBlock(x).split('\n'))` must equal `x`**, and the tests say
+ * > so. That is what makes every verb a block replacement rather than a rewrite
+ * > of the file, and it is the only round trip this grammar promises (D85).
+ *
+ * **Field order is fixed** so that writing an unchanged record is a no-op in the
+ * bytes — which is what keeps the history readable: a due date changing touches
+ * one line rather than rewriting the item.
+ */
+export function itemBlock(item: TodoItem, bullet = '- '): string {
+  const lines = [`${bullet}[${GLYPHS[item.status]}]${item.text === '' ? '' : ` ${item.text}`}`]
+  const field = (key: string, value: string | null): void => {
+    if (value !== null && value !== '') lines.push(`${NOTE_INDENT}${key}: ${value}`)
+  }
+  field('tags', item.tags.map(name => spellTag(name) ?? `#'${name}'`).join(' '))
+  field('for', item.for)
+  field('due', item.due)
+  field('owner', item.owner === null ? null : (spellName(item.owner) ?? item.owner))
+  field('moved', item.moved === null ? null : (spellName(item.moved) ?? item.moved))
+  // **Only while it is blocked.** A reason on a task nobody is waiting for is a
+  // fact about the past that the status no longer supports (T4).
+  field('reason', item.status === 'blocked' ? item.reason : null)
+  // A note that has been emptied is a note that was deleted.
+  for (const note of item.notes) {
+    if (note.trim() !== '') lines.push(`${NOTE_INDENT}${note.trim()}`)
   }
   if (item.id !== null) {
     const stamps = [item.ctime, item.mtime].filter(n => n !== null).map(String)
-    parts.push(`<!--tephra:item ${[item.id, ...stamps].join(' ')}-->`)
-  }
-  return parts.join(' ')
-}
-
-/** Every item in a body, with the lines they sit on. Anything else is skipped. */
-/**
- * How far a note is indented under its item.
- *
- * Two spaces, which is the content column of a `- ` list — so a continuation
- * line is markdown's own continuation and every renderer shows it as part of
- * the item above.
- */
-export const NOTE_INDENT = '  '
-
-/**
- * An item and everything written under it, as it goes into the file.
- *
- * `itemLine` is still the LINE, because every verb rewrites exactly that and
- * nothing else — which is what leaves the notes below it untouched.
- */
-export function itemBlock(item: TodoItem, bullet = '- '): string {
-  const lines = [itemLine(item, bullet)]
-  for (const note of item.notes) {
-    // A note that has been emptied is a note that was deleted.
-    if (note.trim() !== '') lines.push(`${NOTE_INDENT}${note.trim()}`)
+    lines.push(`${NOTE_INDENT}<!--tephra:item ${[item.id, ...stamps].join(' ')}-->`)
   }
   return lines.join('\n')
 }
 
-/** An indented line under an item, and not itself an item. */
-const isNote = (line: string): boolean => /^\s+\S/.test(line) && parseItem(line.trim()) === null
+/**
+ * How far a field or a note is indented under its item.
+ *
+ * Two spaces, which is the content column of a `- ` list — so every line of the
+ * block is markdown's own continuation and any renderer shows it as part of the
+ * item above.
+ */
+export const NOTE_INDENT = '  '
+
+/**
+ * An indented line belonging to the item above — a field, a note, or its mark.
+ *
+ * **Anything indented, which is simpler than it was.** The old rule had to ask
+ * *and is it not itself an item?*, because an indented line could be a nested
+ * checkbox; the answer is the same and the question is now asked by `ITEM`
+ * matching the block's first line only.
+ */
+const isUnder = (line: string): boolean => /^\s+\S/.test(line)
 
 export function scanItems(body: string): readonly ScannedItem[] {
   const out: ScannedItem[] = []
@@ -471,33 +603,41 @@ export function scanItems(body: string): readonly ScannedItem[] {
     const line = lines[i] as string
     const from = at
     at += line.length + 1 // the split ate the newline; the next line starts past it
-    const item = parseItem(line)
-    if (item === null) continue
+    if (ITEM.exec(line) === null) continue
 
-    // **The notes are the indented lines that follow, contiguously.** A blank
-    // line ends them, which keeps "what belongs to this item" answerable by
-    // looking rather than by counting — and keeps a paragraph further down the
-    // file from being adopted by an item it has nothing to do with.
-    const notes: string[] = []
+    // **The block is the indented lines that follow, contiguously.** A blank line
+    // ends it, which keeps "what belongs to this item" answerable by looking
+    // rather than by counting — and keeps a paragraph further down the file from
+    // being adopted by an item it has nothing to do with.
+    const under: string[] = []
     let blockTo = from + line.length
     let end = Math.min(from + line.length + 1, body.length)
     let j = i + 1
-    while (j < lines.length && isNote(lines[j] as string)) {
-      notes.push((lines[j] as string).trim())
+    while (j < lines.length && isUnder(lines[j] as string)) {
+      under.push(lines[j] as string)
       blockTo = end + (lines[j] as string).length
       end = Math.min(blockTo + 1, body.length)
       j++
     }
 
+    const item = parseBlock([line, ...under])
+    if (item === null) {
+      // A glyph this grammar does not know. Not an item, and its indented lines
+      // are not anybody's.
+      at = from + line.length + 1
+      continue
+    }
+
     out.push({
-      item: notes.length === 0 ? item : { ...item, notes },
+      item,
       from,
       textFrom: from + line.indexOf(item.text, line.indexOf(']') + 1),
-      // **The LINE**, so a verb rewriting it leaves the notes below alone.
+      // **The first line**, for a caller that wants to know where the checkbox is.
       to: from + line.length,
+      // **The whole block**, which is what every verb rewrites: the fields are
+      // part of the item now, so changing one is not a line replacement (D85).
       blockTo,
-      // **The line AND its notes**, because removing an item removes what was
-      // written about it.
+      /** The block including its final newline — what removing it means. */
       end,
     })
     // Skip them: an indented line is not an item and must not be scanned as one.

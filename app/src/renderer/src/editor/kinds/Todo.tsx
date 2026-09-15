@@ -29,7 +29,7 @@ import { Horizon } from '../../frame/Horizon'
 // The two rungs this surface needs, from the module that owns the grammar: the
 // row draws its own chips, so it wants the text without them and with the links
 // still live; the rail has no room for either and wants the short line.
-import { shortLine, withoutMarks as prose } from '../../../../shared/kinds/todo.ts'
+import { shortLine } from '../../../../shared/kinds/todo.ts'
 import { BACKLOG_DOCKET, ONLY_SEGMENT } from '../../../../shared/document-api.ts'
 import {
   groupByTag, isLive, resolveDue,
@@ -1320,7 +1320,7 @@ function Row({
         <button
           type="button"
           className="todo-glyph"
-          aria-label={`${TITLE[item.status]}: ${prose(item)}`}
+          aria-label={`${TITLE[item.status]}: ${item.text}`}
           title={`${TITLE[item.status]} \u2014 click for ${TITLE[advance(item.status)].toLowerCase()}`}
           onClick={e => {
             e.stopPropagation() // the row edits; the box changes the status
@@ -1349,13 +1349,13 @@ function Row({
         />
       ) : (
         <span className="todo-text">
-          {prose(item) === '' ? (
+          {item.text === '' ? (
             // Something to see and something to aim at. An item with no words
             // yet is a real item — it has an id, a ctime and a place in the
             // order — and saying so is better than a blank the eye slides off.
             <span className="todo-unwritten">Nothing written yet</span>
           ) : (
-            <Prose text={prose(item)} />
+            <Prose text={item.text} />
           )}
           {item.reason !== null && <span className="todo-reason">{item.reason}</span>}
         </span>
@@ -1373,8 +1373,8 @@ function Row({
 
       {/* **Who has it, beside what it is about.** Drawn rather than left in the
           sentence, which is the point of it being a marker: it reads as a fact
-          about the task and comes off cleanly wherever there is no room for it
-          (`withoutMarks`). Distinct from a tag, because a person is not a
+          about the task and is a field rather than words in the sentence (D85).
+          Distinct from a tag, because a person is not a
           subject — T5 scopes those to things that turn over weekly. */}
       {/* **Where it went**, on a line this list no longer owns (MH5). The record
           of what happened, the way a finished row is — and the only thing left

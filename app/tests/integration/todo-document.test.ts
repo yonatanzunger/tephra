@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { Corpus } from '../../src/main/x/documents/corpus.ts'
 import { TodoDocument } from '../../src/main/x/documents/kinds/todo.ts'
-import { parseItem } from '../../src/shared/kinds/todo.ts'
+import { parseBlock } from '../../src/shared/kinds/todo.ts'
 import { ONLY_SEGMENT } from '../../src/shared/document-api.ts'
 import type { DateKey, DocumentId, SegmentKey } from '../../src/shared/document-api.ts'
 
@@ -71,7 +71,9 @@ test('adopting gives a hand-written line an identity, and resolves its date', as
   // **`DUE FRIDAY` in a file would mean something different every week** (T16).
   assert.equal(items[0]?.due, '2026-09-11', 'the Friday after Monday the 7th')
 
-  assert.match(await fileOn(MON), /DUE 2026-09-11 <!--tephra:item [0-9a-z]{8} \d+ \d+-->/)
+  // **And it is written as a FIELD** (D85): resolving a relative date makes a
+  // date, and reading the sentence again is what lifts it out of the prose.
+  assert.match(await fileOn(MON), /- \[ \] file the return\n {2}due: 2026-09-11\n {2}<!--tephra:item [0-9a-z]{8} \d+ \d+-->/)
   assert.equal(await doc.adopt(MON), 0, 'and adopting again changes nothing')
 })
 
@@ -225,11 +227,17 @@ test('the file on disk is the file it appears to be', async t => {
 
   assert.match(file, /^---\n/, 'frontmatter, as every document in this corpus has')
   assert.match(file, /kind: todo/)
-  const line = file.split('\n').find(l => l.startsWith('- ')) ?? ''
   // Legible, hand-editable, and a markdown task list to anything that reads one
-  // (T15, R26). The identity is a comment, which no renderer shows.
-  assert.match(line, /^- \[ \] call the surveyor #house DUE 2026-09-14 <!--tephra:item /)
-  assert.deepEqual(parseItem(line)?.tags, ['house'])
+  // (T15, R26). **The fields are lines of their own** (D85) and the identity is
+  // a comment, which no renderer shows.
+  const lines = file.split('\n')
+  const at = lines.findIndex(l => l.startsWith('- '))
+  const block = lines.slice(at, at + 4)
+  assert.equal(block[0], '- [ ] call the surveyor')
+  assert.equal(block[1], '  tags: #house')
+  assert.equal(block[2], '  due: 2026-09-14')
+  assert.match(block[3] as string, /^ {2}<!--tephra:item /)
+  assert.deepEqual(parseBlock(block)?.tags, ['house'])
 })
 
 test('every write is an ordinary edit, so undo puts it back', async t => {
