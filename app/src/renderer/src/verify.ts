@@ -20,6 +20,42 @@ export async function runVerify(request: string): Promise<void> {
   const settle = (ms = 200): Promise<void> => new Promise(r => setTimeout(r, ms))
 
   /**
+   * Where each mark sits relative to the words it belongs to, in pixels of
+   * baseline — 0 meaning *on them*.
+   *
+   * **Reported from use** (2026-09-15): *the baseline of the owner, due date and
+   * "do today" button are slightly off. Just enough off to drive me nuts.* The
+   * geometry checks before this measured each box's MIDDLE, and centring boxes is
+   * not aligning type: two faces at two sizes centred on one line sit a couple of
+   * pixels apart, which is the amount that reads as sloppy.
+   *
+   * **A zero-height inline box sits ON the baseline**, so its `top` is the
+   * baseline's y. It is appended, measured and removed, so nothing it measures
+   * changes by being measured — and each mark is compared to **its own row**,
+   * because the mark you want to check may be on a row the first one is not.
+   */
+  const baselineDeltas = (marks: readonly string[]): Record<string, number | null> => {
+    const at = (el: Element): number => {
+      const probe = document.createElement('span')
+      probe.style.cssText = 'font-size:0;line-height:0;vertical-align:baseline;display:inline'
+      probe.textContent = '\u200b'
+      el.appendChild(probe)
+      const y = probe.getBoundingClientRect().top
+      probe.remove()
+      return y
+    }
+    const out: Record<string, number | null> = {}
+    for (const mark of marks) {
+      const found = document.querySelector(`.todo-row ${mark}`)
+      const words = found?.closest('.todo-row')?.querySelector('.todo-text')
+      out[mark.replace(/^\./, '')] = found == null || words == null
+        ? null
+        : Math.round(at(found) - at(words))
+    }
+    return out
+  }
+
+  /**
    * Photograph the app *now*, because now is the moment this scene means.
    *
    * **The picture used to be taken after the scene ended**, which looked right
@@ -1240,6 +1276,12 @@ export async function runVerify(request: string): Promise<void> {
       say('tags', seen('.todo-tag'))
       say('dues', seen('.todo-due'))
       say('owners', seen('.todo-owner'))
+      // **The row this scene builds has every mark on it**, which the geometry
+      // scene's fixture does not — so this is where the owner's baseline is
+      // actually asserted (reported from use, 2026-09-15).
+      say('baselines', baselineDeltas([
+        '.todo-tag', '.todo-due', '.todo-owner', '.todo-pick', '.todo-for',
+      ]))
 
       // A tag comes off at its chip — the row's text no longer holds it, so
       // deleting it from the sentence is not a thing that can be done.
@@ -1539,6 +1581,10 @@ export async function runVerify(request: string): Promise<void> {
           return b === undefined ? null : Math.round(b.top + b.height / 2)
         }
         say('middles', { text: mid('.todo-text'), tag: mid('.todo-tag'), due: mid('.todo-due') })
+        // **Deltas, each mark against its own row's words** — 0 is on them.
+        say('baselines', baselineDeltas([
+          '.todo-tag', '.todo-due', '.todo-owner', '.todo-pick', '.todo-for',
+        ]))
         const box = (sel: string) => {
           const b = row?.querySelector(sel)?.getBoundingClientRect()
           const css = row?.querySelector(sel) === null || row?.querySelector(sel) === undefined

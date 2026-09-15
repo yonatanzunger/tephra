@@ -1629,6 +1629,18 @@ console.log('\n— an item\'s fields —')
       !/^ {2}due:/m.test(file) && /^ {2}owner: Sam$/m.test(file),
     JSON.stringify(file.split('\n').slice(5, 10)),
   )
+  check(
+    // **Reported from use** (2026-09-15) and asserted here rather than in the
+    // geometry scene, because this is the row that HAS an owner: *the baseline
+    // of the owner, due date and "do today" button are slightly off. Just
+    // enough off to drive me nuts.* Every mark, against its own row's words.
+    'AND EVERY MARK ON A FULL ROW SHARES THE WORDS\' BASELINE, the owner included',
+    typeof F.baselines === 'object' && F.baselines !== null &&
+      F.baselines['todo-owner'] === 0 && F.baselines['todo-due'] === 0 &&
+      F.baselines['todo-tag'] === 0 && F.baselines['todo-for'] === 0 &&
+      F.baselines['todo-pick'] === 0,
+    JSON.stringify(F.baselines),
+  )
   check('nothing errored on the way', F.appError === 'none', String(F.appError))
 }
 
@@ -1921,15 +1933,26 @@ console.log('\n— pills —')
     `tag ${tag.size}px \u00b7 due ${(P.todoDue ?? {}).size}px`,
   )
   check(
-    // **Reported from use**: they sat at the top of a 1.72em line box, riding
-    // visibly above the words they belong to. Centred on the FIRST line by the
-    // same arithmetic the status mark uses — which keeps them on line one when
-    // an item wraps to three, the thing `flex-start` was protecting.
-    'a tag and a due date sit on the middle of the line, not the top of it',
-    typeof P.middles === 'object' && P.middles !== null &&
-      Math.abs(P.middles.tag - P.middles.text) <= 2 &&
-      Math.abs(P.middles.due - P.middles.text) <= 2,
-    JSON.stringify(P.middles),
+    // **Reported from use, twice.** First they sat at the top of a 1.72em line
+    // box, riding visibly above the words — fixed by centring each small box in
+    // the line. Then: *the baseline of the owner, due date and "do today" button
+    // are slightly off. Just enough off to drive me nuts* — because **centring
+    // boxes is not aligning type**. Two faces at two sizes centred on one line
+    // do not share a baseline: an 11.6px sans pill centred in a 20px serif line
+    // sits about two pixels high, which is exactly the amount that reads as
+    // sloppy rather than as deliberate.
+    //
+    // So the measure is the baseline itself, for every mark in the group and not
+    // only the two that were wrong first. `align-self: baseline` is what does
+    // it, and it took a computed nudge out of the stylesheet — the first fix's
+    // arithmetic was answering the wrong question precisely.
+    'EVERY MARK SITS ON THE WORDS\' OWN BASELINE, not centred in the line box',
+    typeof P.baselines === 'object' && P.baselines !== null &&
+      Object.values(P.baselines).every(d => d === null || Math.abs(d) <= 1) &&
+      // **And it is not passing because it measured nothing.** Every delta null
+      // would satisfy the line above, which is the shape a vacuous check takes.
+      Object.values(P.baselines).some(d => d !== null),
+    JSON.stringify(P.baselines),
   )
   check(
     // Quiet is not the same as unreadable: muted grey on a grey tint was two

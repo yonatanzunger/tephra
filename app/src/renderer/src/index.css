@@ -499,11 +499,6 @@ body {
   border: 1px solid rgb(var(--text-heading)); border-radius: 4px; padding: .3rem .9rem;
 }
 
-@property --note-lift {
-  syntax: '<length>';
-  inherits: true;
-  initial-value: 0px;
-}
 
 /* ── pills ──────────────────────────────────────────────
    **A pill says one of two things, and it should say which.** A LABEL is a
@@ -936,19 +931,22 @@ body {
    box with a line-height and padding, and a bare span is its font metrics, so
    the due date is given the pill's box to sit in. Two nudges for two heights
    would have been two magic numbers waiting to disagree. */
-/* **Registered, so it is computed ONCE and on the ROW.** An unregistered custom
-   property is substituted as text and its `em` resolves wherever it lands — and
-   the due date sets its own font-size, so the identical expression came out at
-   7.34px on the tags and 4.26px on the date, which is exactly the 3px of
-   riding-high that was left. `<length>` makes it compute where it is written,
-   in the row's em, and inherit as a number of pixels. */
-.todo-row, .todo-adding {
-  --note-lift: calc((1em * var(--todo-leading, 1.5) - var(--row-note) * 1.7) / 2);
-}
-/* **Everything in the right-hand group shares one nudge.** The row is
-   `flex-start`, so each of these sits where its own box puts it — two of them
-   were added without the lift and the group came out visibly ragged. */
-.todo-tags, .todo-due, .todo-owner, .todo-pick { margin-top: var(--note-lift); }
+/* **On the words' BASELINE, not centred in the line box** — reported from use
+   (2026-09-15): *the baseline of the owner, due date and "do today" button are
+   slightly off. Just enough off to drive me nuts.*
+
+   They were centred: `margin-top` pushed each small box to the middle of the
+   tall line, which is right for a box and wrong for type. Two faces at two sizes
+   centred on one line do NOT share a baseline — an 11.6px sans pill centred in a
+   20px serif line sits with its baseline a couple of pixels high, which is
+   exactly the amount that reads as sloppy rather than as different.
+   `align-self: baseline` asks the browser for the thing the eye is looking for,
+   and takes a magic number out of the stylesheet.
+   **The text is in the group too**, deliberately: baseline alignment uses each
+   item's FIRST baseline, so the marks still sit on line one when the sentence
+   wraps to three — which is the property `flex-start` was protecting. */
+.todo-text, .todo-tags, .todo-due, .todo-owner, .todo-owner-field, .todo-moved,
+.todo-pick { align-self: baseline; }
 .todo-tags { display: flex; flex-wrap: wrap; gap: .25rem; flex: 0 0 auto; }
 /* Shape and colour come from `.pill.label`; a tag adds nothing but its place
    in the row. It was 10.5px inside 20px prose, which is half the size of the
@@ -2617,7 +2615,6 @@ body {
 .todo-owner-field {
   flex: 0 0 auto; width: 8rem;
   font-family: var(--font-ui); font-size: var(--row-note);
-  margin-top: var(--note-lift);
   background: transparent; color: rgb(var(--text));
   border: 1px solid rgb(var(--text-muted) / .5); border-radius: 3px;
   padding: 0 .25em;
