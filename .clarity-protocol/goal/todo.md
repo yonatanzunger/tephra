@@ -182,6 +182,8 @@ Three things above go past the evidence and should be treated as proposals: **sp
 
 **T16. One notation for tags and dates, typed or assisted.** `#tag` / `#'multi word tag'` and `DUE <date>`, written inline and left in the line. Relative dates resolve to absolute on recognition. The assisted entry path produces exactly the text the typed path would, so there is one parser and one truth; the file is never a rendering of structure held elsewhere.
 
+> **Amended 2026-09-15 by D85.** *Left in the line* is superseded: an item is a record and the day file holds it as **field lines**, the way a docket holds a matter. The notation survives as the **quick-entry grammar** — a parser with no serializer — which is what it was for. *One parser* weakens to two, the file's and the adapter's, and only the file's has an inverse. **The last clause stands unchanged**, and is the reason the structure went into the file rather than beside it: nothing is held elsewhere.
+
 **T14. A backlog that is not a graveyard.** "Someday, I suppose" is the graveyard with a comfortable place to live, and the project's own problem statement credits era 1 and 2's *lack* of one for keeping them honest. It goes in anyway, because the need is real — but it is not finished until something resurfaces what is in it.
 
 > **Staged (Q3a).** The status and a reachable, counted drawer ship with everything else; the resurfacing mechanism waits for a later milestone and for evidence from use. The deferral is safe because every input such a mechanism could want is already recorded by copy-forward. **Until it lands, this requirement is knowingly unmet** — worth stating plainly, since a backlog nobody rereads is the failure the whole project is named against.

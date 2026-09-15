@@ -4252,3 +4252,89 @@ docket-side type and a native typed item is not one.
 **An agenda holds what is coming as readily as what to do** — *the boiler service
 is due*, *Ada's birthday*, *ring the surveyor* — which is exactly the
 standing-plus-asked union, and is why it survived where the others did not.
+
+---
+
+## D85: A task item is a record, and the file holds it as fields
+
+**Date:** 2026-09-15
+**Status:** decided; **not yet built** — the plan is MT8 in `solution/todo-roadmap.md`
+**Amends:** **T16**, whose *left in the line* clause this supersedes; D81 (who has it
+is a marker — the principle survives, the storage changes); D56 (an item's
+identity). **Extends:** D31 (parse leniently, serialize precisely), D80 (the
+schedule is edited structurally — this is the same move one kind over).
+**Source:** asked from use — the by-tag view repeating docket-generated items —
+and then asked properly: *why is the line the representation at all?*
+
+**Decision.** An item is a **record**. The day file holds it as a markdown list
+item with **field lines**, exactly as a docket holds a matter:
+
+```md
+- [/] Review Melissa's proposal
+  tags: #career
+  for: Initiate Remodel
+  due: 2026-09-13
+  owner: AV
+  Discuss with AV -- a $50k total cost is a lot!
+  <!--tephra:item t3o1x3g5 1789012387 1789256926-->
+```
+
+> **Identity in comments, data in fields, prose bare** — the docket's own
+> division (`spellMatter`), so there is one dialect in the notebook and not two.
+
+**The checkbox stays a marker, not a field.** `- [ ] / [/] / [?] / [x] / [-] /
+[>]` is status in markdown's own vocabulary; it keeps the file scannable as a
+list, and it is one character to change by hand. Everything else becomes a field.
+
+**The round-trip law, and it points one way.**
+
+> **structure → string → structure is the identity.** string → structure →
+> string is **not**, and is not attempted: the entry grammar is a **parser with
+> no serializer**.
+
+`#tag`, `DUE fri`, `OWNER Sam` were always meant as *ways to type an item
+quickly*, not as its representation — so they survive as input only, and nothing
+can be tempted to reproduce them. The file's own format keeps both directions
+stable, by fixed field order and by preserving unknown lines verbatim in `extra`,
+which is how D31's byte-for-byte rule is already implemented for matters.
+
+**Why the file, and not merely the model and the editor.** The argument for
+keeping one line per item was that a day file reads as a plain markdown
+checklist. It still would — but **the surface is where essentially every edit
+happens**, and hand-editing a day file is a maintenance operation rather than a
+normal path. Given that, the trade is between a shape that is pleasant to read
+once and a shape that is cheap to be correct about every day, and the docket has
+already run the experiment: a matter is structured in the file, and editing one
+in a text editor is unremarkable.
+
+**Two things fall out that were not the reason.** Structured lines **diff
+better**: today changing a tag rewrites the item's whole line in the history,
+where a field touches one line. And the model **sheds four fields and their
+arithmetic** — `tagSpans`, `dueSpan`, `ownerSpan`, `movedSpan` exist only
+because the markers live inside the text, and every verb that changes one slices
+the line against them. A verb becomes *change the record, rewrite the block*.
+`withoutMarks` goes with them, and so does `reason`'s documented edge: a trailing
+`— …` clause is a reason on a blocked item and prose on every other kind, which
+took the clause off "call the surveyor — the one from Tuesday" if you blocked it.
+As `reason:` the ambiguity does not arise.
+
+**What it costs, counted honestly.**
+
+1. **A second parser.** T16 asked for one, and this makes two — the file's, and
+   the entry adapter's. They are not peers: only the file's has an inverse, and
+   the adapter's job is to produce a record from a string typed anywhere,
+   including places with no access to the list's own UI, which is the case that
+   will matter more later rather than less.
+2. **A whole-notebook migration**, every day file in every task list.
+   Deliberately a **disposable script** rather than a button: it is needed once,
+   and a permanent affordance for it would be a permanent invitation to rewrite
+   the notebook.
+3. **Quick-form hand edits normalize on the next write.** A line typed
+   `- [ ] do the thing #lima DUE fri` into a file parses — leniency is kept —
+   and comes back as fields. This is also why the migration is nearly nothing:
+   **migrating a file is reading it and writing it.**
+
+**What T16 keeps.** *The file is never a rendering of structure held elsewhere*
+stands: the structure is in the file. Nothing moves to a database, an index or a
+sidecar, and the notebook remains the truth — which is the failure that clause
+was written against.

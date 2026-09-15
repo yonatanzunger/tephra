@@ -774,6 +774,82 @@ than something built here.
 list is what is needed first; the directory arrives while MT4–MT6 are still
 ahead, so anything that wants it has it.
 
+## MT8 — an item is a record, and `for:` says what it is for *(planned, D85)*
+
+**Asked from use 2026-09-14**, from a complaint about the by-tag view and a
+question that turned out to be underneath it.
+
+### What was actually wrong
+
+A docket-generated item carried **two** tags, the matter and the docket, so it
+appeared in the by-tag view twice — and on a real notebook (`~/Tephra`,
+2026-09-15) that was 13 items drawn as **18 rows**, with all five `lima` items
+doubled. Every hand-typed item carried one tag and appeared once, so the
+duplication was entirely the generator's.
+
+**The matter was not a facet; it was context.** *Find the right team* means
+nothing without the matter it belongs to — it could be defeating a supervillain
+or building an outhouse, and both can be active at once. What the item needs is
+what was on screen when the step was written: docket, section, matter. That is
+provenance, not vocabulary, and putting it in the tag space is what made it
+noise: **tags are the words you think in; the docket path is structure.**
+
+And a matter cannot be a useful grouping anyway. A matter may hold dozens of
+steps, but **more than a handful active at once is a sign the matter is badly
+organised** — so a matter group is destined to be one or two items, which is a
+label wearing a grouping's clothes.
+
+### The three steps
+
+1. **The record and the format** (D85). `text` becomes the sentence; `tags`,
+   `due`, `owner`, `for`, `reason`, `moved`, `notes` are fields; the file holds
+   them as field lines under the checkbox. `spellItem` writes, a lenient
+   `parseItem` reads both the field form and the quick form.
+   - **The gate is the round-trip**, one way: structure → string → structure is
+     the identity, proven over generated records and over every day file in the
+     developer notebook.
+   - **No behaviour change.** Same information, new shape — which is what makes
+     the round-trip the whole test.
+   - Deletes `tagSpans`, `dueSpan`, `ownerSpan`, `movedSpan`, `withoutMarks`,
+     and the marker arithmetic in every verb that changes one.
+
+2. **`for:`, and the matter tag goes.** The generator composes a record rather
+   than joining a string, and fills `for` with the context — matter, and the
+   section when it adds something. The row draws it trailing and muted beside the
+   text, not in the chip cluster. **Reconciliation repairs it** (D77): the docket
+   owns the truth, the step knows its item, and a rename or a move makes the
+   annotation stale today with nothing to fix it.
+   - **The rule that keeps repair safe: the sentence is yours, the markers are
+     the docket's.** A pass may rewrite the fields of a generated item and must
+     never touch its text.
+   - The original complaint dies here: a generated item has **one** tag, so it
+     appears once, and the by-tag view needs no home-tag rule at all.
+
+3. **The panel**, over the record — the docket's matter panel one kind over.
+   Quick entry stays: the add row accepts the full grammar and translates
+   immediately into fields, because jotting a task somewhere without the list's
+   UI is the case that matters more later, not less.
+
+### The migration is a disposable script
+
+Not a button. `migrate-items.mjs`: for each task list, for each day, **read and
+write** — which is the whole of it, because leniency already parses the old form.
+It saves a version first (D32's `saveVersionNamed`, so the way back is a
+restore), it is idempotent, and it reports counts per day. Deleted once the
+notebook is converted; its one real transform — a matter-named tag becoming
+`for:` — belongs to reconciliation, where it goes on being exercised.
+
+### What is NOT in MT8
+
+- **A home tag for hand-typed items.** "First tag wins" was the other candidate
+  and step 2 makes it unnecessary for generated items. Left until a hand-typed
+  item with two tags actually annoys somebody.
+- **Grouping by `for:`.** Possible later and cheap, because the value is in the
+  file — but the matter is not a grouping worth having, which is the finding
+  above.
+- **Making `for:` a link.** `AgendaService.matterFor` already answers it; a
+  clickable annotation is a separate, small pleasure.
+
 ## What is deliberately not here
 
 - **Backlog resurfacing** (Q3a). Deferred to a milestone of its own, to be
