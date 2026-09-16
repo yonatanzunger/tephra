@@ -234,9 +234,14 @@ export class AgendaService implements Serves {
    * the field whose absence made the old design safe against a machine that was
    * asleep at midnight.
    *
-   * Two things are reconciled so far, in this order because the first changes
-   * what the second should conclude:
+   * Three things are reconciled so far, in this order because each changes
+   * what the next should conclude:
    *
+   * 0. **Adoption.** A matter or a step somebody wrote by hand has no id until
+   *    Tephra writes its block, and the two clauses below address everything by
+   *    id — so this comes first or they cannot see it at all. Found by a docket
+   *    written from outside the app, which generated nothing and said nothing
+   *    (note 67).
    * 1. **Instances.** A matter that recurs moves on when its instance is
    *    settled — for a recurring task, when the step its clock reads is done;
    *    for a recurring event, when its date has passed and nothing is left
@@ -565,6 +570,13 @@ export class AgendaService implements Serves {
     )
     for (const docket of await this.#store.corpus.list('docket')) {
       let touched = false
+      // **Adoption first, because everything below it addresses by id.** A
+      // matter or step somebody typed by hand has no marker until Tephra writes
+      // the block, and the two loops under this one skip what has no id — so an
+      // unadopted docket generated nothing at all, silently and for ever (note
+      // 67). The clause is idempotent: it writes only what would differ, and
+      // the write it makes wakes the round that then generates.
+      if (await this.#docket.adoptAll(docket) > 0) touched = true
       // **What the docket is CALLED**, for the tag every task it generates
       // carries. The same rule `dockets()` uses: the person's words, falling
       // back to the slug of them, which is the only other name a document has.

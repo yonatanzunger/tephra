@@ -88,6 +88,22 @@ export class Dockets {
   }
 
   /**
+   * Give ids to whatever on this docket has not got one, and say how many.
+   *
+   * **A reconciliation clause wearing a verb's clothes.** It is called by the
+   * pass rather than by a person, and it is here rather than in `AgendaService`
+   * for the tier rule: the agenda decides *when* derived state is brought into
+   * agreement, and the store knows *how* a docket is written.
+   */
+  async adoptAll(id: DocumentId): Promise<number> {
+    const adopted = await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as DocketDocument).adoptAll()),
+    )
+    if (adopted > 0) await this.#durable.wrote(id)
+    return adopted
+  }
+
+  /**
    * Put a matter on a docket.
    *
    * **`when` arrives as text, and is parsed here.** The notation is the one a

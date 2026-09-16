@@ -377,6 +377,15 @@ body {
   border: 1px solid rgb(var(--accent) / .38);
   border-radius: 5px;
 }
+/* **The same row, quieter.** The zone bar asks a question and keeps its accent;
+   this one reports something that already happened, so it drops to the panel's
+   own surface and takes a pointer, because clicking it is how you put it away. */
+.zonebar.said {
+  background: rgb(var(--surface-muted));
+  border-color: rgb(var(--border));
+  color: rgb(var(--text-muted));
+  cursor: pointer;
+}
 .zonebar-text { flex: 1; min-width: 0; }
 .zonebar-text b { font-weight: 600; color: rgb(var(--text-heading)); }
 /* The action reads as a button because it is one — the pill's whole failure

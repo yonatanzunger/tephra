@@ -4292,6 +4292,34 @@ export async function runVerify(request: string): Promise<void> {
           const back = await window.tephra.todo.items(list, await window.tephra.todo.today(list))
           say('afreshOnList', back.map(one => one.text).filter(t => t.includes('mower')))
         }
+
+        // **THE GESTURE, not the door.** Every check above calls the pass
+        // directly, which is how this suite stayed green for a whole phase
+        // while nothing in the app could ask for it — the only caller of that
+        // door was this file (note 66).
+        //
+        // **What can be checked here, and what cannot.** In a running window
+        // the list is never behind, because every docket verb reconciles as
+        // part of doing its job — which is precisely why the door had no
+        // caller and why the gap was invisible. So this asserts the two claims
+        // that are true in-window: the gesture reaches the pass, and it reports
+        // in items rather than in machinery. The case it exists FOR — a docket
+        // written while Tephra was closed, by hand or by an agent — is
+        // startup's trigger, and a scene in one window cannot produce it.
+        {
+          const list = await window.tephra.todo.which()
+          const day = await window.tephra.todo.today(list)
+          const before = JSON.stringify((await window.tephra.todo.items(list, day)).map(one => one.id))
+          say('menuItemFound', await window.tephra.clickMenu('Bring the List Up to Date'))
+          await settle(1200)
+          const after = JSON.stringify((await window.tephra.todo.items(list, day)).map(one => one.id))
+          say('gestureChangedNothing', before === after)
+          say('gestureSaid', document.querySelector('.zonebar.said .zonebar-text')?.textContent ?? 'none')
+          // And reading it is how it goes away, so it cannot become furniture.
+          ;(document.querySelector('.zonebar.said') as HTMLElement | null)?.click()
+          await settle(200)
+          say('gestureRowAfterClick', document.querySelectorAll('.zonebar.said').length)
+        }
       }
 
       await window.tephra.doc.flush()

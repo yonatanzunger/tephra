@@ -37,6 +37,27 @@ Worth keeping, because each line is a thing the operation path already solves:
 - **A parse-and-simulate harness written from scratch** to answer *what would
   this generate today* before letting it near a real notebook.
 
+## What the first import found, within the hour
+
+**The file was valid and the app could not see it** (note 67). Twelve matters
+and sixty-two steps parsed, rendered, and generated nothing, because the
+reconciler addresses by id and an unmarked block has no id until Tephra writes
+it. The grammar promised that write and only the *verbs* performed it, each
+adopting the one block it touched. Adoption is a reconciliation clause now.
+
+**Two lessons for the door, both of them sharper than anything above.**
+
+1. **A file written by an agent is not the same as a file written by a verb**,
+   even when the bytes are identical, because the state that makes a record
+   *addressable* is assigned on the way in. A door offering operations has this
+   for free; a door that accepts files needs an adoption pass behind it, and
+   must say so.
+2. **The test could not have been written through the app.** Suites and scenes
+   both act through Tephra, so neither can produce a file Tephra did not write.
+   The integration fixture now takes a **seed** — files placed in the notebook
+   before it is opened — which is the honest stand-in for *edited while closed*
+   and is the shape every future test of agent-written files will want.
+
 ## The finding that reframes the project
 
 **The operations already exist.** The renderer reaches **thirty-three** docket

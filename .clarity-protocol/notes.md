@@ -1678,3 +1678,60 @@ models: an operation set reachable by only one caller is an operation set that
 gets reimplemented, badly, by the second one.
 
 > Related: note 62's two doors, one of them deaf — same shape, one door out.
+
+## 67. The promise in the comment, kept by nobody
+
+**2026-09-16.** A docket written from outside Tephra — twelve matters, sixty-two
+steps, valid by the grammar and drawn correctly by the surface — generated
+**nothing**. Asking for reconciliation changed nothing. Nothing said why.
+
+The cause is one line of the reconciler, twice:
+
+```js
+for (const id of (await matters(docket)).flatMap(m => (m.id === null ? [] : [m.id])))
+  …
+  if (step.id === null || step.kind !== 'task') continue
+```
+
+**Both skips are right**, and that is what makes this interesting. A generated
+task records which step made it, so an unmarked step is not addressable and
+cannot be given provenance. The grammar even says what should happen instead:
+*a block with no marker is a matter somebody typed by hand, and gets an id the
+first time Tephra writes.*
+
+> **The promise was true of every verb and true of nothing else.** Each verb
+> rewrites the block it touches, so each adopts one matter as a side effect of
+> doing something else. Nothing adopted a docket that nobody had touched — and
+> a pass that only *reads* leaves a hand-written file invisible for ever.
+
+The task list has had exactly this clause since D56 and calls it `adopt`. The
+docket kind has a method called `adopt` too, and it means something completely
+different — *put a matter that came from another docket onto this one* — which
+is a good part of why the gap was never noticed: the word was taken.
+
+**The fix is a reconciliation clause, not an import step.** Adoption runs first
+in the pass, writes only blocks whose bytes would differ, and its write wakes
+the round that then generates. `0.` in the clause list, because the two clauses
+after it address everything by id.
+
+**Three things this is a case of.**
+
+- **A leniency promise needs an owner.** *Lenient in, precise out* (R26) is a
+  claim about the boundary, and a boundary that is read by a pass and written by
+  verbs has two halves — the tolerant half is only real if something eventually
+  performs the write that regularises it.
+- **The gesture was missing too, and for the same reason.** `CHANNEL.reconcile`
+  had exactly one caller in the whole app: the acceptance harness. Inside a
+  running window the list is never behind, because every docket verb reconciles
+  as part of its own work — so nobody ever needed a button, and the case that
+  needs one is the case where Tephra was not the thing writing. A menu item now
+  asks for it, and it reports in items rather than in machinery.
+- **The check that would have caught it could not have been written in a
+  window.** Both suites and scenes act through the app, so neither can produce
+  a file the app did not write. The integration fixture now takes a **seed** —
+  files placed in the notebook before it is opened — which is the honest
+  stand-in for *edited while closed*, and is the shape every future test of
+  agent-written files will want (`parts/agent-api.md`).
+
+> Related: note 66, which produced the file that produced this; note 62's door
+> that was deaf; note 61's invariant kept by memory at one door out of many.

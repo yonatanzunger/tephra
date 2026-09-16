@@ -357,6 +357,31 @@ export function App(): React.JSX.Element {
         setFinding(true)
         setFindSeed(null)
         findControl.current?.focus()
+      } else if (command === 'reconcile') {
+        // **Counted by id, not by length.** A pass can add one and withdraw
+        // another, and a count that did not move would report *nothing
+        // changed* about a list that had changed twice.
+        void (async () => {
+          const list = await window.tephra.todo.which()
+          const day = await window.tephra.todo.today(list)
+          const ids = async (): Promise<Set<string>> =>
+            new Set((await window.tephra.todo.items(list, day)).map(item => item.id as string))
+          const before = await ids()
+          await window.tephra.docket.generate()
+          const after = await ids()
+          const came = [...after].filter(id => !before.has(id)).length
+          const went = [...before].filter(id => !after.has(id)).length
+          const count = (n: number, what: string): string =>
+            `${n} ${what}${n === 1 ? '' : 's'}`
+          setPassSaid(
+            came === 0 && went === 0
+              ? 'Today’s list was already up to date.'
+              : [
+                  came === 0 ? null : `${count(came, 'task')} added to today’s list`,
+                  went === 0 ? null : `${count(went, 'task')} withdrawn`,
+                ].filter(one => one !== null).join(', ') + '.',
+          )
+        })().catch(fail)
       } else if (command === 'newDocket') {
         // **Named before it exists** (MH1). A docket is named for a domain —
         // the house, birthdays, speaking engagements — and one called
@@ -798,6 +823,27 @@ export function App(): React.JSX.Element {
    * the property, not the display.
    */
   const [zoneNotice, setZoneNotice] = useState<ZoneNotice | null>(null)
+  /**
+   * What the last pass did, said once and then gone.
+   *
+   * **A gesture with no visible effect reads as a broken control**, and a
+   * reconciliation that finds nothing to do is the commonest outcome by design
+   * (D77) — so the row says *nothing changed* rather than leaving the person to
+   * wonder. It reports what it MEASURED, which is the arrival and departure of
+   * items on today's list, rather than what the pass claims: the pass
+   * deliberately reports nothing and has its writes observed instead.
+   */
+  const [passSaid, setPassSaid] = useState<string | null>(null)
+
+  // **Cleared on a timer that belongs to the message, not to the element.** A
+  // second pass while the first row is up replaces the text and restarts the
+  // clock, which is what the dependency does; a timer hung off the node would
+  // have two of them racing to clear one row.
+  useEffect(() => {
+    if (passSaid === null) return
+    const timer = setTimeout(() => setPassSaid(null), 5000)
+    return () => clearTimeout(timer)
+  }, [passSaid])
   useEffect(() => {
     void window.tephra.doc.zoneNotice().then(setZoneNotice).catch(fail)
     return window.tephra.doc.onZoneNotice(setZoneNotice)
@@ -1436,6 +1482,18 @@ export function App(): React.JSX.Element {
           </>
         }
       >
+        {/* **What the pass did, dismissed by reading it.** Five seconds is
+            long enough to read eight words and short enough that it is gone
+            before it becomes furniture; clicking it puts it away sooner. The
+            row pushes the surface down, which D42 allows here for the reason
+            MH4's *today* section does: the reflow is caused by your own
+            gesture. */}
+        {passSaid !== null && (
+          <div className="zonebar said" role="status" onClick={() => setPassSaid(null)}>
+            <span className="zonebar-text">{passSaid}</span>
+          </div>
+        )}
+
         {zoneNotice !== null && (
           <ZoneBar
             notice={zoneNotice}

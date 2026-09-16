@@ -10,7 +10,7 @@
 
 import { test, type TestContext } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
@@ -292,8 +292,23 @@ test('every docket is listed, by what it is CALLED', async t => {
   assert.deepEqual(rows.map(r => r.title), ['Speaking engagements', 'The house'])
 })
 
-async function serviced(t: TestContext, at = '2026-03-10T09:00:00Z') {
+async function serviced(
+  t: TestContext,
+  at = '2026-03-10T09:00:00Z',
+  /**
+   * Files in the notebook before the app opens it.
+   *
+   * **Because there is no other way to be a file Tephra did not write.** The
+   * fixture opens with `watch: false` and the corpus caches what it reads, so a
+   * write into the directory afterwards is invisible — which is the same reason
+   * the acceptance scenes cannot produce this case either. Seeding before the
+   * open is the honest stand-in for *edited while the app was closed*, and that
+   * is exactly the situation adoption exists for.
+   */
+  seed?: (root: string) => Promise<void>,
+) {
   const root = await mkdtemp(join(tmpdir(), 'tephra-docket-svc-'))
+  if (seed !== undefined) await seed(root)
   const nb = await Notebook.open({ root, lock: false, watch: false })
   const { NotebookService } = await import('../../src/main/services/notebook-service.ts')
   let clock = new Date(at)
@@ -2984,4 +2999,80 @@ test('and a real flow stays far below the divergence threshold', async t => {
     `an ordinary flow reached ${service.agenda.reconciliationHighWater} rounds on one key`,
   )
   // Measured 2026-09-14: **2**. The limit is 25.
+})
+
+// ── adoption ───────────────────────────────────────────────
+
+test('THE BUG: a docket written by hand generated nothing, for ever', async t => {
+  // **Reported from use, on a real notebook** (note 67). Twelve matters and
+  // sixty-two steps were written into `lima.docket.md` from outside Tephra —
+  // valid by the grammar, rendered correctly by the surface — and the task list
+  // stayed exactly as it was. Asking for reconciliation changed nothing, and
+  // nothing anywhere said why.
+  //
+  // The cause: the reconciler addresses matters and steps **by id**, because a
+  // generated task records which step made it. An unmarked block has no id
+  // until Tephra writes it, and the grammar says exactly that — *gets an id the
+  // first time Tephra writes* — which was true of every verb and true of
+  // nothing that merely ran over the file. The verbs each adopted the one block
+  // they touched; nothing adopted a docket nobody had touched.
+  const { service } = await serviced(t, '2026-03-10T09:00:00Z', async root => {
+    await mkdir(join(root, 'dockets'), { recursive: true })
+    await writeFile(join(root, 'dockets', 'house.docket.md'), `---
+tephra: 1
+kind: docket
+title: House
+---
+## Fix the gate
+mode: task
+start: 2026-03-10
+steps:
+- +0d task: Measure the gap
+- +0d task: Order the hinge
+`)
+  })
+  const id = 'dockets/house.docket.md' as DocumentId
+  await service.agenda.reconcile()
+
+  const matters = await service.docket.matters(id)
+  assert.equal(matters.length, 1, 'the matter is read')
+  assert.notEqual(matters[0]?.id, null, 'and it has been given an id')
+  assert.deepEqual(
+    matters[0]?.steps.map(step => step.id === null),
+    [false, false],
+    'and so has every step',
+  )
+
+  const list = await service.todo.list()
+  const items = await service.todo.items(list, service.today)
+  assert.deepEqual(
+    items.map(one => one.text).filter(text => text.includes('hinge')),
+    ['Order the hinge'],
+    'and the steps that are due have produced tasks',
+  )
+
+  // **Idempotent, which is what makes it a clause and not an import.** The
+  // second pass has nothing to adopt and nothing to generate.
+  await settled(service as never)
+  assert.equal(await service.docket.adoptAll(id), 0, 'a second adoption writes nothing')
+})
+
+test('adoption leaves alone what already has an id', async t => {
+  // The other half of idempotence, and the one that would corrupt a notebook
+  // rather than merely fail: a matter that already carries a marker must keep
+  // its id, its arrival stamp and its generated links through any number of
+  // passes — an id reassigned is a task orphaned from the step that made it.
+  const { service } = await serviced(t)
+  const today = service.today
+  const id = await service.library.newDocument('Garden', undefined, 'docket')
+  const matter = await service.docket.add(id, 'Mow the lawn', { mode: 'task', start: today })
+  await service.agenda.reconcile()
+  const was = (await service.docket.matters(id)).find(one => one.id === matter)
+  assert.ok(was !== undefined)
+
+  assert.equal(await service.docket.adoptAll(id), 0, 'nothing to adopt')
+  const now = (await service.docket.matters(id)).find(one => one.id === matter)
+  assert.equal(now?.id, was.id)
+  assert.equal(now?.arrived, was.arrived, 'the arrival stamp is not restamped')
+  assert.deepEqual(now?.steps.map(s => s.made), was.steps.map(s => s.made), 'links are kept')
 })

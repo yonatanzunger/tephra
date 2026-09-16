@@ -128,6 +128,74 @@ export class DocketDocument extends SegmentedDocument {
     return found
   }
 
+  /**
+   * Give an id to every matter and step that has not got one.
+   *
+   * **The format promises this and nothing was keeping the promise.** The
+   * grammar's own rule is that *a block with no marker is a matter somebody
+   * typed by hand, and gets an id the first time Tephra writes* — which is true
+   * of the verbs, each of which rewrites the block it touches, and was never
+   * true of anything that ran over a docket nobody had touched.
+   *
+   * **What that cost, and it cost it silently.** The reconciler skips a matter
+   * whose id is null and a step whose id is null, because a generated task has
+   * to record which step made it and an unmarked step is not addressable. So a
+   * docket written by hand — or by a script, or by an agent (note 66) — parsed
+   * correctly, rendered correctly, and generated *nothing*, for ever. Found on
+   * a real notebook: twelve matters and sixty-two steps, of which the pass could
+   * see the three that already had markers.
+   *
+   * **Idempotent, and that is what makes it a reconciliation clause** rather
+   * than an import step: it writes only the blocks whose bytes would differ,
+   * returns how many it adopted, and the second run over the same docket
+   * returns zero. The task list has had exactly this since D56 (`adopt` there);
+   * this is the same rule one kind over.
+   *
+   * `arrived` is stamped for a matter that has never had a marker, because *when
+   * did this appear here* has no better answer than *when we first saw it*.
+   */
+  async adoptAll(): Promise<number> {
+    const found = await this.#scan()
+    // **One pool for the whole file**, minted before any writing: ids are
+    // unique per docket, and two matters adopted in one pass must not be given
+    // the same one because each was minted against the text as it was.
+    const matters = new Set(found.flatMap(one => (one.matter.id === null ? [] : [one.matter.id])))
+    const now = nowSeconds()
+    const edits: { span: Span; payload: DocumentText }[] = []
+    const body = (await this.segment(ONLY_SEGMENT)).body
+
+    for (const scanned of found) {
+      let id = scanned.matter.id
+      if (id === null) {
+        id = unusedMatterId(matters)
+        matters.add(id)
+      }
+      // **Step ids are minted against the matter, not the file** — that is the
+      // scope `addStep` uses, and an `after` reference is resolved inside one
+      // matter, so widening it would only make collisions harder to reason
+      // about.
+      const steps = new Set(scanned.matter.steps.flatMap(one => (one.id === null ? [] : [one.id])))
+      const adopted = scanned.matter.steps.map(step => {
+        if (step.id !== null) return step
+        const made = unusedMatterId(steps)
+        steps.add(made)
+        return { ...step, id: made }
+      })
+      const block = matterBlock(
+        { ...scanned.matter, id, steps: adopted, arrived: scanned.matter.arrived === 0 ? now : scanned.matter.arrived },
+        scanned.level,
+      )
+      if (block === body.slice(scanned.from, scanned.to)) continue
+      edits.push({
+        span: { begin: this.at(ONLY_SEGMENT, scanned.from), end: this.at(ONLY_SEGMENT, scanned.to) },
+        payload: block as DocumentText,
+      })
+    }
+    if (edits.length === 0) return 0
+    await this.replace(edits, 'operation')
+    return edits.length
+  }
+
   // ── the verbs ──────────────────────────────────────────────
 
   /**

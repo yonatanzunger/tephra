@@ -431,6 +431,23 @@ export function installMenu(next?: MenuActions): void {
           accelerator: 'CmdOrCtrl+R',
           click: () => actions.reorient(),
         },
+        {
+          // **The machine's half of the same act.** Reorient is the person's
+          // pass over their situation; this is the app's — dockets generate
+          // what is due, withdraw what is not, and advance what has settled
+          // (D77). It is normally invisible on purpose: a write wakes it, the
+          // day wakes it, and startup asks for it, so there has never been
+          // anything to press.
+          //
+          // **It is here because those triggers all assume Tephra did the
+          // writing.** A docket edited while the app was closed — by hand, by
+          // another tool, by an agent — leaves the list one pass behind with no
+          // gesture to catch it up, and the only caller of that door was the
+          // test harness. Found the first time a docket was written from
+          // outside (note 66).
+          label: 'Bring the List Up to Date',
+          click: () => send(CHANNEL.menuCommand, 'reconcile'),
+        },
         { type: 'separator' },
         {
           // **The other place you are always going**, and it opens in a window

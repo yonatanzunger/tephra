@@ -638,6 +638,35 @@ check(
   Array.isArray(r.afreshOnList) && r.afreshOnList.length === 1,
   `on the list: ${JSON.stringify(r.afreshOnList)}`,
 )
+check(
+  // **The door had one caller and it was this file.** Every check above reaches
+  // the pass directly, which is how the suite stayed green while nothing in the
+  // app could ask for it — found the first time a docket was written from
+  // outside Tephra (note 66).
+  'THE GESTURE EXISTS: a menu item asks for the pass',
+  r.menuItemFound === true,
+  `clicked: ${r.menuItemFound}`,
+)
+check(
+  // Idempotence, asked of the gesture rather than of the method: in a running
+  // window nothing is ever stale, so the honest claim is that pressing it
+  // changes nothing. What it exists for is the case a window cannot make — a
+  // docket written while the app was closed, which startup reconciles.
+  'and pressing it on an up-to-date list changes nothing',
+  r.gestureChangedNothing === true,
+)
+check(
+  // A control whose effect is invisible reads as broken, and finding nothing to
+  // do is this pass's commonest outcome by design.
+  'and it says so in items rather than in machinery',
+  typeof r.gestureSaid === 'string' && /today.s list/i.test(r.gestureSaid),
+  `said: ${JSON.stringify(r.gestureSaid)}`,
+)
+check(
+  'and reading it is how it goes away',
+  r.gestureRowAfterClick === 0,
+  `rows left: ${r.gestureRowAfterClick}`,
+)
 
 // ── 8. legibility ───────────────────────────────────────────────────────────
 check(
