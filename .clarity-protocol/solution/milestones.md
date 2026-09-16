@@ -299,6 +299,13 @@ after the list.
 - ✅ **`Now`**, the one row that is not a set of places: the end of the stream,
   where the next sentence goes. Not a fileset entry, because it is not a date —
   pinning today's date would be wrong tomorrow.
+- ✅ **`Tasks`**, the other distinguished place — added 2026-09-16, from
+  wanting it. ⌘1 opens the task list in a window of its own on purpose (MT3),
+  and that left no way to simply GO there; the panel is where going somewhere is
+  what a row means, so the list is offered there too. It sits at the seam of the
+  section list, under the sections somebody made and over the ones derived from
+  a directory: the list is neither pinned nor found, it is the one file the
+  notebook keeps. Written up in `navigation.md`.
 - ✅ **Themes gain colour, and the chrome gets designed.** The first two parts
   had quietly already happened: a theme authors six palette colours, and there
   are four on disk including a real dark one (`night`). What was left was that

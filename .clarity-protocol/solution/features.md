@@ -160,7 +160,7 @@ in `goal/horizon.md` and `solution/horizon.md`; scheduled in
 | Awareness with no task | H6 | ✓ v1 (MH2) — a **status** step, which is a horizon row and generates nothing, ever |
 | The day's selection | H9 | ✓ v1 (MH4) — a per-day mark, not a status and not a tag, so it cannot travel |
 | Bulk acts on the list | MH4 | ✓ v1 — ⌘-click to select, shift to extend; one write and one undo step |
-| Reorient | H11 | **in progress** (MH4) — the pass and its entrances exist; the annotation layer is what remains |
+| Reorient | H11 | **in progress** (MH4) — the pass and its entrances exist; the annotation layer is what remains: *how the flow shows on screen what might require attention*, defined in `horizon-roadmap.md` under MH4 and undesigned below that |
 | The backlog as the miscellaneous docket, and the review flow | H2, T14 | **next** (MH5) |
 | The graveyard | H3 | scheduled (MH6) — its threshold waits on MH5's real decline counts |
 | An explicit list of instances | H7 | **promoted from the backlog 2026-09-12** — withdrawn by D76 for want of evidence, and the evidence arrived |

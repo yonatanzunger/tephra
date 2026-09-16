@@ -4491,6 +4491,32 @@ export async function runVerify(request: string): Promise<void> {
         say('whereHeadingsAway', document.querySelectorAll('.nav-here-part').length)
       }
 
+      // **The list, reachable from here.** ⌘1 opens it in a window of its own,
+      // which is what it is for; this row is the other gesture — go there in
+      // the window you are in — and it sits at the seam, under the half
+      // somebody wrote down and over the half the index derives.
+      const tasksRow = [...document.querySelectorAll('.nav-row.nav-tasks')] as HTMLElement[]
+      say('tasksRows', tasksRow.length)
+      say('tasksLabel', tasksRow[0]?.querySelector('.nav-label')?.textContent ?? '')
+      // The order as the panel actually draws it, top to bottom: the row has to
+      // land under Now and over every section the index derived.
+      say(
+        'navOrder',
+        [...(document.querySelector('.nav-scroll')?.children ?? [])].map(el =>
+          el.classList.contains('nav-section')
+            ? titleOf(el.querySelector('.nav-head'))
+            : (el.querySelector('.nav-label')?.textContent ?? el.className),
+        ),
+      )
+      // And clicking it is navigation, not a new window: the list arrives HERE.
+      tasksRow[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      let forList = 0
+      while (forList < 12_000 && document.querySelector('.todo') === null) {
+        await settle(200)
+        forList += 200
+      }
+      say('tasksLanded', document.querySelector('.todo')?.getAttribute('aria-label') ?? 'none')
+
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
     }

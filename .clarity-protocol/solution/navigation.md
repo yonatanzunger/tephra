@@ -508,6 +508,31 @@ it is a different kind of thing to click. What it lacks is what it cannot have:
 no caret, because there is nothing to disclose, and no unpin, because there is
 no line in a file to take out.
 
+## Tasks, at the seam
+
+**The gesture ⌘1 cannot make** (added 2026-09-16, from use). ⌘1 opens the task
+list in a window of its own, deliberately: the list is something a person keeps
+*beside* their writing, so a shortcut that navigated the current window would
+take away what they were writing (MT3). That is an argument about the shortcut,
+not about the place — and it left the notebook's one distinguished list with no
+in-window route at all, which was noticed the first time somebody wanted to go
+there rather than to have it beside them.
+
+The panel is where *going somewhere* is what every row means, so the list is
+offered there the way everywhere else is: one row, no caret, no count.
+
+**Between the two halves of the section list.** The sections above it are ones
+somebody made — named by the order, or a fileset file sitting there unnamed;
+the ones below are listings derived from a directory because a file arrived in
+it (D10, D53). The task list is in neither: it is not pinned and it was not
+found, it is the one file the notebook itself keeps (T1). Like `Now` it is a
+distinguished place no fileset names, and unlike `Now` it is a real document —
+which is why it sits here rather than up there beside the row that is not a
+place at all.
+
+The seam is read off the tree rather than counted: a derived section is the one
+with no document to act on, which is what `Filesets.tree` already marks it by.
+
 ## Landing at the top
 
 A jump from the panel puts its target at the TOP of the screen, not centred.

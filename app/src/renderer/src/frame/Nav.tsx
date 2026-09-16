@@ -86,6 +86,8 @@ export interface NavProps {
   readonly onOpenDocument: (id: DocumentId) => void
   /** The end of the stream, in append position — the one place that is not a place. */
   readonly onNow: () => void
+  /** The task list, in THIS window — the same place ⌘1 opens beside it. */
+  readonly onTasks: () => void
   readonly onActive: (
     places: readonly Located[],
     current: number,
@@ -142,7 +144,7 @@ interface RowActs {
 }
 
 export function Nav({
-  today, here, where, generation, onGo, onActive, onUnavailable, onOpenDocument, onNow, onPin, onUnpin,
+  today, here, where, generation, onGo, onActive, onUnavailable, onOpenDocument, onNow, onTasks, onPin, onUnpin,
   onAskRename, onRename, onCopy, onDelete, onRelabel, onNewFile,
 }: NavProps): React.JSX.Element {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(['sections', 'timeline']))
@@ -297,6 +299,79 @@ export function Nav({
     })),
   }
 
+  /**
+   * One section of the curated half, however it came to be here.
+   *
+   * **Hoisted out of the list because the list is now in two pieces.** A
+   * section somebody made and a directory's derived listing are the same ROW —
+   * same header, same expando, same verbs on what is in it — and rendering
+   * them from one function is what keeps that true while they are drawn in two
+   * places.
+   */
+  const sectionBlock = (entry: SectionRow): React.ReactElement => {
+    const name = entry.target.kind === 'section' ? entry.target.name : ''
+    return (
+      <Section
+        key={`section:${name}`}
+        id={`section-${name}`}
+        // **The label wins when the file is gone.** A missing section's
+        // own title is its filename, which is the one thing nobody
+        // chose; the label in the order is what someone wrote down and
+        // the only remaining record of what was meant (D53).
+        title={entry.missing ? entry.label : (entry.children?.title ?? entry.label)}
+        count={entry.children?.entries.length ?? 0}
+        open={!open.has(`closed:${name}`)}
+        onToggle={() => toggle(`closed:${name}`)}
+        missing={entry.missing}
+        summary={entry.summary}
+        onMenu={e => {
+          e.preventDefault()
+          e.stopPropagation()
+          acts.onMenu({
+            at: { x: e.clientX, y: e.clientY },
+            about: entry.label,
+            // **One item, and it is the one this header can answer.**
+            // A section's own name and whether it exists are the order's
+            // business, which is deferred with the rest of section
+            // management; where a new file goes is this header's, and
+            // it is the question a person right-clicking a list asks.
+            items: [
+              {
+                label: 'New File…',
+                onChoose: () =>
+                  acts.onNewFile(entry.children?.base ?? entry.children?.path ?? null),
+              },
+            ],
+          })
+        }}
+      >
+        {entry.children?.entries.map((row, i) => (
+          <CuratedRows
+            key={`${row.label}:${i}`}
+            entry={row}
+            depth={0}
+            active={active}
+            onGo={go}
+            acts={acts}
+            section={entry.children?.path ?? null}
+            base={entry.children?.base ?? entry.children?.path ?? null}
+          />
+        ))}
+      </Section>
+    )
+  }
+
+  // **The seam in the section list** (D10, D53). A section is either one
+  // somebody made — named by the order, or a fileset file sitting there
+  // unnamed — or a listing the notebook derived from a directory because a
+  // file arrived in it; `tree` puts the made ones first and marks the derived
+  // ones by having no document to act on. The distinguished list goes between
+  // them, which is where a person looking for it looks: under what they chose
+  // to keep in front of them, over what is merely findable.
+  const asSections = sections?.entries.filter(entry => entry.target.kind === 'section') ?? []
+  const derived = asSections.filter(entry => entry.document === null && !entry.missing)
+  const curated = asSections.filter(entry => !(entry.document === null && !entry.missing))
+
   return (
     <nav className="frame-nav" aria-label="Sections">
       <div className="nav-scroll">
@@ -346,60 +421,31 @@ export function Nav({
             />
           ))}
 
-        {sections?.entries
-          .filter(entry => entry.target.kind === 'section')
-          .map(entry => {
-            const name = entry.target.kind === 'section' ? entry.target.name : ''
-            return (
-              <Section
-                key={`section:${name}`}
-                id={`section-${name}`}
-                // **The label wins when the file is gone.** A missing section's
-                // own title is its filename, which is the one thing nobody
-                // chose; the label in the order is what someone wrote down and
-                // the only remaining record of what was meant (D53).
-                title={entry.missing ? entry.label : (entry.children?.title ?? entry.label)}
-                count={entry.children?.entries.length ?? 0}
-                open={!open.has(`closed:${name}`)}
-                onToggle={() => toggle(`closed:${name}`)}
-                missing={entry.missing}
-                summary={entry.summary}
-                onMenu={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  acts.onMenu({
-                    at: { x: e.clientX, y: e.clientY },
-                    about: entry.label,
-                    // **One item, and it is the one this header can answer.**
-                    // A section's own name and whether it exists are the order's
-                    // business, which is deferred with the rest of section
-                    // management; where a new file goes is this header's, and
-                    // it is the question a person right-clicking a list asks.
-                    items: [
-                      {
-                        label: 'New File…',
-                        onChoose: () =>
-                          acts.onNewFile(entry.children?.base ?? entry.children?.path ?? null),
-                      },
-                    ],
-                  })
-                }}
-              >
-                {entry.children?.entries.map((row, i) => (
-                  <CuratedRows
-                    key={`${row.label}:${i}`}
-                    entry={row}
-                    depth={0}
-                    active={active}
-                    onGo={go}
-                    acts={acts}
-                    section={entry.children?.path ?? null}
-                    base={entry.children?.base ?? entry.children?.path ?? null}
-                  />
-                ))}
-              </Section>
-            )
-          })}
+        {curated.map(sectionBlock)}
+
+        {/* **The list, in this window — and that is not what ⌘1 is for.**
+            ⌘1 puts the task list in a window of its OWN on purpose: the list
+            is something a person keeps beside their writing, so a shortcut that
+            navigated the current window would take away the thing they were
+            writing (MT3). That is an argument about the shortcut, not about the
+            place. Sometimes the list is simply where you are going next, and
+            then a second window is one more window to close — so the sidebar,
+            which is where going somewhere is what every row means, offers it
+            the way it offers everywhere else.
+
+            **It sits at the seam.** Above it is the half somebody wrote down
+            (D53); below it is the half the index derives. The task list is in
+            neither, because it is neither pinned nor found — it is the one
+            file the notebook itself keeps (T1). Like Now it is a distinguished
+            place no fileset names, and unlike Now it is a real document, which
+            is why it goes here rather than up there beside the row that is not
+            a place at all. */}
+        <button type="button" className="nav-row nav-tasks" onClick={onTasks}>
+          <span className="nav-label">Tasks</span>
+          <span className="nav-detail">the day’s list</span>
+        </button>
+
+        {derived.map(sectionBlock)}
 
       <Section id="timeline" title="Timeline" count={timeline.length} open={open.has('timeline')} onToggle={toggle}>
         {/* Newest first: "the most recent five" is what a person means by

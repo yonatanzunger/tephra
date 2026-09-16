@@ -244,6 +244,9 @@ body {
    breathing room below it is its own, so the first section header does not sit
    flush against it (D51). */
 .nav-now { margin-bottom: .25rem; }
+/* At the seam between the written-down half and the derived one, with air on
+   both sides so it reads as belonging to neither. */
+.nav-tasks { margin: .3rem 0; }
 
 .nav-row {
   display: flex; align-items: baseline; gap: .4rem; flex: 1; width: 100%;

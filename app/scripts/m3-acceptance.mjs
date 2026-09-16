@@ -328,6 +328,29 @@ console.log('\n— the sidebar —')
     Array.isArray(r.whereTagsAway) && r.whereTagsAway.length === 0 && r.whereHeadingsAway === 0,
     `${JSON.stringify(r.whereTagsAway)} · ${r.whereHeadingsAway} headings`,
   )
+  check(
+    // **The gesture ⌘1 cannot make.** The shortcut opens the list in a window
+    // of its own on purpose (MT3); the sidebar is where "go there, here" is
+    // what every row means, so the list is offered there too.
+    'THE LIST IS REACHABLE IN THIS WINDOW: one row, named for it',
+    r.tasksRows === 1 && r.tasksLabel === 'Tasks',
+    `${r.tasksRows} rows · ${JSON.stringify(r.tasksLabel)}`,
+  )
+  check(
+    // Under the half somebody wrote down, over the half the index derived —
+    // which in this fixture is the directory sections, Notes among them.
+    'and it sits at the seam: under Now, over the derived sections',
+    Array.isArray(r.navOrder) &&
+      r.navOrder.indexOf('Tasks') > r.navOrder.indexOf('Now') &&
+      r.navOrder.indexOf('Tasks') < r.navOrder.indexOf('Notes') &&
+      r.navOrder.indexOf('Notes') < r.navOrder.indexOf('Timeline'),
+    JSON.stringify(r.navOrder),
+  )
+  check(
+    'and clicking it brings the list HERE, not into a second window',
+    r.tasksLanded === 'Task list',
+    String(r.tasksLanded),
+  )
   check('and nothing errored on the way', r.appError === 'none')
 }
 

@@ -1356,6 +1356,14 @@ export function App(): React.JSX.Element {
             // lands at the end — which is the whole of what "now" means, and
             // why this needs no special case in the editor (MC6, Q7).
             onNow={() => void pane?.goToToday().catch(fail)}
+            // The list this notebook keeps, in the window you asked from —
+            // which is the one thing ⌘1 cannot do, because it opens a window.
+            onTasks={() =>
+              void window.tephra.todo
+                .which()
+                .then(id => pane?.goTo({ kind: 'document', id }))
+                .catch(fail)
+            }
             onActive={(places, current, slot) => setTrack({ places, current, slot })}
             onPin={(reference, label) => {
               void window.tephra.nav

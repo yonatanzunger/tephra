@@ -281,24 +281,19 @@ Daily operation gets significantly easier.
 
 **In:** the three movements; the day's selection, stored per day and not
 surviving the carry; the compact horizon relocated out of the task surface;
-docket staleness reporting; **the three-way offer when a generated task is put
-down** (D79).
+**the three-way offer when a generated task is put down** (D79).
+
+**Docket staleness reporting moved to MH5 (2026-09-16),** where its settled
+design now sits. It was in MH4 because H11 says reorient reports staleness; it
+belongs in MH5 because the review is what makes *last reviewed* a fact — the
+report has nothing to read until the flow that writes it exists, and MH5 is now
+the phase that ships it.
 
 **Settled in advance (2026-09-12), by discussing the experience before building
 it:**
 
-- **Staleness is a matter, not a computation.** Every docket carries one marked
-  matter — a **recurring task to review this docket**, completion-driven. H11
-  already says *"not reviewed since June"*, not *not edited*, and those differ
-  exactly when it matters: a docket you add to weekly is still unreviewed if you
-  never go through the standing matters giving them dates. Three things then come
-  free — *since last time* for the demotion report is the step's completion
-  stamp; the graveyard's exemption is *has none* rather than a special case; and
-  cadence is authored per docket, which the misc docket's own length risk asks
-  for. A real, visible, seeded matter rather than an implicit property, so it can
-  be edited, suspended, or declined outright — but **marked**, the way `after`
-  marks the clock step, so *when was this last reviewed* is answerable without
-  matching on a name.
+- ~~**Staleness is a matter, not a computation.**~~ *Moved to MH5, 2026-09-16 —
+  the claim stands unchanged, the phase it lands in does not. See MH5.*
 - **The stalled chain needs no mechanism of its own.** It is a stall of a TODO
   item, not of a docket, and reorient already sees the live list. What it did
   need was D79, which is built.
@@ -313,6 +308,39 @@ it:**
   region means one thing.
 - **Its appearing pushes the list down, and that is allowed.** D42 is about
   things moving under you unbidden; this reflow is caused by your own gesture.
+
+### The annotation layer — what the phrase names
+
+**Written down 2026-09-16, because it was being cited and never defined.** The
+roadmap has said since 2026-09-12 that the annotation layer is *what remains of
+MH4*, and `features.md` says the same, with nothing anywhere saying what it is.
+What it names, from the discussion it came out of:
+
+> **The annotation layer is how the reorientation flow shows, on screen, what
+> might require attention.**
+
+That is a claim about the *experience* of reorienting rather than about any new
+state. The pass itself is a computation over what the notebook already knows —
+which dates have gone by, which generated tasks were put down, which items have
+not moved, which docket has not been reviewed. What the layer adds is where a
+person *meets* that: annotations on the surfaces already in front of them — the
+task list, the docket, the horizon — rather than a sequence that stops them and
+asks. Reorienting is then **reading**, and the verbs stay where they already
+are, on the rows themselves.
+
+**Why this is the piece that was left.** Everything else in MH4 is a mechanism
+with an obvious end condition: the selection is stored or it is not, the
+horizon is in the frame or it is not. This one is a rendering question with the
+whole flow's usefulness resting on it, and it is the half that use will judge —
+which is the argument that put MH5 in front of it (see the note at the top).
+
+**Undesigned, and deliberately so until there is something to annotate.** Three
+questions are open and none of them can be answered from the records as they
+stand: *what earns an annotation* (a list, not a feeling); *how one is drawn*,
+against D42's rule that nothing moves under you unbidden and the marks the
+surfaces already carry; and *whether an annotation is computed at the moment of
+looking or recorded by the pass* — which is the same question D77 answers for
+every other piece of derived state, and probably has the same answer.
 
 **Mostly assembly.** Movement 2 is the existing walk unchanged, movement 1 is
 MH2's query at a small limit, and movement 3 is small and new.
@@ -334,8 +362,9 @@ of a docket, and it turned out to be a live bug rather than a reporting gap
 begin accruing.
 
 **In:** root dockets; `move`, preserving identity; `[>]` reinterpreted as
-*transferred* and counted as resolved; the review session; migration of the
-**live** backlogged items and of MT7's overall-todo files; `CorpusIndex.backlog()`
+*transferred* and counted as resolved; the review session; **docket staleness
+reporting** (moved here from MH4, 2026-09-16); migration of the **live**
+backlogged items and of MT7's overall-todo files; `CorpusIndex.backlog()`
 retired.
 
 **Smaller than it was, and its centre has shifted.** Once activation exists
@@ -346,6 +375,28 @@ counts accrue, which is the only thing that gives MH6 a threshold instead of a
 guess.
 
 **Out:** the graveyard, deliberately — see MH6.
+
+**Settled in advance, and arrived here from MH4 (2026-09-16):**
+
+- **Staleness is a matter, not a computation.** Every docket carries one marked
+  matter — a **recurring task to review this docket**, completion-driven. H11
+  already says *"not reviewed since June"*, not *not edited*, and those differ
+  exactly when it matters: a docket you add to weekly is still unreviewed if you
+  never go through the standing matters giving them dates. Three things then come
+  free — *since last time* for the demotion report is the step's completion
+  stamp; the graveyard's exemption is *has none* rather than a special case; and
+  cadence is authored per docket, which the misc docket's own length risk asks
+  for. A real, visible, seeded matter rather than an implicit property, so it can
+  be edited, suspended, or declined outright — but **marked**, the way `after`
+  marks the clock step, so *when was this last reviewed* is answerable without
+  matching on a name.
+
+**Why it moved.** Nothing about the claim changed; what changed is which phase
+can act on it. A marked review matter is only worth seeding when there is a
+review to complete it, and the report *not reviewed since June* has nothing to
+read until one has been. MH5 is the phase that ships the flow, so the matter,
+the mark, and the report ship with it — and MH4's remaining piece stops
+carrying a dependency on a flow that comes after it.
 
 **Why the review comes before the graveyard.** Decline count is un-backfillable
 and only accrues once the review exists. Shipping them together would mean
