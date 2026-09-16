@@ -4339,3 +4339,79 @@ As `reason:` the ambiguity does not arise.
 stands: the structure is in the file. Nothing moves to a database, an index or a
 sidecar, and the notebook remains the truth — which is the failure that clause
 was written against.
+
+---
+
+## D86: There is one measure, and the code block's size is solved to fit it
+
+**Date:** 2026-09-15
+**Status:** decided and **built**
+**Amends:** the prose intent in `editor/kinds/markdown/theme.ts` and
+`milestones.md`'s ML4 note — *a block reaches its own measure, **past** the prose
+column* — whose second half is reversed. **Extends:** D42 (the frame's
+arrangement), R27 (the annotation gutter), ML4 (a theme authors the code face).
+**Source:** reported from use — *one of the tables I added is breaking the
+measure* — and then five wrong answers on the way to this one.
+
+**Decision.** The reading measure is the one width in the frame, and **nothing
+widens it**: prose wraps there whatever a document contains.
+
+> A code block still gets its eighty columns. It gets them by having its **size
+> solved** so that eighty columns of the code face *is* the measure —
+> `codeSize = (measure × advance(body)) / (codeMeasure × advance(code))` — rather
+> than by reaching past the column.
+
+A table is bounded by the column and compresses to fit; when it genuinely cannot,
+its own wrapper scrolls, which is the one place overflow has somewhere to go.
+
+**Why this and not two measures.** A declared *wide* measure for code and tables
+was the obvious alternative and costs the frame's geometry: the gutter would
+begin further out on every window whether or not a document has code, and where
+the gutter begins is what D42 settled with a study. Solving the size changes no
+geometry at all — and it turns two independent theme numbers that were *supposed*
+to agree into one quantity with the other derived, which is the third time this
+codebase has paid for that pattern (the tag and the due date at 14px and 11px;
+`--note-lift` computed where its `em` did not resolve; and now this).
+
+`codeSize` in a theme keeps a job: it is the size of **inline** code in a line of
+prose, where fitting eighty columns means nothing.
+
+**The floor.** Below **11px** the derivation stops being a service — eighty
+columns of six-point type is not a block anybody reads — so the size holds there
+and the block wraps instead, which is the trade the measure itself makes at a
+window too narrow for it.
+
+### The mechanism, and how long it hid
+
+`.cm-content` is a flex item with `width: var(--measure)`. **CodeMirror measures
+the widest thing it has rendered and writes it inline** as `flex-basis` — read
+off the reporter's live DOM as `flex-basis: 1510px` — and for a flex item
+`flex-basis` beats `width`, while an inline declaration beats a stylesheet one.
+So the measure was being overruled by the content it exists to constrain, and the
+prose wrapped at the table's width, ran under the annotation gutter and was
+clipped mid-word.
+
+The guard is the **one `!important` in the stylesheet**, which is what the cascade
+provides for exactly this: there is no other way to beat an inline style short of
+patching the library.
+
+### Five wrong answers, because the order of them is the lesson
+
+1. **A flexbox `min-width: auto` diagnosis**, from reading the CSS. Plausible,
+   and never demonstrated.
+2. **A fixture that could not reproduce it.** The reported table was copied
+   verbatim and *fitted*: cells wrap word by word, so a table compresses to
+   whatever it is given. A check over it passed while the bug was live.
+3. **Bounding the widget**, which an A/B against the reporter's own notebook
+   showed changing nothing measurable — because this build never triggers
+   CodeMirror's wide measurement at all.
+4. **Clamping the column and calling it safe** on the grounds that *nothing in
+   this frame needs a wider column*. Falsified by a recorded design decision one
+   file away: a code block is given `maxWidth: none` on purpose.
+5. **Reading my own check's failure as the design working.** With a code block in
+   the fixture, *the prose still ends at the measure* failed by 80px — which was
+   the code line, doing what it was built to do, counted as prose.
+
+**What actually found each one was a measurement**, and what made the
+measurements trustworthy was the reporter pasting the live DOM. A cropped
+screenshot supported three different theories; one inline style settled it.

@@ -379,6 +379,146 @@ export async function runVerify(request: string): Promise<void> {
       say('lineBoxes', lines.slice(0, 8))
     }
 
+    if (scene === 'wide') {
+      // **A table wider than the measure must not widen the measure** (D42,
+      // R27). Reported from use: a six-column table at the end of a day pushed
+      // the column open and took the prose with it, so sentences ran off the
+      // right edge of the window.
+      await settle(1200)
+      // **Scroll until the table is decorated.** CodeMirror renders what is near
+      // the viewport, so a table further down the day is not in the DOM to be
+      // measured — the first version of this scene reported *no table* and
+      // measured a column that nothing was pushing on.
+      {
+        // **Swept, not scrolled in a direction.** The stream opens at the END of
+        // today (that is what opening the app means), so a table earlier in the
+        // day is ABOVE the viewport — and scrolling down, which is what this
+        // first did, walks away from it.
+        const scroller = document.querySelector('.cm-scroller') as HTMLElement | null
+        let found = false
+        for (let at = 0; at <= 40 && !found; at += 1) {
+          if (scroller !== null) {
+            scroller.scrollTop = Math.round((scroller.scrollHeight - scroller.clientHeight) * (at / 40))
+          }
+          await settle(120)
+          found = document.querySelector('.tx-table') !== null
+        }
+        say('sweptTo', scroller === null ? -1 : Math.round(scroller.scrollTop))
+        // **And then WAIT.** CodeMirror measures the widest content and writes
+        // `flex-basis` inline on `.cm-content` a frame or two later; reading the
+        // width the moment the widget appears reports the column as it was
+        // *before* the widget was accounted for, which is how the first version
+        // of this scene certified a bug as absent.
+        await settle(1500)
+      }
+      const content = document.querySelector('.cm-content') as HTMLElement | null
+      const reading = document.querySelector('.frame-reading') as HTMLElement | null
+      const wrap = document.querySelector('.tx-table') as HTMLElement | null
+      const style = content === null ? null : getComputedStyle(content)
+      say('tableRendered', wrap !== null)
+      // **What CodeMirror asked for**, which is the thing that beats the measure:
+      // an inline `flex-basis` from its own widest-content measurement.
+      say('flexBasis', content === null ? 'none' : (content.style.flexBasis || 'unset'))
+      say('measure', reading === null
+        ? -1
+        : Math.round(parseFloat(getComputedStyle(reading).getPropertyValue('--measure'))))
+      // The measure is the content box; the reserved gutter is padding, and
+      // counting it as text would hide exactly the failure being looked for.
+      say('columnWidth', content === null || style === null
+        ? -1
+        : Math.round(content.getBoundingClientRect().width
+          - parseFloat(style.paddingRight) - parseFloat(style.paddingLeft)))
+      // **Does the table scroll inside the column, or is it the column?**
+      say('table', wrap === null ? null : {
+        client: Math.round(wrap.clientWidth),
+        scroll: Math.round(wrap.scrollWidth),
+      })
+      // **Why a table in THIS editor always compresses**: CodeMirror's wrapping
+      // sets `overflow-wrap`/`word-break` on the content, which inherits into
+      // every cell — so even an unbreakable token breaks, and a table can always
+      // be made to fit. Worth knowing before asserting that one scrolls.
+      {
+        const cell = document.querySelector('.tx-table td')
+        const css = cell === null ? null : getComputedStyle(cell)
+        say('cellWrapping', css === null
+          ? 'none'
+          : `${css.overflowWrap}/${css.wordBreak}/${css.whiteSpace}`)
+        // **What a cell DRAWS**, which is the other half of the report: a cell
+        // reading `**Property**` used to show its asterisks, because a widget's
+        // DOM is outside the decoration machinery that conceals marks in a line.
+        const marked = [...document.querySelectorAll('.tx-table td, .tx-table th')]
+          .find(one => one.querySelector('strong, em, code, .tx-link') !== null)
+        say('cellMarks', marked === undefined ? null : {
+          text: (marked.textContent ?? '').trim(),
+          tags: [...marked.querySelectorAll('strong, em, code, .tx-link')]
+            .map(one => one.tagName.toLowerCase() + (one.className ? `.${one.className}` : '')),
+        })
+        say('cellSource', [...document.querySelectorAll('.tx-table td, .tx-table th')]
+          .some(one => /\*\*|`/.test(one.textContent ?? '')))
+      }
+      // And the prose: a line's right edge past the column is text off the page.
+      {
+        // **Prose, which excludes a code line**: `.tx-code` has a measure of its
+        // own and is meant to reach past the prose column (`theme.ts`). Counting
+        // it as prose made this report an 80px overflow that is the design
+        // working — and would have had me "fix" it.
+        const lines = ([...document.querySelectorAll('.cm-line')] as HTMLElement[])
+          .filter(l => !l.classList.contains('tx-code'))
+        const right = content === null
+          ? 0
+          : content.getBoundingClientRect().right - parseFloat(getComputedStyle(content).paddingRight)
+        say('proseOverflow', Math.round(Math.max(
+          0,
+          ...lines.map(l => l.getBoundingClientRect().right - right),
+        )))
+      }
+      // **And what happens when CodeMirror asks for a wider column**, which is
+      // the reported failure's actual mechanism: it measures the widest thing it
+      // has rendered and writes `flex-basis` inline on `.cm-content`. Simulated
+      // here rather than waited for, because the trigger depends on a document
+      // large enough to make CodeMirror measure that way and the GUARD is what
+      // matters: with the widget bounded, nothing should ask for it — and if
+      // something does, the prose must not follow it off the page.
+      if (content !== null) {
+        content.style.flexBasis = '1510px'
+        await settle(400)
+        const style2 = getComputedStyle(content)
+        say('forcedColumn', Math.round(content.getBoundingClientRect().width
+          - parseFloat(style2.paddingRight) - parseFloat(style2.paddingLeft)))
+        const lines = ([...document.querySelectorAll('.cm-line')] as HTMLElement[])
+          .filter(l => !l.classList.contains('tx-code'))
+        const right = content.getBoundingClientRect().right - parseFloat(style2.paddingRight)
+        say('forcedProseOverflow', Math.round(Math.max(
+          0, ...lines.map(l => l.getBoundingClientRect().right - right),
+        )))
+        // **Did the simulation survive?** CodeMirror owns this property and
+        // rewrites it on its own measure pass, so a check built on forcing it
+        // may be measuring nothing at all.
+        say('forcedStuck', content.style.flexBasis || 'cleared by CodeMirror')
+        content.style.flexBasis = ''
+      }
+      // **And what a CODE block does**, which is the other half of the question.
+      // `theme.ts` gives a code line a measure of its own — 80 characters of the
+      // code face, `maxWidth: none` — because code written to eighty columns and
+      // wrapped at a reading measure loses the one thing its layout carries. So a
+      // code line is SUPPOSED to reach past the prose column, and whatever holds
+      // the measure for a table must not hold it against code.
+      {
+        const code = document.querySelector('.cm-line.tx-code') as HTMLElement | null
+        const box = code?.getBoundingClientRect()
+        const inner = content === null
+          ? null
+          : content.getBoundingClientRect().right - parseFloat(getComputedStyle(content).paddingRight)
+        say('codeLine', code === null || box === undefined || inner === null ? null : {
+          width: Math.round(box.width),
+          pastColumn: Math.round(box.right - inner),
+          clipped: Math.round(code.scrollWidth - code.clientWidth),
+        })
+      }
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(400)
+    }
+
     if (scene === 'frame') {
       // D42's guarantee, measured in the real app rather than in a proof sheet:
       // toggling the nav or the capture stream must move nothing. Position AND
@@ -4557,32 +4697,65 @@ export async function runVerify(request: string): Promise<void> {
       const doc = (): string => live().state.doc.toString()
       live().dispatch({ selection: { anchor: live().state.doc.length } })
 
-      // From a bare caret: the markers open and the caret waits between them.
+      // **From a bare caret: ONE delimiter run, and the caret after it** — so
+      // the pair is typed the way a person types it, and the second press
+      // closes what the first opened (reported from use, 2026-09-15).
       say('bold1', await window.tephra.clickMenu('Bold'))
       await settle(500)
       say('afterBold', doc().slice(-8))
-      say('caretInside', live().state.selection.main.head === live().state.doc.length - 2)
+      say('caretAfter', live().state.selection.main.head === live().state.doc.length)
 
-      // Typing lands between them, which is the whole point of the gesture.
-      live().dispatch({
-        changes: { from: live().state.selection.main.head, insert: 'loud' },
-        userEvent: 'input.type',
-      })
+      {
+        // **The caret has to be moved deliberately.** A programmatic insert at
+        // the caret maps the old selection to the START of what was inserted, so
+        // without this the next press acts where the first one did — which is
+        // what a person typing never does, and what made this scene report a bug
+        // in the product that was a bug in the scene.
+        const at = live().state.selection.main.head
+        live().dispatch({
+          changes: { from: at, insert: 'loud' },
+          selection: { anchor: at + 'loud'.length },
+          userEvent: 'input.type',
+        })
+      }
       await settle(500)
-      say('typedInside', doc().slice(-12))
+      say('typedAfter', doc().slice(-12))
 
-      // Select the word and press it again: the markers come off, not on.
-      const at = doc().length
-      live().dispatch({ selection: { anchor: at - 6, head: at - 2 } })
-      await settle(200)
+      // **The press that used to leave `**loud**\u002a\u002a`.** Same characters
+      // opening and closing, so closing needs no cleverness — it just needs the
+      // first press not to have put a marker in the way.
       await window.tephra.clickMenu('Bold')
       await settle(600)
-      say('afterUnbold', doc().slice(-8))
+      say('afterClosing', doc().slice(-12))
 
-      // And italic is the same gesture with one marker.
+      // Select the word with its markers outside it and press again: they come
+      // off, which is the toggle a selection still gets.
+      {
+        const at = doc().length
+        live().dispatch({ selection: { anchor: at - 6, head: at - 2 } })
+        await settle(200)
+        await window.tephra.clickMenu('Bold')
+        await settle(600)
+        say('afterUnbold', doc().slice(-8))
+      }
+
+      // And italic is the same gesture with one marker: open, type, close.
+      live().dispatch({ selection: { anchor: live().state.doc.length } })
+      await settle(200)
+      await window.tephra.clickMenu('Italic')
+      await settle(500)
+      {
+        const at = live().state.selection.main.head
+        live().dispatch({
+          changes: { from: at, insert: 'soft' },
+          selection: { anchor: at + 'soft'.length },
+          userEvent: 'input.type',
+        })
+      }
+      await settle(300)
       await window.tephra.clickMenu('Italic')
       await settle(600)
-      say('afterItalic', doc().slice(-8))
+      say('afterItalic', doc().slice(-10))
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(400)
     }

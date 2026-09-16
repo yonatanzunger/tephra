@@ -201,10 +201,12 @@ export interface EditorHandle extends SurfaceHandle {
   /**
    * Put emphasis on, or take it off again.
    *
-   * A toggle, because the second press of ⌘B is someone changing their mind and
-   * `****` reads as broken. From a bare caret it opens the pair and waits
-   * inside — which is how a person types a bold word they have not written yet,
-   * and why emphasis is the one command that needs no selection.
+   * With a selection: a toggle, because the second press of ⌘B is someone
+   * changing their mind and `****` reads as broken.
+   *
+   * **From a bare caret: one delimiter run**, so `⌘I foo ⌘I` leaves `*foo*` —
+   * the way a person types a word they have not written yet, and why emphasis is
+   * the one command that needs no selection. `bind.ts` has the sequence.
    */
   toggleEmphasis(marker: string): void
   /**

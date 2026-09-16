@@ -815,15 +815,28 @@ console.log('\n\u2014 emphasis \u2014')
 
   check('Bold is in the menu, on \u2318B', r.bold1 === true)
   check(
-    'from a bare caret it opens the markers',
-    typeof r.afterBold === 'string' && r.afterBold.endsWith('****'),
+    // **Reported from use** (2026-09-15): it used to open the whole pair and sit
+    // between them, which looks right and is not — once the word is typed the
+    // caret is before the closing marker, so a second \u2318B matched nothing and
+    // opened a SECOND pair, leaving `*foo*` followed by `**`.
+    'from a bare caret it writes ONE delimiter run',
+    typeof r.afterBold === 'string' && r.afterBold.endsWith('**') &&
+      !r.afterBold.endsWith('****'),
     JSON.stringify(r.afterBold),
   )
-  check('and leaves the caret BETWEEN them', r.caretInside === true)
+  check('and leaves the caret AFTER it, where typing continues', r.caretAfter === true)
   check(
     'so what you type next is what gets emphasised',
-    typeof r.typedInside === 'string' && r.typedInside.endsWith('**loud**'),
-    JSON.stringify(r.typedInside),
+    typeof r.typedAfter === 'string' && r.typedAfter.endsWith('**loud'),
+    JSON.stringify(r.typedAfter),
+  )
+  check(
+    // THE POINT: closing is the same characters as opening, so the second press
+    // finishes the job instead of starting another one.
+    'AND THE SECOND PRESS CLOSES IT, rather than opening another pair',
+    typeof r.afterClosing === 'string' && r.afterClosing.endsWith('**loud**') &&
+      !r.afterClosing.endsWith('****'),
+    JSON.stringify(r.afterClosing),
   )
   check(
     'pressing it again on the same words takes it off, rather than doubling it',
@@ -833,7 +846,7 @@ console.log('\n\u2014 emphasis \u2014')
   )
   check(
     'and italic is the same gesture with one marker',
-    typeof r.afterItalic === 'string' && r.afterItalic.endsWith('*loud*'),
+    typeof r.afterItalic === 'string' && r.afterItalic.endsWith('*soft*'),
     JSON.stringify(r.afterItalic),
   )
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))

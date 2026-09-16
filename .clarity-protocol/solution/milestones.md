@@ -453,6 +453,12 @@ after the list.
     there. It still wraps past that width, because a line you cannot see is a
     line you will forget to read.
 
+    > **Amended 2026-09-15 by D86.** *Past the prose column* is reversed: a block
+    > gets its eighty columns **inside** the measure, by having its size solved so
+    > that eighty columns of the code face is exactly the measure's width. The
+    > mechanism it used to reach past the column is the same one by which a wide
+    > table dragged the prose out with it.
+
     **Colour is restrained and comes from the theme's existing palette** —
     comments quiet and italic, keywords and strings on the accent at two
     strengths, everything else ink. It works on themes nobody has written yet

@@ -91,11 +91,22 @@ export interface Binding {
   /**
    * Put emphasis on, or take it off again.
    *
-   * A TOGGLE rather than an insert, because the second press of ⌘B is a person
-   * changing their mind, and answering it with `****` is the kind of thing that
-   * reads as broken. With nothing selected it opens the pair and leaves the
-   * caret between them, which is how you type a bold word you have not written
-   * yet.
+   * **With a selection: a toggle.** The second press of ⌘B is a person changing
+   * their mind, and answering it with `****` reads as broken.
+   *
+   * **With nothing selected: one delimiter run at the caret**, so the pair is
+   * typed the way a person actually types it — reported from use (2026-09-15):
+   *
+   *     ^            ⌘I
+   *     *^           foo
+   *     *foo^        ⌘I
+   *     *foo*^
+   *
+   * It used to open the whole pair and sit between them (`*^*`), which looks
+   * right and is not: once you have typed the word, the caret is before the
+   * closing marker and a second ⌘I matches nothing, so it opened a SECOND pair
+   * and left `*foo*^**`. Emphasis is the one command that is normally used
+   * without a selection, so that is the case it has to be right for.
    */
   toggleEmphasis(marker: string): void
   /**
@@ -331,6 +342,15 @@ export function bindEditor(options: BindOptions): Binding {
                 { from: range.to - n, to: range.to },
               ],
               range: EditorSelection.range(range.from, range.to - 2 * n),
+            }
+          }
+          // **Nothing selected: one run, at the caret.** Pressing again after
+          // typing the word closes it, because closing is the same characters
+          // as opening — which is the whole reason this needs no cleverness.
+          if (range.empty) {
+            return {
+              changes: [{ from: range.from, insert: marker }],
+              range: EditorSelection.cursor(range.from + n),
             }
           }
           return {

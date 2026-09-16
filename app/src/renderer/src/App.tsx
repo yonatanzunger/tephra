@@ -70,6 +70,7 @@ import { ZoneBar } from './frame/ZoneBar'
 import { Links } from './frame/Links'
 import type { ZoneNotice } from '../../shared/ipc.ts'
 import { useTheme, typographyOf } from './theme/useTheme'
+import { forgetAdvances } from './editor/typography'
 import { ThemePanel } from './theme/ThemePanel'
 
 /** A reference in words, for the one place a person is told about a failure. */
@@ -178,7 +179,34 @@ export function App(): React.JSX.Element {
   const theme = useTheme(themeName, setThemeName)
   // The editor and the frame both lay out from the DRAFT, so a slider moves the
   // text while it is being dragged. That is the entire point of the panel.
-  const typography = useMemo(() => typographyOf(theme.draft, theme.face), [theme.draft, theme.face])
+  /**
+   * **Recomputed once the fonts are in.** The code block's size is solved from
+   * the *measured* advance of the body and code faces (D86), and a measurement
+   * taken before `Lora` and `JetBrains Mono` arrive measures whatever fallback
+   * was standing in — so the block would be sized from the wrong font and look
+   * near-right, which is the worst kind of wrong.
+   *
+   * `document.fonts.ready` settles once per session; this forgets the cached
+   * advances and asks for one more pass.
+   */
+  const [fontsIn, setFontsIn] = useState(false)
+  useEffect(() => {
+    let live = true
+    void document.fonts.ready.then(() => {
+      if (!live) return
+      forgetAdvances()
+      setFontsIn(true)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+  const typography = useMemo(
+    () => typographyOf(theme.draft, theme.face),
+    // `fontsIn` is not read: it is here to ask for the recomputation above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme.draft, theme.face, fontsIn],
+  )
   const [error, setError] = useState<string | null>(null)
   const [diverged, setDiverged] = useState<{ date: string } | null>(null)
   const [navVisible, setNavVisible] = useState(true)

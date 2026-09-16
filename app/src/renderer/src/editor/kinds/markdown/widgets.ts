@@ -158,6 +158,95 @@ class ImageWidget extends WidgetType {
   }
 }
 
+/**
+ * A link as the reader sees it: its words, live.
+ *
+ * **One factory, because there are two callers** — the link widget in a line of
+ * prose, and a link inside a table cell. Two copies would have differed in the
+ * way this codebase keeps finding: the cell's would have been a plain `<a href>`
+ * that the desktop opens, where `openLink` resolves a path inside the notebook
+ * first (D54).
+ */
+function linkElement(label: string, target: string): HTMLElement {
+  const el = document.createElement('span')
+  el.className = 'tx-link'
+  el.textContent = label
+  el.title = target
+  el.setAttribute('role', 'link')
+  el.addEventListener('mousedown', event => {
+    event.preventDefault()
+    event.stopPropagation()
+    void window.tephra.openLink(target)
+  })
+  return el
+}
+
+/**
+ * Inline marks inside a table cell, drawn the way a line of prose draws them.
+ *
+ * **Reported from use** (2026-09-15): a cell reading `**Property**` showed its
+ * asterisks. A cell was `td.textContent = cell`, which is the one place in the
+ * surface where markdown was rendered as its own source — the line renderer
+ * conceals the marks with decorations, and a widget's DOM is outside that
+ * machinery entirely.
+ *
+ * **The same patterns as the line**, imported rather than rewritten: `a *b* c`
+ * inside a code span is three words and two asterisks, and two answers about
+ * that is the failure `codeSpans` already exists to prevent.
+ *
+ * Priority is code, then links, then strong, then emphasis — the first match
+ * wins a piece of text, so a link's label is not re-scanned for asterisks it
+ * does not have.
+ */
+function inlineInto(parent: HTMLElement, text: string): void {
+  type Found = { from: number; to: number; make: () => Node }
+  const found: Found[] = []
+  const claimed = (from: number, to: number): boolean =>
+    found.some(one => from < one.to && to > one.from)
+
+  for (const [from, to] of codeSpans(text)) {
+    const inner = text.slice(from, to).replace(/^`+|`+$/g, '')
+    found.push({ from, to, make: () => {
+      const el = document.createElement('code')
+      el.textContent = inner
+      return el
+    } })
+  }
+  for (const link of scanLinks(text)) {
+    if (link.image || claimed(link.from, link.to)) continue
+    found.push({ from: link.from, to: link.to, make: () => linkElement(link.label, link.target) })
+  }
+  for (const [pattern, tag] of [
+    [STRONG_STAR, 'strong'], [STRONG_UNDER, 'strong'],
+    [EM_STAR, 'em'], [EM_UNDER, 'em'],
+  ] as const) {
+    pattern.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = pattern.exec(text)) !== null) {
+      const to = m.index + m[0].length
+      if (claimed(m.index, to)) continue
+      const inner = m[1] as string
+      found.push({ from: m.index, to, make: () => {
+        const el = document.createElement(tag)
+        // **Nested, because emphasis nests**: `**bold *and italic*** ` is one
+        // inside the other, and a cell is prose like any other.
+        inlineInto(el, inner)
+        return el
+      } })
+    }
+  }
+
+  found.sort((a, b) => a.from - b.from)
+  let at = 0
+  for (const one of found) {
+    if (one.from < at) continue
+    if (one.from > at) parent.appendChild(document.createTextNode(text.slice(at, one.from)))
+    parent.appendChild(one.make())
+    at = one.to
+  }
+  if (at < text.length) parent.appendChild(document.createTextNode(text.slice(at)))
+}
+
 class TableWidget extends WidgetType {
   readonly key: string
   constructor(readonly rows: readonly string[]) {
@@ -178,7 +267,7 @@ class TableWidget extends WidgetType {
       const tr = document.createElement('tr')
       for (const cell of cells(row)) {
         const td = document.createElement(i === 0 ? 'th' : 'td')
-        td.textContent = cell
+        inlineInto(td, cell)
         tr.appendChild(td)
       }
       table.appendChild(tr)
@@ -283,17 +372,7 @@ class LinkWidget extends WidgetType {
   }
 
   toDOM(): HTMLElement {
-    const el = document.createElement('span')
-    el.className = 'tx-link'
-    el.textContent = this.#label
-    el.title = this.#target
-    el.setAttribute('role', 'link')
-    el.addEventListener('mousedown', event => {
-      event.preventDefault()
-      event.stopPropagation()
-      void window.tephra.openLink(this.#target)
-    })
-    return el
+    return linkElement(this.#label, this.#target)
   }
 
   /** The click belongs to the link, not to the editor underneath it. */

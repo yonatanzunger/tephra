@@ -377,6 +377,117 @@ console.log('\n— geometry —')
   check('with an earlier day above it', r.earlierDayAbove === true)
 }
 
+// ── a table wider than the measure ──────────
+//
+// **Reported from use** (2026-09-15), from a real notebook: a six-column table
+// at the end of a day pushed the reading column open and took the prose with it,
+// so sentences ran off the right edge of the window. The measure is the one
+// promise this frame exists to keep (D42, R27) — so a table is allowed to be
+// wider than it and is not allowed to widen it.
+console.log('\n— a wide table —')
+{
+  // **The shape reported from use**, and then a cell that cannot compress.
+  //
+  // The reported table is six ordinary columns, and a table like that COMPRESSES:
+  // its cells wrap word by word, so it fits any measure and needs no scroller.
+  // That is why the first version of this section passed while the bug was live.
+  // The last row holds one unbreakable token, which is the only way to make a
+  // table genuinely wider than the column it is in — and that is the case where
+  // *bounded, with its own scroller* has to be true rather than moot.
+  const table = [
+    '| Mode | Impact | Work | Scariness | Boundaries | Notes |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| **Netflix-type job** | Low | High | Low | Externally enforced | `see note` |',
+    '| SoD book etc | High | Med-High | High | Must be internal | Time pressure: need to act soon |',
+    '| Clarity-type work | Uncertain | Med-High | Med | Must be internal | Details still fuzzy |',
+    '| Unbreakable | x | y | z | w | aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa |',
+  ].join('\n')
+  // **And a fenced block**, because a code line has a measure of its own and is
+  // meant to reach past the prose column (`theme.ts`: 80 characters of the code
+  // face, `maxWidth: none`). Whatever holds the measure for a table must leave
+  // that alone — which is the mistake this section nearly shipped.
+  const code = [
+    '```python',
+    'def a_line_of_code_written_to_eighty_columns(argument, another, third):  # and a comment',
+    '    return argument + another + third  # eighty columns is the point of the width',
+    '```',
+  ].join('\n')
+  const root = await week([
+    `Before the table, a sentence long enough to show where the measure is.\n\n${table}\n\n${code}\n\nAnd after it, another sentence of ordinary prose that should wrap at the measure.\n`,
+  ])
+  const r = report(await launch('wide', root, { timeoutMs: 60_000, shotDelay: 25_000 }))
+
+  check('the table renders as a table', r.tableRendered === true, String(r.tableRendered))
+  check(
+    // **The failure, stated as the check.** `.cm-content` is a flex item with an
+    // explicit width, and a flex item's automatic minimum is its content's
+    // min-content size — so a wide table grew the column despite the width, and
+    // `min-width: 0` is what lets the width mean what it says.
+    'A WIDE TABLE DOES NOT WIDEN THE COLUMN',
+    typeof r.measure === 'number' && typeof r.columnWidth === 'number' &&
+      Math.abs(r.columnWidth - r.measure) <= 1,
+    `measure ${r.measure}px · column ${r.columnWidth}px`,
+  )
+  check(
+    // **The guard, and the check that actually catches the reported bug.**
+    // CodeMirror writes `flex-basis` inline on `.cm-content` from its own
+    // widest-content measurement — `1510px` in the notebook that reported this —
+    // and for a flex item that beats `width`, so the measure was overruled by
+    // the content it exists to constrain. This does what CodeMirror does and
+    // asserts the column does not move.
+    //
+    // **The trigger is not reproducible here and the guard is**, which is why it
+    // is tested this way: the same table in the same notebook never made this
+    // build measure wide, so a check that waited for the symptom would pass
+    // while the bug was live — as an earlier version of this section did.
+    'AND THE MEASURE HOLDS when something asks for a wider column',
+    r.forcedStuck !== 'cleared by CodeMirror' &&
+      typeof r.forcedColumn === 'number' && Math.abs(r.forcedColumn - r.measure) <= 1 &&
+      r.forcedProseOverflow === 0,
+    `asked for ${r.forcedStuck} → column ${r.forcedColumn}px, prose ${r.forcedProseOverflow}px past it`,
+  )
+  check(
+    // **Words stay whole in a cell.** CodeMirror's wrapping sets `overflow-wrap:
+    // anywhere` on its content and it inherited into cells, which broke
+    // *Property* across two lines as *Prop / erty* — reported from use, and at
+    // its worst in a table because a column is narrow by nature.
+    'a cell breaks at spaces, not mid-word',
+    typeof r.cellWrapping === 'string' && r.cellWrapping.startsWith('normal/normal'),
+    String(r.cellWrapping),
+  )
+  check(
+    // **Reported from use**: a cell reading `**Property**` showed its asterisks.
+    // A widget's DOM is outside the decoration machinery that conceals marks in
+    // a line, and the cell was assigned `textContent` — the one place in this
+    // surface where markdown was rendered as its own source.
+    'AND A CELL DRAWS ITS MARKS rather than showing them',
+    r.cellMarks !== null && typeof r.cellMarks === 'object' &&
+      r.cellMarks.tags.includes('strong') && r.cellSource === false,
+    `${JSON.stringify(r.cellMarks)} · any literal marks left: ${r.cellSource}`,
+  )
+  check(
+    'and the prose still ends at the measure',
+    r.proseOverflow === 0,
+    `${r.proseOverflow}px past the column`,
+  )
+  check(
+    // **The two claims that read as a conflict and are not one** (D86). Code is
+    // written to eighty columns and wrapping it narrower destroys the one thing
+    // its layout carries; prose wraps at a reading measure and must not be
+    // dragged wider by anything. Solved rather than traded off: the block's size
+    // is derived so that eighty columns of the code face IS the prose measure.
+    //
+    // Before this, a code block took `maxWidth: none` and reached past the
+    // column — into the band the annotation gutter lives in — and the mechanism
+    // that let it do so is the one that let a table drag the prose out with it.
+    'A CODE BLOCK GETS EIGHTY COLUMNS AND STAYS IN THE COLUMN',
+    r.codeLine !== null && typeof r.codeLine === 'object' &&
+      Math.abs(r.codeLine.width - r.measure) <= 2 && r.codeLine.pastColumn <= 1,
+    JSON.stringify(r.codeLine),
+  )
+  check('nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 if (process.env.TEPHRA_TIMING !== undefined) {
   const total = spent.reduce((n, one) => n + one.ms, 0)
   console.log(`\n\u2014 where the time went: ${(total / 1000).toFixed(1)}s across ${spent.length} launches \u2014`)

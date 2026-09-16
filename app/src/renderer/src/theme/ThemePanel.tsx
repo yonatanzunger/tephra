@@ -16,6 +16,9 @@
 // it names is a worse instrument than none: it teaches you the other half is
 // not adjustable.
 
+import { useMemo } from 'react'
+import { codeBlockSize } from '../editor/typography'
+import { typographyOf } from './useTheme'
 import type { Theme } from '../../../shared/theme.ts'
 import type { ThemeControl } from './useTheme'
 
@@ -34,6 +37,18 @@ export function ThemePanel({
   onClose: () => void
 }): React.JSX.Element {
   const { themes, draft, dirty, saving, builtIn } = control
+
+  /**
+   * What a code block's size comes out at, for the readout below (D86).
+   *
+   * Measured from the faces themselves, so it answers for the fonts this machine
+   * actually has — and recomputed as the sliders move, which is the point: it
+   * says whether the measure you are choosing leaves code readable.
+   */
+  const blockSize = useMemo(
+    () => codeBlockSize(typographyOf(draft, draft.face)),
+    [draft],
+  )
 
   return (
     <aside className="theme-panel" aria-label="Theme">
@@ -251,10 +266,15 @@ export function ThemePanel({
           onChange={e => control.update({ codeFace: e.target.value })}
         />
       </label>
-      {/* A RATIO, not a size: a monospaced face reads larger than a serif at the
-          same nominal size, and it should stay a little smaller when the body
-          size moves. */}
-      <Slider label="Size" unit="×" min={0.5} max={1.5} step={0.01}
+      {/* **Inline code only** (D86). A RATIO, not a size: a monospaced face reads
+          larger than a serif at the same nominal size, and it should stay a
+          little smaller when the body size moves.
+          
+          A code BLOCK is not sized from this — its size is solved so that the
+          measure below fits the prose column exactly, which is the one number
+          the two of them have to agree about. The panel says what that comes to
+          rather than leaving it to be discovered. */}
+      <Slider label="Inline size" unit="×" min={0.5} max={1.5} step={0.01}
         value={draft.codeSize} onChange={codeSize => control.update({ codeSize })} />
       <Slider label="Leading" unit="" min={1} max={2.4} step={0.02}
         value={draft.codeLeading} onChange={codeLeading => control.update({ codeLeading })} />
@@ -262,6 +282,16 @@ export function ThemePanel({
         value={draft.codeMeasure} onChange={codeMeasure => control.update({ codeMeasure })} />
       <Slider label="Inset" unit="ch" min={0} max={8} step={0.5}
         value={draft.codeIndent} onChange={codeIndent => control.update({ codeIndent })} />
+      {/* **What a block will actually be**, solved rather than set (D86). Shown
+          because a panel that lets you set a size and then sizes blocks by
+          another rule is a panel that lies — and because the number is the
+          interesting one: it says whether the measure you chose leaves code
+          readable. At the floor it says so, and the block wraps. */}
+      <p className="theme-derived">
+        A block: {draft.codeMeasure} columns at{' '}
+        {Math.round(blockSize.em * draft.size * 10) / 10}px
+        {blockSize.wraps ? ' \u2014 at the floor, so it wraps' : ', which is the measure exactly'}
+      </p>
       <p className="theme-sample theme-code-sample">
         <code>{'def solve(grid):  # memoised\n    return cache["key"]'}</code>
       </p>

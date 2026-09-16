@@ -13,7 +13,7 @@ import { EditorView } from '@codemirror/view'
 import { HighlightStyle } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { Compartment, type Extension } from '@codemirror/state'
-import type { Typography } from '../../typography.ts'
+import { codeBlockSize, type Typography } from '../../typography.ts'
 
 export const typographyCompartment = new Compartment()
 
@@ -99,21 +99,30 @@ export function tephraTheme(t: Typography): Extension {
 
     // ── code ─────────────────────────────────────────────────────────────
     //
-    // **A block reaches its own measure, past the prose column.** Code is
-    // written to eighty columns and wrapping it at a reading measure destroys
-    // the one thing its layout carries. `ch` here is a character of the CODE
-    // face, because that is the font on the line — which is what makes the
-    // number mean what a person setting it expects.
+    // **A block gets its own measure — eighty columns — AND stays inside the
+    // prose column** (D86). Code is written to eighty columns and wrapping it
+    // narrower destroys the one thing its layout carries; prose wraps at a
+    // reading measure and must not be dragged wider by anything. Those read as
+    // a conflict and are not one: the size is **solved for** so that eighty
+    // columns of the code face is exactly as wide as the prose measure
+    // (`codeBlockSize`), and then both are true at once with nothing overflowing
+    // and nothing to scroll.
     //
-    // Wider than the column rather than scrolling inside it: a line you cannot
-    // see is a line you will forget to read. Past this width it still wraps.
+    // `ch` here is a character of the CODE face, because that is the font on the
+    // line — which is what makes `codeMeasure` mean what a person setting it
+    // expects, and what makes the solved size land the width where the prose
+    // column ends.
     '.cm-line.tx-code': {
       fontFamily: 'var(--font-code)',
-      fontSize: `${t.codeSize}em`,
+      fontSize: `${codeBlockSize(t).em}em`,
       lineHeight: `${t.codeLeading}`,
       paddingLeft: `${t.codeIndent}ch`,
       width: `${t.codeMeasure}ch`,
-      maxWidth: 'none',
+      // **Clamped now, where it used to be `none`.** The width above is the prose
+      // measure by construction, so this only bites at a window too narrow for
+      // the measure itself — where wrapping the code is the same trade the prose
+      // is already making.
+      maxWidth: '100%',
       // Never justified, whatever prose is doing: stretching the spaces in a
       // line of code changes what it says it is.
       textAlign: 'left',

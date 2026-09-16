@@ -127,6 +127,29 @@ body {
      flexing before setting the width. */
   flex: 0 0 auto;
   width: var(--measure);
+  /* **The one `!important` in this stylesheet, and what it is for.**
+     
+     Reported from use (2026-09-15): a six-column table made the prose wrap far
+     past the measure, run under the annotation gutter and clip mid-word. The
+     mechanism, read off the live DOM: **CodeMirror writes `flex-basis` inline on
+     this element** from its own measurement of the widest thing it has rendered
+     — `flex-basis: 1510px` — and for a flex item `flex-basis` beats `width`. An
+     inline declaration also beats a stylesheet one, so the measure this frame
+     exists to keep was being overruled by the content it exists to constrain.
+     `!important` is the cascade's designated answer to exactly that, and there is
+     no other way to beat an inline style short of patching the library.
+     
+     **And nothing is hidden by clamping it**, which is what makes this safe
+     rather than merely effective: the editor wraps, and its `overflow-wrap:
+     anywhere` inherits into every widget — measured, including into table cells
+     — so no content in this frame NEEDS a column wider than the measure. A table
+     that cannot compress has its own scroller (`.tx-table`).
+     
+     The alternative considered and rejected: bounding each widget so CodeMirror
+     never measures wide. It addresses one cause rather than the class, and an
+     A/B against the notebook that reported this showed it changing nothing
+     measurable — unverifiable CSS is how a stylesheet accumulates ballast. */
+  flex-basis: var(--measure) !important;
   max-width: 100%;
   margin: 0;
   padding-right: var(--gutter);
@@ -1231,6 +1254,14 @@ body {
   border: 1px solid rgb(var(--border-strong)); border-radius: 5px; padding: .2rem .35rem; min-width: 0; }
 /* The sample is set in the body face, so the slider is judged against the type
    it will actually affect rather than against the panel's UI font. */
+/* A number the panel SOLVED rather than took: what a code block's size comes out
+   at, given the measure and the two faces (D86). Quiet, because it is a readout
+   and not a control — but present, because a panel that lets you set a size and
+   then sizes blocks by another rule is a panel that lies. */
+.theme-derived {
+  margin: -.2rem 0 .5rem; font-family: var(--font-ui); font-size: .78rem;
+  color: rgb(var(--text-muted));
+}
 .theme-sample { margin: .1rem 0 0; font-family: var(--font-body);
   font-size: 15px; line-height: 1.5; color: rgb(var(--panel-text)); }
 
@@ -1332,7 +1363,20 @@ body {
 
 .tx-table { display: block; padding: .5em 0; overflow-x: auto; }
 .tx-table table { border-collapse: collapse; font-size: .9em; font-family: var(--font-ui); width: 100%; }
-.tx-table th, .tx-table td { border-bottom: 1px solid rgb(var(--border)); padding: .35em .7em; text-align: left; }
+.tx-table th, .tx-table td {
+  border-bottom: 1px solid rgb(var(--border)); padding: .35em .7em; text-align: left;
+  /* **Words stay whole in a cell.** CodeMirror's wrapping sets `overflow-wrap:
+     anywhere` on its content and it inherits in here, which broke *Property*
+     across two lines as *Prop / erty* — reported from use. A column is narrow by
+     nature, so anywhere-breaking is at its worst exactly here. Undone for cells
+     only: the table compresses to word boundaries and, when it cannot fit, its
+     wrapper scrolls (`.tx-table`), which is the one place overflow has somewhere
+     to go. */
+  overflow-wrap: normal; word-break: normal;
+}
+/* Inline marks inside a cell are drawn, not literal (`widgets.ts`'s
+   `inlineInto`). `code` in a cell takes the code face at the cell's own size. */
+.tx-table code { font-family: var(--font-code); font-size: .92em; }
 .tx-table th { color: rgb(var(--text-heading)); font-weight: 600; border-bottom-width: 1.5px; }
 
 /* headings carry their size on the line, so the whole line reflows with it */
