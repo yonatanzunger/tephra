@@ -19,6 +19,7 @@ import type { BrowserWindow, WebContents } from 'electron'
 import type { NotebookService } from '../services/notebook-service.ts'
 import { attachWindow } from './ipc.ts'
 import { setMenuTargets } from './menu.ts'
+import { isDraft, type RelPath } from '../w/layout.ts'
 import { STREAM_ID, type DocumentId } from '../../shared/document-api.ts'
 import type { WindowInfo, WindowReport } from '../../shared/ipc.ts'
 import type { NavTarget } from '../../shared/pane-api.ts'
@@ -184,7 +185,15 @@ export class Windows {
   }
 
   #syncMenu(): void {
-    setMenuTargets({ importable: this.importable() !== null, renamable: this.renamable() !== null })
+    const named = this.renamable()
+    setMenuTargets({
+      importable: this.importable() !== null,
+      renamable: named !== null,
+      // **Whether the focused document still needs a name** (D90), which is what
+      // ⌘S offers to give it. A place rather than a state, so the question is
+      // answered by the path.
+      draft: named !== null && isDraft(named as string as RelPath),
+    })
   }
 
   /** Every window, with its live bounds — what the file should say right now. */

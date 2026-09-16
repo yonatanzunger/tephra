@@ -104,6 +104,21 @@ export const NOTES_DIR = 'notes'
  * the nav derives a section from what is on disk, and nothing is on disk yet.
  */
 export const DOCKETS_DIR = 'dockets'
+
+/**
+ * Where a document with no name yet lives (D90).
+ *
+ * **A place, not a state.** A draft is an ordinary document — versioned,
+ * journalled, indexed, recoverable from the first keystroke, like everything
+ * else (D32) — and the only thing it lacks is a name somebody chose. Keeping the
+ * unnamed ones together is what stops `untitled-7` appearing in the middle of a
+ * list of real notes, and naming one is what moves it out.
+ *
+ * **Not in `REQUIRED_DIRS`**, for the reason `dockets/` is not: the nav derives a
+ * section from what is on disk, so a notebook with no drafts shows no Drafts
+ * section rather than an empty one.
+ */
+export const DRAFTS_DIR = 'drafts'
 export const SECTIONS_DIR = 'sections'
 export const ATTACHMENTS_DIR = 'attachments'
 
@@ -227,6 +242,11 @@ export const REQUIRED_DIRS: readonly RelPath[] = [
   LOCAL_DIR,
   LOCAL.wal,
 ]
+
+/** True for a document that has no name anybody chose yet (D90). */
+export function isDraft(rel: RelPath): boolean {
+  return rel.startsWith(`${DRAFTS_DIR}/`)
+}
 
 /** True for paths under `.tephra/`, which is machine-local and never synced. */
 export function isLocal(rel: RelPath): boolean {

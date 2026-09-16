@@ -3113,6 +3113,34 @@ export async function runVerify(request: string): Promise<void> {
       say('rawInBuffer', view.state.doc.toString().includes('tephra:'))
       say('bodyInBuffer', view.state.doc.toString().includes('premise 2'))
       say('quickReactions', [...document.querySelectorAll('.rail .quick')].map(b => b.textContent))
+      // **At rest the offered emoji are invisible** — reported from use: a row of
+      // them read as reactions the comment already had. Controls appear on hover,
+      // the way Edit and Delete do.
+      {
+        const quick = document.querySelector('.rail .quick')
+        const plus = document.querySelector('.rail .more')
+        say('quickAtRest', quick === null ? 'none' : getComputedStyle(quick).opacity)
+        say('plusAtRest', plus === null ? 'none' : getComputedStyle(plus).opacity)
+      }
+      // **And the note's guideline is clear of the prose** — it sits in the
+      // gutter, and the text's box is inset by the spine band, which this was
+      // once placed without (reported as an overlap of about seven pixels).
+      {
+        // **Measured against the MEASURE, not against the text.** A fixture whose
+        // lines happen to be short would pass with the guideline anywhere; what
+        // has to be true is that the guideline is clear of the column a full line
+        // reaches — which is the arithmetic that was wrong.
+        const note = document.querySelector('.rail .note') as HTMLElement | null
+        const content = document.querySelector('.cm-content') as HTMLElement | null
+        const style = content === null ? null : getComputedStyle(content)
+        const columnRight = content === null || style === null
+          ? 0
+          : content.getBoundingClientRect().left + parseFloat(style.paddingLeft)
+            + parseFloat(style.getPropertyValue('--measure'))
+        say('guideGap', note === null || content === null
+          ? -999
+          : Math.round(note.getBoundingClientRect().left - columnRight))
+      }
 
       // React, and check the actions did not move as a result.
       const before = (document.querySelector('.rail .note-actions') as HTMLElement | null)?.getBoundingClientRect().left ?? -1
@@ -4689,6 +4717,61 @@ export async function runVerify(request: string): Promise<void> {
 
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
       await settle(600)
+    }
+
+    if (scene === 'quotes') {
+      // **Typed, not dispatched** (D87). Curling happens in an input handler, so
+      // a `view.dispatch` — what every other scene here uses — goes straight
+      // past it and would prove nothing. `execCommand('insertText')` is real
+      // input as far as CodeMirror is concerned: a `beforeinput`, a DOM
+      // mutation, and the same path a keystroke takes.
+      const doc = (): string => live().state.doc.toString()
+      ;(document.querySelector('.cm-content') as HTMLElement | null)?.focus()
+      const type = async (text: string): Promise<void> => {
+        for (const ch of text) {
+          document.execCommand('insertText', false, ch)
+          await settle(40)
+        }
+      }
+
+      live().dispatch({ selection: { anchor: live().state.doc.length } })
+      await settle(200)
+      // **Measured across real characters.** The first version of this guard
+      // typed a newline and asked whether the document grew — and browsers do
+      // not insert those through `insertText` (Enter is `insertParagraph`), so
+      // the guard failed while the thing it was guarding worked.
+      const was = doc().length
+      await type('He said "hello" and it\'s Ada\'s (the "good" one).')
+      say('typingWorks', doc().length > was)
+      await settle(400)
+      say('prose', doc().slice(-52))
+
+      // And inside a fenced block, where a quote is a character of a language
+      // and a tick is a tick.
+      {
+        const fence = doc().indexOf('print(')
+        live().dispatch({ selection: { anchor: fence + 'print('.length } })
+        await settle(250)
+        await type('"x"')
+        await settle(400)
+        // The line the caret is on, taken from the text rather than from the
+        // document's own API — the scene's view of it is deliberately narrow.
+        {
+          const text = doc()
+          const head = live().state.selection.main.head
+          const from = text.lastIndexOf('\n', head - 1) + 1
+          const to = text.indexOf('\n', head)
+          say('inCode', text.slice(from, to === -1 ? undefined : to).trim())
+        }
+      }
+
+      // **And nothing already written is touched** — the second rule (D87): the
+      // straight quotes in the fence and the curly ones in the prose each stay
+      // as they were typed, whatever the text around them becomes.
+      say('curlyInProse', /[\u201c\u201d\u2018\u2019]/.test(doc()))
+      say('straightInCode', doc().includes('print("x")'))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+      await settle(400)
     }
 
     if (scene === 'emphasis') {

@@ -930,8 +930,18 @@ console.log('\n\u2014 code blocks \u2014')
     `${JSON.stringify(r.codeFace)} vs ${JSON.stringify(r.proseFace)}`,
   )
   check(
-    'THE MEASURE: a code block is wider than the prose column',
-    Number(r.codeWidth) > Number(r.proseWidth),
+    // **Amended by D86, and this check is where the old rule lived.** A block
+    // used to be set at `codeSize` and given `maxWidth: none`, so eighty columns
+    // came out wider than the prose column and reached past it — into the band
+    // the annotation gutter occupies, by the same mechanism that let a wide
+    // table drag the prose out with it.
+    //
+    // Now the size is SOLVED so that eighty columns of the code face is exactly
+    // the prose measure: the block still gets its width, and the column still
+    // means what it says. Both claims at once, which is why the old assertion
+    // had to become this one rather than merely loosen.
+    'THE MEASURE: a code block gets eighty columns, and they fit the prose column',
+    Math.abs(Number(r.codeWidth) - Number(r.proseWidth)) <= 2,
     `${r.codeWidth}px vs ${r.proseWidth}px`,
   )
   check(

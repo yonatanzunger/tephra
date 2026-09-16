@@ -33,6 +33,8 @@ export interface MenuState {
   importable: boolean
   /** Whether it is showing a document of ours, which Rename and Delete need. */
   renamable: boolean
+  /** Whether the focused document is still a draft, and so has a name to be given (D90). */
+  draft: boolean
 }
 
 /**
@@ -40,14 +42,22 @@ export interface MenuState {
  * neither. One call because they change together — focus moves once and both
  * answers move with it, and two setters would rebuild the menu twice.
  */
-export function setMenuTargets(targets: { importable: boolean; renamable: boolean }): void {
-  if (state.importable === targets.importable && state.renamable === targets.renamable) return
+export function setMenuTargets(
+  targets: { importable: boolean; renamable: boolean; draft: boolean },
+): void {
+  if (
+    state.importable === targets.importable && state.renamable === targets.renamable
+    && state.draft === targets.draft
+  ) return
   state.importable = targets.importable
   state.renamable = targets.renamable
+  state.draft = targets.draft
   installMenu()
 }
 
-const state: MenuState = { selection: NO_SELECTION, importable: false, renamable: false }
+const state: MenuState = {
+  selection: NO_SELECTION, importable: false, renamable: false, draft: false,
+}
 
 function send(channel: string, value: unknown): void {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -247,10 +257,38 @@ export function installMenu(next?: MenuActions): void {
           enabled: state.renamable,
           click: () => send(CHANNEL.menuCommand, 'duplicateFile'),
         },
+        /**
+         * **⌘S names a draft, and does nothing else** (D90).
+         *
+         * Nothing here is ever unsaved — the write tiers and the WAL see to that
+         * — so ⌘S cannot mean *write this to disk*, and for years it meant
+         * nothing at all, which is its own kind of wrong: the key every text
+         * application has was the one key this app ignored. A document made
+         * without a name has exactly one thing outstanding, and this is it.
+         *
+         * Disabled on anything already named, rather than hidden: the item says
+         * what the key is for, and a person who presses it on a named file
+         * learns there is nothing to do rather than wondering where it went.
+         */
+        {
+          label: 'Save…',
+          accelerator: 'CmdOrCtrl+S',
+          enabled: state.draft,
+          click: () => send(CHANNEL.menuCommand, 'renameFile'),
+        },
         // Naming is the renderer's: a name needs a text field, and this app
         // asks in-app rather than in a native box, for the reason `Prompt` was
         // written — `window.prompt` blocks the renderer's whole event loop.
-        { label: 'Rename…', enabled: state.renamable, click: () => send(CHANNEL.menuCommand, 'renameFile') },
+        //
+        // **⇧⌘R, which it lacked** (D90): renaming was reachable only by opening
+        // a menu, and it is the commonest thing anybody does to a document they
+        // have just made.
+        {
+          label: 'Rename…',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          enabled: state.renamable,
+          click: () => send(CHANNEL.menuCommand, 'renameFile'),
+        },
         { label: 'Delete…', enabled: state.renamable, click: () => send(CHANNEL.menuCommand, 'deleteFile') },
         { type: 'separator' },
         ...commandItem('branch'),

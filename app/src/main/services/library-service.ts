@@ -28,8 +28,8 @@ import { CHANNEL } from '../../shared/ipc.ts'
 import { isOutside, ONLY_SEGMENT, type DocumentId, type DocumentText } from '../../shared/document-api.ts'
 import { STREAM_ID } from '../x/documents/corpus.ts'
 import {
-  kindOf, noteFile, NOTES_DIR, relativePath, resolveInsideNotebook, DOCKETS_DIR, SECTIONS_DIR,
-  slug, type RelPath,
+  kindOf, noteFile, NOTES_DIR, relativePath, resolveInsideNotebook, DOCKETS_DIR, DRAFTS_DIR,
+  isDraft, SECTIONS_DIR, slug, type RelPath,
 } from '../w/layout.ts'
 import { outsideExists, readOutside } from '../w/outside.ts'
 import { nameOf } from '../../shared/slug.ts'
@@ -109,7 +109,19 @@ export class LibraryService implements Serves {
     // the UI: with no `dockets/` on disk the sidebar shows no section, so there
     // was no listing to make one from.
     const made = kind ?? (directoryFor(section) === DOCKETS_DIR ? 'docket' : 'markdown')
-    const into = made === 'docket' && section === undefined ? DOCKETS_DIR : directoryFor(section)
+    // **A document made without a name is a draft** (D90), which is a place and
+    // not a state: it is durable, versioned and indexed like anything else, and
+    // the only thing it lacks is a name somebody chose. Naming it moves it out —
+    // see `renameDocument`, which is the same act.
+    //
+    // A docket is never a draft: it belongs to one directory by decision (MH1).
+    // Nor is anything made INTO a section, which is a place already chosen.
+    const into =
+      made === 'docket' && section === undefined
+        ? DOCKETS_DIR
+        : wanted === '' && section === undefined && made === 'markdown'
+          ? DRAFTS_DIR
+          : directoryFor(section)
     const id = await this.#freeNoteName(
       wanted === '' ? 'untitled' : slug(wanted),
       into,
@@ -162,7 +174,14 @@ export class LibraryService implements Serves {
     // title behind would make Rename appear to do nothing, since the panel
     // shows the title when there is one.
     await this.#store.corpus.use(to, async doc => {
-      if ((await doc.titleOf(ONLY_SEGMENT)) !== null) await doc.setTitleOf(ONLY_SEGMENT, wanted)
+      // **A draft leaving gets a title whether or not it had one** (D90): the
+      // name it is being given is what it is called, and the frontmatter is
+      // where *what it is called* lives (D59). For an ordinary rename the old
+      // rule holds — a document with no title never had one, and inventing one
+      // would put a heading on somebody's file because they renamed it.
+      if (isDraft(id as string as RelPath) || (await doc.titleOf(ONLY_SEGMENT)) !== null) {
+        await doc.setTitleOf(ONLY_SEGMENT, wanted)
+      }
     })
     await this.#store.filesets.retarget(id as string as RelPath, to as string as RelPath)
     this.#durable.touched()
@@ -194,11 +213,18 @@ export class LibraryService implements Serves {
     this.#durable.touched()
   }
 
-  /** A name nobody is using, in the directory the document already lives in. */
+  /**
+   * A name nobody is using, in the directory the document already lives in —
+   * **except a draft, which is leaving** (D90).
+   *
+   * Naming a draft is what makes it an ordinary document, so the name decides
+   * both what it is called and where it goes. *Save…* on a draft and *Rename…*
+   * on anything else are the same verb, which is why there is no second one.
+   */
   async #freeName(id: DocumentId, label: string): Promise<DocumentId> {
     const rel = id as string as RelPath
     const cut = rel.lastIndexOf('/')
-    const dir = cut < 0 ? '' : rel.slice(0, cut)
+    const dir = isDraft(rel) ? NOTES_DIR : cut < 0 ? '' : rel.slice(0, cut)
     // **A rename must not change what the document IS.**
     //
     // This read `.fileset.md` or else `.md`, so renaming an overall task list

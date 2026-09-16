@@ -281,6 +281,22 @@ console.log('\n— comments —')
   check('the body never reached the buffer', r.bodyInBuffer === false && r.rawInBuffer === false)
   check('the margin drew it, anchored', r.notesInMargin === 1 && r.markInText === 1 && r.ruleUnderRange === 1)
   check('reacting does not move the controls', r.actionsStayedPut === true)
+  check(
+    // **Reported from use**: the row of offered emoji read as reactions the
+    // comment already had. What exists is drawn; what you could add is a control,
+    // and controls appear on hover the way Edit and Delete do.
+    'THE EMOJI SELECTORS ARE CONTROLS, invisible until you hover',
+    r.quickAtRest === '0' && r.plusAtRest === '0',
+    `quick ${r.quickAtRest} · plus ${r.plusAtRest}`,
+  )
+  check(
+    // **Reported from use**: *comments are rendering too close to the text, with
+    // their guideline even overlapping it a bit* — seven pixels, being the spine
+    // band the rail's placement did not account for.
+    'and a note\'s guideline is clear of the prose, not through it',
+    typeof r.guideGap === 'number' && r.guideGap > 0,
+    `${r.guideGap}px between the column edge and the guideline`,
+  )
 }
 
 // ── 3. branching ────────────────────────────────────────────────────────────

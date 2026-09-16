@@ -394,12 +394,54 @@ test('a new document is a real file from the first keystroke', async t => {
   // Not an unsaved buffer: Tephra has no unsaved state, so a buffer with no
   // file behind it would be the one losable thing in the app — and it would be
   // the newest thing, which is the worst one to lose.
+  //
+  // **And it is a DRAFT** (D90): unnamed is a place, not a state. It is
+  // versioned, journalled and indexed like everything else; what it lacks is a
+  // name somebody chose, and keeping those together is what stops `untitled-7`
+  // turning up in the middle of a list of real notes.
   const { service, root } = await fixture(t)
   const id = await service.library.newDocument()
 
-  assert.equal(id, 'notes/untitled.md')
-  assert.match(await readFile(join(root, 'notes', 'untitled.md'), 'utf8'), /^---\ntephra: 1\n/)
-  assert.equal(await service.library.newDocument(), 'notes/untitled-2.md', 'and the second is its own')
+  assert.equal(id, 'drafts/untitled.md')
+  assert.match(await readFile(join(root, 'drafts', 'untitled.md'), 'utf8'), /^---\ntephra: 1\n/)
+  assert.equal(await service.library.newDocument(), 'drafts/untitled-2.md', 'and the second is its own')
+})
+
+test('NAMING A DRAFT IS WHAT MOVES IT, which is why there is no second verb', async t => {
+  // *Save…* on a draft and *Rename…* on anything else are the same act, and the
+  // name decides both what it is called and where it goes (D90). Reported from
+  // use: *renaming requires a "rename" command that goes through a menu with no
+  // keyboard shortcut* — this is the other half of that, the half about where an
+  // unnamed document sits while you write it.
+  const { service, root } = await fixture(t)
+  const draft = await service.library.newDocument()
+  assert.equal(draft, 'drafts/untitled.md')
+
+  const named = await service.library.renameDocument(draft, 'Notes on the Lima closing')
+  assert.equal(named, 'notes/notes-on-the-lima-closing.md')
+  // The write tiers are asynchronous by design (D32); the file is the claim.
+  await service.flush()
+  assert.equal(existsSync(join(root, 'drafts', 'untitled.md')), false, 'it left the drafts')
+
+  // **And it is CALLED what you called it** (D59): the filename is the identity
+  // and the frontmatter title is the name. A draft has no title to preserve, so
+  // naming it writes one — where an ordinary rename leaves a title-less document
+  // without one rather than inventing a heading for it.
+  const file = await readFile(join(root, 'notes', 'notes-on-the-lima-closing.md'), 'utf8')
+  assert.match(file, /^title: Notes on the Lima closing$/m)
+})
+
+test('and a document made WITH a name was never a draft', async t => {
+  // Which is the whole rule, read the other way: naming at creation is a place
+  // already chosen. Both call sites already do one or the other — the sidebar
+  // asks for a name, the File menu does not.
+  const { service } = await fixture(t)
+  assert.equal(await service.library.newDocument('A thought'), 'notes/a-thought.md')
+  assert.equal(
+    await service.library.newDocument(undefined, undefined, 'docket'),
+    'dockets/untitled.docket.md',
+    'and a docket is never a draft: it belongs to one directory by decision (MH1)',
+  )
 })
 
 test('THE POINT: renaming rewrites the sections that pointed at it', async t => {

@@ -1544,7 +1544,13 @@ body {
 }
 .rail-host {
   position: absolute; top: 0; height: 100%; width: 0;
-  left: calc(var(--measure) + 0.9rem);
+  /* **The spine band counts.** The text's own box is `content-box` and inset by
+     the band (`.frame-reading .cm-content`), so the last character sits at
+     `band + measure` — and this was placed at `measure + 0.9rem`, which puts the
+     note's guideline 0.45rem INSIDE the text. Reported from use as *comments are
+     rendering too close to the text, with their guideline even overlapping it a
+     bit*, which is exactly 7px of arithmetic. */
+  left: calc(var(--spine-band) + var(--measure) + 0.9rem);
   pointer-events: none;
 }
 .rail { position: relative; }
@@ -1609,7 +1615,19 @@ body {
 /* Reactions keep their own line. Sharing one with Edit and Delete made those
    move sideways every time anyone reacted — reflow, at a smaller scale. */
 .note-message footer { display: block; }
+/* **What is there, and what you could add, are not the same thing.** An existing
+   reaction is a fact about the thread and is always drawn; the quick selectors
+   and the `+` are controls, and they appear on hover the way Edit and Delete do
+   (`.note-actions` above). Reported from use: at rest the row of offered emoji
+   read as reactions the comment already had.
+
+   The row keeps its height either way, so hovering reveals the controls without
+   moving anything below them — the same care `.note-actions` takes, and what the
+   scene's `actionsStayedPut` check is about. */
 .note-reactions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; min-height: 1.4em; }
+.note .quick, .note .more { opacity: 0; transition: opacity .1s; }
+.note:hover .quick, .note:focus-within .quick,
+.note:hover .more, .note:focus-within .more { opacity: 1; }
 .note-actions { display: flex; gap: .5rem; margin-top: .15rem; }
 .note .more { position: relative; display: inline-flex; }
 /* The system picker types into whatever has focus, so there has to be
