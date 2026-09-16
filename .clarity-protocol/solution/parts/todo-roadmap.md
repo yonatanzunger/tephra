@@ -1,6 +1,6 @@
 # MT — the TODO list
 
-**Design: `goal/todo.md` and `solution/todo.md`. Decisions: D55–D59.**
+**Design: `goal/todo.md` and `solution/parts/todo.md`. Decisions: D55–D59.**
 
 Six phases. The rule for every one of them is the rule MC ran under: **`npm test`,
 `m0`, `m1`, `m2` and `m3` are green at the end of it.** A phase that cannot be
@@ -136,7 +136,7 @@ of doing it here. A todo file opens in the markdown surface meanwhile, because
 ## MT3 — The list *(done)*
 
 **Done**, and verified by `npm run m3`. It also delivered **ML1**, the shared
-link scanner (`solution/link-roadmap.md`). What the phase settled:
+link scanner (`solution/parts/link-roadmap.md`). What the phase settled:
 
 - **The surface reads ITEMS, not text.** `SurfaceProps` hands over a
   `DocumentWindow`, and the todo surface uses it for one thing: `onChanged` as
@@ -267,7 +267,7 @@ here rather than in the storage, so it gets a phase to itself.
   This is load-bearing for D56's mtime rule, not merely a UI preference.
 - The due-soon band (T9): always present, usually short, absent when empty.
 
-**It also delivers ML1, the shared link scanner** (`solution/link-roadmap.md`,
+**It also delivers ML1, the shared link scanner** (`solution/parts/link-roadmap.md`,
 D61). A row is a table cell rather than CodeMirror, so rendering a live link in
 one means finding links in a string — and without the shared scanner that is the
 codebase's third link regex. Counted there, built here.
@@ -300,7 +300,7 @@ Landing on the exact line is worth having and is not this milestone's.
 round of feedback after MT3 — a notation nobody can discover is a notation
 nobody uses.
 
-**Depended on MD1** (`solution/day-boundary.md`): capture writes into the stream
+**Depended on MD1** (`solution/parts/day-boundary.md`): capture writes into the stream
 from outside it, and without the boundary in place it would be a fourth caller
 learning the day rules by hand.
 
@@ -533,7 +533,7 @@ sentence after it: **the full set stays reachable.**
   the one an index is needed for. *Dormant* is then a subtraction done where
   both halves are known, rather than a third thing to store.
 - **And `itemIds()`: every id in the corpus**, which is what D56 always wanted.
-  `solution/todo.md` said ids "must be unique across the corpus for
+  `solution/parts/todo.md` said ids "must be unique across the corpus for
   `tephra:todo/<id>` to resolve without a list name"; MT2 shipped eight base-36
   characters, which is wide enough on its own, and left the check for here.
   Minting is checked against the whole corpus now, which is what makes it
@@ -765,7 +765,7 @@ and the one segment name the same thing here.
 ## ML — the link directory, which is not part of this
 
 **D57: it is a corpus capability, not a TODO feature**, and it has its own
-roadmap in `solution/link-roadmap.md`. It shares exactly one piece of code with
+roadmap in `solution/parts/link-roadmap.md`. It shares exactly one piece of code with
 this milestone — the link scanner, which MT3 delivers as ML1 — and nothing else:
 D57 already made the TODO link mode a filter over a corpus-wide index rather
 than something built here.

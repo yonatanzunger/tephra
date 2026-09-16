@@ -63,7 +63,7 @@ export const isDirectoryDocument = (rel: RelPath): boolean => documentRoot(rel) 
  *
  * **`notebook.stream`, because the stream IS the notebook** — one stream per
  * notebook, the way one `.todo` at the root is *the* todo list. It was plain
- * `stream` until 2026-09-01; see `solution/link-roadmap.md`'s sibling
+ * `stream` until 2026-09-01; see `solution/parts/link-roadmap.md`'s sibling
  * `todo-roadmap.md`, MT1, and the migration in `scripts/migrate-layout.mjs`.
  */
 export const STREAM_DIR = 'notebook.stream'

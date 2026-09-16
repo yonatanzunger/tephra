@@ -160,13 +160,13 @@ intended** — and it discriminates against all three candidates below. Design i
 
 ## Q3b: How long do resolved items stay, and what evicts them?
 
-**Status: RESOLVED — nothing evicts them, because nothing carries them.** See `solution/todo.md` §2.
+**Status: RESOLVED — nothing evicts them, because nothing carries them.** See `solution/parts/todo.md` §2.
 
 If each day's file holds that day's working set and the morning walk writes it by carrying items forward, a finished item is simply not carried: it stays in the day it was finished, forever, and leaves the working view without being deleted from anything. "Recently resolved" in the tag pivot is a lookback over the last few days' files. The question dissolved once the wire format was chosen.
 
 ## Q3c: Do TODO items have stable identity?
 
-**Status: RESOLVED — yes, and it costs less than the question assumed.** See `solution/todo.md` §3 and D55.
+**Status: RESOLVED — yes, and it costs less than the question assumed.** See `solution/parts/todo.md` §3 and D55.
 
 Carrying items forward across days only works if tomorrow's line can be recognised as today's item, and text-matching breaks the moment an item is reworded. So an item carries an id, minted at creation and carried with it.
 
@@ -216,7 +216,7 @@ That matters more here than it would for most apps, because **OS integration is 
 
 ## Q6: How do local undo and versioned history interact?
 
-**Status: RESOLVED — D32.** Options in `solution/history-options.md`; architecture in `solution/history-architecture.md`.
+**Status: RESOLVED — D32.** Options in `solution/parts/history-options.md`; architecture in `solution/parts/history-architecture.md`.
 **Why it matters:** It is a v1 question (how undo works) and a v2/v3 question (the sync architecture) that must be answered together, because answering them separately misaligns them. It also currently has **three decisions resting on an unexamined assumption** — D28's 30-day journal retention, D29's rewind semantics, and D31's split of responsibilities — all of which were written before the interaction was examined directly.
 
 **The shape of it.** Two histories want to exist: fine-grained edit history (undo) and versioned history (rewind, cross-device). The difficulty is entirely in three places where they touch — **autosave** (no discrete save event to anchor a version to), **remote merge** (what does undo mean over text someone else changed), and **hand-editing** (a change with no record of intent). A good option puts all three in one place or in none; a bad one spreads them across two mechanisms that must agree.
@@ -279,7 +279,7 @@ A large window is slow to open and rarely needs extending; a small one opens ins
 **Status: ANSWERED — D47, option (a), fully inline.** The body is ordinary
 markdown in the same file — a callout block placed immediately after the block
 containing the closing marker — and the anchor is a marker pair carrying a short
-file-local id. Design in `solution/comments.md`.
+file-local id. Design in `solution/parts/comments.md`.
 
 **The deciding argument was not the one this question anticipated.** It expected
 to turn on whether a comment ever wants to be long. It turned instead on a line

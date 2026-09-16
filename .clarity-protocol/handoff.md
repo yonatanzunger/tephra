@@ -9,17 +9,25 @@ thing here.
 
 ## Where the project is
 
-**v1 is complete.** The ordered plan in `solution/milestones.md` is finished:
-MD1 → MT4 → MD2 → MT4a → MT5a → MT5b → ML2+ML3 → MT6 → MT7 → MS1–MS4 → R7. The
-app is in daily use and has been for months, which is why several decisions were
-reversed by evidence rather than argument.
+**1.0 works, and is in daily use.** v1's ordered plan completed 2026-09-10; the
+week after it added dockets, the horizon, reorientation's foundation, the
+service split, structured TODO items and a pass over the editing surface. The
+app has been in daily use throughout, which is why several decisions were
+reversed by evidence rather than by argument.
 
-Everything that remains is **wanted-on-demand and freely reorderable** — the
-backlog at the foot of `milestones.md`. After that, `components.md`'s sequence:
-v2a sync alone, v2b Android, v3 promotes what earned it.
+**There is no queue any more, and that is a deliberate change of state**
+(2026-09-16). Everything that remains is a **project to be chosen** rather than
+a next step: `solution/milestones.md` is now the list of them, each with what it
+is waiting to *learn* named beside it — including the three horizon phases
+(reorientation's annotation layer, the docket review flow, the graveyard), which
+were unscheduled together for the same reason. After the projects,
+`solution/parts/components.md`'s sequence still holds: v2a sync alone, v2b
+Android, v3 promotes what earned it.
 
-**A design cycle is starting** (2026-09-10), driven by what daily use has taught.
-Expect reprioritisation rather than continuation.
+**The solution documents were reorganised the same day.** Top level is the
+overall design — `architecture.md`, `architecture-as-built.md`, `features.md`,
+`milestones.md`, `working-in-the-tree.md`; the detailed design of each piece is
+in `solution/parts/`, and how 1.0 got built is `solution/parts/build-history.md`.
 
 ## Read in this order
 
@@ -29,10 +37,12 @@ Expect reprioritisation rather than continuation.
    arguments about scope should be settled against it.
 3. `goal/requirements.md` — and note which have been amended: R1.4 (vim, by
    D67) and R15–R17 (superseded by `goal/todo.md`).
-4. `solution/milestones.md` — what was built, in what order, and what is in the
-   backlog. The narrative of the build.
+4. `solution/milestones.md` — what shipped, and the projects that might come
+   next with what each is waiting on. For the narrative of how it was built,
+   `solution/parts/build-history.md` is behind it.
 5. `solution/architecture-as-built.md` — the map: which module holds what, and
    where each contract is written down. Read it before touching code.
+   `solution/working-in-the-tree.md` is how to run and test it.
 6. `decisions/decisions.md` — 67 decisions, append-only with amendments in
    place. **Never rewrite one**; amend it and date the amendment.
 7. `notes.md` — the carried design discipline, and the general rules the
@@ -48,13 +58,17 @@ Expect reprioritisation rather than continuation.
   `observations.md`, `notes.md`, the transcripts. History. Amend, annotate, date
   — never edit in place to make the past look consistent.
 - **Descriptions**: `architecture-as-built.md`, `features.md`, `milestones.md`,
-  `format-spec.md`, `scope.md`, `components.md`. These claim to say what *is*,
-  so a stale line in one of them is a bug.
+  `working-in-the-tree.md`, and the pieces under `solution/parts/` —
+  `format-spec.md`, `components.md` — plus `goal/scope.md`. These claim to say
+  what *is*, so a stale line in one of them is a bug. `build-history.md` is the
+  exception inside that folder: it is a record, and reads as of its dates.
 
 ## What the acceptance suites are for
 
-`npm test` is the unit and integration suites; `npm run m0`–`m4` drive a real
-Electron window through scenes in `verify.ts`. **The suites exist because the
+`npm test` is the unit and integration suites; `m0`–`m4` and `mh1`, `mh2`,
+`mh4` drive a real Electron window through scenes in `verify.ts` — eight suites,
+run serially because they share `out/`. `solution/working-in-the-tree.md` has
+the rest, including what each one claims. **The suites exist because the
 unit tests could not have caught this project's worst bugs** — a segment cache
 race, a span mislabelled by a fallthrough, a search panel inked from the wrong
 surface. And **screenshots caught what the suites could not**, repeatedly. Look

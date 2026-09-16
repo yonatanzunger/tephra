@@ -5,10 +5,11 @@ rules that keep them honest; this says where each of those things actually lives
 and what the contract between them is, so that "where does X happen" has a
 one-line answer.
 
-**Current as of MH4 in progress (2026-09-12).** Everything below exists and
-runs. v1's ordered plan (`milestones.md`) is finished; the MH phases — dockets,
-the horizon, reorientation — are building on top of it and are tracked in
-`horizon-roadmap.md`.
+**Current as of 2026-09-16.** Everything below exists and runs. v1's ordered
+plan is finished and so is the queue behind it: dockets, the horizon and
+reorientation's foundation are built, and the three phases still designed but
+unscheduled are projects in `milestones.md` rather than work in progress. The
+phase designs stay in `parts/horizon-roadmap.md`.
 
 > **What the MH phases added to this map**, in one place, since each of the
 > tables below carries its own row:
@@ -131,7 +132,7 @@ may call which* a question with an answer.
 > dependencies in its opening comment (D83).
 >
 > **Done 2026-09-14.** `DocumentService` went 2,805 lines to `NotebookService` at
-> 355 across eleven steps, bottom-up; `service-layers.md` has the plan and what each step actually
+> 355 across eleven steps, bottom-up; `parts/service-layers.md` has the plan and what each step actually
 > cost. The load-bearing move was the same one four times over — **lower things
 > emit, higher things subscribe** — which is what lets `Dockets` and `Tasks` be
 > peers that have never heard of each other.
@@ -237,7 +238,7 @@ both projects, for that reason.
 | **Printing** | `renderer/src/print/` builds the page, `main/print.ts` renders it; the base for relative links is a `Base` (day or document) |
 | **Comments in the margin** | `main/x/comments.ts` → `frame/Rail.tsx`, anchored by markers |
 | **What each window is showing, and restoring it** | `main/windows.ts` + `shared/ui-state.ts`; per-window location and cursor, machine-local theme, list view and search width (D30) |
-| **Which keys do what** | `solution/keymap.md`, kept true by `tests/unit/keymap.test.ts` |
+| **Which keys do what** | `solution/parts/keymap.md`, kept true by `tests/unit/keymap.test.ts` |
 
 ---
 
@@ -296,7 +297,7 @@ is about scope rather than sequence.
 
 - **Sync and mobile are v2.** v2a is sync alone, v2b is Android; the order
   matters because the phone needs a corpus before any judgement about it means
-  anything (`components.md`).
+  anything (`parts/components.md`).
 - **A text index is v2** (D23). v1 searches by scanning, and D65's split —
   narrowing predicates answered from the index, filtering predicates that must
   read text — is what makes the index a later addition rather than a later
@@ -306,6 +307,9 @@ is about scope rather than sequence.
   link directory is a location, and both are read-only, so v1 never had to
   decide whether a filtered view is editable.
 - **Rendered *editing* of inline constructs**, the keymap's design, and the
-  visual system's next pass are all in the backlog: wanted-on-demand, not
-  scheduled.
+  visual system's next pass are projects rather than plans: wanted-on-demand,
+  and listed with what each is waiting on in `milestones.md`.
+- **Reorientation's annotation layer, the docket review flow and the graveyard**
+  are designed and unscheduled (2026-09-16) — the designs are in
+  `parts/horizon-roadmap.md`, the reasons they are waiting in `milestones.md`.
 - **Vim is gone** (D67), not switched off. There is one keymap.

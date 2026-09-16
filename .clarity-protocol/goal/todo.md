@@ -98,7 +98,7 @@ Three things above go past the evidence and should be treated as proposals: **sp
 
 ## The flows, and what they force
 
-*Nine motions. Each is written as how it should feel, then what it obliges the API to be able to do — the bridge to `solution/todo.md`.*
+*Nine motions. Each is written as how it should feel, then what it obliges the API to be able to do — the bridge to `solution/parts/todo.md`.*
 
 **1. Capture from elsewhere.** Mid-sentence in the stream, from a quick-add box, or from the phone's share sheet. It should feel like the thought left your head and went somewhere safe, with no context switch and nothing to dismiss.
 **Forces:** create-an-item from a single string, callable from outside the TODO surface, with no other required argument — and the tag/date parse shared between renderer and main, as `shared/fileset.ts` and `shared/prose.ts` already are, so the assisted and typed paths cannot disagree.

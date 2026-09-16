@@ -15,6 +15,29 @@ the difference is only that it can be made to stop existing.
 
 ---
 
+## The work, in order
+
+**Carried here from `../milestones.md` on 2026-09-16**, when M6 stopped being a
+milestone with a checklist and became a project with a design. The order is the
+one the milestone recorded; the reasoning for each item is below.
+
+- Multi-notebook: read `tephra.json`, choose storage from it
+- The encrypting `Notebook` wrapper at the bottom of W, and a null `Repository`
+- Key hierarchy — Secure Enclave master, per-file data keys, rotate on shred
+- Opaque object names and the encrypted index
+- The shred operation, and `tephra export`
+- **Explicit `<!--tephra:split-->`**, which also serves the primary notebook
+- Its own theme, so the two notebooks are never mistaken for each other
+- The three verification tests, including restore-from-backup
+
+**It was placed last by choice rather than by dependency**, and it stays there
+for the same reason: it touches only the bottom of the storage layer plus a
+config file and a theme, so nothing above it changes and nothing else waits on
+it. Checked against `goal/scope.md`'s deferral rule — *data cannot be
+backfilled; mechanisms can be deferred* — it defers cleanly, since the notebook
+is a new directory whose files will not exist until it does. **No coverage
+obligation is incurred by waiting.**
+
 ## The shape
 
 **A notebook is a directory, and it declares itself.** `tephra.json` at the root,

@@ -392,7 +392,7 @@ test('a hand-written line keeps the identity of the day it was WRITTEN on', asyn
 // ── minting against the whole corpus (MT5b, D56) ───────
 //
 // **Eight base-36 characters were always meant to be checked, not just wide.**
-// `solution/todo.md`: ids "must be unique across the corpus for
+// `solution/parts/todo.md`: ids "must be unique across the corpus for
 // `tephra:todo/<id>` to resolve without a list name", and minting against one
 // day's items is unique enough within a list while saying nothing about a
 // second one. MT2 shipped the width and left the check for here.

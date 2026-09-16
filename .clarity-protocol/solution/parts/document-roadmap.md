@@ -5,7 +5,7 @@ remaining bullets — reordering, deletion, jump-to-a-file, the pinned lists —
 all write to documents or open them, so they resume on top of this rather than
 being built twice.
 
-**Each phase establishes one floor of the invariant stack** (`architecture.md`):
+**Each phase establishes one floor of the invariant stack** (`../architecture.md`):
 MC2 and MC3 put invariant 2 in place — X touches files only through documents,
 and gets them only from the `Corpus` — and MC5 does the same for invariant 1 in
 the renderer. Invariant 3 stays a direction rather than a rule for now.
@@ -43,7 +43,7 @@ green**; nothing below is a state the app cannot run in.
 
 **Where it goes.** `main/x/documents/` — the floor of X, holding the `Corpus`
 and, from MC3, the kinds. Nothing else in `x/` may see the corpus's file system,
-and a directory says so better than a rule does (`architecture.md`, invariant 2).
+and a directory says so better than a rule does (`../architecture.md`, invariant 2).
 
 ### MC2a — the object, used by nothing
 
@@ -542,7 +542,7 @@ the audit is kept rather than done once.
   **Noticed while designing the TODO kind (D55), and it is the stream's problem
   more than the new kind's**: a todo list and the stream accumulate day files at
   about the same rate, and the stream's are far larger. This is D8's measured
-  scale arriving through a door nobody was watching, and `solution/todo.md`
+  scale arriving through a door nobody was watching, and `solution/parts/todo.md`
   §2's "inherits everything else" is where the cost hides.
 
   The shape of the fix is known — a recent-window default on the five, with

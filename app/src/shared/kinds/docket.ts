@@ -637,7 +637,7 @@ export interface Matter {
    */
   readonly notes: readonly string[]
   /**
-   * The four that cannot be added later (`solution/horizon.md`).
+   * The four that cannot be added later (`solution/parts/horizon.md`).
    *
    * `arrived` dates the matter's appearance on *this* docket — a move is a
    * delete plus an append and records no date of its own, so without this the

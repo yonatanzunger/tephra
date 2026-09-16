@@ -543,7 +543,7 @@ the line a reader sees holds every occurrence whether the scope admits it or not
 ## What is not in M4
 
 - **The composite document** — descoped (D9 as amended).
-- **Ranking, stemming, structure** — `features.md` has these at v3+, and
+- **Ranking, stemming, structure** — `../features.md` has these at v3+, and
   reverse-chronological is what makes their absence tolerable.
 - **A text index** — D23 puts it in v2, and the predicate split is what makes
   that a later addition rather than a later rewrite. **Ranked ordering comes

@@ -1,6 +1,6 @@
 # Features and version assignment
 
-Everything discussed so far, in one list, with a proposed stage. Stages are **v1** (single-device Mac, the stream, excellent editing), **v2a** (sync alone), **v2b** (Android), **v3+** (deliberate decisions later, see `feature-backlog.md`).
+Everything discussed so far, in one list, with a proposed stage. Stages are **v1** (single-device Mac, the stream, excellent editing), **v2a** (sync alone), **v2b** (Android), **v3+** (deliberate decisions later — the live candidates are in `milestones.md`, what has left that list is `parts/feature-backlog.md`).
 
 **"Format only" is a real stage.** Several items must have their *syntax* fixed in v1 even though the feature arrives later, because the corpus accumulates in the meantime and data cannot be backfilled (`goal/scope.md`). Fixing a syntax is nearly free; retrofitting one is not.
 
@@ -36,14 +36,14 @@ in place rather than being quietly corrected.
 |---|---|---|
 | Windowed editor over the document, per-region write-back | D8, D23 | ✓ v1 — **required**, not deferred: a month of writing is 2.4× the largest corpus the editor has been tested against |
 | ~~Vim mode, as a switchable setting~~ | ~~R1.4, D15~~ | **removed, D67** — shipped in M0, never once wanted in months of use, deleted rather than left as a switch nobody switched |
-| **The** keymap — one, and its inventory | D67 | ✓ v1 for the inventory (`keymap.md`); **its design is in the backlog** |
+| **The** keymap — one, and its inventory | D67 | ✓ v1 for the inventory (`parts/keymap.md`); **its design is a project** (`milestones.md`) |
 | Raw markdown editing | R1.4 | ✓ v1 |
 | Rendered reading view | R1.4 | ✓ v1 |
-| Rendered editing — inline constructs | R1.4 | backlog (◆ settled 2026-09-09: the plain version went months without complaint) |
+| Rendered editing — inline constructs | R1.4 | a project (◆ settled 2026-09-09: the plain version went months without complaint) |
 | Rendered editing — tables | R1.4 | v3+ |
 | Rendered editing — equations | R1.4 | v3+ |
 | Inline image rendering | R7 | ✓ v1 — **and it had never once worked before R7**: the widget drew an `<img>` with no route to the corpus to point it at |
-| Typography and visual system, tunable | R1.3 | ✓ v1 for tunable; **what "excellent" wants next is in the backlog** |
+| Typography and visual system, tunable | R1.3 | ✓ v1 for tunable; **what "excellent" wants next is a project** (`milestones.md`) |
 | State preservation: scroll, cursor, in-flight text | R1.2 | ✓ v1 |
 | Autosave | R1.2 | ✓ v1 |
 
@@ -138,7 +138,7 @@ argument.
 | The backlog drawer, and scrubbing to a past day | T14, T7 | ✓ v1 (MT6) |
 | More than one list; a distinguished one | T15, D55 as amended | ✓ v1 (MT7) — `foo.todo.md` overall lists beside the daily `tasks.todo` |
 | The resolved tail under a tag | T8 | ✓ built, **suppressed from use 2026-09-10** — read as more list rather than as context; one flag, and everything behind it stands |
-| The soft cap on the working view | T12 | backlog — the requirement with the least evidence behind it, still waiting for some |
+| The soft cap on the working view | T12 | a small item awaiting its number (`milestones.md`) — the requirement with the least evidence behind it, and the daily walk is what produces that evidence |
 | Backlog resurfacing | Q3a | **deferred, and says so** — the design has no answer yet |
 | Pinned lists | R18 | ✓ v1 (a markdown file in a section) |
 | Events calendar | R19, H1–H11 | ✓ v1 — **and no longer a pinned file** (MH1–MH4). R19 said the need was real and the feature was not, so a markdown file in a section would do; use said otherwise, and R19 was **promoted against the evidence its own gate demanded**. What it asked for arrived as three things, none of them a calendar: the **docket** (a domain's complete record), the **horizon** (a date-ordered query over everything dated, now the lower half of the task view), and **generation** (a docket putting work on the list). What R19 got right survives intact: the full horizon is a plain date-ordered list, not a month grid. |
@@ -146,8 +146,8 @@ argument.
 ## Dockets and the horizon
 
 The domain records, what they produce, and the surface that reads them. Designed
-in `goal/horizon.md` and `solution/horizon.md`; scheduled in
-`solution/horizon-roadmap.md`.
+in `goal/horizon.md` and `solution/parts/horizon.md`; scheduled in
+`solution/parts/horizon-roadmap.md`.
 
 | Feature | Ref | Stage |
 |---|---|---|
@@ -160,16 +160,16 @@ in `goal/horizon.md` and `solution/horizon.md`; scheduled in
 | Awareness with no task | H6 | ✓ v1 (MH2) — a **status** step, which is a horizon row and generates nothing, ever |
 | The day's selection | H9 | ✓ v1 (MH4) — a per-day mark, not a status and not a tag, so it cannot travel |
 | Bulk acts on the list | MH4 | ✓ v1 — ⌘-click to select, shift to extend; one write and one undo step |
-| Reorient | H11 | **in progress** (MH4) — the pass and its entrances exist; the annotation layer is what remains: *how the flow shows on screen what might require attention*, defined in `horizon-roadmap.md` under MH4 and undesigned below that |
-| The backlog as the miscellaneous docket, and the review flow | H2, T14 | **next** (MH5) |
-| The graveyard | H3 | scheduled (MH6) — its threshold waits on MH5's real decline counts |
+| Reorient | H11 | **part shipped, part a project** (MH4) — the pass and its entrances exist; the annotation layer is what remains: *how the flow shows on screen what might require attention*, defined in `parts/horizon-roadmap.md` and unscheduled since 2026-09-16 (`milestones.md`) |
+| The backlog as the miscellaneous docket, and the review flow | H2, T14 | **a project** (MH5) — unscheduled 2026-09-16: it wants a real backlog to review, not a fixture (`milestones.md`) |
+| The graveyard | H3 | **a project** (MH6) — waits on MH5's real decline counts, and MH5 is itself unscheduled (`milestones.md`) |
 | An explicit list of instances | H7 | **promoted from the backlog 2026-09-12** — withdrawn by D76 for want of evidence, and the evidence arrived |
 | ICS import | H12 | deferred, and not decided against — the placeholder stays |
 | Calendar-rule recurrence | H7 | out of scope for now (D76) |
 
 ## Filesets as document collections
 
-The index format and the nav role arrive in v1; the *collection experience* is separate and later.
+The index format and the nav role arrived in v1; the *collection experience* is separate and is now a named project (`milestones.md`) — the failures it answers are recorded, so it is the largest thing on that list that could start today.
 
 | Feature | Ref | Stage |
 |---|---|---|

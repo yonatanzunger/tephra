@@ -1,4 +1,4 @@
-// History — the durable half, transcribed from solution/history-architecture.md.
+// History — the durable half, transcribed from solution/parts/history-architecture.md.
 //
 // TYPES ONLY. Two objects, two jobs, two coordinates, and they are genuinely
 // different things rather than one thing described twice (D32):

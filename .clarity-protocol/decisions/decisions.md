@@ -51,7 +51,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/components.md`
+**Detail:** `solution/parts/components.md`
 
 **Decision.** **v1** is a single-device Mac app over one directory of markdown files, presenting the notebook as one continuous stream with an excellent editing experience — no sync layer, no mobile, no TODO or fileset UX. **v2** adds sync, then Android, in that order and preferably with time living on sync alone in between. **v3** promotes the remaining features.
 
@@ -109,7 +109,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/components.md`
+**Detail:** `solution/parts/components.md`
 
 **Decision.** The app exposes the notebook as a single continuous document. The split into day files is below that boundary — but the **split rule is a format decision, fixed at date boundaries**, not a storage-tuning knob.
 
@@ -282,7 +282,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** v1's first artifact is the **Document API**, not the file format. The format is an implementation of a storable state adequate to that API.
 
@@ -301,7 +301,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** Inside Document, a **span tier** knows text, points and spans and nothing about their meaning; a **semantic tier** knows the kinds — anchors, tags, headings, dates — their invariants, and how each is written. Z sees only the semantic tier.
 
@@ -324,7 +324,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided, with one sub-question open
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** Spans are **inferred from the markdown**, never stored beside it — dates from frontmatter, headings from markdown headings, anchors from anchor markers, tags from a delimited protocol. Spans and their ids are never persisted. The single mutation is `replace([{span, payload}])`, a **batch**; an empty span inserts, an empty payload deletes. Reads are `size`, `fetch` and `snap`, where fetch is markdown-aware and returns the span it actually served alongside the text.
 
@@ -344,7 +344,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** Document's live buffer **is** a `@codemirror/state` `EditorState`. A view attaches when the document is open and detaches when it is not; the state exists either way. Document coordinates are **`(date, offset)`**, not absolute offsets into the stream.
 
@@ -366,7 +366,7 @@
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** The Document API declaration names no CodeMirror type and imports nothing from it. The alignment established in D21 is preserved as a **compatibility property** rather than a dependency, so that replacing the editor costs an adapter rather than a redesign. The three coordinate systems are **named types in the code** — `DocumentPosition`, `WindowPosition`, `StoragePosition` — with the last confined to Document's interior and never appearing in a signature Z can reach.
 
@@ -390,7 +390,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 **Amends:** D21, D22
 
 **The fact that forced this.** Era 3 produced 40–50 thousand lines a month — roughly **2–3.5 MB a month, 20–45 MB a year, 0.4–0.9 GB over twenty years**. Spike A's 1.05 MB corpus, which read as a generous test, is **about a fortnight of writing**.
@@ -413,7 +413,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 **Date:** 2026-08-12
 **Status:** decided
 **Resolves:** the open sub-question in D20
-**Detail:** `solution/offset-units.md`, `solution/document-api.md`
+**Detail:** `solution/parts/offset-units.md`, `solution/parts/document-api.md`
 
 **Decision.** `DocumentOffset` — named `Offset` until D48 — is an opaque branded type whose unit is **UTF-16 code units**. Arithmetic on two of them yields a plain number that cannot be assigned back without a deliberate cast, so accidental unit-dependence is a type error. Only two places may know the unit: the **window adapter** and the **position algebra**. Bytes appear only in file I/O, which takes no offsets at all.
 
@@ -433,7 +433,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/format-spec.md`
+**Detail:** `solution/parts/format-spec.md`
 
 **Decision.** Markdown files in a dated directory tree, with anchors and tags as HTML comments, types declared by filename suffix and mirrored in frontmatter, and sections as ordinary markdown link lists. Full spec in `format-spec.md`.
 
@@ -457,7 +457,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** `Window` becomes the full surface an editor binds to: text, `edit()` in window coordinates, synchronous `spansAt`/`spans`/`snap`/`advance`/`distance`, a change feed, and coordinate conversion. It translates to `DocumentPosition` and forwards to `Document.replace`. An editor never touches Document — **except for undo.**
 
@@ -489,7 +489,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/format-spec.md`
+**Detail:** `solution/parts/format-spec.md`
 
 **Decision.** `.tephra/journal/` retains serialised change records for **30 days** — machine-local, never synced, disposable. The day-file split threshold moves from 256 KB to **1 MB**.
 
@@ -505,7 +505,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** `Generation` is opaque and comparable, and it is the document's rewind coordinate. The primitive is **`rewindTo(generation)`**; `currentGeneration()` exposes the present one; **`undo` and `redo` become policy over `rewindTo` rather than primitives beside it**, rewinding to the generation at the previous history-group boundary. `history(since?)` enumerates what the retained journal can still reach.
 
@@ -521,7 +521,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 **Date:** 2026-08-12
 **Status:** decided, with one item open
-**Detail:** `solution/format-spec.md`
+**Detail:** `solution/parts/format-spec.md`
 
 **Decision.** `.tephra/` holds `version`, `lock`, `journal/<doc-id>/`, `index/`, `issues.json`, `attachments.manifest` and `ui-state.json`. Never synced; deleting it costs a rebuild and nothing else.
 
@@ -533,7 +533,7 @@ CodeMirror satisfies all five, which is why D21 is cheap. If the editor is ever 
 
 ## D31: The journal stays local; versioned history belongs to the hub
 
-> **Under review (Q6).** D31 split the responsibilities correctly but did not examine the three points where the two histories actually touch — autosave, remote merge, hand-editing. See `solution/history-options.md`; the likely refinement is that the journal stops being a history at all.
+> **Under review (Q6).** D31 split the responsibilities correctly but did not examine the three points where the two histories actually touch — autosave, remote merge, hand-editing. See `solution/parts/history-options.md`; the likely refinement is that the journal stops being a history at all.
 
 **Date:** 2026-08-12
 **Status:** decided
@@ -573,7 +573,7 @@ Fine-grained cross-device undo is the only capability this forgoes, and under D1
 **Status:** decided
 **Resolves:** Q6
 **Amends:** D28, D29, D31
-**Detail:** `solution/history-architecture.md`, options in `solution/history-options.md`
+**Detail:** `solution/parts/history-architecture.md`, options in `solution/parts/history-options.md`
 
 **Decision.** Four mechanisms, each with one job, and no two of them histories of the same thing: an **in-memory undo stack** on Document (session-scoped, fine-grained); a **write-ahead log** holding only the changes since the last file write (seconds); the **files**, which are the corpus; and a **git repository**, local from v1 and gaining a remote at v2a, which is the only durable history.
 
@@ -597,7 +597,7 @@ Fine-grained cross-device undo is the only capability this forgoes, and under D1
 
 **Date:** 2026-08-12
 **Status:** decided
-**Detail:** `solution/document-api.md`
+**Detail:** `solution/parts/document-api.md`
 
 **Decision.** `SessionGeneration` and `VersionId` are distinct types with distinct owners, and the API is structured so they cannot be confused — the same treatment `DocumentPosition` / `WindowPosition` / `StoragePosition` already get, for the same reason.
 
@@ -616,7 +616,7 @@ Fine-grained cross-device undo is the only capability this forgoes, and under D1
 
 **Date:** 2026-08-12
 **Status:** decided for v1; revisit at v2a
-**Detail:** `solution/git-library.md`
+**Detail:** `solution/parts/git-library.md`
 
 **Decision.** **No dependency on system `git`.** The choice is among bundled libraries, and for v1 it is **`isomorphic-git`** — pure JavaScript, no native build, no Electron ABI coupling. Revisit at v2a, when network and merge requirements actually arrive.
 
@@ -749,7 +749,7 @@ is currently unscheduled (`milestones.md`).
 **Date:** 2026-08-12
 **Status:** decided
 **Addresses:** Q7
-**Detail:** `solution/pane-api.md`
+**Detail:** `solution/parts/pane-api.md`
 
 **Decision.** A new **`Pane`** class in Z owns navigation and extent policy: where the user is, how they got there, and whether an extension blocks or happens quietly. **`Window` is renamed `DocumentWindow`** (`WindowPosition` → `BufferPosition`).
 
@@ -825,7 +825,7 @@ Main also wins on the properties actually wanted: it is a singleton by construct
 
 **Date:** 2026-08-14, amended 2026-09-02
 **Status:** decided
-**Detail:** `solution/format-spec.md`, `solution/day-boundary.md`
+**Detail:** `solution/parts/format-spec.md`, `solution/parts/day-boundary.md`
 
 **Decision.** *(Amended twice. **D62**: the filing date is the **writing day**, which advances to the calendar date only once writing has stopped — so a passage typed at 00:30 files under the evening it was written in. **D63**: the zone is no longer fixed at UTC−8 but chosen by the person and kept with the notebook; the diagnosis below is right about local time and wrong about the remedy, because what fails is a zone that changes *itself*, not one that is local. UTC−8 remains what an unset notebook means.)* The `date` a passage is filed under is computed in a **fixed UTC−8**, never in the device's local zone. Times are *displayed* locally; only the filing date is fixed. The practice is borrowed from Google, where a single reference zone removed exactly this class of problem.
 
@@ -855,8 +855,8 @@ electron-vite gives renderer HMR, which is worth having for the phase this build
 
 **Date:** 2026-08-16
 **Status:** decided
-**Amends:** D35 (`ExtentPolicy`), and `DocumentWindow.extend` in the locked `solution/document-api.md`
-**Detail:** `solution/pane-api.md`
+**Amends:** D35 (`ExtentPolicy`), and `DocumentWindow.extend` in the locked `solution/parts/document-api.md`
+**Detail:** `solution/parts/pane-api.md`
 
 **Decision.** `ExtentPolicy` is denominated in **screens**, converted to characters at the moment of use by a rate measured from the editor, and bounded by a hard character ceiling. `DocumentWindow.extend(direction, chars?)` takes characters rather than days. A loaded region need not begin or end on a day boundary.
 
@@ -1271,7 +1271,7 @@ D41's per-notebook parameter sets already make cheap.
 **M6, after M5 — by choice rather than by dependency.** Because encryption sits
 at the bottom of W, nothing above it changes and nothing else in the plan waits
 on it; it could move earlier, later, or past v2 at no cost to anything else.
-The design is `solution/shreddable-notebook.md`.
+The design is `solution/parts/shreddable-notebook.md`.
 
 **It passes the deferral rule** (`goal/scope.md`: *data cannot be backfilled;
 mechanisms can be deferred*). The notebook is a new directory with its own
@@ -1286,7 +1286,7 @@ to paper or the typewriter until this exists.
 ### What this makes stale
 
 Updated already: `goal/scope.md` (the one-directory rule),
-`solution/format-spec.md` (layout and filenames), `solution/milestones.md` (M6),
+`solution/parts/format-spec.md` (layout and filenames), `solution/milestones.md` (M6),
 and `Q12`, which this answers.
 
 Still owed, and safely deferrable to M6 since nothing before then depends on
@@ -1299,7 +1299,7 @@ now has a second shape).
 **Date:** 2026-08-23, revised 2026-08-24
 **Status:** decided
 **Answers:** Q8; dissolves Q9; constrains Q11
-**Detail:** `solution/comments.md`
+**Detail:** `solution/parts/comments.md`
 
 **Decision.** A comment is a **thread anchored to a range** by a marker pair
 carrying a short file-local id. Its **body is ordinary markdown in the same
@@ -1445,10 +1445,10 @@ computes the narrow fold; Q10 settled the mobile arrangement.
 
 ### What this makes stale
 
-`solution/format-spec.md` (marker verbs, the degradation table), 
-`solution/document-api.md` (`SpanKind`, `TypedSpan`, the comment methods),
+`solution/parts/format-spec.md` (marker verbs, the degradation table), 
+`solution/parts/document-api.md` (`SpanKind`, `TypedSpan`, the comment methods),
 `goal/open-questions.md` (Q8 answered, Q9 dissolved, Q11 constrained),
-`solution/milestones.md` (M2 items 5–7).
+`solution/parts/build-history.md` (M2 items 5–7).
 
 ---
 
@@ -1537,7 +1537,7 @@ the first bug rather than after the third.
 
 ### What this makes stale
 
-`solution/document-api.md` (every coordinate name, the three-coordinate table).
+`solution/parts/document-api.md` (every coordinate name, the three-coordinate table).
 
 ---
 
@@ -1545,7 +1545,7 @@ the first bug rather than after the third.
 
 **Date:** 2026-08-25
 **Status:** decided
-**Detail:** `solution/implementation-notes.md`, "A block widget's margins are not measured"
+**Detail:** `solution/parts/implementation-notes.md`, "A block widget's margins are not measured"
 
 **Decision.** Two rules about the editor layer, both learned the same way:
 
@@ -1579,7 +1579,7 @@ where the compiler cannot help because pixels are not our type to brand.
 **Date:** 2026-08-26, revised 2026-08-26
 **Status:** decided
 **Constrains:** Q11; raises Q13 and Q14
-**Detail:** `solution/prose.md`
+**Detail:** `solution/parts/prose.md`
 
 **Decision.** **`Prose` is one value: the text a person sees, and every
 annotation anchored into it.** The annotations are a single union — a day, a
@@ -1662,9 +1662,9 @@ treatment drops belongs in the design, not in the discovery on paper.**
 
 ### What this makes stale
 
-`solution/document-api.md` (the window's three parallel values), 
-`solution/comments.md` (the rail as a comment-specific mechanism),
-`solution/marker-roadmap.md` (tags as an inline-only treatment).
+`solution/parts/document-api.md` (the window's three parallel values), 
+`solution/parts/comments.md` (the rail as a comment-specific mechanism),
+`solution/parts/marker-roadmap.md` (tags as an inline-only treatment).
 
 ---
 
@@ -1672,7 +1672,7 @@ treatment drops belongs in the design, not in the discovery on paper.**
 
 **Date:** 2026-08-26
 **Status:** decided
-**Detail:** `solution/navigation.md`
+**Detail:** `solution/parts/navigation.md`
 **Builds on:** D10 (sections), D11 (reference by identity), D50 (annotations)
 
 **Decision.** The left nav is a list of rows, and **a row names a set of places
@@ -1726,7 +1726,7 @@ decision record is harder to undo than a wrong default in a component.
 **Date:** 2026-08-26
 **Status:** decided
 **Revises:** D7 (an index was a v3 concern)
-**Detail:** `solution/navigation.md`
+**Detail:** `solution/parts/navigation.md`
 
 **Decision.** A machine-local **index of spans over the whole corpus**, so that
 corpus-wide questions stop being answered by loading every segment. It is
@@ -1776,7 +1776,7 @@ skips days that are loaded and dirty, which answer from memory anyway.
 
 ### What this makes stale
 
-`solution/document-api.md` (`spans()` is no longer a scan), 
+`solution/parts/document-api.md` (`spans()` is no longer a scan), 
 `decisions.md` D7 (the timing, not the reasoning).
 
 ---
@@ -1786,7 +1786,7 @@ skips days that are loaded and dirty, which answer from memory anyway.
 **Date:** 2026-08-26
 **Status:** decided
 **Amends:** D10 (the default section dissolves into the top-level list)
-**Detail:** `solution/navigation.md`, `solution/format-spec.md`
+**Detail:** `solution/parts/navigation.md`, `solution/parts/format-spec.md`
 
 **Decision.** A section is a fileset at `sections/<name>.fileset.md`, exactly as
 the v1 format draft describes it: frontmatter says `kind: fileset`, the entries
@@ -1842,7 +1842,7 @@ the index cannot know.
 
 ### What this makes stale
 
-`solution/format-spec.md` (amended in place — the URI table, `_index`, two
+`solution/parts/format-spec.md` (amended in place — the URI table, `_index`, two
 degradation rows), `decisions.md` D10 (the default section).
 
 ---
@@ -1852,7 +1852,7 @@ degradation rows), `decisions.md` D10 (the default section).
 **Date:** 2026-08-27
 **Status:** decided
 **Implements:** D10's "in the current window or a new one"
-**Detail:** `solution/file-documents.md`
+**Detail:** `solution/parts/file-documents.md`
 
 **Decision.** **A document has a KIND, and the stream is one of them.** "An
 infinite stream chopped into days" is a file format sitting beside plain
@@ -2024,7 +2024,7 @@ way.
 
 ### What this makes stale
 
-`solution/document-api.md` (`extent` and `dateAt` on the common interface),
+`solution/parts/document-api.md` (`extent` and `dateAt` on the common interface),
 `shared/ui-state.ts` (one location and cursor becomes a SET of windows),
 `decisions.md` D53 (pinning becomes a document edit, as it claimed to be).
 
@@ -2032,7 +2032,7 @@ way.
 
 **Date:** 2026-09-01, revised 2026-09-01
 **Status:** decided
-**Detail:** `solution/todo.md`, `goal/todo.md`
+**Detail:** `solution/parts/todo.md`, `goal/todo.md`
 
 **Decision.** `TodoDocument extends SegmentedDocument`, segments keyed by
 `DateKey`, one list per directory: `<name>.todo/YYYY/MM/YYYY-MM-DD.md` (D59),
@@ -2074,7 +2074,7 @@ what the clause was actually protecting.
 **Two shapes, and the filesystem is what says which.** A `.todo` **directory**
 is day-paged; a single `.todo` **file** is not, and holds exactly what one day
 segment holds. Whether that file is spelled `<name>.todo` or `<name>.todo.md` is
-open and recorded in `solution/todo-roadmap.md`; either way this reinstates the
+open and recorded in `solution/parts/todo-roadmap.md`; either way this reinstates the
 single-file form MT2 retired — retired for this very clause, which is the clause
 being amended.
 
@@ -2098,7 +2098,7 @@ reaching a second list is special, so almost none of it has to be built.
 history**;
 git versions it the way it versions every other document. It keeps the item
 grammar, the verbs, the surface, the tag pivot, the due-soon rail and capture.
-Delivered in **MT7** (`solution/todo-roadmap.md`), which is ordered after MT5b
+Delivered in **MT7** (`solution/parts/todo-roadmap.md`), which is ordered after MT5b
 because corpus-wide id minting is what lets `tephra:todo/<id>` resolve without a
 list name — a property this decision already specified and which does not matter
 until there is more than one list.
@@ -2147,15 +2147,15 @@ shorter.
 daily is ~220k lines over twenty years, ~15 MB, against the stream's own
 0.4–0.9 GB. The duplication *is* the history.
 
-**What this makes stale.** `solution/file-documents.md` (the record-shaped
+**What this makes stale.** `solution/parts/file-documents.md` (the record-shaped
 prediction, and the claim that the first non-text kind forks `Document`);
-`solution/milestones.md` (the M3 rejection's second reason); D4 (below).
+`solution/parts/build-history.md` (the M3 rejection's second reason); D4 (below).
 
 ## D56: TODO items carry ids, which D20 already permits
 
 **Date:** 2026-09-01, revised 2026-09-01
 **Status:** decided
-**Detail:** `solution/todo.md` §3
+**Detail:** `solution/parts/todo.md` §3
 
 **Decision.** Every TODO item carries a machine-minted id, corpus-unique,
 written inline as a trailing marker and carried forward with the item. Identity
@@ -2221,7 +2221,7 @@ expensive to retrofit onto a year of carried-forward lines — R15's class.
 
 **Date:** 2026-09-01
 **Status:** decided
-**Detail:** `solution/todo.md` §5, R10a
+**Detail:** `solution/parts/todo.md` §5, R10a
 
 **Decision.** One index over **every link in the corpus**, whatever file it was
 found in — reverse-chronological by last appearance, searchable, each entry
@@ -2248,7 +2248,7 @@ is the read-only fork of D9's filtered view, and that it de-risks search. Both
 hold; neither says anything about the TODO list. **The two share exactly one
 piece of code** — the link scanner, which MT3 delivers because its rows need it
 (D61) — so nothing structural drives the order, and it goes on urgency.
-`solution/link-roadmap.md`.
+`solution/parts/link-roadmap.md`.
 
 **And "no surface beyond a list" was understated.** Nothing scans links today;
 `TypedSpan` has no link variant and `shared/fileset.ts` parses links only in
@@ -2287,7 +2287,7 @@ applied to a process control rather than to a measurement.
 
 **Date:** 2026-09-01
 **Status:** decided
-**Detail:** `solution/todo.md` §6
+**Detail:** `solution/parts/todo.md` §6
 
 **Decision.** A document made of many files is a **directory whose name carries
 its kind as an extension**, exactly as a single-file document's name does:
@@ -2319,7 +2319,7 @@ readable through git and not through restore.**
 
 **Date:** 2026-09-01
 **Status:** decided
-**Detail:** `solution/link-roadmap.md`, R10a
+**Detail:** `solution/parts/link-roadmap.md`, R10a
 
 **Decision.** The link index is a cache of a scan of the corpus **as it stands**
 — D52's rule, unweakened. A link whose text no longer appears in any file leaves
@@ -2360,7 +2360,7 @@ is what makes that a two-call-site change rather than a redesign.
 
 **Date:** 2026-09-01
 **Status:** decided
-**Detail:** `solution/link-roadmap.md`
+**Detail:** `solution/parts/link-roadmap.md`
 
 **Decision.** `shared/links.ts` finds every markdown link in a body — both legal
 spellings of a destination — and classifies each through `referenceOf`. It has
@@ -2389,7 +2389,7 @@ along with the bug, and the bug is what the scanner's first test should be.
 
 **Date:** 2026-09-02
 **Status:** decided
-**Detail:** `solution/day-boundary.md`. Amends D38.
+**Detail:** `solution/parts/day-boundary.md`. Amends D38.
 
 **Decision.** Three names, for three questions that were all called "today":
 
@@ -2464,7 +2464,7 @@ rule.
 
 **Date:** 2026-09-02
 **Status:** decided — supersedes D38's fixed offset; D38's writing-day amendment (D62) stands
-**Detail:** `solution/day-boundary.md`
+**Detail:** `solution/parts/day-boundary.md`
 
 **Decision.** `clockDay` is computed in an IANA zone the person chose, stored in
 `config/` with the notebook. When the system's zone differs, the interface says
@@ -3137,7 +3137,7 @@ so it is free.
 **Date:** 2026-09-10
 **Status:** decided
 **Amends:** `goal/scope.md`'s "one syntax family" rule. **Answers:** Qc.
-**Design:** `solution/horizon.md`.
+**Design:** `solution/parts/horizon.md`.
 
 **Decision.** A docket is stored in a **structured format** rather than as
 leniently-parsed markdown, and **its editing surface ships in the first
@@ -3181,7 +3181,7 @@ and this type rejoins the syntax family.
 
 **Date:** 2026-09-10
 **Status:** decided
-**Design:** `solution/horizon.md`. **Answers:** a question raised reading it.
+**Design:** `solution/parts/horizon.md`. **Answers:** a question raised reading it.
 
 **Decision.** The horizon is served by an **API of its own**, whose
 implementation is free to be a scan now and a persisted artifact later. Behind it
@@ -3214,7 +3214,7 @@ oversight.
 
 **Date:** 2026-09-10
 **Status:** decided
-**Design:** `solution/horizon.md`. **Applies:** D66's test.
+**Design:** `solution/parts/horizon.md`. **Applies:** D66's test.
 
 **Decision.** The **full horizon is a location** — a `NavTarget`, with a
 ⌘-number beside ⌘0 (the notebook) and ⌘1 (the task list) — and is expected to sit
@@ -3276,7 +3276,7 @@ done.
 **Status:** decided
 **Amends:** D72's format (settling its open question). **Amends:** the claim that
 a docket is in *creation order and nothing else*, inherited from `goal/todo.md`.
-**Design:** `solution/horizon.md`.
+**Design:** `solution/parts/horizon.md`.
 
 **Decision.** A docket is divided for reading by **sections** — ordinary markdown
 headings, with matters nested one level under them. A heading **with nothing
@@ -3684,7 +3684,7 @@ side of midnight that D62 exists to keep coherent.
 
 **Date:** 2026-09-12
 **Status:** decided
-**Design:** `solution/horizon.md`. **Applies:** D74's location; H8, H6, H1.
+**Design:** `solution/parts/horizon.md`. **Applies:** D74's location; H8, H6, H1.
 **Source:** built as MH2.
 
 **The horizon owns what a row is, what window it spans and what order rows come
@@ -4019,7 +4019,7 @@ spine is reachable anywhere along its length.
 
 **Date:** 2026-09-13
 **Status:** decided and **built** (2026-09-14) — the plan and its record of
-execution are `solution/service-layers.md`
+execution are `solution/parts/service-layers.md`
 **Constrains:** every future service in `main/`. **Extends:** D77 (reconciliation),
 D78 (the horizon is its own object), D37 (X lives in main).
 **Source:** `DocumentService` at 2,805 lines and 150 members, and the observation
@@ -4258,7 +4258,7 @@ standing-plus-asked union, and is why it survived where the others did not.
 ## D85: A task item is a record, and the file holds it as fields
 
 **Date:** 2026-09-15
-**Status:** decided and **built** (2026-09-15) — MT8 in `solution/todo-roadmap.md`
+**Status:** decided and **built** (2026-09-15) — MT8 in `solution/parts/todo-roadmap.md`
 has the plan and what building it taught
 **Amends:** **T16**, whose *left in the line* clause this supersedes; D81 (who has it
 is a marker — the principle survives, the storage changes); D56 (an item's
@@ -4347,7 +4347,7 @@ was written against.
 **Date:** 2026-09-15
 **Status:** decided and **built**
 **Amends:** the prose intent in `editor/kinds/markdown/theme.ts` and
-`milestones.md`'s ML4 note — *a block reaches its own measure, **past** the prose
+`solution/parts/build-history.md`'s ML4 note — *a block reaches its own measure, **past** the prose
 column* — whose second half is reversed. **Extends:** D42 (the frame's
 arrangement), R27 (the annotation gutter), ML4 (a theme authors the code face).
 **Source:** reported from use — *one of the tables I added is breaking the

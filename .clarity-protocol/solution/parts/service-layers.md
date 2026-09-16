@@ -3,7 +3,7 @@
 **Status: the foundation is built** — `Bus`, `CorpusService`,
 `DurabilityService`, `DayService`, `FixedPoints` — and reconciliation runs on it.
 Next is the first domain service; the plan is under *Order of work*.
-`architecture-as-built.md` describes what *is*; this describes what we are going
+`../architecture-as-built.md` describes what *is*; this describes what we are going
 to do, and each piece moves into that file as it lands. Decided in D83. Progress
 is tracked under *Order of work* at the foot — **1a is done**, and nothing above
 the core has moved yet.

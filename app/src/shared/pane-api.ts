@@ -1,4 +1,4 @@
-// Pane — the navigation and extent API, transcribed from solution/pane-api.md.
+// Pane — the navigation and extent API, transcribed from solution/parts/pane-api.md.
 //
 // TYPES ONLY. Pane is Z's view-model: a person's position in the corpus over
 // time, where a DocumentWindow is a loaded region of one document. It cannot

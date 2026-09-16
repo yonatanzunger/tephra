@@ -136,7 +136,7 @@ work through the table by construction:
   knows which are open — and a restore that left a stale document in memory
   would be a version that "took" and then got overwritten by a buffer.
 
-`solution/history-architecture.md` describes the tiers; what changes is that
+`solution/parts/history-architecture.md` describes the tiers; what changes is that
 their subject is the table's contents rather than a single stream.
 
 ## What each existing mechanism does about it

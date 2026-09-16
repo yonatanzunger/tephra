@@ -54,7 +54,7 @@
       "relatedDocs": {
         "goal/scope.md": "a14aa0cabf34883929726b26fb9f783167895b979989d3667ec6a3dd4eae0df7",
         "goal/requirements.md": "17c852f38a05a502e92533425bf4b549fc950b2813dceda81dfd0755bbb44c53",
-        "solution/format-spec.md": "8705f3906fa2f3721b1a87333978183b59707b1256d20389c4b179d824e32808",
+        "solution/parts/format-spec.md": "8705f3906fa2f3721b1a87333978183b59707b1256d20389c4b179d824e32808",
         "solution/architecture.md": "1e250afdd3db6f447fbcecccae1a59d72875ae15d3ed6c2e23c7a8dd492c56c7",
         "goal/open-questions.md": "1a34ddbedb9bc55b76f35deb37f86e9eaa2656e454e3d13f0af1858624cbf152"
       },
@@ -64,8 +64,8 @@
     "D47": {
       "status": "decided",
       "relatedDocs": {
-        "solution/document-api.md": "6ae1c1860947b133e6835476734494ae44884d1a4f718ebb9669edf5299843f0",
-        "solution/format-spec.md": "9f1f5423210eb91f9da47b5a48efb2050a1669ce09565389ccf09469e92dc6f2",
+        "solution/parts/document-api.md": "6ae1c1860947b133e6835476734494ae44884d1a4f718ebb9669edf5299843f0",
+        "solution/parts/format-spec.md": "9f1f5423210eb91f9da47b5a48efb2050a1669ce09565389ccf09469e92dc6f2",
         "goal/requirements.md": "17c852f38a05a502e92533425bf4b549fc950b2813dceda81dfd0755bbb44c53",
         "goal/open-questions.md": "eb41e3581ed935d2311becc48a069b74abd17f99e7be03b3965eb0c010944d5b"
       },

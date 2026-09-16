@@ -448,7 +448,7 @@ export class Dockets {
    * **Every docket, because an id names a matter and not a docket** — the same
    * reason the task list reads every list. Scanned rather than indexed: a few
    * hundred matters over a lifetime is not a thing to build an index for
-   * (`solution/horizon.md`), and the index would be the second copy of a truth
+   * (`solution/parts/horizon.md`), and the index would be the second copy of a truth
    * the files already hold.
    */
   readonly #takenMatterIds = async (): Promise<ReadonlySet<string>> => {

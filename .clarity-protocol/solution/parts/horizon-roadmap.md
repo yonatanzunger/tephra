@@ -1,11 +1,23 @@
 # The Horizon and Dockets — Roadmap
 
-**Design: `solution/horizon.md`. Requirements: `goal/horizon.md`. Decisions:
+**Design: `solution/parts/horizon.md`. Requirements: `goal/horizon.md`. Decisions:
 D68–D76.** Feature-level; the architectural design happens per phase, at the
 keyboard.
 
-**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 ✓ → MH4 (part) → MH5 → MH4 (rest)
-→ MH6.**
+**Build order: MH1 ✓ → MH3a ✓ → MH3b ✓ → MH2 ✓ → MH4 (part) ✓ → MH4 (rest) ·
+MH5 · MH6, all three unscheduled.**
+
+> **Unscheduled 2026-09-16, and this is not a deferral of the designs.** The
+> three remaining phases moved to `../milestones.md`'s project list, where the
+> whole of what is left of the product now lives. The reason is the same for
+> each and was given plainly: *these are really solid, but I'm not sure I have
+> enough information yet to proceed with any of them.*
+>
+> What each is waiting to learn is named in that file — the annotation layer
+> wants a list of what actually earns an annotation, MH5 wants a real backlog to
+> review rather than a fixture, and MH6 wants MH5's decline counts. The phases
+> keep their numbers and their designs; what they lose is a position in a queue,
+> because the queue itself is finished. Everything below stands as written.
 
 > **Rescheduled 2026-09-12, from living on it.** MH4's foundation is built — the
 > unified view, the day's selection, selection and bulk verbs, the entrances —
@@ -204,7 +216,7 @@ had differently:
   recurrence "cannot accumulate" is exactly the reasoning that hides the
   opposite failure: it goes quiet instead. Asking *what should be true?* answers
   both halves with one rule, and it took two live bugs out with it (see MH3b in
-  `milestones.md`).
+  `../milestones.md`).
 
 ## MH2 — The horizon ✓
 
@@ -313,7 +325,7 @@ it:**
 
 **Written down 2026-09-16, because it was being cited and never defined.** The
 roadmap has said since 2026-09-12 that the annotation layer is *what remains of
-MH4*, and `features.md` says the same, with nothing anywhere saying what it is.
+MH4*, and `../features.md` says the same, with nothing anywhere saying what it is.
 What it names, from the discussion it came out of:
 
 > **The annotation layer is how the reorientation flow shows, on screen, what

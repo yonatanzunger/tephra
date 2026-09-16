@@ -1,4 +1,4 @@
-// The Document API — the contract, transcribed from solution/document-api.md.
+// The Document API — the contract, transcribed from solution/parts/document-api.md.
 //
 // THIS FILE HAS NO RUNTIME CODE. It is types and interfaces only, so it can be
 // imported from main, preload and renderer alike without dragging anything

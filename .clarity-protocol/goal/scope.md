@@ -6,7 +6,7 @@ The concrete answer to "smaller than a high-powered notebook app." It is a count
 
 **Tephra is a small number of view types over one directory of plain files.** The scope number is the count of *view types*, not the count of features. This falls out of R26 (plain durable formats) rather than being imposed on top of it, and it makes the departer's exit structural: if every artifact is already a file another program can open, "leaving" is not an export feature, it is stopping.
 
-> **Amended by D46.** The app may open more than one notebook directory, and a second one — the *shreddable* notebook (`solution/shreddable-notebook.md`, M6) — stores its files encrypted so that deletion is real. **The counting rule is unaffected**: still three view types, still plain files inside, and the second notebook is a different *storage* choice rather than a fourth type. What it relaxes is the departer's exit, and only for itself: R26 protects the archive, and that notebook is definitionally not the archive.
+> **Amended by D46.** The app may open more than one notebook directory, and a second one — the *shreddable* notebook (`solution/parts/shreddable-notebook.md`, M6) — stores its files encrypted so that deletion is real. **The counting rule is unaffected**: still three view types, still plain files inside, and the second notebook is a different *storage* choice rather than a fourth type. What it relaxes is the departer's exit, and only for itself: R26 protects the archive, and that notebook is definitionally not the archive.
 
 > **Amended 2026-09-12 (MH1–MH2, Qb). Three becomes four, and the increment is
 > paid for rather than waived.** The **docket** is a native type with its own UX
@@ -46,7 +46,7 @@ Four native types, each with its own UX. Everything else in the directory is eit
 > alternative was a bespoke block format, and what it would have cost is the one
 > thing this section is about. One parser and one merge story still.
 >
-> **The TODO promotion is now live** (`goal/todo.md`), so this is no longer hypothetical: the wire format is explicitly an implementation detail for `solution/todo.md` to settle, constrained only by R26 and by T2 — the user-perceived model is one ever-growing list, and the storage need not mirror it.
+> **The TODO promotion is now live** (`goal/todo.md`), so this is no longer hypothetical: the wire format is explicitly an implementation detail for `solution/parts/todo.md` to settle, constrained only by R26 and by T2 — the user-perceived model is one ever-growing list, and the storage need not mirror it.
 
 **Type is declared by name, not inferred.** Portal found the failure this prevents: a mutable list mistyped as append-only notebook content merges with append-union semantics and *silently duplicates edited lines* — no error, the file quietly fills with near-duplicate paragraphs. Explicit typing is what makes merge safe.
 
@@ -58,7 +58,7 @@ Four native types, each with its own UX. Everything else in the directory is eit
 
 The admission test is: **what does having this here beat?** Filesets compete with a folder and a text file; a browser extension competes with copy-paste. Some will win that fight, but they win it later and on evidence from use.
 
-Which reframes the last stage of the sequencing (`solution/components.md`): **v3 is not "add the remaining features," it is "promote the ones that earned it."** v1 already ships a TODO list — a pinned markdown file with checkboxes — and a fileset — a directory with a notes file. v1 should deliberately *run* those plain versions rather than doing without, so that promotion happens against a specific recorded failure rather than an argument.
+Which reframes the last stage of the sequencing (`solution/parts/components.md`): **v3 is not "add the remaining features," it is "promote the ones that earned it."** v1 already ships a TODO list — a pinned markdown file with checkboxes — and a fileset — a directory with a notes file. v1 should deliberately *run* those plain versions rather than doing without, so that promotion happens against a specific recorded failure rather than an argument.
 
 ## The rule that decides what may be deferred
 

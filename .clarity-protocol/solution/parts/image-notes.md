@@ -44,7 +44,7 @@ unless they are the same picture.
 
 ## Found on the way: inline images had never once worked
 
-**`features.md` has listed *inline image rendering* as v1 since it was written,
+**`../features.md` has listed *inline image rendering* as v1 since it was written,
 and the widget has drawn an `<img>` for just as long — pointing at nothing.** The
 renderer is served from `tephra://app`, so a relative src resolved against the
 *bundle*; there was no route to the notebook at all. Every inline image in the
