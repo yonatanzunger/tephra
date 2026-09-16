@@ -1632,3 +1632,49 @@ The honest reading of my own evidence was available at the time: my race require
 a keystroke composed *before* the comment write, and the person's own sequence
 said they typed *after* pressing Done. I had the refutation in hand and read past
 it, because the artifact matched.
+
+## 66. The format was the easy half
+
+**2026-09-16.** A page of prose — fifty-two numbered tasks for a house move —
+became twelve matters on a docket. The job reads as format conversion, which is
+the part an LLM is obviously good at, and the format took one pass. What took
+the care was something else entirely.
+
+**The source file silently disagreed with the notebook.** Four of its tasks were
+refinements of steps already on the docket; a fifth was marked *needs to be in
+Lima* there and *can be done right now* in the file; two more were duplicates of
+steps that already existed. An append-only conversion would have produced a
+docket with everything twice **and would have looked like it worked** — the file
+would parse, the surface would render, and the error would surface weeks later
+as *why do I have two of these*.
+
+> **The interesting question was never what the source says. It was what the
+> target already says about it.** That is the difference between an importer and
+> a reconciler, and it is the same distinction D77 makes about derived state:
+> the pass that matters is the one that brings two things into agreement.
+
+**And the hazard was in the lenient boundary.** `after <step>` reading a file
+back takes the token **verbatim** — a reference to a step that does not exist
+parses happily, stores, and then never comes due, in silence. The code says so
+in a comment. Leniency at the file boundary is right for a person editing in vim
+(R26) and wrong for a machine writing a hundred lines: what I needed was the
+strict boundary, and the only way to get it was to write a throwaway harness
+that ran the app's **own parser** over my file and printed every dangling
+reference and every task the import would generate today.
+
+> **Verify a generated file with the real parser, never with your reading of the
+> grammar.** Fifteen items were going to land on a live list; the number came out
+> of the harness, not out of my estimate, and the estimate had been wrong by
+> seven.
+
+**The reframing, which is worth more than the conversion.** Every operation I
+needed already existed — `add`, `addSection`, `addStep`, `setStart`, `setMode`,
+`setOwner`, `editStep` — validated, transactional, and holding the lock.
+`addStep` even takes its schedule as *text* and resolves `then` or an index
+against the real step list, refusing what resolves to nothing. **I hand-minted
+fourteen ids and wrote a validator for a job the API does better**, because the
+API has exactly one caller and it is the renderer. The lesson generalises past
+models: an operation set reachable by only one caller is an operation set that
+gets reimplemented, badly, by the second one.
+
+> Related: note 62's two doors, one of them deaf — same shape, one door out.

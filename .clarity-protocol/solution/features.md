@@ -179,6 +179,20 @@ The index format and the nav role arrived in v1; the *collection experience* is 
 | Browser extension | R23 | v3+ |
 | Drag and drop into a fileset | — | v3+ |
 
+## Models and agents
+
+Raised 2026-09-16. Designed nowhere yet; the notes are `parts/agent-api.md` and
+the project entry is in `milestones.md`.
+
+| Feature | Ref | Stage |
+|---|---|---|
+| A door onto the existing operations, reachable outside the renderer | — | a project — the operations exist; the caller does not |
+| Self-describing contract, derived from the parser rather than written beside it | — | a project — the test is *a model needs no codebase* |
+| Provenance on anything machine-written | D79 as precedent | **owed by the first import**, which is unmarked |
+| Propose-then-apply, with the diff and what it would generate | — | a project — hand-rolled once, for the Lima conversion |
+| A model as a participant in a comment thread | D47 | a project — the byline grammar already carries author and assignee |
+| Disclosure: what may leave the notebook, scoped and recorded | D69's mirror | **undecided**, and the one that wants deciding first |
+
 ## OS integration
 
 | Feature | Ref | Stage |

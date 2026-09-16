@@ -131,6 +131,50 @@ kept, opening a collection en masse, snapshots taken of what it points at.
 (summaries not kept, en-masse opening painful, snapshots not taken). This is the
 largest project here that could start today.
 
+### Models and agents — the door, and the conversation
+
+*Notes: `parts/agent-api.md`. Raised 2026-09-16, from two wants that arrived in
+the same week.*
+
+**Two wants that look like one feature and are not.** Converting a page of prose
+into docket matters is a *transformation of the corpus*: a model does work on the
+notebook and leaves, and what it needs is an API. Wanting to think about
+yesterday's notes with a model that knows you is a *conversation anchored in the
+corpus*, and what it needs is a **place**. Building one thing for both is how
+this becomes a chat sidebar nobody opens.
+
+**The door is smaller than it looks.** The operations already exist — thirty-three
+docket operations, twenty-four list operations, plus nav, search and comments,
+all validated and all going through the services that own the lock. What is
+missing is a caller outside the renderer, which is the shape D83 already left
+behind: a service declares which door it answers, and this is a third one. The
+test to build against is the user's own: **a model must be able to operate the
+notebook without reading the codebase** — which means the door offers operations
+and owns the serialisation, rather than a document explaining the file format to
+machines.
+
+**The place may already exist too, and this is the surprising part.** A comment
+carries an `author`, an **assignee** (`→ **Name**`), append-only replies, and a
+byline rule that preserves unknown tokens so it can grow without a format break.
+So *select a passage, address a comment to a model, and the reply lands in the
+thread as a message* needs no new kind and no new surface. The anchor decides
+what is disclosed; the exchange is durable and findable like everything else.
+And Tephra need not talk to a service at all: a question addressed to a model is
+text in a file, which a local agent can read and answer through the same door.
+
+**Four policies this wants decided before it is built**, each from something
+that has already happened: provenance is a field and not a convention (D79's
+precedent, the snippets question as the failure); acceptance is a gesture, so
+proposals land somewhere you promote them from; **amend, not only append**, since
+the real work in the first conversion was reconciling against what the docket
+already said; and disclosure is scoped and recorded — the mirror of D69, which
+settled what may be *written* to a service and never had to ask what may leave.
+
+**Waiting on:** which operations use actually demands. The first conversion was
+done by hand on purpose and produced the list in `parts/agent-api.md`; a few
+more will say which six of the fifty-seven carry the traffic. Nothing about the
+conversation half is blocked by the door, but it is cheaper after it.
+
 ### The editing surface: the keymap and the visual system
 
 *D67, R1.3, R1.4 as superseded. `parts/keymap.md`.*
