@@ -669,6 +669,52 @@ check(
 )
 
 // ── 8. legibility ───────────────────────────────────────────────────────────
+// ── finishing, and the archive (D91) ────────────────────────────────────────
+check(
+  // Reported from use: *when a one-off has all its steps completed, that matter
+  // should itself become completed, marked as such.* The slug is where it says
+  // so, because a finished matter's schedule is behind it and *when* is no
+  // longer the thing anybody wants from the row.
+  'A FINISHED MATTER SAYS SO, in place of its schedule',
+  typeof r.finishedSays === 'string' && /^finished /.test(r.finishedSays),
+  `the slug reads: ${JSON.stringify(r.finishedSays)}`,
+)
+check(
+  // D42: a matter that vanished as its last step was ticked would be the app
+  // moving something nobody asked it to move. The pass files it tomorrow.
+  'and it stays on the docket for the rest of the day',
+  r.finishedStillThere === true && r.archiveDoorBefore === 0,
+  `row ${r.finishedStillThere} · doors ${r.archiveDoorBefore}`,
+)
+check(
+  // MH1 made the affordance mistake three times; this is its inverse — an
+  // option that CAN act, on a matter where acting means nothing.
+  'and offers nothing that cannot mean anything: no suspend on finished work',
+  Array.isArray(r.finishedOffers) && r.finishedOffers.length === 0,
+  `offered: ${JSON.stringify(r.finishedOffers)}`,
+)
+check(
+  'filing it moves it to the archive beside the docket',
+  r.filedInto === 'docket-archive/the-house.docket.md' && r.goneFromDocket === true,
+  `into ${r.filedInto} · gone ${r.goneFromDocket}`,
+)
+check(
+  // The archive is kept out of the sidebar on purpose, so the door has to be
+  // where the question is asked: on the docket it belongs to.
+  'and the docket grows a door to it, saying how much is behind it',
+  typeof r.archiveDoor === 'string' && /1 finished matter, filed/.test(r.archiveDoor),
+  `the door reads: ${JSON.stringify(r.archiveDoor)}`,
+)
+check(
+  // **The reason this is not `moveTo`**, which recreates the matter and loses
+  // every stamp: for an archive of finished work the stamps are the content.
+  'and the archive is a docket, with the completion dates kept',
+  Array.isArray(r.inArchive) && r.inArchive.length === 1 &&
+    /\|\d{4}-\d{2}-\d{2}$/.test(String(r.inArchive[0])) &&
+    Array.isArray(r.stampsKept) && r.stampsKept.length > 0 && r.stampsKept.every(Boolean),
+  `${JSON.stringify(r.inArchive)} · steps done: ${JSON.stringify(r.stampsKept)}`,
+)
+
 check(
   'EVERY CLASS THE SURFACE STYLES has a rule to style it',
   // A wholesale rewrite of one CSS region silently took four rules with it.

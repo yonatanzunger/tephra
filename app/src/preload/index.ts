@@ -211,6 +211,20 @@ const tephra = {
   docket: {
     /** Every docket, by what it is called. */
     list: (): Promise<readonly DocketRow[]> => ipcRenderer.invoke(CHANNEL.docket, { kind: 'list' }),
+    /**
+     * File a finished matter now (D91).
+     *
+     * **The impatient half of a clause that would do it anyway.** The pass
+     * files finished matters on the next day's run, which is what keeps a
+     * matter from vanishing under the hand that ticked its last step; this is
+     * for the sitting where somebody is tidying deliberately and wants it gone
+     * now.
+     */
+    fileMatter: (docket: DocumentId, matter: string): Promise<DocumentId | null> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'fileMatter', docket, matter }),
+    /** The archive beside this docket, if there is one (D91). */
+    archive: (docket: DocumentId): Promise<{ id: DocumentId; matters: number } | null> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'archive', docket }),
     matters: (docket: DocumentId): Promise<readonly Matter[]> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'matters', docket }),
     /** `when` as a person types it, parsed in main so there is one grammar. */

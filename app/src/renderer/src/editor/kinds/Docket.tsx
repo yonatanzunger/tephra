@@ -51,7 +51,7 @@ import {
   type StepKind,
 } from '../../../../shared/kinds/docket.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
-import { addDays, dateKeyAt, DEFAULT_ZONE } from '../../../../shared/dates.ts'
+import { addDays, dateKeyAt, dayLabel, DEFAULT_ZONE } from '../../../../shared/dates.ts'
 
 export function DocketSurface({
   window: docWindow,
@@ -72,6 +72,15 @@ export function DocketSurface({
    * section in a dropdown — a question whose answer was already in the gesture.
    */
   const [adding, setAdding] = useState<string | null>(null)
+  /**
+   * The archive beside this docket, if anything has been filed yet (D91).
+   *
+   * **Null until there is one**, so a docket nobody has finished anything on
+   * says nothing — the same rule as every other absence here. Re-read whenever
+   * the matters are, because the pass that files a matter is the thing that
+   * makes this appear.
+   */
+  const [archive, setArchive] = useState<{ id: DocumentId; matters: number } | null>(null)
   /** Which section header is being renamed, and whether a new one is being typed. */
   const [naming, setNaming] = useState<string | null>(null)
   const [newSection, setNewSection] = useState(false)
@@ -164,6 +173,11 @@ export function DocketSurface({
 
   const refresh = useCallback(async (): Promise<void> => {
     setSections(await window.tephra.docket.sections(id))
+    // **Asked at the same moment, because it changes for the same reason**: the
+    // pass that files a finished matter takes it out of the sections above and
+    // puts it in the archive below, and two reads that disagree would draw a
+    // matter in neither place or both.
+    setArchive(await window.tephra.docket.archive(id))
   }, [id])
 
   useEffect(() => {
@@ -494,13 +508,24 @@ export function DocketSurface({
                       // one-off it would collapse into *suspend*, and an option
                       // that cannot do anything is the affordance mistake MH1
                       // made three times, inverted.
+                      // **Filing it now, on a matter that is already finished**
+                      // (D91). The pass would do this on tomorrow's run, which
+                      // is deliberate — a matter must not vanish under the hand
+                      // that ticked its last step — and this is for the sitting
+                      // where somebody is tidying on purpose.
+                      ...(matter.done !== null
+                        ? ['rule' as const, {
+                          label: 'File it in the archive',
+                          onChoose: () => { void act(window.tephra.docket.fileMatter(id, who)) },
+                        }]
+                        : []),
                       ...(matter.when.every !== null && matter.when.start !== null
                         ? ['rule' as const, {
                           label: 'Skip to the next one',
                           onChoose: () => { void act(window.tephra.docket.advance(id, who)) },
                         }]
                         : []),
-                      ...(matter.when.start !== null
+                      ...(matter.when.start !== null && matter.done === null
                         ? [{
                           label: 'Suspend this matter',
                           onChoose: () => { void act(window.tephra.docket.suspend(id, who)) },
@@ -684,6 +709,23 @@ export function DocketSurface({
         </button>
       )}
 
+      {/* **The door to what is finished** (D91). The archive is kept out of the
+          sidebar on purpose — it is not somewhere you navigate to — so the way
+          in is on the docket it belongs to, which is where *what happened to
+          that* is actually asked.
+
+          **In a window of its own**, for ⌘1's reason one kind over: you open it
+          to check something while looking at the live docket, and navigating
+          away would take the thing you were checking against. */}
+      {archive !== null && archive.matters > 0 && (
+        <button
+          className="docket-archive"
+          onClick={() => void window.tephra.win.create({ kind: 'document', id: archive.id })}
+        >
+          {archive.matters} finished {archive.matters === 1 ? 'matter' : 'matters'}, filed
+        </button>
+      )}
+
       {menu !== null && <RowMenu request={menu} onClose={() => setMenu(null)} />}
 
       {total === 0 && adding === null && (
@@ -842,7 +884,16 @@ function Row({
 }): React.JSX.Element {
   // The round-trip form is what an edit starts from; the reading form is what
   // the row shows. See `readWhen`.
-  const read = readSchedule(matter.when, matter.mode, today ?? undefined)
+  /**
+   * **Finished says so in place of its schedule** (D91). A one-off whose task
+   * steps are all done has no *when* worth reading — the date it was going to
+   * happen on is behind it — so the slug reads *finished 16 Sep*, which is the
+   * only thing anybody wants from the row now. It stays on the docket for the
+   * rest of the day and the next pass files it.
+   */
+  const read = matter.done !== null
+    ? `finished ${dayLabel(matter.done, today ?? undefined)}`
+    : readSchedule(matter.when, matter.mode, today ?? undefined)
   /**
    * **Inactive is *no start date*, and nothing else** (D76). There is no
    * suspended flag: a matter with no date cannot compute `T±N`, so it cannot
@@ -851,7 +902,7 @@ function Row({
    */
   /** Which half of which step is being corrected. Local: it is one gesture. */
   const [fixing, setFixing] = useState<{ step: string; part: 'when' | 'what' } | null>(null)
-  const inactive = matter.when.start === null
+  const inactive = matter.when.start === null && matter.done === null
   return (
     <li
       // **Right-click anywhere on a matter** (D10's idiom, as the sidebar and
@@ -1003,7 +1054,13 @@ function Row({
             step on the list today. Suspending clears it again — which is what a
             deferred talk actually is, *still happening, date to be decided* —
             and leaves completed steps completed, so a mis-press costs nothing. */}
-        {inactive ? (
+        {/* **Nothing to offer a finished matter** (D91). *Suspend* means *stop
+            work on this*, which is not a thing you can do to work that is over;
+            it would still have an effect — clearing the date — which is what
+            makes it worse than a disabled control rather than better. MH1 made
+            the affordance mistake three times and this is its inverse: an
+            option that CAN act where acting means nothing. */}
+        {matter.done !== null ? null : inactive ? (
           <button className="docket-start" onClick={onActivate} title="Start work on this now">
             activate
           </button>

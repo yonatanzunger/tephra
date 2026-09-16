@@ -315,6 +315,25 @@ inferred, which is what keeps merges safe.
 
 ## The rules that govern behaviour
 
+**A one-off finishes, and its docket has an archive** (D91, added 2026-09-16
+from use). Finishing is read from the steps rather than declared: a `task` whose
+task steps are all done is done, an `event` also has to have happened, and
+anything recurring never finishes because it advances. The stamp is `done:` on
+the matter, written by the pass and taken off by it when a step is reopened.
+
+The finished matter stays where it is for the rest of the day and the next pass
+moves it to `docket-archive/<same name>.docket.md` — an ordinary docket, so the
+way back is an ordinary move. Two consequences worth stating with the rules:
+the archive is **outside every clause that generates**, so a filed matter cannot
+put work on the list; and it is **outside the horizon**, because a finished
+matter's date is a fact about the past and the horizon answers *what is coming*.
+
+**Why the delay is a day and not a moment.** D42's rule is that nothing moves
+under you unbidden, and a matter that vanishes as its last step is ticked is the
+clearest possible case of it. A matter that is gone when you come back tomorrow
+is tidying, which is the same distinction the *today* section's reflow rests on.
+
+
 **Generation is idempotent, and that is the load-bearing rule.** It produces what
 *should be live now* — never one item per day missed, and never a second copy of
 something it already made. Without it a month away from the desk yields thirty

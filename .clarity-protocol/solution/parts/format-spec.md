@@ -17,6 +17,9 @@ notebook/
   tasks.todo/2026/03/2026-03-14.md          the distinguished task list, a day at a time
   blog-posts.todo.md                        an OVERALL list: no days, no walk (D55 as amended)
   notes/titration-curves.md                 branched documents, pinned lists
+  dockets/lima.docket.md                    a docket: one block per matter (D68, D72)
+  docket-archive/lima.docket.md             its finished matters, same grammar (D91)
+  drafts/untitled.md                        a document nobody has named yet (D90)
   sections/_index.fileset.md                the nav's top level: a fileset of filesets (D53)
   sections/house-deal.fileset.md            nav sections (D10)
   attachments/2026/03/2026-03-14-plot-a1b2c3.png
@@ -187,6 +190,38 @@ The field form above is read and written by one pair that round-trips. The
 into a field — or into a file by hand — read into a record and never written back
 that way. It is what those notations were always for, and it is why an old file
 needs no migration beyond **reading it and writing it**.
+
+## Dockets, and the archive beside them
+
+A docket is `dockets/<name>.docket.md`, one block per matter, and its grammar is
+in `shared/kinds/docket.ts` — the modes, the three schedule fields, the step
+lines (D68, D72, D76 as amended by D80).
+
+**A finished one-off carries `done:`** (D91), written by the reconciler from the
+steps and cleared by it when a step is reopened:
+
+```markdown
+### Replace the gate latch
+mode: task
+start: 2026-09-13
+done: 2026-09-16
+steps:
+- +0d task: Replace the gate latch <!--tephra:step 4c8e11a2 1789600000-->
+<!--tephra:matter aa11bb22 1789347032 0-->
+```
+
+**And `docket-archive/<same name>.docket.md` holds the ones that are finished.**
+Same kind, same grammar, same surface, sections mirrored from the docket — which
+is what makes moving a matter back an ordinary docket-to-docket move rather than
+an import. The move copies the block's record rather than recreating it, so
+every id and every completion stamp survives; a matter arrives in the archive
+exactly as it left the docket, plus nothing.
+
+**Two rules a reader needs.** The archive is skipped by the sidebar's
+directory listing, because it is not somewhere you navigate to — the door is on
+the docket. And it is skipped by the generating clauses of the pass, so a filed
+matter cannot put work back on the list; it is still *adopted*, so a hand-edit
+in an archive is regularised like anywhere else.
 
 ## Sections
 

@@ -2106,6 +2106,20 @@ body {
   background: none; border: 0; border-radius: 4px;
 }
 .docket-add.here:hover { color: rgb(var(--accent)); background: rgb(var(--accent) / .08); }
+
+/* **The door to the archive, at the foot and under a rule** (D91). It is the
+   quietest thing on the page by design: a docket is what you are keeping up
+   with, and what you have finished is a place you visit rarely and on purpose.
+   Under the rule because it is not part of the list above it. */
+.docket-archive {
+  display: block; margin: 1.6rem 0 0; padding: .5rem 0 0;
+  width: 100%; text-align: left;
+  font-family: var(--font-ui); font-size: 12.5px;
+  color: rgb(var(--text-muted));
+  background: none; border: 0; border-top: 1px solid rgb(var(--border) / .5);
+  cursor: pointer;
+}
+.docket-archive:hover { color: rgb(var(--accent)); }
 .docket-row {
   padding: .55rem 0 .5rem;
   border-bottom: 1px solid rgb(var(--border) / .5);

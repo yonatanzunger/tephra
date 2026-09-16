@@ -47,6 +47,7 @@ waiting to learn.**
 | **D83 · D84** | `DocumentService` split into sixteen services across four tiers; `ipc.ts` 471 lines to 66 | 14 Sep |
 | **MT8 · D85** | TODO items become structured records with a field-based format; `for:` replaces the matter tag | 15 Sep |
 | **D86–D90** | One measure, with the code face's size solved so eighty columns fit it; smart quotes; the stale-edit guard; elided blocks; drafts; the Tasks row in the sidebar | 15–16 Sep |
+| **D91, and two bugs** | A one-off matter finishes and is filed in an archive beside its docket; reconciliation on demand; **adoption**, without which a docket written from outside Tephra generated nothing at all | 16 Sep |
 
 The reasoning behind each — what it taught, what it moved, which of its
 predictions were wrong — is `parts/build-history.md`.
@@ -112,6 +113,13 @@ is the plainest way to say what it is. The resurrection rate becomes visible,
 which is the only evidence that the threshold is right. The graveyard is exempt from staleness
 reporting, or the mechanism built to prevent neglect nags about the one place
 where neglect is the point.
+
+**Half of it is now built, by something else.** D91's archive is the same
+motion with a different trigger — finished rather than passed over — so
+demotion arrives as a second caller of a mechanism that exists, with two
+differences to keep in view: the graveyard may use `moveTo`'s recreation, since
+nothing about a never-started matter is worth preserving byte-for-byte, and it
+must be exempt from staleness reporting.
 
 **Waiting on:** MH5's decline counts. Decline count is un-backfillable and only
 accrues once the review exists, so shipping these together would mean choosing

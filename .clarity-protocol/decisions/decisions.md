@@ -4660,3 +4660,90 @@ section rather than an empty one.
 **What is NOT done:** existing `notes/untitled-*.md` files stay where they are.
 They are named files now, and moving somebody's documents because the rule
 changed is not a migration, it is a surprise.
+
+## D91: A one-off matter finishes, and its docket has an archive beside it
+
+**Date:** 2026-09-16
+**Status:** decided
+**Extends:** D68, D72 (a docket is a document with a block per matter), D75
+(sections), D76 as amended by D80 (the modes), D77 (derived state reconciled,
+never notified), D42 (nothing moves under you unbidden).
+**Source:** reported from use, on the docket that came out of the first
+machine-written import — *when a one-off task or event has all its steps
+completed, that matter should itself become completed, marked as such, and
+probably moved into an archive.*
+
+**Decision.** Three parts, and each is decided separately because each could
+have gone another way.
+
+**1. A one-off matter finishes, and the rule is read from its steps.** A matter
+whose mode is `task` or `event` is **finished** when it has at least one task
+step and every task step is done. `status` steps do not count either way: they
+generate nothing and cannot be done, so a matter made only of them has no work
+in it to finish. **An event needs its date to have passed as well** — booking
+the boiler service is not the service happening, and a run-up step completed
+three weeks early would otherwise finish the matter before the event occurred.
+A recurring matter never finishes; it advances, which is what recurrence means.
+
+**2. Finishing is a `done:` field, written by the pass.** `done: 2026-09-16` on
+the matter block, beside the schedule fields. Not a fifth slot in the marker,
+for the reason the byline grammar gives about the comment kind: the archive is
+read by a person, *when was this finished* is the first thing they want from it,
+and a date behind a machine marker is a date nobody reads. It is written by the
+reconciler and **cleared by the reconciler** when a step is reopened — both
+directions, or it is an event handler wearing a hat.
+
+**3. The archive is an ordinary docket, in a directory beside the dockets.**
+`dockets/lima.docket.md` is partnered by `docket-archive/lima.docket.md`, same
+kind, same grammar, same surface, sections mirrored. A finished matter is moved
+there **by the next day's pass, not at the moment of the last tick** — you see
+the completion where you made it, and the tidying happens between sessions
+(D42: the reflow you did not ask for is the one to avoid). The row also offers
+*File it in the archive* once it is finished, for the sitting where somebody is
+tidying deliberately; the clause and the gesture are the same act, and the
+gesture exists only because waiting is the default rather than the rule.
+
+**What the surface says, and what it stops offering.** A finished matter reads
+*finished 16 Sep* where its schedule was, because a schedule it has passed is
+not what anybody wants from the row — and it stops offering **suspend**, which
+means *stop work on this* and cannot be done to work that is over. That is MH1's
+affordance mistake inverted: not a control that can do nothing, but one that
+would still act where acting means nothing.
+
+**Why an archive rather than a flag.** A docket is reasoned about as a whole and
+read at conversational distance (H3); a year of finished matters in it makes
+that worse every month, and *hidden but present* is the arrangement that turns a
+planning document into a database view. Out of the file is out of the way.
+
+**Why a directory and not a section inside the docket.** A reserved section name
+collides with D75's rule that sections are what a person wrote; and the point is
+that the archive is *rarely opened*, which a section at the foot of the live
+document does not achieve.
+
+**Why the move copies the block rather than calling `moveTo`.** `moveTo` exists
+and would be the obvious reuse, and it is exactly wrong here: it recreates the
+matter — a new id, steps made afresh — so **every completion stamp is lost.**
+For a graveyard of matters that were never started that is tolerable; for an
+archive of finished work the stamps *are* the content. Archiving re-serialises
+the parsed matter, which is what every docket verb already does, so ids,
+arrival, declines, per-step completion and generated links all survive.
+
+**Why the archive is not in the sidebar.** The panel derives a section per
+top-level directory so that a file nobody pinned can still be found (D10). An
+archive is not somewhere you navigate to; it is where things go when you are
+done with them, and a section of them would be a list you scroll past for ever.
+It is skipped from that listing the way `sections/` already is, and the door to
+it is on the docket it belongs to — where the question *what happened to that*
+is actually asked.
+
+**What this gives MH6 for free.** The graveyard is the same motion with a
+different trigger — passed over enough times rather than finished — so demotion
+arrives as a second caller of a built mechanism rather than as new machinery.
+The difference to keep in view: the graveyard's move may use `moveTo`'s
+recreation, since nothing about a never-started matter is worth preserving
+byte-for-byte, and it must also **not** be swept by staleness reporting.
+
+**What would reopen this.** An archive that turns out to be read often, which
+would make its absence from the sidebar wrong rather than restful; or restoring
+a matter proving common enough that *move it back* wants a verb of its own
+rather than the docket-to-docket move it already is.

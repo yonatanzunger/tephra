@@ -28,6 +28,7 @@ import {
   type Matter, type Mode, type NewMatter, type Schedule, type Section, type StepKind,
 } from '../../shared/kinds/docket.ts'
 import { asDateKey } from '../../shared/dates.ts'
+import { archiveOf, isArchive, type RelPath } from '../w/layout.ts'
 import { nameOf } from '../../shared/slug.ts'
 import type { DateKey, DocumentId } from '../../shared/document-api.ts'
 import { ONLY_SEGMENT } from '../../shared/document-api.ts'
@@ -72,8 +73,71 @@ export class Dockets {
    * same rule the sidebar's directory sections follow: a docket is there because
    * its file is there, which cannot be wrong.
    */
+  /**
+   * Every docket that holds live work — the archives are not among them (D91).
+   *
+   * **The archive is a docket by kind and not by role.** It has the suffix, the
+   * grammar and the surface, which is what makes moving a matter back an
+   * ordinary move; what it must not be is a destination for anything that
+   * enumerates *what I am keeping up with* — the picker, the horizon, and the
+   * clauses of the pass that generate work. Three call sites deliberately do
+   * NOT use this: the id pool (an archived id is still taken), and the two
+   * lookups that ask *which matter made this task*, which must still answer
+   * for a task whose matter has since been filed away.
+   */
+  async live(): Promise<readonly DocumentId[]> {
+    return (await this.#store.corpus.list('docket'))
+      .filter(id => !isArchive(id as string as RelPath))
+  }
+
+  /**
+   * Move a finished matter into the docket's archive (D91).
+   *
+   * **The archive is written before the source is cleared**, and that order is
+   * the whole of the crash story: two documents cannot be written in one
+   * transaction, so the failure has to be chosen. A duplicate is visible and
+   * fixable by hand; a matter that left one file without arriving in the other
+   * is a year of somebody's work gone.
+   *
+   * **Not `moveTo`, which exists and is wrong here.** That verb recreates the
+   * matter — a new id, steps made afresh — so every completion stamp is lost;
+   * fine for a graveyard of things never started, and exactly backwards for an
+   * archive of finished work, where the stamps are the content.
+   */
+  async archiveMatter(from: DocumentId, matter: string): Promise<DocumentId | null> {
+    const found = (await this.matters(from)).find(one => one.id === matter)
+    if (found === undefined) return null
+    const partner = archiveOf(from as string as RelPath)
+    if (partner === null) return null
+    const to = partner as string as DocumentId
+    if (!(await this.#store.corpus.exists(to))) {
+      const title = (await this.#store.corpus.use(from, doc => doc.titleOf(ONLY_SEGMENT)))
+        ?? nameOf(from as string)
+      await this.#store.corpus.create(to, `${title} (archive)`)
+      this.#store.changed(to)
+    }
+    // **Filed under the section it was filed under**, so the archive mirrors the
+    // docket's own shape and reference reading finds the grouping it expects.
+    const within = (await this.sections(from)).find(one =>
+      one.matters.some(one2 => one2.id === matter))
+    await this.#mutate(async () =>
+      this.#store.corpus.use(to, doc => (doc as DocketDocument).keep(found, within?.name ?? '')))
+    await this.#durable.wrote(to)
+    await this.remove(from, matter)
+    return to
+  }
+
+  /** Whether this docket has an archive, and how much is in it (D91). */
+  async archive(id: DocumentId): Promise<{ id: DocumentId; matters: number } | null> {
+    const partner = archiveOf(id as string as RelPath)
+    if (partner === null) return null
+    const to = partner as string as DocumentId
+    if (!(await this.#store.corpus.exists(to))) return null
+    return { id: to, matters: (await this.matters(to)).length }
+  }
+
   async all(): Promise<readonly DocketRow[]> {
-    const ids = await this.#store.corpus.list('docket')
+    const ids = await this.live()
     const rows = await Promise.all(ids.map(async id => ({
       id,
       // **What it is CALLED, falling back to what it is named.** The frontmatter
@@ -195,6 +259,18 @@ export class Dockets {
   }
   async setOwner(id: DocumentId, matter: string, owner: string | null): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).setOwner(matter, owner)))
+    await this.#durable.wrote(id)
+  }
+  /**
+   * Stamp a matter finished, or take the stamp off (D91).
+   *
+   * **Called by the pass and by nothing else.** Finishing is a fact about the
+   * steps, so the only honest way to finish a matter is to finish its steps —
+   * there is no gesture for this and there should not be one.
+   */
+  async setDone(id: DocumentId, matter: string, done: DateKey | null): Promise<void> {
+    await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as DocketDocument).setDone(matter, done)))
     await this.#durable.wrote(id)
   }
   async setLink(id: DocumentId, matter: string, link: string | null): Promise<void> {

@@ -221,7 +221,7 @@ export class DocketDocument extends SegmentedDocument {
       ...(taken === undefined ? [] : [...(await taken())]),
     ]))
     const matter: Matter = {
-      id, name: said, when, mode, tags: [], owner: null, link: null, steps: [], notes: [],
+      id, name: said, when, mode, done: null, tags: [], owner: null, link: null, steps: [], notes: [],
       arrived: nowSeconds(), declines: 0, occurrence: null, extra: [], from: null,
     }
     // **Where it goes is said, never guessed.** Appending to the end of the file
@@ -263,6 +263,68 @@ export class DocketDocument extends SegmentedDocument {
     await this.replace([{
       span: { begin: this.at(ONLY_SEGMENT, found.from), end: this.at(ONLY_SEGMENT, found.to) },
       payload: matterBlock(change(found.matter), found.level) as DocumentText,
+    }], 'operation')
+  }
+
+  /**
+   * Stamp a matter finished, or take the stamp off (D91).
+   *
+   * **Set by the pass, not by a person.** Nothing in the surface offers this:
+   * finishing is a fact about the steps, so the only honest way to finish a
+   * matter is to finish its steps, and the only honest way to unfinish one is
+   * to reopen a step. Both directions exist here because the pass needs both —
+   * a step reopened on an archived matter is a matter that is no longer done.
+   */
+  async setDone(id: string, done: DateKey | null): Promise<void> {
+    await this.#write(id, was => ({ ...was, done }))
+  }
+
+  /**
+   * Append a matter that is already written, under a section, verbatim (D91).
+   *
+   * **Not `adopt`, and the difference is the point.** `adopt` takes a matter
+   * that came from another docket and stamps `arrived` afresh, because that is
+   * what arriving means. An archived matter is not arriving anywhere: it is the
+   * same record, kept, and every stamp on it is the content — `arrived`,
+   * `declines`, each step's completion, each generated link. So this writes the
+   * record as it stands and touches nothing.
+   *
+   * **The section is made if it is missing**, so the archive mirrors the shape
+   * of the docket it belongs to: *House Bootstrap* in one is *House Bootstrap*
+   * in the other, and a person reading the archive for reference finds the
+   * grouping they filed it under. The heading depth follows from that — a
+   * matter under a section is written one level deeper (D75).
+   */
+  async keep(matter: Matter, section: string): Promise<void> {
+    const named = section.trim()
+    if (named !== '') {
+      const there = (await this.sections()).some(one => one.name === named)
+      if (!there) await this.addSection(named)
+    }
+    const found = await this.#blocks()
+    // **Under the section's last matter**, which for an archive is its end —
+    // and the end of the file when there is no section, which is where an
+    // undivided docket appends.
+    const level = named === '' ? MATTER_LEVEL : MATTER_LEVEL + 1
+    const body = (await this.segment(ONLY_SEGMENT)).body
+    const at = named === ''
+      ? body.length
+      : (() => {
+          const start = found.findIndex(one => one.kind === 'section' && one.name === named)
+          if (start < 0) return body.length
+          let end = found[start]?.end ?? body.length
+          for (const block of found.slice(start + 1)) {
+            if (block.kind === 'section') break
+            end = block.end
+          }
+          return end
+        })()
+    const gap = at === 0 || body.slice(0, at).endsWith('\n\n')
+      ? ''
+      : body.slice(0, at).endsWith('\n') ? '\n' : '\n\n'
+    await this.replace([{
+      span: { begin: this.at(ONLY_SEGMENT, at), end: this.at(ONLY_SEGMENT, at) },
+      payload: `${gap}${matterBlock(matter, level)}\n` as DocumentText,
     }], 'operation')
   }
 

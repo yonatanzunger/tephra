@@ -159,6 +159,9 @@ in `goal/horizon.md` and `solution/parts/horizon.md`; scheduled in
 | The horizon: everything bearing down, whatever its source | H8, D74, D78 | ✓ v1 (MH2, MH4) — its own object, implemented by dockets and the task list; **the lower half of the task view**, not a place of its own |
 | Awareness with no task | H6 | ✓ v1 (MH2) — a **status** step, which is a horizon row and generates nothing, ever |
 | The day's selection | H9 | ✓ v1 (MH4) — a per-day mark, not a status and not a tag, so it cannot travel |
+| A one-off matter finishes when its steps do | D91 | ✓ v1 — `done:` written by the pass from the steps, and cleared by it when one is reopened |
+| A docket has an archive beside it | D91 | ✓ v1 — `docket-archive/<name>.docket.md`, same grammar; filed by the next day's pass, or by hand from the row |
+| Reconciliation on demand | D77, D91 | ✓ v1 — *Window ▸ Bring the List Up to Date*, for a docket Tephra was not the one writing |
 | Bulk acts on the list | MH4 | ✓ v1 — ⌘-click to select, shift to extend; one write and one undo step |
 | Reorient | H11 | **part shipped, part a project** (MH4) — the pass and its entrances exist; the annotation layer is what remains: *how the flow shows on screen what might require attention*, defined in `parts/horizon-roadmap.md` and unscheduled since 2026-09-16 (`milestones.md`) |
 | The backlog as the miscellaneous docket, and the review flow | H2, T14 | **a project** (MH5) — unscheduled 2026-09-16: it wants a real backlog to review, not a fixture (`milestones.md`) |

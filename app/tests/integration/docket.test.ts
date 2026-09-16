@@ -1908,7 +1908,15 @@ test('AND A MATTER WITH NO INTERVAL NEVER ADVANCES, however long it sits', async
 
   await on('2027-03-01')
   await settled(service)
-  assert.equal((await service.docket.matters(id))[0]?.when.start, '2026-03-01')
+  // **Filed rather than advanced** (D91, amending this test). A one-off whose
+  // task steps are all done is finished, and the next day's pass moves it to
+  // the archive — so the claim here is unchanged and has to follow the matter
+  // to where it went: it never gained a second instance, and its date is the
+  // one it always had.
+  assert.deepEqual((await service.docket.matters(id)).map(one => one.name), [])
+  const filed = await service.docket.archive(id)
+  assert.ok(filed !== null, 'a finished one-off is in the archive')
+  assert.equal((await service.docket.matters(filed.id))[0]?.when.start, '2026-03-01')
   void car
 })
 
@@ -3075,4 +3083,162 @@ test('adoption leaves alone what already has an id', async t => {
   assert.equal(now?.id, was.id)
   assert.equal(now?.arrived, was.arrived, 'the arrival stamp is not restamped')
   assert.deepEqual(now?.steps.map(s => s.made), was.steps.map(s => s.made), 'links are kept')
+})
+
+/** Complete every task step on a matter — which is what finishing one means. */
+async function finish(
+  service: { readonly docket: {
+    matters(id: DocumentId): Promise<readonly { id: string | null; steps: readonly { id: string | null; kind: string }[] }[]>
+    completeStep(id: DocumentId, matter: string, step: string, done: boolean): Promise<unknown>
+  } },
+  id: DocumentId,
+  matter: string,
+): Promise<void> {
+  const found = (await service.docket.matters(id)).find(one => one.id === matter)
+  for (const step of found?.steps ?? []) {
+    if (step.kind === 'task' && step.id !== null) {
+      await service.docket.completeStep(id, matter, step.id, true)
+    }
+  }
+}
+
+// ── finishing, and the archive (D91) ───────────────────────
+
+test('a one-off matter finishes when its task steps are done, and says when', async t => {
+  const { service, on } = await serviced(t)
+  const today = service.today
+  const id = await service.library.newDocument('House', undefined, 'docket')
+  const matter = await service.docket.add(id, 'Fix the gate', { mode: 'task', start: today })
+  const step = await service.docket.addStep(id, matter, '+0d', 'Order the hinge')
+  await service.agenda.reconcile()
+  assert.equal((await service.docket.matters(id))[0]?.done, null, 'not finished with work outstanding')
+
+  // **Every task step, which is more than the one you remember adding**: `add`
+  // seeds a first step whose text is the matter's name (D76), so a matter with
+  // one step added has two.
+  await finish(service, id, matter)
+  await service.agenda.reconcile()
+  void step
+  const was = (await service.docket.matters(id))[0]
+  assert.equal(was?.done, today, 'finished, and stamped with the day')
+
+  // **It stays where it is for the rest of the day** (D42): you see the
+  // completion where you made it, and the tidying happens between sessions.
+  assert.equal((await service.docket.matters(id)).length, 1, 'still on the docket today')
+  assert.equal(await service.docket.archive(id), null, 'and no archive has been made yet')
+
+  // Tomorrow's pass files it.
+  await on('2026-03-11')
+  const left = await service.docket.matters(id)
+  assert.equal(left.length, 0, 'gone from the docket')
+  const archive = await service.docket.archive(id)
+  assert.ok(archive !== null, 'and an archive exists')
+  assert.equal(archive.matters, 1)
+  assert.equal(archive.id, 'docket-archive/house.docket.md')
+})
+
+test('archiving keeps every stamp, which is what the archive is FOR', async t => {
+  // `moveTo` would have been the obvious reuse and is exactly wrong: it
+  // recreates the matter, so the ids and the completion stamps are lost.
+  const { service, on } = await serviced(t)
+  const today = service.today
+  const id = await service.library.newDocument('House', undefined, 'docket')
+  const section = await service.docket.addSection(id, 'Repairs')
+  const matter = await service.docket.add(id, 'Fix the gate', { mode: 'task', start: today }, section)
+  await service.docket.addStep(id, matter, '+0d', 'Order the hinge')
+  await service.agenda.reconcile()
+  const before = (await service.docket.matters(id)).find(one => one.id === matter)
+  await finish(service, id, matter)
+  const ticked = (await service.docket.matters(id)).find(one => one.id === matter)
+  await on('2026-03-11')
+
+  const archive = await service.docket.archive(id)
+  assert.ok(archive !== null)
+  const kept = (await service.docket.matters(archive.id)).find(one => one.id === matter)
+  assert.ok(kept !== undefined, 'the same id, not a new one')
+  assert.equal(kept.arrived, before?.arrived, 'arrival kept')
+  assert.equal(kept.done, today, 'the completion date kept')
+  assert.deepEqual(
+    kept.steps.map(one => [one.id, one.done !== null]),
+    ticked?.steps.map(one => [one.id, one.done !== null]),
+    'every step id and its completion kept',
+  )
+  // And the section it was filed under is mirrored in the archive.
+  // **And the section it was filed under is mirrored in the archive** — made
+  // there if it was missing, so reading the archive for reference finds the
+  // grouping it was filed under. No unnamed run, because nothing in the archive
+  // sits above the first heading.
+  assert.deepEqual(
+    (await service.docket.sections(archive.id)).map(one => one.name),
+    ['Repairs'],
+  )
+})
+
+test('reopening a step unfinishes the matter, and the pass says so', async t => {
+  const { service } = await serviced(t)
+  const today = service.today
+  const id = await service.library.newDocument('House', undefined, 'docket')
+  const matter = await service.docket.add(id, 'Fix the gate', { mode: 'task', start: today })
+  const step = await service.docket.addStep(id, matter, '+0d', 'Order the hinge')
+  await finish(service, id, matter)
+  await service.agenda.reconcile()
+  assert.equal((await service.docket.matters(id))[0]?.done, today)
+
+  // The same day, before it is filed: a step reopened is a matter not finished.
+  await service.docket.completeStep(id, matter, step, false)
+  await service.agenda.reconcile()
+  assert.equal((await service.docket.matters(id))[0]?.done, null, 'the stamp came off')
+})
+
+test('a recurring matter never finishes, and an event waits for its day', async t => {
+  const { service } = await serviced(t)
+  const today = service.today
+  const id = await service.library.newDocument('House', undefined, 'docket')
+
+  // Recurring: its step is done, and it advances rather than finishing.
+  const round = await service.docket.add(id, 'Change the filters',
+    { mode: 'recurring-task', start: today, every: '90d' })
+  const step = await service.docket.addStep(id, round, '+0d', 'Change them')
+  await service.docket.setAfter(id, round, step)
+  await finish(service, id, round)
+  await service.agenda.reconcile()
+  assert.equal((await service.docket.matters(id)).find(one => one.id === round)?.done, null)
+
+  // An event whose run-up is done but whose day has not come is not finished.
+  const soon = await service.docket.add(id, 'Service the boiler',
+    { mode: 'event', start: '2026-04-20' })
+  await service.docket.addStep(id, soon, '-2w', 'Book it')
+  await finish(service, id, soon)
+  await service.agenda.reconcile()
+  assert.equal(
+    (await service.docket.matters(id)).find(one => one.id === soon)?.done,
+    null,
+    'booking it is not the boiler being serviced',
+  )
+})
+
+test('the archive is left out of what enumerates live work', async t => {
+  const { service, on } = await serviced(t)
+  const today = service.today
+  const id = await service.library.newDocument('House', undefined, 'docket')
+  const matter = await service.docket.add(id, 'Fix the gate', { mode: 'task', start: today })
+  await service.docket.addStep(id, matter, '+0d', 'Order the hinge')
+  await service.agenda.reconcile()
+  // **Ticked on the LIST, which is the way it actually happens**: resolving a
+  // generated task tells the step that made it, the steps are then all done,
+  // and the matter is finished without anybody saying so.
+  const list = await service.todo.list()
+  for (const item of await onList(service)) {
+    await service.agenda.todoSetStatus(list, item, 'done')
+  }
+  await on('2026-03-11')
+
+  const archive = await service.docket.archive(id)
+  assert.ok(archive !== null)
+  // The picker, and so the *put it down in…* menu and the docket list.
+  assert.deepEqual((await service.docket.all()).map(one => one.id), [id])
+  assert.ok(!(await service.docket.live()).includes(archive.id))
+  // The horizon: a filed matter is not bearing down on anybody.
+  const horizon = await service.agenda.horizon('2026-01-01' as DateKey, '2027-01-01' as DateKey)
+  assert.equal(horizon.filter(row => row.text.includes('gate')).length, 0)
 })

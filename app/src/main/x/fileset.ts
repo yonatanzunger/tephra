@@ -18,7 +18,7 @@ import { nameOf } from '../../shared/slug.ts'
 import { asFileset, type FilesetDocument } from './documents/kinds/fileset.ts'
 import {
   documentRoot,
-  SECTIONS_DIR, STREAM_DIR, relativePath, relativeTo, sectionFile, type RelPath,
+  ARCHIVE_DIR, SECTIONS_DIR, STREAM_DIR, relativePath, relativeTo, sectionFile, type RelPath,
 } from '../w/layout.ts'
 import {
   INDEX_SECTION, MAX_DEPTH, PINNED_SECTION, parseEntries, sameTarget,
@@ -179,6 +179,12 @@ export class Filesets {
       // `sections/` holds the sections themselves; a section listing the
       // sections is the list twice.
       if (dir === SECTIONS_DIR) continue
+      // **And an archive is not somewhere you navigate to** (D91). It is where
+      // matters go when you are done with them, so a section of them is a list
+      // you scroll past for ever — and the same reason that keeps the finished
+      // ones out of the docket keeps them out of the panel. The door is on the
+      // docket they belong to, which is where *what happened to that* is asked.
+      if (dir === ARCHIVE_DIR) continue
       if (nameOf(rel) === '_index') continue // the listing is not in its own list
 
       const held = byDirectory.get(dir)

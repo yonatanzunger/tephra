@@ -55,6 +55,7 @@ import { basename, isAbsolute, join } from 'node:path'
 import { addDays, asDateKey, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
 import type { CorpusIndex } from '../x/documents/corpus-index.ts'
 import { documentKey, ASKED_KEY } from './change-keys.ts'
+import { isArchive, type RelPath } from '../w/layout.ts'
 import { Dockets } from './dockets.ts'
 import type { CorpusService } from './corpus-service.ts'
 import type { DurabilityService } from './durability-service.ts'
@@ -63,7 +64,7 @@ import type { FixedPoints, RunReport } from './fixed-point.ts'
 import type { Dockets as DocketStore } from './dockets.ts'
 import type { Tasks } from './tasks.ts'
 import { serve, serveKinds, type Served, type Serves } from './serves.ts'
-import { dueOn, matterHorizon, addInterval, backInterval, instancesIn, NOT_STARTED, type Matter, type Section, type Step } from '../../shared/kinds/docket.ts'
+import { dueOn, isFinished, matterHorizon, addInterval, backInterval, instancesIn, NOT_STARTED, type Matter, type Section, type Step } from '../../shared/kinds/docket.ts'
 import { CHANNEL, type DocketCommand, type TodoCommand } from '../../shared/ipc.ts'
 
 export class AgendaService implements Serves {
@@ -137,6 +138,8 @@ export class AgendaService implements Serves {
       serveKinds<DocketCommand>(CHANNEL.docket, {
       list: () => this.#docket.all(),
       matters: command => this.#docket.matters(command.docket),
+      archive: command => this.#docket.archive(command.docket),
+      fileMatter: command => this.#docket.archiveMatter(command.docket, command.matter),
       add: command => this.#docket.add(command.docket, command.name, command.shape, command.section),
       rename: command => this.#docket.rename(command.docket, command.matter, command.name),
       mode: command => this.#docket.setMode(command.docket, command.matter, command.mode),
@@ -304,7 +307,11 @@ export class AgendaService implements Serves {
 
     // **Dockets: what is coming.** A step already on the list is the other
     // source's business, which `horizonOf` is what enforces.
-    for (const docket of await this.#store.corpus.list('docket')) {
+    //
+    // **The live ones, so an archive bears down on nobody** (D91): a finished
+    // matter's date is a fact about the past, and the horizon is the question
+    // *what is coming*.
+    for (const docket of await this.#docket.live()) {
       for (const matter of await this.#docket.matters(docket)) {
         for (const step of matterHorizon(matter, window, addDays, this.#day.zone)) {
           rows.push({
@@ -570,6 +577,13 @@ export class AgendaService implements Serves {
     )
     for (const docket of await this.#store.corpus.list('docket')) {
       let touched = false
+      // **An archive is adopted and then left alone** (D91). It is a docket by
+      // kind, so a hand-edit in one should still be regularised — but nothing
+      // in it is live work: generating from a filed matter would put finished
+      // work back on the list, and advancing one would give a finished matter a
+      // next instance. So the clause above runs for it and the clauses below do
+      // not.
+      const filed = isArchive(docket as string as RelPath)
       // **Adoption first, because everything below it addresses by id.** A
       // matter or step somebody typed by hand has no marker until Tephra writes
       // the block, and the two loops under this one skip what has no id — so an
@@ -577,6 +591,10 @@ export class AgendaService implements Serves {
       // 67). The clause is idempotent: it writes only what would differ, and
       // the write it makes wakes the round that then generates.
       if (await this.#docket.adoptAll(docket) > 0) touched = true
+      if (filed) {
+        if (touched) await this.#durable.wrote(docket)
+        continue
+      }
       // **What the docket is CALLED**, for the tag every task it generates
       // carries. The same rule `dockets()` uses: the person's words, falling
       // back to the slug of them, which is the only other name a document has.
@@ -695,6 +713,33 @@ export class AgendaService implements Serves {
               }
             }
           }
+        }
+
+        // **Finished, and then — a day later — filed** (D91).
+        //
+        // **Both directions, because it is a reconciler.** A one-off whose task
+        // steps are all done gets today's date; one that is stamped and no
+        // longer finished — a step reopened, a step added — loses it. The
+        // second half is what keeps the stamp a *fact about the steps* rather
+        // than a state somebody has to maintain.
+        const finished = isFinished(matter, today)
+        if (finished && matter.done === null) {
+          await this.#docket.setDone(docket, id, today)
+          touched = true
+        } else if (!finished && matter.done !== null) {
+          await this.#docket.setDone(docket, id, null)
+          touched = true
+        } else if (finished && matter.done !== null && compareDateKeys(matter.done, today) < 0) {
+          // **Not on the day it finished, which is the whole of D42 here.** A
+          // matter that vanishes from under the hand that ticked its last step
+          // is the app moving something you did not ask it to move; a matter
+          // that is gone when you come back tomorrow is tidying. The day
+          // trigger wakes this pass, so the delay needs no clock of its own.
+          //
+          // **The archive is written before the source is cleared**, and the
+          // move itself says why (`Dockets.archiveMatter`).
+          await this.#docket.archiveMatter(docket, id)
+          touched = true
         }
       }
       if (touched) await this.#durable.wrote(docket)

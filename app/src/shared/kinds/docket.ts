@@ -463,6 +463,36 @@ export const MODES: readonly ModeShape[] = [
   },
 ]
 
+/**
+ * Is this one-off matter finished? (D91)
+ *
+ * **Read from the steps, because the steps are the work.** A `task` is finished
+ * when every task step is done; an `event` has to have *happened* as well, or
+ * booking the boiler service three weeks early would finish the matter before
+ * the boiler was serviced.
+ *
+ * **`status` steps do not count either way.** They generate nothing and cannot
+ * be done, so they neither block a matter nor constitute one — which is why a
+ * matter made only of them is never finished rather than always finished, and
+ * that asymmetry is deliberate: *nothing to do* is not *done*.
+ *
+ * **A recurring matter is never finished.** It advances; that is what
+ * recurrence means, and a finished recurring matter would be a contradiction
+ * the advance clause has to undo on its next pass.
+ */
+export function isFinished(matter: Matter, today: DateKey): boolean {
+  if (shapeOf(matter.mode).repeating) return false
+  const tasks = matter.steps.filter(step => step.kind === 'task')
+  if (tasks.length === 0) return false
+  if (!tasks.every(step => step.done !== null)) return false
+  if (shapeOf(matter.mode).kind !== 'status') return true
+  // The event's own day: its instance date, which is what `start` holds.
+  // **Compared as strings, which is what an ISO date is for** — and the
+  // comparison this file does everywhere else.
+  const day = matter.when.start
+  return day !== null && day <= today
+}
+
 export const shapeOf = (mode: Mode): ModeShape =>
   MODES.find(one => one.key === mode) ?? (MODES[0] as ModeShape)
 
@@ -616,6 +646,19 @@ export interface Matter {
    * in a block written before modes existed, and read back from the shape then.
    */
   readonly mode: Mode
+  /**
+   * The day this finished, for a one-off that has (D91).
+   *
+   * **Written by the pass and cleared by it**, from the steps: a `task` whose
+   * task steps are all done is done, and an `event` also has to have happened.
+   * Null for anything recurring, which never finishes — it advances, and that
+   * is what recurrence means.
+   *
+   * **A field rather than a fifth slot in the marker.** The archive is read by
+   * a person and *when was this finished* is the first thing they want from it;
+   * a date behind a machine marker is a date nobody reads.
+   */
+  readonly done: DateKey | null
   readonly tags: readonly string[]
   readonly owner: string | null
   /** A relative markdown link to one document (H14). */
@@ -904,6 +947,7 @@ export function parseMatter(block: string): Matter | null {
   let arrived = 0
   let declines = 0
   let occurrence: DateKey | null = null
+  let done: DateKey | null = null
   let said: Mode | null = null
   const tags: string[] = []
   const steps: Step[] = []
@@ -998,6 +1042,14 @@ export function parseMatter(block: string): Matter | null {
       // the old word.
       inSteps = true
       if (value !== '') extra.push(line)
+    } else if (key === 'done') {
+      // **A date or nothing**, and an unreadable one is kept as an unknown key
+      // rather than dropped: `done: soon` is somebody's note to themselves, and
+      // this grammar's leniency rule is that what it cannot read, it keeps.
+      const said = value.trim()
+      if (said === '') done = null
+      else if (DAY.test(said)) done = said as DateKey
+      else extra.push(line)
     } else if (key === 'owner') {
       owner = value === '' ? null : value
     } else if (key === 'link') {
@@ -1040,6 +1092,7 @@ export function parseMatter(block: string): Matter | null {
     // still happens — a best guess about how somebody thought of it, rather
     // than the rule (see `Mode`).
     mode: said ?? modeFrom(recurrence, folded),
+    done,
     tags,
     owner,
     link,
@@ -1085,6 +1138,9 @@ export function matterBlock(matter: Matter, level = MATTER_LEVEL): string {
   // sessions down eight lines would bury the matter they belong to.
   if (matter.when.dates !== null) lines.push(`dates: ${matter.when.dates.join(', ')}`)
   if (matter.when.after !== null) lines.push(`after: ${matter.when.after}`)
+  // **After the schedule and before everything else**, because on an archived
+  // matter this is the fact somebody is looking for (D91).
+  if (matter.done !== null) lines.push(`done: ${matter.done}`)
   if (matter.tags.length > 0) lines.push(`tags: ${matter.tags.map(spellTag).join(' ')}`)
   if (matter.owner !== null) lines.push(`owner: ${matter.owner}`)
   if (matter.link !== null) lines.push(`link: ${matter.link}`)

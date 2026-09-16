@@ -3537,6 +3537,60 @@ export async function runVerify(request: string): Promise<void> {
       }
 
       // **Legibility has a floor even though it has no instrument** (H3): the
+      // ── finishing, and the archive (D91) ──────────────────────
+      //
+      // **The whole cycle in one window**, which is possible because filing is
+      // offered as a gesture as well as done by the pass: complete every task
+      // step on a one-off, watch the row say so, file it, and find the door to
+      // the archive at the foot with the matter behind it.
+      {
+        const docketId = (await window.tephra.docket.list())[0]?.id
+        if (docketId !== undefined) {
+          // **A one-off with no date, which is the backlog case** (D76): it
+          // generates nothing, so finishing it touches no list — and this scene
+          // shares its notebook with the ones after it, so an item left behind
+          // would move their counts. It also asks the question the rule has to
+          // answer: a matter with no start is *inactive*, and inactive is not
+          // the same as unfinishable.
+          const mine = await window.tephra.docket.add(docketId, 'Replace the gate latch',
+            { mode: 'task' })
+          for (const step of (await window.tephra.docket.matters(docketId))
+            .find(one => one.id === mine)?.steps ?? []) {
+            if (step.kind === 'task' && step.id !== null) {
+              await window.tephra.docket.completeStep(docketId, mine, step.id, true)
+            }
+          }
+          await window.tephra.docket.generate()
+          await settle(900)
+          const rowOf = (text: string): HTMLElement | undefined =>
+            [...document.querySelectorAll('.docket-row')].find(
+              one => (one.textContent ?? '').includes(text),
+            ) as HTMLElement | undefined
+          const row = rowOf('latch')
+          say('finishedSays', row?.querySelector('.docket-when')?.textContent?.trim() ?? 'none')
+          // **And nothing is offered that cannot mean anything**: *suspend* is
+          // *stop work on this*, which is not a thing you do to finished work.
+          say('finishedOffers', [...(row?.querySelectorAll('.docket-start') ?? [])]
+            .map(one => one.textContent?.trim() ?? ''))
+          say('finishedStillThere', row !== undefined)
+          say('archiveDoorBefore', document.querySelectorAll('.docket-archive').length)
+
+          // File it by hand, which is the gesture on a finished matter.
+          const filed = await window.tephra.docket.fileMatter(docketId, mine)
+          say('filedInto', filed ?? 'none')
+          await settle(900)
+          say('goneFromDocket', rowOf('latch') === undefined)
+          const door = document.querySelector('.docket-archive') as HTMLElement | null
+          say('archiveDoor', door?.textContent?.trim() ?? 'none')
+          // And the archive is a docket: the same grammar, read back.
+          say('inArchive', filed === null ? [] : (await window.tephra.docket.matters(filed))
+            .map(one => `${one.name}|${one.done ?? '-'}`))
+          // Its steps kept their completion, which is what the archive is for.
+          say('stampsKept', filed === null ? [] : (await window.tephra.docket.matters(filed))
+            .flatMap(one => one.steps.map(step => step.done !== null)))
+        }
+      }
+
       // name is read aloud across a table, so it takes the notebook's reading
       // face at reading size rather than a UI size.
       {
@@ -3574,7 +3628,7 @@ export async function runVerify(request: string): Promise<void> {
             'docket-grip', 'docket-step-at', 'docket-step-what', 'docket-step-when',
             'docket-name', 'docket-when', 'docket-quiet', 'docket-tools',
             'docket-step-tools', 'docket-schedule', 'docket-steps', 'docket-open',
-            'docket-open-mark', 'docket-link', 'docket-owner',
+            'docket-open-mark', 'docket-link', 'docket-owner', 'docket-archive',
           ].filter(one => !written.has(one)))
         }
         say('type', name === null ? null : {

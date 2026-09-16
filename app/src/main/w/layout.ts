@@ -119,6 +119,22 @@ export const DOCKETS_DIR = 'dockets'
  * section rather than an empty one.
  */
 export const DRAFTS_DIR = 'drafts'
+
+/**
+ * Where a docket's finished matters go (D91).
+ *
+ * **One archive per docket, and it is itself a docket** —
+ * `docket-archive/lima.docket.md` partners `dockets/lima.docket.md`, same kind,
+ * same grammar, same surface. Nothing about the archive is a new format, which
+ * is what makes moving a matter back in an ordinary docket-to-docket move.
+ *
+ * **Beside `dockets/` rather than inside it**, because the sidebar derives a
+ * section from the top-level directory: a subdirectory would list the archives
+ * among the live dockets, which is exactly the list this is meant to keep
+ * short. It is skipped from that listing altogether — see `fileset.ts` — and
+ * reached from the docket it belongs to.
+ */
+export const ARCHIVE_DIR = 'docket-archive'
 export const SECTIONS_DIR = 'sections'
 export const ATTACHMENTS_DIR = 'attachments'
 
@@ -242,6 +258,29 @@ export const REQUIRED_DIRS: readonly RelPath[] = [
   LOCAL_DIR,
   LOCAL.wal,
 ]
+
+/**
+ * The archive partnering a docket, and the docket partnering an archive.
+ *
+ * **One function both ways**, because the pairing is one fact: the basename is
+ * the identity (D59), so the partner is the same name in the other directory.
+ * Returns null for anything that is not in either, so a caller cannot ask the
+ * question of a note and get a plausible answer.
+ */
+export function archiveOf(rel: RelPath): RelPath | null {
+  if (rel.startsWith(`${DOCKETS_DIR}/`)) {
+    return `${ARCHIVE_DIR}/${rel.slice(DOCKETS_DIR.length + 1)}` as RelPath
+  }
+  if (rel.startsWith(`${ARCHIVE_DIR}/`)) {
+    return `${DOCKETS_DIR}/${rel.slice(ARCHIVE_DIR.length + 1)}` as RelPath
+  }
+  return null
+}
+
+/** True for a docket that holds finished matters rather than live ones (D91). */
+export function isArchive(rel: RelPath): boolean {
+  return rel.startsWith(`${ARCHIVE_DIR}/`)
+}
 
 /** True for a document that has no name anybody chose yet (D90). */
 export function isDraft(rel: RelPath): boolean {

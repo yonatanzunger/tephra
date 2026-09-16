@@ -648,6 +648,10 @@ export type DocketCommand =
   /** Every docket there is, newest name last. */
   | { readonly kind: 'list' }
   | { readonly kind: 'matters'; readonly docket: DocumentId }
+  /** This docket's archive, if it has one, and how much is in it (D91). */
+  | { readonly kind: 'archive'; readonly docket: DocumentId }
+  /** File a finished matter now rather than waiting for the next pass (D91). */
+  | { readonly kind: 'fileMatter'; readonly docket: DocumentId; readonly matter: string }
   | {
       readonly kind: 'add'
       readonly docket: DocumentId
