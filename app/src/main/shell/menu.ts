@@ -251,6 +251,10 @@ export function installMenu(next?: MenuActions): void {
         // original was in some sense not saved until you did. Making a second
         // copy under a new name is the act, and it is what other applications
         // call it when there is nothing to save.
+        //
+        // **Still true, and it now has a sibling** (D90): `Save…` above names a
+        // draft. Neither of them writes anything to disk that was not already
+        // there — one copies, the other names.
         {
           label: 'Save a Copy…',
           accelerator: 'CmdOrCtrl+Shift+S',

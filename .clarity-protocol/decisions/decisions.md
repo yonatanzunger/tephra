@@ -4605,3 +4605,58 @@ already on disk. Every keystroke after it landed 210 characters away.
 separate commits, each adding one stray character at the same place, dated to the
 moment a comment was written. A file is a log (D32), and the history of a
 corrupted file says which edit corrupted it.
+
+---
+
+## D90: An unnamed document is a draft, and naming it is what moves it
+
+**Date:** 2026-09-15
+**Status:** decided and **built**
+**Amends:** the `Save a Copy, not Save As` rationale in `shell/menu.ts`, which
+stands — and now has a sibling: ⌘S names a draft. **Extends:** D32 (durable from
+the first keystroke), D59 (the filename is the identity, the frontmatter title is
+what it is called), MH1 (a docket belongs to one directory).
+**Source:** reported from use — *when we create a new file it is named
+untitled-XXX, and renaming it requires a command that goes through a menu with no
+keyboard shortcut*.
+
+**Decision.** A document created **without a name** is made in `drafts/`.
+Naming it — *Save…* on a draft, *Rename…* on anything else, the same verb —
+resolves the new name into `notes/` and writes the frontmatter title.
+
+> **A place, not a state.** A draft is an ordinary document: versioned,
+> journalled, indexed, watched, recoverable from the first keystroke. What it
+> lacks is a name somebody chose.
+
+### Why the traditional model was worth adopting and the traditional mechanism was not
+
+The familiar shape is *new documents are temporary; Save names one and makes it
+real*, and the instinct against it here was that **temporary** means undurable —
+the one losable thing in an app whose whole storage design exists so that nothing
+is losable (D32), and it would be the newest thing, which is the worst to lose.
+
+The proposal that dissolved that was the user's: keep the document entirely
+durable and let *draft* be a **folder**. Then the gesture arrives with none of
+the cost — no unsaved state, no second class of file for `grep`, the sidebar, the
+horizon, print or sync to know about, and no new machinery at all. A draft is
+found by its path.
+
+**And it made the naming verb fall out.** Renaming a draft already had to choose
+a directory; a draft is one that is leaving, so the name decides both what it is
+called and where it goes. There is no promote, no save-as, no second code path —
+`#freeName` resolves into `notes/` when the document it is renaming is a draft.
+
+**⌘S finally means something.** Nothing here is ever unsaved, so the key every
+text application has was the one key this app ignored — which is its own kind of
+wrong. A draft has exactly one thing outstanding and this is it. Disabled rather
+than hidden on a named document: the item says what the key is for, and pressing
+it teaches you there is nothing to do rather than leaving you wondering where the
+file went. **⇧⌘R** for Rename, which is the other half of what was reported.
+
+**`drafts/` is not in `REQUIRED_DIRS`**, following `dockets/`: the nav derives a
+section from what is on disk, so a notebook with no drafts shows no Drafts
+section rather than an empty one.
+
+**What is NOT done:** existing `notes/untitled-*.md` files stay where they are.
+They are named files now, and moving somebody's documents because the rule
+changed is not a migration, it is a surprise.
