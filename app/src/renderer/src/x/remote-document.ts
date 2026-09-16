@@ -67,6 +67,7 @@ export class RemoteDocument implements Document {
         message.origin,
         message.text,
         message.generation,
+        message.heard,
         message.spans,
         message.placement,
         message.boundaries,

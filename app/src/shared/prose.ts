@@ -37,6 +37,23 @@ export interface Marker {
   readonly from: DocumentOffset
   readonly to: DocumentOffset
   readonly width: ProseWidth
+  /**
+   * Whether these bytes are **content elided from the passage** rather than
+   * apparatus belonging to it (D89).
+   *
+   * Both take no prose width, and the difference decides which side of them a
+   * caret is on. A `tag-end` is apparatus: a position at it belongs BEFORE it, so
+   * continuing a tagged sentence keeps the subject (D44). A comment's thread
+   * block is two hundred characters of somebody's writing that merely lives
+   * here: a position at it belongs AFTER it, because text typed where a comment
+   * card appears is the next paragraph and not a line of the comment.
+   *
+   * Reported from use as a crash, three times in one evening: typing after a
+   * comment inserted a character at the start of its byline, which stopped the
+   * block being a blockquote, which un-elided two hundred and ten characters,
+   * which desynchronised the window.
+   */
+  readonly elides?: true
 }
 
 /**
@@ -116,6 +133,11 @@ export class ProseMap {
    * before the marker or after it. Answering "before" means text inserted at
    * the end of a tagged range lands INSIDE the range, so continuing a tagged
    * sentence keeps the subject. Use `toDocumentAfter` where the other side is wanted.
+   *
+   * **Except past an elided block** (D89), which is content and not apparatus:
+   * there, leftmost would put text inside somebody's comment. The rule is about
+   * which side of two characters of machinery a caret is on; it was never about
+   * which side of a paragraph.
    */
   toDocument(prose: ProseOffset): DocumentOffset {
     return this.#toDocument(clamp(prose, 0, this.proseLength), false)
@@ -132,7 +154,10 @@ export class ProseMap {
       const marker = this.#markers[i] as Marker
       const sits = this.#at[i] as number
       if (prose < sits) break
-      if (prose === sits && !(after && marker.width === 0)) break
+      // **An elided block is always passed**, whatever the caller asked for: a
+      // prose position at it is after the block, because there is nothing in
+      // the block a caret in the passage could mean (D89).
+      if (prose === sits && !((after || marker.elides === true) && marker.width === 0)) break
       if (prose === sits + marker.width && marker.width === 1) {
         // Immediately after a handle: past its bytes, before anything else.
         return marker.to

@@ -36,6 +36,7 @@ import { contextMenu, markAt, readSelection, reportSelection, type Selection } f
 import type { MarkInfo } from '../../annotations.ts'
 import { retag, tagExtents } from './tags.ts'
 import { tagSpines } from './tag-spines.ts'
+import { smartQuotes } from './quotes.ts'
 import { commentExtents, recomment } from './comment-anchors.ts'
 import type { CommentAnchor } from '../../annotations.ts'
 import { richPaste } from './paste.ts'
@@ -209,6 +210,8 @@ export function bindEditor(options: BindOptions): Binding {
             ]),
         widgetExtensions(),
         codeBlocks(),
+        // Quotes curl as they are typed, and never afterwards (D87).
+        smartQuotes(),
         listLayout(),
         ...(behaviour.annotations ? [tagExtents(docWindow), tagSpines(docWindow, spineHost)] : []),
         ...(behaviour.days ? [dayBoundaries(docWindow)] : []),

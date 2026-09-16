@@ -52,7 +52,8 @@ async function type(svc: NotebookService, text: string): Promise<DateKey> {
     edits: [{ from: wp(w.text.length), to: wp(w.text.length), insert: pt(text) }],
     origin: 'user',
     generation: w.generation,
-  })
+        heard: 0,
+      })
   return info.today
 }
 

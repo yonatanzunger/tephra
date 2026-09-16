@@ -75,6 +75,7 @@ async function notebook(
         edits: [{ from: w.text.length as WindowPosition, to: w.text.length as WindowPosition, insert: text as ProseText }],
         origin: 'user',
         generation: w.generation,
+        heard: 0,
       })
     },
     async fileOn(date: DateKey): Promise<string> {

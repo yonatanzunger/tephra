@@ -41,6 +41,7 @@ function fixture(raw: DocumentText) {
       end: { segment: DAY as unknown as SegmentKey, offset: raw.length as DocumentOffset, generation: 1 as SessionGeneration },
     },
     generation: 1 as SessionGeneration,
+    heard: 0,
     spans: [],
     placement: [{ date: DAY, start: 0 as WindowPosition, length: raw.length, markers, annotations: [] }],
     boundaries: { earlier: false, later: false },
@@ -104,12 +105,12 @@ test('when the spans change, whoever draws them is told', async () => {
   let told = 0
   window.onSpansChanged(() => told++)
 
-  window.applyRemote([], 'external', window.text, 2 as SessionGeneration, [SPAN], PLACEMENT, EDGES)
+  window.applyRemote([], 'external', window.text, 2 as SessionGeneration, 2, [SPAN], PLACEMENT, EDGES)
   assert.equal(told, 1, 'a new span should be announced')
 
-  window.applyRemote([], 'external', window.text, 3 as SessionGeneration, [SPAN], PLACEMENT, EDGES)
+  window.applyRemote([], 'external', window.text, 3 as SessionGeneration, 3, [SPAN], PLACEMENT, EDGES)
   assert.equal(told, 1, 'the same spans again are not news — this is the typing path')
 
-  window.applyRemote([], 'external', window.text, 4 as SessionGeneration, [], PLACEMENT, EDGES)
+  window.applyRemote([], 'external', window.text, 4 as SessionGeneration, 4, [], PLACEMENT, EDGES)
   assert.equal(told, 2, 'and losing them is')
 })

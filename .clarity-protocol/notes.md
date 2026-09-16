@@ -1569,3 +1569,66 @@ symbol to grep for.
 > channel with no listener; this is a *gesture* with no verb. Both are failures
 > of a kind the type system cannot see, because in both the missing thing is an
 > absence rather than a mistake.
+
+## 65. Three failures downstream of the cause
+
+**2026-09-15.** A person typed after writing a comment and got *window
+desynchronised: main has 21328 characters, renderer has 21118*. The message is
+accurate, arrives at the right moment, and points at nothing: the cause was
+three steps upstream and had already damaged the file.
+
+The chain: a comment write shifted the prose by two characters → the next
+keystroke, composed a moment earlier, landed two characters off → it ate the
+newline before the comment's byline → the byline stopped starting a line, so the
+block stopped being a blockquote → **210 characters of thread became prose** →
+main and the renderer differed by 210 → the desync check fired.
+
+**Every step was individually invisible.** No exception, no log, no assertion
+between the misplaced character and the arithmetic four steps later. What made
+the difference between a mystery and a mechanism was two artifacts the person
+supplied: the live DOM (which settled an unrelated theory about the measure) and
+**their own keystroke sequence**, which read as a specification of the race.
+
+**What I got wrong, in order.** I looked for the corruption in the writer — and
+`startComment` is correct in every body shape I could build, six by hand and four
+through a real window. I nearly concluded the reproduction was environmental.
+Then the notebook's own git history dated the first damage to the comment commit,
+and the file's shape — a byline joined to a paragraph by exactly one missing
+newline — said *something deleted a newline there*, which is not something a
+writer does and is exactly what a misplaced keystroke does.
+
+> **A file is a log.** The notebook is in git because of D32, and the history of
+> a corrupted file is a record of which edit corrupted it. That is twice now that
+> the fastest instrument was the artifact rather than the code.
+
+**And the guard that should have existed was half-built.** The payload carried a
+`generation` described as *what the renderer believed when it composed these
+edits* — and nothing ever compared it. A field that exists, is documented, is
+transmitted, and is never read is worse than an absent one: it reads as a check
+when you go looking for one.
+
+> Related: note 64's gesture with no verb, and note 62's message with no
+> listener. Three failures in one fortnight of the same family — a thing that
+> looks present and is not doing anything. The pattern worth naming: **carrying a
+> value is not checking it, declaring a channel is not answering it, and having a
+> field is not having a rule.**
+
+**Postscript, an hour later: the guard was right and the diagnosis was wrong.**
+The race above is real, reproducible and now guarded — and it was not what
+damaged the file. The actual cause (D89) needed no race: a prose position at an
+elided comment block resolved to the *wrong side* of it, so typing after a
+comment landed at the start of its byline every single time.
+
+What misled me was a reproduction that produced the artifact **exactly** — a
+stray character before the byline, the block broken, the window 210 apart. It
+matched the file character for character, so I wrote the history as settled.
+
+> **Same artifact is not same cause**, and the difference was one test away: I
+> tested the writer six ways and the race two, and never asked the mapping where
+> a caret after a comment lands. The fourth occurrence — after the guard was
+> verified working — is what asked it for me.
+
+The honest reading of my own evidence was available at the time: my race required
+a keystroke composed *before* the comment write, and the person's own sequence
+said they typed *after* pressing Done. I had the refutation in hand and read past
+it, because the artifact matched.

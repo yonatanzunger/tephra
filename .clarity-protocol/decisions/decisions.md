@@ -4415,3 +4415,193 @@ patching the library.
 **What actually found each one was a measurement**, and what made the
 measurements trustworthy was the reporter pasting the live DOM. A cropped
 screenshot supported three different theories; one inline style settled it.
+
+---
+
+## D88: An edit composed against a buffer that has moved is refused, not applied
+
+**Date:** 2026-09-15
+**Status:** decided and **built**
+**Extends:** D37 (the renderer holds a mirror and fires edits without awaiting),
+D47 (a comment is a blockquote in the file), D54 (one queue in main).
+**Source:** reported from use, with the keystroke sequence — *type a paragraph,
+select a phrase, ⌥⌘M, write the comment, Done, type "So"* — followed by
+`window desynchronised: main has 21328 characters, renderer has 21118` and a
+damaged file.
+
+**Decision.** A window counts the changes it has **announced** to its renderer.
+The renderer echoes that number back with every edit, and main **refuses** an
+edit whose number is behind.
+
+> The renderer re-reads instead. One keystroke is lost; the file is right.
+
+### Why the generation could not do this job
+
+`EditRequest` has carried a `generation` since D37 — *what the renderer believed
+when it composed these edits* — and **main never checked it**. `git log -S` finds
+no commit where it did.
+
+It could not have been used as it stood. The renderer fires edits without
+awaiting (R1.1: no round trip on the typing path), so several are in flight at
+once and **all of them carry the same generation**; refusing everything that was
+not current would refuse ordinary typing. The generation answers *has the
+document moved*, and the dangerous question is narrower: **has it moved in a way
+this renderer has not seen?**
+
+Those are exactly the changes a window *announces* — a comment main wrote, a tag,
+a file edited outside; never the renderer's own edits, which it has already
+applied. So the count of announcements is the token, and typing never moves it.
+
+### What it cost to not have it
+
+The failure is worth recording in order, because every step looked like a
+different bug:
+
+1. `Done` wrote the comment block. That shifts the prose after the anchor by the
+   block's separating newlines — two or three characters.
+2. The next keystroke had been composed against the buffer as it was *before*
+   that, and main applied it at those offsets: a few characters off, landing on
+   the newline before the comment's byline.
+3. A byline that does not start a line is not a blockquote. The block stopped
+   being a thread, so its **210 characters became ordinary prose in main** while
+   the renderer still concealed them.
+4. Main was now 210 ahead. That is the error the person saw — and the first
+   honest signal in the whole sequence, three failures downstream of the cause.
+5. Everything typed afterwards landed 210 characters away.
+
+**Refused rather than rebased**, which is the trade to revisit. Mapping the stale
+offsets through the announced change would lose no keystroke, and is only correct
+when the edit does not overlap what moved — so it is more machinery for a case
+that arises when a person types within a few hundred milliseconds of commenting.
+Losing the keystroke is visible and recoverable; landing it in the wrong place
+was neither.
+
+**And the refusal is not an error.** It returns an ack saying *refused*, the
+renderer re-reads, and nothing is put in front of anybody: the state afterwards
+is correct, which is the definition of recoverable. The person saw *the system
+immediately failed* because a desync threw; a refusal is the same situation
+caught one step earlier, where it is still boring.
+
+> **The refusal has to carry the text**, which the first cut did not. A reset
+> re-renders from the renderer's own buffer — the one just judged stale — so
+> refusing without attaching main's text left the window unable to accept another
+> keystroke, every one refused for the same reason as the last. Worse than the
+> fault it prevents, and reported within the minute.
+
+**Amended 2026-09-15, the same evening: this was not the reported failure's
+cause.** The race above is real and the reproduction stands, but the damage that
+prompted it was D89's — a prose position at an elided comment block resolving to
+the wrong side of it. The tell was a fourth occurrence *after* this guard was
+verified working.
+
+**The mistake was mine and it is worth naming**: a reproduction that produces the
+same artifact is not the same cause. I built a race that put a stray character at
+the start of a comment's byline, saw it match the file exactly, and wrote the
+history above as though it were settled — when the actual mechanism needed no race
+at all and would have shown up in a mapping test I had not thought to write. Same
+symptom, different arithmetic, and the honest check was one test away.
+
+---
+
+## D87: Quotes are curled as they are typed, except in code — and never afterwards
+
+**Date:** 2026-09-15
+**Status:** decided and **built**
+**Reverses** an earlier decision to do without smart quotes, which was taken in
+conversation and **never written down** — searched for in the decisions, the
+notes, the observations and the goal documents before this was written, and not
+there. That is the argument for this record existing: a decision worth reversing
+was not available to reverse.
+**Extends:** R26/D20 (the file is what it appears to be), T16 (one notation,
+typed or assisted).
+
+**Decision.** `"` becomes `“` or `”` and `'` becomes `‘` or `’` as they are
+typed, decided by the character to the left of the caret.
+
+> **Two restraints, and they are the whole design.**
+>
+> **Not inside code.** In a fenced block or a code span a quote is a character of
+> a language and a tick is a tick: `print("x")` must stay exactly that. Asked of
+> the **syntax tree**, so the answer is the parser's rather than a guess from the
+> text.
+>
+> **Never retroactively.** Nothing re-examines text that is already written. A
+> paragraph that becomes a code block keeps its curly quotes; a block that
+> becomes a paragraph keeps its straight ones.
+
+**Why the second restraint is the more important one.** The alternative — curling
+and un-curling as text moves in and out of code — is an editor that rewrites what
+you wrote while you are reorganising it, which is a worse failure than an
+inconsistent quote. It is also unfixable in general: *what you meant* is not
+recoverable from where the text has landed.
+
+**The file gets the curly character**, not a rendering of one. A notebook read in
+another editor shows the quotes a reader expects and `grep` finds what is on the
+page; a renderer that curled on screen while the bytes stayed straight would be
+the other kind of lie, where the file and the page disagree.
+
+**An input handler, not a transaction filter**, because this must see *typing* and
+nothing else: a filter would also catch a paste, an undo and every programmatic
+edit the app makes, and curling any of those is the retroactive rewriting above.
+A paste is left alone deliberately — text arriving from elsewhere is quoted
+however its author quoted it.
+
+**The known wrong answer, recorded rather than patched.** A leading elision —
+`'90s`, `'tis` — wants a closing single and gets an opening one, because the rule
+sees only what is to the left and the text to the right does not exist when the
+key is pressed. A word list would fix the two examples anybody thinks of and be
+wrong about the third; a rule that is right about what it can see is worth more
+than one that guesses.
+
+**No escape hatch yet**, which is the open question: a straight quote in prose
+can be pasted but not typed. The conventional answers are a second press
+un-curling the first, or undo restoring the straight character — both are one
+keystroke of vocabulary, and neither is worth inventing before somebody wants it.
+
+---
+
+## D89: An elided block is content, so a caret at it belongs after it
+
+**Date:** 2026-09-15
+**Status:** decided and **built**
+**Narrows:** D44's trailing-boundary rule, which stands for apparatus and not for
+content. **Extends:** D47 (a comment is a blockquote in the file, elided from the
+passage it glosses).
+**Source:** reported from use as a crash, three times in one evening, with the
+sequence: comment on a phrase, press Done, type.
+
+**Decision.** A zero-width marker is one visual place and two document offsets.
+Which one a caret means depends on **what the bytes are**:
+
+| the marker | what it is | a position at it means |
+|---|---|---|
+| `tag-end`, `comment-end` | apparatus — two characters of machinery | **before** it, so continuing a tagged sentence keeps its subject (D44) |
+| a comment's thread block | **content** — a paragraph of somebody's writing, stored in the passage and elided from it | **after** it, because text typed where a card appears is the next paragraph |
+
+So a marker says which it is (`Marker.elides`), and the map passes an elided
+block whatever the caller asked for.
+
+**Why this was so hard to see.** D44's rule is right, well-argued and tested; the
+comment block reached it as *another zero-width marker* and inherited an answer
+that had been reasoned about two characters of machinery. Nothing was wrong with
+either half. The fault was in a category that had only one member when it was
+written.
+
+### What it cost
+
+Typing after a comment inserted the character at the **start of the byline**:
+
+```
+S> **zunger** 2026-09-15T17:28 <!--tephra:comment gllh-->
+```
+
+A byline that does not begin a line is not a blockquote, so the block stopped
+being a thread and its **210 characters became ordinary prose in main** while the
+renderer still elided them. The window then differed by exactly that many, which
+is the error the person finally saw — three steps downstream, with a damaged file
+already on disk. Every keystroke after it landed 210 characters away.
+
+**The evidence that settled it** was the notebook's own git history: three
+separate commits, each adding one stray character at the same place, dated to the
+moment a comment was written. A file is a log (D32), and the history of a
+corrupted file says which edit corrupted it.

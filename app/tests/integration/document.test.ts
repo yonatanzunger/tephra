@@ -1139,3 +1139,55 @@ test('THE BUG: branching to the end of a day joins it to the next one', async t 
   )
   assert.equal(corpus !== undefined, true)
 })
+
+// ── typing where a comment card appears (D89) ───────────────────────────────
+
+test('TYPING AFTER A COMMENT lands after it, not inside its byline', async t => {
+  // **Reported from use as a crash, three times in one evening.** The sequence:
+  // comment on a phrase, press Done, type. The character landed at the START of
+  // the comment's byline — `S> **zunger** …` — which stopped the block being a
+  // blockquote, un-elided its two hundred and ten characters into the prose, and
+  // desynchronised the window by exactly that many.
+  //
+  // The cause was a rule about apparatus applied to content. A zero-width marker
+  // is one visual place and two document offsets, and `toDocument` answers
+  // *leftmost* so that text typed at the end of a tagged range stays inside the
+  // range (D44). A thread block is also zero-width — and is a paragraph of
+  // somebody's writing, where leftmost means *inside the comment*.
+  const { doc, root, w, span } = await commented(t)
+  await doc.startComment(span, 'A note that lives in the margin.', AT)
+
+  // Where a person is when the card is on screen: the paragraph after it.
+  const reopened = await windowOver(doc, DAY)
+  const at = reopened.text.indexOf('And the day continues')
+  await reopened.edit([{ from: wp(at), to: wp(at), insert: pt('X') }], 'user')
+  await doc.flush()
+
+  const file = await fileOf(root)
+  assert.match(file, /^> \*\*.+\*\* .+ <!--tephra:comment/m, 'the byline still starts a line')
+  assert.match(file, /^XAnd the day continues\./m, 'and the character landed where the caret was')
+  assert.equal(file.includes('X>'), false, 'nothing landed on the byline')
+
+  // And the two halves still agree about how long the passage is, which is the
+  // arithmetic that surfaced this as a desync.
+  const after = await windowOver(doc, DAY)
+  assert.equal(after.text.includes('A note that lives in the margin'), false, 'still elided')
+})
+
+test('and a tagged range still keeps text typed at its end (D44 is unchanged)', async t => {
+  // The rule this narrows: `tag-end` is apparatus, two characters of it, and a
+  // position at it belongs BEFORE it so that continuing a tagged sentence keeps
+  // the subject. Only elided CONTENT changed sides.
+  const { doc, root } = await fixture(t, {
+    [dayFile(DAY)]: dayText('2026-03-14', 'Nothing here yet.\n'),
+  })
+  const w = await windowOver(doc, DAY)
+  const from = w.text.indexOf('here')
+  await doc.tag({ begin: w.toDocument(wp(from)), end: w.toDocument(wp(from + 4)) }, 'subject')
+  const again = await windowOver(doc, DAY)
+  const end = again.text.indexOf('here') + 4
+  await again.edit([{ from: wp(end), to: wp(end), insert: pt('!') }], 'user')
+  await doc.flush()
+  const file = await fileOf(root)
+  assert.match(file, /here!<!--tephra:tag-end/, 'the text stayed inside the range')
+})

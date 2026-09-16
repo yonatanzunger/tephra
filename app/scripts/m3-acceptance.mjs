@@ -803,6 +803,56 @@ console.log('\n\u2014 \u2318-click \u2014')
   check('and nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── 9b. smart quotes ────────────────────────────────────────────────────────
+//
+// **Curled as they are typed, and never afterwards** (D87). `"` becomes `“` or
+// `”` from what is to the left of the caret; inside code a quote is a character
+// of a language and is left alone. And nothing re-examines what is already
+// written: a paragraph that becomes a block keeps its curly quotes, which is the
+// rule that stops an editor rewriting your text while you reorganise it.
+console.log('\n\u2014 smart quotes \u2014')
+{
+  const root = await week([
+    'A day with a fence in it.\n\n```python\nprint()\n```\n',
+  ])
+  const q = report(await launch('quotes', root))
+
+  check(
+    // The scene types through the DOM rather than dispatching, because curling
+    // happens in an input handler. If that stops working the checks below would
+    // pass on an empty document, so this says it out loud.
+    'the scene is really typing, not dispatching',
+    q.typingWorks === true,
+    String(q.typingWorks),
+  )
+  check(
+    'A QUOTE CURLS BY WHAT IS TO ITS LEFT',
+    typeof q.prose === 'string' && q.prose.includes('\u201chello\u201d'),
+    JSON.stringify(q.prose),
+  )
+  check(
+    // Same character as the closing single, which is not a coincidence: an
+    // elision closes. Two of them here, one mid-word and one possessive.
+    'and an apostrophe is the closing single',
+    typeof q.prose === 'string' && q.prose.includes('it\u2019s') &&
+      q.prose.includes('Ada\u2019s'),
+    JSON.stringify(q.prose),
+  )
+  check(
+    'a quote after an opening bracket opens',
+    typeof q.prose === 'string' && q.prose.includes('(the \u201cgood\u201d one)'),
+    JSON.stringify(q.prose),
+  )
+  check(
+    // **THE POINT of the second rule.** `print("x")` must stay exactly that:
+    // curling it produces a program that does not run.
+    'AND INSIDE CODE A QUOTE IS A QUOTE',
+    q.inCode === 'print("x")' && q.straightInCode === true,
+    JSON.stringify(q.inCode),
+  )
+  check('nothing errored on the way', q.appError === 'none', String(q.appError))
+}
+
 // ── 10. emphasis ────────────────────────────────────────────────────────────
 //
 // \u2318B and \u2318I, from the Edit menu where the accelerators live. Emphasis is the

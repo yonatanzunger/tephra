@@ -57,6 +57,15 @@ export class LocalWindow implements DocumentWindow {
   /** Set while this window is the origin of a change, to suppress its own echo. */
   #originating = false
 
+  /**
+   * Changes from elsewhere that this window has announced (D88).
+   *
+   * Not a generation and not a version: a COUNT of announcements, which is the
+   * only thing that distinguishes *the document moved* from *the document moved
+   * in a way the renderer has not seen*.
+   */
+  #heard = 0
+
   #edges = { earlier: false, later: false }
 
   constructor(doc: SegmentedDocument, segments: readonly Segment[]) {
@@ -291,6 +300,17 @@ export class LocalWindow implements DocumentWindow {
 
   // ── changes from elsewhere ─────────────────────────────────
 
+  /**
+   * How many changes from elsewhere this window has announced (D88).
+   *
+   * The renderer echoes it back with every edit; main refuses an edit that was
+   * composed before an announcement the renderer had not yet applied. See
+   * `EditRequest.heard` for why the generation cannot do this job.
+   */
+  get heard(): number {
+    return this.#heard
+  }
+
   onChanged(handler: (edits: readonly WindowEdit[], origin: EditOrigin) => void): Unsubscribe {
     this.#changeHandlers.add(handler)
     return () => this.#changeHandlers.delete(handler)
@@ -322,6 +342,13 @@ export class LocalWindow implements DocumentWindow {
     this.#generation = change.to
     for (const handler of this.#spansHandlers) handler()
     if (this.#originating) return
+
+    // **Counted here and nowhere else** (D88): this is the line past which a
+    // change is ANNOUNCED, which is exactly the set of changes a renderer has to
+    // have applied before its offsets mean anything. A change the window
+    // originated returns above and is not counted, which is what lets several
+    // edits be in flight at once without any of them looking stale.
+    this.#heard += 1
 
     // **The buffer is told what its PROSE did, not what the document did.**
     //

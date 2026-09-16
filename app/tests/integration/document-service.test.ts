@@ -61,6 +61,7 @@ test('edits apply in the order they were composed, not the order they finish', a
         edits: [{ from: wp(at), to: wp(at), insert: pt(ch) }],
         origin: 'user',
         generation: 1 as never,
+        heard: 0,
       }),
     )
     at += 1
@@ -76,13 +77,14 @@ test('edits apply in the order they were composed, not the order they finish', a
 test('a failed edit does not wedge the queue behind it', async t => {
   const { service, snapshot } = await fixture(t)
   await assert.rejects(() =>
-    service.text.edit({ id: 9999 as never, edits: [], origin: 'user', generation: 1 as never }),
+    service.text.edit({ id: 9999 as never, edits: [], origin: 'user', generation: 1 as never , heard: 0}),
   )
   const ack = await service.text.edit({
     id: snapshot.id,
     edits: [{ from: wp(0), to: wp(0), insert: pt('still works') }],
     origin: 'user',
     generation: 1 as never,
+    heard: 0,
   })
   assert.equal(ack.length, 'still works'.length)
 })
@@ -96,6 +98,7 @@ test('the ack reports the length main actually holds', async t => {
     edits: [{ from: wp(0), to: wp(0), insert: pt('twelve chars') }],
     origin: 'user',
     generation: 1 as never,
+    heard: 0,
   })
   assert.equal(ack.length, 12)
 })
@@ -112,6 +115,7 @@ test('pushed messages reach every attached sink and stop when detached', async t
     edits: [{ from: wp(0), to: wp(0), insert: pt('x') }],
     origin: 'user',
     generation: 1 as never,
+    heard: 0,
   })
   await service.text.undo()
   assert.ok(seen.length > 0, 'undo reached the renderer')
@@ -123,6 +127,7 @@ test('pushed messages reach every attached sink and stop when detached', async t
     edits: [{ from: wp(0), to: wp(0), insert: pt('y') }],
     origin: 'user',
     generation: 1 as never,
+    heard: 0,
   })
   await service.text.undo()
   assert.equal(seen.length, before, 'a detached sink hears nothing')
@@ -135,6 +140,7 @@ test('flush writes through the service, and the file is on disk', async t => {
     edits: [{ from: wp(0), to: wp(0), insert: pt('persisted\n') }],
     origin: 'user',
     generation: 1 as never,
+    heard: 0,
   })
   await service.flush()
   const onDisk = await readFile(join(root, dayFile(today as DateKey)), 'utf8')
@@ -152,6 +158,7 @@ test('a change is written without anyone asking, on quiescence', async t => {
     edits: [{ from: wp(0), to: wp(0), insert: pt('unprompted\n') }],
     origin: 'user',
     generation: 1 as never,
+    heard: 0,
   })
   await new Promise(r => setTimeout(r, 1400)) // past the quiescence window
   const onDisk = await readFile(join(root, dayFile(today as DateKey)), 'utf8')
@@ -171,6 +178,7 @@ test('continuous typing still reaches disk, because quiescence is not the only t
       edits: [{ from: wp(at), to: wp(at), insert: pt('x') }],
       origin: 'user',
       generation: 1 as never,
+      heard: 0,
     })
     at++
     await new Promise(r => setTimeout(r, 300)) // never quiet for a full second
@@ -198,7 +206,8 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
     generation: snapshot.generation,
     edits: [{ from: wp(0), to: wp(0), insert: pt('The good version.\n') }],
     origin: 'user',
-  })
+        heard: 0,
+      })
   await service.flush()
   const first = (await service.repository?.save('first')) as VersionId
 
@@ -208,7 +217,8 @@ test('a restore is flushed and committed at once, and is itself a version', asyn
     generation: after.generation,
     edits: [{ from: wp(0), to: wp(0), insert: pt('A regrettable addition.\n') }],
     origin: 'user',
-  })
+        heard: 0,
+      })
   await service.flush()
   await service.repository?.save('second')
 
@@ -497,4 +507,74 @@ test('DELETING leaves the entry that named it dangling, and visibly (D7)', async
 test('the notebook itself cannot be deleted', async t => {
   const { service } = await fixture(t)
   await assert.rejects(() => service.library.deleteDocument(STREAM_ID), /cannot be deleted/)
+})
+
+// ── an edit composed against a buffer that has moved (D88) ──────────────────
+
+test('A STALE EDIT IS REFUSED, not applied at offsets that have moved', async t => {
+  // **Reported from use, with the sequence** (2026-09-15): type a paragraph,
+  // select a phrase, ⌥⌘M, write the comment, Done — then type. The next
+  // keystroke landed a few characters from where it belonged, joined a comment's
+  // byline to the paragraph above it, and so stopped the block being a
+  // blockquote: 210 characters of thread became ordinary prose in main, the
+  // window desynchronised, and everything typed afterwards landed 210 characters
+  // away.
+  //
+  // The renderer fires edits without awaiting (D37), so its offsets are always a
+  // moment old — which is fine, because its own edits are the only thing moving
+  // the text. A change from ELSEWHERE breaks that, and `heard` is what makes it
+  // visible: main refuses rather than guessing.
+  const { service, snapshot, today } = await fixture(t)
+  await service.text.edit({
+    id: snapshot.id,
+    edits: [{ from: wp(0), to: wp(0), insert: pt('The premise is stated here.\n\nAnd more prose.\n') }],
+    origin: 'user',
+    generation: snapshot.generation,
+    heard: 0,
+  })
+
+  // Main writes a comment: a change the renderer has not been told about.
+  const w = await service.text.openWindow({ first: today, last: today })
+  const anchor = w.text.indexOf('premise')
+  const stream = (await service.corpus.use(STREAM_ID, async d => d)) as StreamDocument
+  const span = {
+    begin: stream.positionAt(today, anchor),
+    end: stream.positionAt(today, anchor + 7),
+  }
+  await service.comments.startComment(span, 'A thought about the premise.')
+
+  // And now the keystroke that was composed before it.
+  const ack = await service.text.edit({
+    id: w.id,
+    edits: [{ from: wp(w.text.length), to: wp(w.text.length), insert: pt('S') }],
+    origin: 'user',
+    generation: w.generation,
+    heard: w.heard,
+  })
+
+  assert.equal(ack.refused, true, 'the edit was applied at stale offsets')
+  // **And the document is untouched by it**, which is the whole point: the
+  // character is lost and the file is right, where before the character landed
+  // and the file was wrong.
+  const after = await service.text.openWindow({ first: today, last: today })
+  assert.equal(after.text.includes('S\n'), false, JSON.stringify(after.text))
+  // The refusal is the claim; `heard` on a freshly opened window is that
+  // window's own count and says nothing about the one that was refused.
+})
+
+test('and an edit that is merely LATE is still applied, which is ordinary typing', async t => {
+  // Several edits are in flight at once and all carry the same generation; the
+  // check must not refuse them. `heard` counts announcements only, so typing
+  // — which the window originates — never moves it.
+  const { service, snapshot } = await fixture(t)
+  for (const ch of 'abcdef') {
+    const ack = await service.text.edit({
+      id: snapshot.id,
+      edits: [{ from: wp(0), to: wp(0), insert: pt(ch) }],
+      origin: 'user',
+      generation: snapshot.generation,
+      heard: snapshot.heard,
+    })
+    assert.notEqual(ack.refused, true, `refused ${ch} — typing is not a stale edit`)
+  }
 })

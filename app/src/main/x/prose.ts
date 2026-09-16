@@ -99,7 +99,16 @@ export function proseMarkers(body: DocumentText): readonly Marker[] {
     out.push({ from: m.from as DocumentOffset, to: m.to as DocumentOffset, width })
   }
   for (const block of scanThreadBlocks(body)) {
-    out.push({ from: block.from as DocumentOffset, to: block.to as DocumentOffset, width: 0 })
+    // **`elides`, because this is content and not apparatus** (D89). Everything
+    // else here is a marker whose own bytes are machinery; a thread block is a
+    // paragraph of somebody's writing that is merely stored in the passage, and
+    // which side of it a caret sits on is therefore the opposite question.
+    out.push({
+      from: block.from as DocumentOffset,
+      to: block.to as DocumentOffset,
+      width: 0,
+      elides: true,
+    })
   }
   return out.sort((a, b) => a.from - b.from)
 }

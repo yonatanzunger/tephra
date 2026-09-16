@@ -128,6 +128,7 @@ export class TextService implements Serves {
         edits,
         origin,
         generation: window.generation,
+        heard: window.heard,
         text: window.text,
         spans: window.spans(),
         placement: window.placement(),
@@ -144,6 +145,7 @@ export class TextService implements Serves {
       text: window.text,
       span: window.span,
       generation: window.generation,
+      heard: window.heard,
       spans: window.spans(),
       placement: window.placement(),
       boundaries: window.boundaries,
@@ -159,10 +161,44 @@ export class TextService implements Serves {
     })
   }
 
+  /**
+   * Apply what a renderer typed — or **refuse it**, if the buffer it was
+   * composed against has been overtaken (D88).
+   *
+   * **The refusal is the whole of this method's care.** An edit carries window
+   * offsets, and offsets mean nothing without the text they were computed
+   * against. A change the renderer has not applied yet — a comment main wrote, a
+   * tag, a file edited outside — moves that text, and applying the edit anyway
+   * puts the characters somewhere else. Reported from use: a comment's own
+   * byline was joined to the paragraph above it by the keystroke that followed
+   * it, which stopped the block being a blockquote, which un-concealed 210
+   * characters, which desynchronised the window and misplaced everything typed
+   * afterwards.
+   *
+   * `heard` counts only announcements, so several edits in flight on one
+   * generation are all fine — see `EditRequest.heard`.
+   */
   async edit(request: EditRequest): Promise<EditAck> {
     return this.#mutate(async () => {
       const window = this.#windows.get(request.id)?.window
       if (window === undefined) throw new Error(`no such window ${request.id}`)
+      if (request.heard !== window.heard) {
+        // **Refused, not thrown.** The renderer re-reads and carries on; a
+        // keystroke is lost, which is the cheap half of this trade. Throwing
+        // would put an error in front of somebody for a state the app can
+        // recover from without them.
+        return {
+          generation: window.generation,
+          heard: window.heard,
+          refused: true as const,
+          // **With the truth attached**, because a refusal the renderer cannot
+          // recover from is worse than the misplaced character it prevents.
+          text: window.text,
+          length: window.text.length,
+          spans: window.spans(),
+          placement: window.placement(),
+        }
+      }
       await window.edit(request.edits, request.origin)
       // The idle rule's only input, and it is free here: every keystroke
       // already passes through this method (D62).
@@ -170,6 +206,7 @@ export class TextService implements Serves {
       this.#durable.writeSoon()
       return {
         generation: window.generation,
+        heard: window.heard,
         length: window.text.length,
         spans: window.spans(),
         placement: window.placement(),

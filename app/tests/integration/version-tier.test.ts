@@ -50,7 +50,8 @@ async function type(svc: NotebookService, text: string): Promise<void> {
     edits: [{ from: wp(opened.text.length), to: wp(opened.text.length), insert: pt(text) }],
     origin: 'user',
     generation: opened.generation,
-  })
+        heard: 0,
+      })
 }
 
 test('opening a fresh notebook makes an initial commit', async t => {

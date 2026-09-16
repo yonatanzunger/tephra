@@ -49,6 +49,17 @@ export class RemoteWindow implements DocumentWindow {
    */
   #seq = 0
 
+  /**
+   * How many announcements from main this buffer has applied (D88).
+   *
+   * Sent with every edit so main can refuse one composed before an announcement
+   * that had not arrived — the offsets in it were computed against text that has
+   * since moved. Set from the snapshot, and advanced only when a push is
+   * actually applied, because a number that ran ahead of the text would defeat
+   * the check it exists for.
+   */
+  #heard: number
+
   constructor(doc: Document, snapshot: WindowSnapshot) {
     this.id = snapshot.id
     this.#doc = doc
@@ -58,6 +69,7 @@ export class RemoteWindow implements DocumentWindow {
     this.#spans = snapshot.spans
     this.#placement = snapshot.placement
     this.#boundaries = snapshot.boundaries
+    this.#heard = snapshot.heard
   }
 
   get document(): Document {
@@ -154,11 +166,32 @@ export class RemoteWindow implements DocumentWindow {
       edits,
       origin,
       generation: this.#generation,
+      heard: this.#heard,
     })
 
     // Superseded: more edits were fired while this one was in flight, so this
     // ack describes a state that is already historical. The newest one governs.
     if (seq !== this.#seq) return
+
+    // **Refused** (D88): composed against a buffer main had already moved on
+    // from, so it was not applied and this buffer is now wrong in a way it
+    // cannot repair by arithmetic. Re-read, and do not raise: the state after a
+    // re-read is correct, and one lost keystroke is the cheap half of the trade
+    // — the expensive half was a character landing somewhere else and taking a
+    // comment's blockquote with it.
+    if (ack.refused === true) {
+      // **Adopt main's text first, then re-render.** A reset re-renders from
+      // THIS buffer, and this buffer is what was just judged stale — so
+      // resyncing without adopting left the window unable to accept another
+      // keystroke, every one of them refused for the same reason as the last.
+      if (ack.text !== undefined) this.#text = ack.text
+      this.#generation = ack.generation
+      this.#heard = ack.heard
+      this.#placement = ack.placement
+      this.#setSpans(ack.spans)
+      this.#resync()
+      return
+    }
 
     if (ack.length !== this.#text.length) {
       // Main is authoritative. Continuing on a buffer that no longer describes
@@ -168,6 +201,7 @@ export class RemoteWindow implements DocumentWindow {
     }
 
     this.#generation = ack.generation
+    this.#heard = ack.heard
     this.#placement = ack.placement
     this.#setSpans(ack.spans)
   }
@@ -255,12 +289,15 @@ export class RemoteWindow implements DocumentWindow {
     origin: EditOrigin,
     text: ProseText,
     generation: SessionGeneration,
+    heard: number,
     spans: readonly TypedSpan[],
     placement: Placement,
     boundaries: { earlier: boolean; later: boolean },
   ): void {
     this.#text = text
     this.#generation = generation
+    // **Advanced only here**, where the text it describes is actually in hand.
+    this.#heard = heard
     this.#placement = placement
     this.#boundaries = boundaries
     this.#setSpans(spans)

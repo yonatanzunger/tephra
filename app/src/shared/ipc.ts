@@ -379,6 +379,24 @@ export interface WindowSnapshot {
   readonly text: ProseText
   readonly span: Span
   readonly generation: SessionGeneration
+  /**
+   * How many changes **from elsewhere** this window has been told about.
+   *
+   * **The token that makes a stale edit refusable** (D88). A renderer composes
+   * edits against the buffer it has and fires them without awaiting, so several
+   * are in flight and all of them carry the same `generation` — which is why
+   * generation cannot be the check: refusing everything that is not current
+   * would refuse ordinary typing.
+   *
+   * What makes an edit dangerous is not that the document moved, but that it
+   * moved **in a way the renderer has not seen**: a comment written by main, a
+   * tag, a file changed outside. Those are exactly the changes a window
+   * ANNOUNCES, so counting them answers the question — the renderer echoes back
+   * the number it has applied, and an edit composed before an announcement it
+   * has not applied is refused rather than landing at offsets that no longer
+   * mean what they meant.
+   */
+  readonly heard: number
   readonly spans: readonly TypedSpan[]
   /** Where each segment's body starts in the buffer — the coordinate mapping. */
   /**
@@ -418,6 +436,28 @@ export interface WindowSnapshot {
  */
 export interface EditAck {
   readonly generation: SessionGeneration
+  /** What the window had heard when this edit was applied (D88). */
+  readonly heard: number
+  /**
+   * Whether the edit was **refused** as composed against a state the renderer
+   * had already been overtaken from (D88).
+   *
+   * Refused rather than applied, because applying it would put the characters
+   * somewhere else — which is how a comment write once joined its own byline to
+   * the paragraph above it and then desynchronised the window by 210 characters.
+   * The renderer re-reads instead; one keystroke is lost and the file is right.
+   */
+  readonly refused?: true
+  /**
+   * The window's text, sent **only with a refusal** (D88).
+   *
+   * Because a refusal is only useful if the renderer can recover from it, and it
+   * cannot recover from its own buffer: that buffer is precisely what was judged
+   * stale. The first cut refused and then told the renderer to re-render what it
+   * already had, which left the window unable to accept another keystroke — a
+   * worse failure than the one being fixed, and reported within the minute.
+   */
+  readonly text?: ProseText
   readonly length: number
   readonly spans: readonly TypedSpan[]
   readonly placement: WindowSnapshot['placement']
@@ -433,6 +473,8 @@ export interface WindowChangedMessage {
   readonly edits: readonly WindowEdit[]
   readonly origin: EditOrigin
   readonly generation: SessionGeneration
+  /** What the window has heard, counting this announcement (D88). */
+  readonly heard: number
   readonly text: ProseText
   readonly spans: readonly TypedSpan[]
   readonly placement: WindowSnapshot['placement']
@@ -459,6 +501,13 @@ export interface EditRequest {
   readonly origin: EditOrigin
   /** What the renderer believed when it composed these edits. */
   readonly generation: SessionGeneration
+  /**
+   * How many announcements the renderer had applied when it composed them (D88).
+   *
+   * Main refuses the edit if it has announced more, because the offsets were
+   * computed against a buffer that has since moved underneath them.
+   */
+  readonly heard: number
 }
 
 export interface SpansRequest {
