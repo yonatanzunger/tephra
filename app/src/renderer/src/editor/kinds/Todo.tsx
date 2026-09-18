@@ -2074,45 +2074,6 @@ function dueSoon(items: readonly TodoItem[], today: DateKey): readonly TodoItem[
     .sort((a, b) => daysBetween(today, a.due as DateKey) - daysBetween(today, b.due as DateKey))
 }
 
-/**
- * The two halves of the compact horizon, merged into one date-ordered strip.
- *
- * **One region, one meaning** — which is the shape MT5a rejected the alternative
- * of: a band whose members mean different things depending on what put them
- * there. These do not. *A due date approaching has more in common with a talk
- * approaching than with anything you chose* (H8), and both are the world bearing
- * down, so they are one list sorted by one thing.
- *
- * Where they differ is only where following one goes: a task is on this list, so
- * it scrolls; a matter is on a docket, so it opens it.
- */
-function compactHorizon(
-  soon: readonly TodoItem[],
-  ahead: readonly HorizonRow[],
-  today: DateKey,
-): readonly { key: string; on: DateKey; what: React.ReactNode; past: boolean; docket: boolean; go: () => void }[] {
-  const rows = [
-    ...soon.map(item => ({
-      key: `soon:${item.id ?? item.text}`,
-      on: item.due as DateKey,
-      what: shortLine(item) as React.ReactNode,
-      past: overdue(item, today),
-      docket: false,
-      go: (): void => {
-        document.getElementById(`todo-${item.id ?? ''}`)?.scrollIntoView({ block: 'center' })
-      },
-    })),
-    ...ahead.map((row, at) => ({
-      key: `hz:${row.doc}:${row.id ?? at}:${row.on}`,
-      on: row.on,
-      what: row.text as React.ReactNode,
-      past: daysBetween(today, row.on) < 0,
-      docket: true,
-      go: (): void => void window.tephra.win.create({ kind: 'document', id: row.doc }),
-    })),
-  ]
-  return rows.sort((a, b) => daysBetween(today, a.on) - daysBetween(today, b.on))
-}
 
 /** How a date reads when it is close: in days, because that is the question. */
 function when(due: DateKey, today: DateKey): string {

@@ -339,10 +339,41 @@ export class DocketDocument extends SegmentedDocument {
     await this.#write(id, was => ({ ...was, from: item }))
   }
 
+  /**
+   * Rename a matter — and the one step that was its echo.
+   *
+   * **The commonest matter on a docket is one thing with one step**, seeded
+   * with the matter's own name (D76), and the surface draws that pair as a
+   * single row because a step repeating the heading above it says nothing
+   * twice. Renaming the matter alone broke the match, so a docket full of
+   * tidy one-line matters grew a second line each time somebody corrected a
+   * title — reported from use, and it is the *rendering* changing that tells
+   * you, not anything about the data.
+   *
+   * **Only when the echo is exact and alone.** One step, and its text equal to
+   * the name that is being replaced: then it was an echo and follows. Two
+   * steps, or one whose text somebody has since edited, are a person's own
+   * words about what has to happen, and renaming the matter has no business
+   * rewriting them.
+   *
+   * **One write, so it is one undo.** The rename and the step's text go into
+   * the same block rewrite, because they are one act.
+   */
   async rename(id: string, name: string): Promise<void> {
     const said = name.trim()
     if (said === '') throw new Error('a matter needs a name')
-    await this.#write(id, was => ({ ...was, name: said }))
+    await this.#write(id, was => {
+      const lone = was.steps.length === 1 ? was.steps[0] : undefined
+      const echoes = lone !== undefined && lone.text.trim() === was.name.trim()
+      return {
+        ...was,
+        name: said,
+        // **The generated task keeps its own words**, deliberately: the pass
+        // never rewrites the sentence on an item, because somebody may have
+        // edited it and overruling them is what that rule exists to prevent.
+        ...(echoes ? { steps: [{ ...lone, text: said }] } : {}),
+      }
+    })
   }
 
   /** When it happens — or that it does not yet, which is a state (H7b). */
@@ -371,8 +402,30 @@ export class DocketDocument extends SegmentedDocument {
         after: shape.repeating && shape.fromCompletion ? was.when.after : null,
         // A list is a recurrence, so it survives exactly as an interval does.
         dates: shape.repeating ? was.when.dates : null,
+        // **An extent survives a change of mode**, because it is a fact about
+        // the thing rather than about its schedule: a trip that becomes a
+        // recurring trip lasts the same eight days.
+        until: was.when.until,
       },
     }))
+  }
+
+  /**
+   * The last day an instance runs, or none (D92).
+   *
+   * **An end before its start is refused rather than stored.** The grammar
+   * keeps an unreadable `until` line as somebody's own text, which is the right
+   * leniency for a file; a verb is a different matter — it has a person in
+   * front of it, and storing a contradiction so that `endOf` can ignore it
+   * later is how a field comes to mean nothing.
+   */
+  async setUntil(id: string, until: DateKey | null): Promise<void> {
+    await this.#write(id, was => {
+      if (until !== null && was.when.start !== null && until <= was.when.start) {
+        throw new Error('an event cannot end before it starts')
+      }
+      return { ...was, when: { ...was.when, until } }
+    })
   }
 
   async setStart(id: string, start: DateKey | null): Promise<void> {

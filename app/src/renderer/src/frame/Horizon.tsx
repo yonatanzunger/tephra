@@ -163,9 +163,22 @@ function Row({
           twice to place. Overdue keeps the error colour, which is the one case
           where the date is the loudest thing on the line. */}
       <span
-        className={`hz-on${today !== null && compareDateKeys(row.on, today) < 0 ? ' hz-past' : ''}`}
+        className={`hz-on${
+          // **A span is overdue only once it is over** (D92). Comparing the
+          // start would grey a conference on its second morning, which is the
+          // one moment it is most certainly not in the past.
+          today !== null && compareDateKeys(row.until ?? row.on, today) < 0 ? ' hz-past' : ''
+        }`}
       >
+        {/* **Both ends, in the date's own ink** (D92). The range is not a
+            footnote to an event, it is the most important fact about it — *is
+            the trip I am looking at still on, and for how much longer* — and
+            seven matters on a real docket had it written into their titles for
+            want of a place to put it. It shares the column so the rows stay
+            aligned: one slot, wide enough for the widest thing it must hold,
+            which is the lesson the docket's own date column learned twice. */}
         {dayLabel(row.on, today ?? undefined)}
+        {row.until !== undefined && ` → ${dayLabel(row.until, today ?? undefined)}`}
       </span>
       {/* **What it says leads**, in the reading face, because that is the line
           somebody wrote and the only part they will recognise.
@@ -197,6 +210,7 @@ function Row({
         {row.instance !== null && row.instance !== row.on && (
           <span className="hz-instance">for {dayLabel(row.instance, today ?? undefined)}</span>
         )}
+
       </div>
     </li>
   )

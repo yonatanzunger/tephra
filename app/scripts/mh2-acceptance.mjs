@@ -136,6 +136,35 @@ check(
   Array.isArray(r.days) && r.days.length > 1,
   JSON.stringify(r.days),
 )
+// ── an event that lasts (D92) ───────────────────────────────────────────────
+check(
+  // Reported from use, and the evidence was the notebook itself: seven of ten
+  // matters on a real events docket had written the range into their own titles
+  // — *Santa Monica 9-17 → 9-22* — because there was nowhere else to put it.
+  'AN EVENT HAS AN EXTENT: the end date is stored as a field',
+  r.spanStored === r.spanAsked?.until,
+  `asked ${JSON.stringify(r.spanAsked)} · stored ${r.spanStored}`,
+)
+check(
+  'and an end before the start is refused rather than stored',
+  r.backwardsRefused === true,
+)
+check(
+  // The behaviour the field buys: a sweep that asked about the first day only
+  // dropped a trip on its second morning, which is when you most need to see it.
+  'IT IS STILL ON THE HORIZON the day after it began, and not marked past',
+  Array.isArray(r.spanRow) && r.spanRow.length === 1 && r.spanRow[0].past === false,
+  JSON.stringify(r.spanRow),
+)
+check(
+  // *Visually prominent*, asked for in those words: the range is the row's
+  // headline fact, so it is in the date column in the date's own ink.
+  'and the range is in the date column, both ends, at the date\'s own weight',
+  Array.isArray(r.spanRow) && / → /.test(String(r.spanRow[0]?.on)) &&
+    Number(r.spanRow[0]?.weight) >= 600,
+  `${JSON.stringify(r.spanRow[0]?.on)} at weight ${r.spanRow[0]?.weight}`,
+)
+
 check(
   'A ROW IS THE SHORT LINE: no link markup, no tag, no due date',
   // Reported from use: a Google Docs URL sprawling across three lines of a
@@ -210,8 +239,14 @@ check(
   // alternate — a true claim about this data rather than about the rule, and it
   // broke the moment the data changed. What must hold is that every row's day is
   // on or after the one before it, whatever made them.
+  // **And a range sorts by the day it starts** (D92), which is why this reads
+  // the half of the cell before the arrow: *16 Sep → 22 Sep* is not a date and
+  // `Date.parse` says NaN, which failed the order test for a row that was in
+  // perfect order. The claim is unchanged; what changed is that a cell can now
+  // hold two dates.
   (() => {
-    const days = (r.strip ?? []).map(one => Date.parse(`${one.when} 2026`))
+    const days = (r.strip ?? [])
+      .map(one => Date.parse(`${String(one.when).split(' → ')[0]} 2026`))
     return days.length > 2 && days.every((d, at) => at === 0 || d >= days[at - 1])
   })(),
   JSON.stringify((r.strip ?? []).map(one => [one.when, one.docket])),

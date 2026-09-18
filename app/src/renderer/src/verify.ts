@@ -1773,6 +1773,19 @@ export async function runVerify(request: string): Promise<void> {
         // Started, so its steps have a date to be measured from — an inactive
         // matter contributes nothing, which is a different claim, tested below.
         await window.tephra.docket.activate(docket, car)
+
+        // **An event that LASTS** (D92), and the one that matters: it began
+        // yesterday and runs for a week, so a sweep that asked about its first
+        // day would have dropped it this morning. Seven matters on a real
+        // events docket were writing this into their own titles.
+        const trip = await window.tephra.docket.add(docket, 'Santa Monica',
+          { mode: 'event', start: from(-1), until: from(5) })
+        say('spanAsked', { start: from(-1), until: from(5) })
+        say('spanStored', (await window.tephra.docket.matters(docket))
+          .find(one => one.id === trip)?.when.until ?? 'none')
+        // An end before the start is refused rather than stored.
+        say('backwardsRefused', await window.tephra.docket
+          .setUntil(docket, trip, from(-3)).then(() => false).catch(() => true))
       }
       // The other source: a task with a due date of its own.
       // **With a link and a tag**, because a raw URL sprawling across a strip
@@ -1793,6 +1806,16 @@ export async function runVerify(request: string): Promise<void> {
         horizon: document.querySelectorAll('.hz-row').length,
       })
       say('days', [...document.querySelectorAll('.hz-on')].map(n => n.textContent ?? ''))
+      // **The range, in the date column and in the date's own ink** (D92): it
+      // is the most important fact about an event that lasts, which is why it
+      // shares the column rather than trailing the row as a muted note.
+      say('spanRow', [...document.querySelectorAll('.hz-row')]
+        .filter(row => (row.textContent ?? '').includes('Santa Monica'))
+        .map(row => ({
+          on: (row.querySelector('.hz-on') as HTMLElement | null)?.textContent ?? '',
+          past: row.querySelector('.hz-on')?.classList.contains('hz-past') ?? false,
+          weight: getComputedStyle(row.querySelector('.hz-on') as Element).fontWeight,
+        })))
       say('rows', [...document.querySelectorAll('.hz-row')].map(n => ({
         what: (n.querySelector('.hz-what') as HTMLElement | null)?.textContent ?? '',
         kind: (n.querySelector('.hz-kind') as HTMLElement | null)?.textContent ?? '',
@@ -3537,6 +3560,73 @@ export async function runVerify(request: string): Promise<void> {
       }
 
       // **Legibility has a floor even though it has no instrument** (H3): the
+      // ── an event that lasts, and an echoing step (D92) ────────
+      {
+        const docketId = (await window.tephra.docket.list())[0]?.id
+        if (docketId !== undefined) {
+          const today = await window.tephra.doc.today()
+          const trip = await window.tephra.docket.add(docketId, 'Lisbon',
+            {
+              mode: 'event',
+              start: today,
+              // Relative to the app's today, never a literal: a date spelled
+              // out passes on the day it is written and fails every day after
+              // (the harnesses' `dayFrom` rule, one layer in).
+              until: new Date(Date.parse(`${today}T12:00:00Z`) + 4 * 86_400_000)
+                .toISOString().slice(0, 10),
+            })
+          await settle(700)
+          const rowOf = (text: string): HTMLElement | undefined =>
+            [...document.querySelectorAll('.docket-row')].find(
+              one => (one.textContent ?? '').includes(text),
+            ) as HTMLElement | undefined
+          const when = rowOf('Lisbon')?.querySelector('.docket-when') as HTMLElement | null
+          // **Both ends, in the column, and set like every other date** (D92 as
+          // corrected): the room is the prominence. A first cut set spans
+          // heavier and that was too much — *the same weight we use for tasks
+          // feels more visually balanced* — so what is asserted now is that the
+          // whole range is legible in the slot and that nothing shouts.
+          say('spanReads', when?.textContent?.trim() ?? 'none')
+          say('spanFits', when === null ? null : {
+            weight: getComputedStyle(when).fontWeight,
+            clipped: when.scrollWidth > when.clientWidth + 1,
+          })
+          // **Prominence is a comparison, so the thing compared against is made
+          // here** rather than found: a single-day event on the same docket,
+          // whose date is apparatus in the ordinary way. Looking for some other
+          // scene's row is how this threw the first time — `rowOf` answers
+          // `undefined`, which a `=== null` guard sails straight past.
+          await window.tephra.docket.add(docketId, 'Rooftop drinks',
+            { mode: 'event', start: today })
+          await settle(500)
+          const plain = rowOf('Rooftop drinks')?.querySelector('.docket-when') ?? null
+          say('plainWeight', plain === null ? null : getComputedStyle(plain).fontWeight)
+
+          // **And renaming takes the echo with it** (D92): one step, its text
+          // the matter's own name, which is the commonest matter there is.
+          await window.tephra.docket.rename(docketId, trip, 'Lisbon, with the family')
+          await settle(700)
+          say('afterRename', (await window.tephra.docket.matters(docketId))
+            .filter(one => one.id === trip)
+            .map(one => `${one.name}|${one.steps.map(step => step.text).join(',')}`))
+          // The row still draws as one line, which is what told us it had broken.
+          say('rowLines', (rowOf('Lisbon, with the family')?.textContent ?? '')
+            .includes('Lisbon, with the family'))
+
+          // **And the block leaves the docket as it found it.** This fixture is
+          // shared with the section and drag checks further down the scene, and
+          // two matters left in its unsectioned run moved every list they
+          // assert — six failures from a passing claim, which is the same trap
+          // the archive block below had to be rescued from.
+          for (const made of [trip, ...(await window.tephra.docket.matters(docketId))
+            .filter(one => one.name === 'Rooftop drinks')
+            .flatMap(one => (one.id === null ? [] : [one.id]))]) {
+            await window.tephra.docket.remove(docketId, made)
+          }
+          await settle(600)
+        }
+      }
+
       // ── finishing, and the archive (D91) ──────────────────────
       //
       // **The whole cycle in one window**, which is possible because filing is

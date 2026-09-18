@@ -197,6 +197,23 @@ A docket is `dockets/<name>.docket.md`, one block per matter, and its grammar is
 in `shared/kinds/docket.ts` — the modes, the three schedule fields, the step
 lines (D68, D72, D76 as amended by D80).
 
+**An event that lasts carries `until:`** (D92), the inclusive last day of the
+instance — a three-day conference is still on, on its third day. It sits
+immediately after the `start` it belongs to, because the pair is one fact:
+
+```markdown
+### Santa Monica
+mode: event
+start: 2026-09-17
+until: 2026-09-22
+steps:
+- +0d status: Santa Monica <!--tephra:step 74iyf9dy-->
+<!--tephra:matter 63tyz5xj 1789254898 0-->
+```
+
+An `until` on or before its `start` is kept in the file (the leniency rule) and
+read as no extent; the verbs refuse to write one.
+
 **A finished one-off carries `done:`** (D91), written by the reconciler from the
 steps and cleared by it when a step is reopened:
 

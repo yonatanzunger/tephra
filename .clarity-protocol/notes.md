@@ -1735,3 +1735,37 @@ after it address everything by id.
 
 > Related: note 66, which produced the file that produced this; note 62's door
 > that was deaf; note 61's invariant kept by memory at one door out of many.
+
+## 68. Prominent was a claim about what is said
+
+**2026-09-18.** *The range of dates is a very important fact about the event, so
+it needs to be visually prominent.* Built three times.
+
+1. **A muted note after the words** — *until 20 Sep* — because the date column
+   was one date wide and widening it would cost every row. That is the treatment
+   for a secondary fact, and the whole point of the sentence was that this is
+   not one.
+2. **In the column, set heavier than a single date.** The objection came back
+   within the hour and named it: **these are equally important; it is not that
+   one is more important than the other.** A three-day conference is not more of
+   an event than a bar mitzvah. What I had built as a rule about *ranges* was
+   not a rule about anything.
+3. **In the column, set like every other date.** *The same weight that we use
+   for tasks feels more visually balanced.*
+
+> **The prominence was room, not weight.** Both ends visible, in one slot wide
+> enough to hold them, aligned with every other row. Twice I heard *prominent*
+> as *louder* when it meant *not hidden* — once by exiling the fact to a
+> footnote, once by shouting it.
+
+**And the second attempt had a tell I walked past.** To make ranges heavier I
+needed a predicate, and the predicate I wrote was *does this have an end date* —
+which is a question about the data's shape rather than about what it means. The
+one that survived is *is this an event* (`kind === 'status'`), and even that
+turned out to earn no emphasis. **A styling rule whose condition is a field's
+presence rather than a fact's meaning is usually the wrong rule**; it took a
+correction to see that the first version could not have been right, because
+nothing about *having two dates* makes something matter more.
+
+> Related: note 50's *unstyled inferred from a font size*, and note 59's three
+> kinds of marker — both are the same error, a rule keyed to a proxy.

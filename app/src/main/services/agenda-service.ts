@@ -49,7 +49,7 @@ import { flattenLinks } from '../../shared/links.ts'
 import { plainLine } from '../../shared/plain.ts'
 import { DocketDocument } from '../x/documents/kinds/docket.ts'
 import { TodoDocument } from '../x/documents/kinds/todo.ts'
-import { isLive, RESOLVED_DAYS, shortLine, spellOwner } from '../../shared/kinds/todo.ts'
+import { isLive, readDue, RESOLVED_DAYS, shortLine, spellOwner } from '../../shared/kinds/todo.ts'
 import type { ResolvedItem, TodoItem, TodoStatus, WalkState } from '../../shared/kinds/todo.ts'
 import { basename, isAbsolute, join } from 'node:path'
 import { addDays, asDateKey, compareDateKeys, dateKeyAt } from '../../shared/dates.ts'
@@ -64,7 +64,7 @@ import type { FixedPoints, RunReport } from './fixed-point.ts'
 import type { Dockets as DocketStore } from './dockets.ts'
 import type { Tasks } from './tasks.ts'
 import { serve, serveKinds, type Served, type Serves } from './serves.ts'
-import { dueOn, isFinished, matterHorizon, addInterval, backInterval, instancesIn, NOT_STARTED, type Matter, type Section, type Step } from '../../shared/kinds/docket.ts'
+import { dueOn, endOf, isFinished, statusPassed, matterHorizon, addInterval, backInterval, instancesIn, NOT_STARTED, type Matter, type Section, type Step } from '../../shared/kinds/docket.ts'
 import { CHANNEL, type DocketCommand, type TodoCommand } from '../../shared/ipc.ts'
 
 export class AgendaService implements Serves {
@@ -144,6 +144,7 @@ export class AgendaService implements Serves {
       rename: command => this.#docket.rename(command.docket, command.matter, command.name),
       mode: command => this.#docket.setMode(command.docket, command.matter, command.mode),
       start: command => this.#docket.setStart(command.docket, command.matter, command.start),
+      until: command => this.#docket.setUntil(command.docket, command.matter, command.until),
       moveTo: command => this.#docket.moveTo(command.docket, command.matter, command.to),
       dates: command => this.#docket.setDates(command.docket, command.matter, command.dates),
       every: command => this.#docket.setEvery(command.docket, command.matter, command.every),
@@ -328,6 +329,7 @@ export class AgendaService implements Serves {
             instance: step.instance,
             item: null,
             id: matter.id,
+            ...(step.until === undefined ? {} : { until: step.until }),
           })
         }
       }
@@ -619,14 +621,31 @@ export class AgendaService implements Serves {
             // **Composed once, rather than added and then tagged.** Two writes
             // would be two undo steps for one act, which is the rule `bulk` and
             // `finishWalk` already keep.
-            // **And a due date, because the schedule already knows one.** A
-            // generated task arrived with no deadline, so it sorted with the
-            // undated and said nothing about the rhythm it belongs to — an air
-            // filter due every 120 days is not the same as a note to self. The
-            // date is the step's own: the day the schedule says it should
-            // happen, which for a run-up step is its own day and not the
-            // occasion's. Being overdue afterwards is correct and is what H7a
-            // asks for — outstanding is shown, never quietly reissued.
+            // **A due date only where there is a clock** (D93, amending this).
+            //
+            // This used to be the step's own computed day, on the argument that
+            // *the schedule already knows one* — and the argument was wrong in
+            // the commonest case. A `+0d` step's computed day is the day it
+            // generates, so every task arrived already due, and a list where
+            // everything is due today says nothing about anything. Reported
+            // from use in exactly those terms: *those should be reserved for
+            // when there is a clock on the step.*
+            //
+            // Two things are a clock, and nothing else is:
+            //
+            // - **An explicit `DUE` written on the step**, which is somebody
+            //   saying so, and is lifted out of the words into the field the
+            //   way the entry grammar lifts it out of a typed line (D85).
+            // - **A run-up**, a step whose timing is *N days before* the
+            //   occasion: then the occasion is the deadline, and it is the
+            //   occasion's date rather than the step's — you have until the
+            //   conference, not until the day you meant to start booking it.
+            //
+            // Everything else — a step at `+0d`, one measured forward, one
+            // waiting on another step — gets none, and a person who wants one
+            // sets it on the item. That was offered as the fallback and is in
+            // fact the right answer: a date the app invented is a date nobody
+            // can trust, and the daily walk is what surfaces work here.
             // **The DOCKET is a tag; the matter is what the item is FOR** (D85,
             // MT8). The docket is the durable grouping — the house, work, games —
             // and a word you actually think in, so it is a tag and it is the one
@@ -651,12 +670,16 @@ export class AgendaService implements Serves {
             // **Composed once, as a record.** Every field is known for certain
             // here, so joining them into a string for the entry grammar to take
             // apart again would be two chances to be wrong.
+            const said = readDue(step.text)
+            const runUp = step.when.kind === 'at' && step.when.offset.startsWith('-')
             const item = await this.#todo.make(list, {
-              text: step.text,
+              text: said.text,
               tags: [domain],
               for: forWhat(matter, step.text, sections),
               owner: matter.owner,
-              due,
+              // The occasion's own date for a run-up, since that is the thing
+              // being run up to; `matter.when.start` IS the live instance.
+              due: said.due ?? (runUp ? matter.when.start : null),
             })
             // **The matter is a TAG, not a prefix.** On the list a step's text
             // stands alone — *find a general mechanic* says nothing about which
@@ -715,21 +738,41 @@ export class AgendaService implements Serves {
           }
         }
 
+        // **A status step completes by the calendar** (D92, amending D91). It is
+        // awareness with no task, so nobody can tick it and *done* can only
+        // mean *that day has gone* — which is what lets a matter made of status
+        // steps finish at all. Before this an events docket could never be
+        // filed: ten real events, each one status step, none of them completable
+        // by any gesture in the app.
+        //
+        // **Read from the matter as it stands after the clauses above**, since
+        // an advance may have just moved the instance this measures from.
+        const settledMatter = (await this.#docket.matters(docket)).find(one => one.id === id)
+        for (const step of settledMatter?.steps ?? []) {
+          if (step.id === null || step.kind !== 'status' || step.done !== null) continue
+          const on = dueOn(step, settledMatter as Matter, addDays, this.#day.zone)
+          if (on === null) continue
+          if (!statusPassed(step, settledMatter as Matter, on, today)) continue
+          await this.#docket.completeStep(docket, id, step.id, true)
+          touched = true
+        }
+
         // **Finished, and then — a day later — filed** (D91).
         //
-        // **Both directions, because it is a reconciler.** A one-off whose task
-        // steps are all done gets today's date; one that is stamped and no
-        // longer finished — a step reopened, a step added — loses it. The
-        // second half is what keeps the stamp a *fact about the steps* rather
-        // than a state somebody has to maintain.
-        const finished = isFinished(matter, today)
-        if (finished && matter.done === null) {
+        // **Both directions, because it is a reconciler.** A one-off whose steps
+        // are all done gets today's date; one that is stamped and no longer
+        // finished — a step reopened, a step added — loses it. The second half
+        // is what keeps the stamp a *fact about the steps* rather than a state
+        // somebody has to maintain.
+        const settled = (await this.#docket.matters(docket)).find(one => one.id === id)
+        const finished = settled !== undefined && isFinished(settled)
+        if (finished && settled?.done === null) {
           await this.#docket.setDone(docket, id, today)
           touched = true
-        } else if (!finished && matter.done !== null) {
+        } else if (!finished && settled?.done != null) {
           await this.#docket.setDone(docket, id, null)
           touched = true
-        } else if (finished && matter.done !== null && compareDateKeys(matter.done, today) < 0) {
+        } else if (finished && settled?.done != null && compareDateKeys(settled.done, today) < 0) {
           // **Not on the day it finished, which is the whole of D42 here.** A
           // matter that vanishes from under the hand that ticked its last step
           // is the app moving something you did not ask it to move; a matter

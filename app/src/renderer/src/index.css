@@ -2166,7 +2166,13 @@ body {
 }
 .docket-when:hover { background: rgb(var(--text) / .06); }
 .docket-when.undecided { color: rgb(var(--text-muted)); font-style: italic; }
-
+/* **An event's date is shown in full, and set like every other date** (D92,
+   corrected twice from use). What the range needed was *room* — both ends in
+   the column rather than a truncation or a muted note after the words — and
+   that is the whole of making it prominent. A first cut also set it heavier,
+   which was too much: *the same weight that we use for tasks feels more
+   visually balanced*, and a column where some rows shout is a column you read
+   twice. The prominence is in what is said, not in how loudly. */
 .docket-under {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: .45rem;
   margin-top: .3rem;
@@ -2431,7 +2437,11 @@ body {
    **In the notebook's ink**, not the muted grey: the date is half of what the
    row says, not apparatus beside it. */
 .hz-on {
-  flex: none; width: 6.5rem;
+  /* **Wide enough for a range, because one slot holding two widths is a ragged
+     column** — the docket's date column learned this twice (D92). Most rows
+     spend the space and that is the trade: alignment for every row, and the
+     rows that span are the ones whose dates matter most. */
+  flex: none; width: 11rem;
   font-family: var(--font-ui); font-size: .72em; font-weight: 600;
   letter-spacing: .04em; text-transform: uppercase;
   font-variant-numeric: tabular-nums;

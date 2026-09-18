@@ -75,6 +75,14 @@ export interface HorizonRow {
   /** The matter it belongs to, for a docket row. Null for a task item. */
   readonly matter: string | null
   /**
+   * The last day it occupies, when it lasts more than one (D92).
+   *
+   * **Absent for everything that happens on a day**, which is nearly all of
+   * this. A row with it reads as a span — *18–20 Sep* — and stays in the window
+   * until the end has passed rather than dropping out after its first morning.
+   */
+  readonly until?: DateKey
+  /**
    * The occurrence, for a docket row.
    *
    * **Shown, because two instances of one recurrence can land in one window**

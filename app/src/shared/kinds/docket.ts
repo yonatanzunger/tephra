@@ -408,10 +408,60 @@ export interface Schedule {
    * list mean something different every week.
    */
   readonly dates: readonly DateKey[] | null
+  /**
+   * The last day of an instance that LASTS — a trip, a conference, a festival.
+   *
+   * **Not the range D76 withdrew, and the difference is the whole argument.**
+   * That one was a fuzzy *schedule* — `2026-11-12..2026-11-20` meaning *somewhere
+   * in here* — offered for "a major project spread over months", and the answer
+   * to that case is still steps. This is an event's **extent**: a thing with one
+   * date that occupies several days, where *how long does it last* is a fact
+   * about the event and not a guess about when work will happen.
+   *
+   * **The evidence is a notebook writing it into titles.** Seven of ten matters
+   * on a real events docket said it in their names — *Santa Monica 9-17 → 9-22*,
+   * *Parents in TLV 10-13 → 11-17* — which is the same shape as every other
+   * field this format has gained: a person encoding structure in prose because
+   * there was nowhere to put it (D85, D80).
+   *
+   * **Inclusive, and the last day counts.** *9-18 → 9-20* is a three-day
+   * conference and is still on, on the 20th. What ends it is the day after.
+   *
+   * **An absolute date rather than a duration**, because a person types the end
+   * and the file should say what they typed. The cost is that a recurring event
+   * has two dates to move at once, which `advance` does — it already moves
+   * `start` and `occurrence` together, and this rides with them.
+   *
+   * Null for everything without an extent, which is most matters.
+   */
+  readonly until: DateKey | null
 }
 
 /** A matter nobody has dated: on the list, generating nothing. */
-export const UNSCHEDULED: Schedule = { start: null, every: null, after: null, dates: null }
+export const UNSCHEDULED: Schedule = {
+  start: null, every: null, after: null, dates: null, until: null,
+}
+
+/**
+ * The last day an instance occupies — its end, or its date when it has no
+ * extent.
+ *
+ * **One function, because *when is this over* is asked from four places** — the
+ * horizon's sweep, the status step's completion, finishing, and the reading
+ * form — and each of them answering it locally is how a rule about dates comes
+ * to be true in three places and false in the fourth.
+ *
+ * **A start that outlives its end is a typo, and is read as no extent.** An
+ * event cannot finish before it begins; taking the field at its word would put
+ * a matter permanently in the past, and dropping the line would lose what
+ * somebody typed. It is kept in the file and ignored here.
+ */
+export function endOf(when: Schedule, instance?: DateKey): DateKey | null {
+  const start = instance ?? when.start
+  if (start === null) return null
+  if (when.until === null || when.until <= start) return start
+  return when.until
+}
 
 /**
  * What kind of thing a matter is, as a person thinks of it.
@@ -480,17 +530,31 @@ export const MODES: readonly ModeShape[] = [
  * recurrence means, and a finished recurring matter would be a contradiction
  * the advance clause has to undo on its next pass.
  */
-export function isFinished(matter: Matter, today: DateKey): boolean {
+export function isFinished(matter: Matter): boolean {
   if (shapeOf(matter.mode).repeating) return false
-  const tasks = matter.steps.filter(step => step.kind === 'task')
-  if (tasks.length === 0) return false
-  if (!tasks.every(step => step.done !== null)) return false
-  if (shapeOf(matter.mode).kind !== 'status') return true
-  // The event's own day: its instance date, which is what `start` holds.
-  // **Compared as strings, which is what an ISO date is for** — and the
-  // comparison this file does everywhere else.
-  const day = matter.when.start
-  return day !== null && day <= today
+  if (matter.steps.length === 0) return false
+  return matter.steps.every(step => step.done !== null)
+}
+
+/**
+ * Is this status step's day behind us? (D92, item 3)
+ *
+ * **A status step completes by the calendar, because nobody can tick it.** It
+ * is awareness with no task (H6) — the conference happening, the holiday
+ * arriving — so *done* for one of them can only mean *that day has gone*. Until
+ * this existed, a matter made of status steps could never finish, which meant
+ * an events docket accumulated for ever: every one of ten real events was a
+ * single status step, and not one of them could ever be filed.
+ *
+ * **Strictly past, and the last day counts.** An event is not over while it is
+ * on, and a three-day conference is on, on its third day — so what completes it
+ * is the day AFTER its end. This is what makes the extent load-bearing rather
+ * than decorative: without `until`, *Santa Monica 9-17 → 9-22* would have read
+ * *finished* on the 18th, while somebody was in Santa Monica.
+ */
+export function statusPassed(step: Step, matter: Matter, on: DateKey, today: DateKey): boolean {
+  if (step.kind !== 'status') return false
+  return (endOf(matter.when, on) ?? on) < today
 }
 
 export const shapeOf = (mode: Mode): ModeShape =>
@@ -518,6 +582,8 @@ export interface NewMatter {
   readonly start?: string
   /** How often, for the two repeating ones — as typed. */
   readonly every?: string
+  /** The last day, for an event that lasts more than one (D92). */
+  readonly until?: string
 }
 
 export type Unit = 'd' | 'w' | 'm' | 'y'
@@ -871,8 +937,18 @@ export function readSchedule(when: Schedule, mode?: Mode, today?: DateKey): stri
    * and saying it has would be a small lie the row repeats every day until then.
    */
   const doing = mode !== undefined && shapeOf(mode).kind === 'task'
+  /**
+   * **An extent reads as the range somebody typed** (D92): *2026-09-18 → 2026-
+   * 09-20*, which is what seven matters on a real docket had written into their
+   * own names with that very arrow. The field took the arrow out of the title
+   * and the reading form puts it back in the column, where it belongs.
+   */
+  const spanned = (day: DateKey): string => {
+    const ends = endOf({ ...when, start: day })
+    return ends === null || ends <= day ? day : `${day} → ${ends}`
+  }
   const began = (day: DateKey): string =>
-    !doing ? day
+    !doing ? spanned(day)
       : today !== undefined && day > today ? `starting ${day}`
         : `started ${day}`
 
@@ -911,7 +987,7 @@ export function parseLegacyWhen(text: string): Schedule | null {
   }
   if (DAY.test(said)) {
     const day = real(said)
-    return day === null ? null : { start: day, every: null, after: null, dates: null }
+    return day === null ? null : { start: day, every: null, after: null, dates: null, until: null }
   }
   const every = EVERY.exec(said.toLowerCase())
   if (every !== null) {
@@ -919,7 +995,7 @@ export function parseLegacyWhen(text: string): Schedule | null {
     if (every[3] !== undefined && from === null) return null
     const n = every[1] === undefined ? 1 : Number(every[1])
     if (n === 0) return null
-    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null, dates: null }
+    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null, dates: null, until: null }
   }
   return null
 }
@@ -1042,6 +1118,13 @@ export function parseMatter(block: string): Matter | null {
       // the old word.
       inSteps = true
       if (value !== '') extra.push(line)
+    } else if (key === 'until') {
+      // **A date or nothing**, and the leniency rule for the rest: an
+      // unreadable end is somebody's note and is kept as an unknown key.
+      const said = value.trim()
+      if (said === '') when = { ...when, until: null }
+      else if (DAY.test(said)) when = { ...when, until: said as DateKey }
+      else extra.push(line)
     } else if (key === 'done') {
       // **A date or nothing**, and an unreadable one is kept as an unknown key
       // rather than dropped: `done: soon` is somebody's note to themselves, and
@@ -1133,6 +1216,9 @@ export function matterBlock(matter: Matter, level = MATTER_LEVEL): string {
   // reading the file sees what kind of thing this is before its parameters.
   lines.push(`mode: ${matter.mode}`)
   lines.push(`start: ${matter.when.start ?? NO_DATE}`)
+  // **Immediately after the start it belongs to**, because the pair is one fact
+  // and a reader's eye should not have to hunt for the second half of a date.
+  if (matter.when.until !== null) lines.push(`until: ${matter.when.until}`)
   if (matter.when.every !== null) lines.push(`every: ${spellInterval(matter.when.every)}`)
   // **One line, comma-separated**, because a docket is read by people and eight
   // sessions down eight lines would bury the matter they belong to.
@@ -1389,6 +1475,14 @@ export interface MatterHorizon {
   /** The critical date of the occurrence this belongs to — the row's label. */
   readonly instance: DateKey
   readonly step: string | null
+  /**
+   * The last day this occupies, when it occupies more than one (D92).
+   *
+   * **Only on the step that IS the occasion**, which is the one landing on the
+   * instance date. A run-up two weeks before a conference is a point in time
+   * and so is a note on its second morning; the extent belongs to the event.
+   */
+  readonly until?: DateKey
 }
 
 /**
@@ -1466,8 +1560,21 @@ export function matterHorizon(
       if (here && (step.done !== null || step.made !== null)) continue
       const on = dueOn(step, at, add, zone)
       if (on === null) continue
-      if (!inHorizon(on, window)) continue
-      out.push({ on, text: step.text, kind: step.kind, instance, step: step.id })
+      // **An event that lasts is in the window while any of it is** (D92).
+      // *Santa Monica 9-17 → 9-22* is the answer to *what is going on* on the
+      // 20th, and a sweep that only asked about its first day dropped it the
+      // morning after it began — which is exactly what made people write the
+      // range into the title, where nothing could drop it at all.
+      //
+      // **The extent is the occasion's, not every step's.** Only the step
+      // landing on the instance date carries it; the rest are points.
+      const ends = on === instance ? endOf(matter.when, instance) : null
+      const spans = ends !== null && ends > on
+      if (spans ? ends < window.from || on > window.to : !inHorizon(on, window)) continue
+      out.push({
+        on, text: step.text, kind: step.kind, instance, step: step.id,
+        ...(spans ? { until: ends } : {}),
+      })
     }
   }
   return out

@@ -237,6 +237,9 @@ const tephra = {
     setMode: (docket: DocumentId, matter: string, mode: Mode): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'mode', docket, matter, mode }),
     /** The next instance, or none. No start date is the whole of *inactive*. */
+    /** The last day an event runs — null for one that takes a single day (D92). */
+    setUntil: (docket: DocumentId, matter: string, until: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'until', docket, matter, until }),
     setStart: (docket: DocumentId, matter: string, start: string | null): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'start', docket, matter, start }),
     /** Move a matter to another docket (MH5). Returns its id in the new one. */

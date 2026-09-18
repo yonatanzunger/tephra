@@ -650,6 +650,13 @@ export type DocketCommand =
   | { readonly kind: 'matters'; readonly docket: DocumentId }
   /** This docket's archive, if it has one, and how much is in it (D91). */
   | { readonly kind: 'archive'; readonly docket: DocumentId }
+  /** The last day an event runs, or none — a single-day event (D92). */
+  | {
+      readonly kind: 'until'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly until: string | null
+    }
   /** File a finished matter now rather than waiting for the next pass (D91). */
   | { readonly kind: 'fileMatter'; readonly docket: DocumentId; readonly matter: string }
   | {

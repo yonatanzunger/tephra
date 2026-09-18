@@ -4747,3 +4747,145 @@ byte-for-byte, and it must also **not** be swept by staleness reporting.
 would make its absence from the sidebar wrong rather than restful; or restoring
 a matter proving common enough that *move it back* wants a verb of its own
 rather than the docket-to-docket move it already is.
+
+## D92: An event has an extent, and a status step completes when its days pass
+
+**Date:** 2026-09-18
+**Status:** decided and **built**
+**Amends:** D76's withdrawal of ranges — *partially, and the part that returns
+is not the part that went*; D91's finishing rule, which no longer needs a
+special case for events. **Extends:** D68, D72, D75, D77, H6 (awareness with no
+task), D42.
+**Source:** reported from use, with the notebook as the evidence — *many events
+span multiple days, and it would be really useful to capture that in the event
+structure rather than just in the event title* — and then *we should make sure
+that status steps become complete when their dates pass, so that event-type
+matters end up becoming complete and get archived just like task-type matters.*
+
+**Decision.** Three parts, and the third is what makes the first two worth
+having.
+
+**1. `until:` on a matter is the last day an instance occupies.** Inclusive: a
+three-day conference is still on, on its third day. `endOf(when, instance)`
+answers *when is this over* in one place, because four callers ask — the
+horizon's sweep, the status step's completion, finishing, and the reading form —
+and a rule about dates that is computed in four places is a rule that will be
+true in three of them.
+
+**2. A status step completes when its days are behind us.** It is awareness with
+no task (H6), so nobody can tick it, and *done* for one can only mean *that day
+has gone*. Strictly past: an event is not over while it is on.
+
+**3. Therefore an event finishes and is filed like anything else**, and D91's
+`isFinished` loses its special case — *every step done* now covers both kinds,
+because the status step's completion **is** the date having passed. That is the
+deletion that justifies the other two parts: one rule where there were two.
+
+**Why the withdrawn range is not this range.** D76 took out
+`2026-11-12..2026-11-20` and was right to: it was a fuzzy *schedule* offered for
+"a major project spread over months", and the answer to that case is still a
+matter with steps. This is an event's **extent** — a conference, a trip, a
+festival, *parents in TLV for five weeks* — where *how long does it last* is a
+fact about the thing rather than a guess about when work will happen. The two
+share a shape and nothing else, which is exactly the distinction D80 had to draw
+when the explicit instance list came back.
+
+**The evidence was the notebook writing the field by hand.** Seven of ten
+matters on the real events docket had the range in their own titles, with an
+arrow: *Halcyon Futures Conference 9-18 → 9-20*, *Santa Monica 9-17 → 9-22*,
+*Parents in TLV 10-13 → 11-17*. That is the same tell as D85's fields and D80's
+dates — a person encoding structure in prose because there was nowhere to put
+it — and the reading form deliberately gives them the arrow back.
+
+**An absolute date rather than a duration**, because a person types the end and
+the file should say what they typed. The cost is that a recurring event has two
+dates to keep in step, which `advance` handles where it already moves `start`
+and `occurrence` together. **An end on or before the start is refused** by the
+verb and ignored by `endOf`: the grammar keeps an unreadable line as somebody's
+own text, and a verb with a person in front of it should not store a
+contradiction for a reader to disarm later.
+
+**What the horizon does with it.** A spanning row is in the window while any of
+it is, so a trip is still the answer to *what is going on* on its third day —
+which is precisely what a sweep on the first day got wrong, and why the range
+was in the titles where nothing could drop it. It is **not** marked past until
+the end has gone.
+
+**Prominence, and two corrections made in the same session — which is the
+useful part of this record.** The requirement was stated plainly: *the range of
+dates is a very important fact about the event, so it needs to be visually
+prominent.*
+
+- **First cut: a muted note after the words** (*until 20 Sep*), on the argument
+  that the date column was one date wide and widening it would cost every row.
+  Wrong: that is the treatment for a secondary fact, and this is not one.
+- **Second cut: the range in the date column, set heavier than a single date.**
+  Also wrong, and the objection named it exactly — **these are equally
+  important; it is not that one is more important than the other.** A rule that
+  looked like it was about ranges was really about nothing: three days is not
+  more of an event than one day.
+- **Third: the range in the column, set like every other date.** *The same
+  weight that we use for tasks feels more visually balanced.*
+
+**What the prominence actually was: room.** Both ends, in the column, in one
+slot wide enough to hold them — so the column stays aligned and nothing is
+truncated or exiled to a footnote. The lesson is worth keeping past this
+feature: *prominent* was a claim about what is **said**, and twice got built as
+a claim about how loudly.
+
+**What would reopen this.** A recurring multi-day event whose extent changes per
+instance — an eight-day festival one year and a six-day one the next — which
+this cannot express and which a duration could not either. Also: a real want for
+*seasons*, which stays withdrawn.
+
+## D93: A generated task gets a due date only where something is a clock
+
+**Date:** 2026-09-18
+**Status:** decided and **built**
+**Amends:** MH3a's generation rule and its recorded reasoning, which is reversed
+here. **Extends:** T9 (urgency without a date), T11 (the walk is what surfaces
+work), D85 (a field rather than words in the sentence).
+**Source:** reported from use — *if a TODO item is generated, it shouldn't
+automatically receive a due date; those should be reserved for when there is a
+clock on the step.*
+
+**Decision.** A generated item carries a due date in exactly two cases:
+
+- **An explicit `DUE 2026-09-30` written on the step**, lifted out of the words
+  into the field the way the entry grammar lifts it out of a typed line.
+- **A run-up** — a step whose timing is *N days before* the occasion — where the
+  **occasion's** date is the deadline, not the step's own.
+
+Everything else gets none: a step at `+0d`, a step measured forward, a step
+waiting on another step. A person who wants a date sets it on the item.
+
+**Why the old rule was wrong in the commonest case.** It used the step's own
+computed day, on the argument that *the schedule already knows one*. But `+0d`
+is the commonest step there is — the first thing to do when work starts — and
+its computed day is **the day it generates**, so nearly every generated task was
+born already due. A list where everything is due today ranks nothing, which is
+the failure T9 exists to prevent.
+
+**And the run-up gained a date rather than losing one.** *Two weeks before the
+talk* names a real deadline and it is the talk: you have until the 17th, not
+until the day you meant to start. The old rule made a run-up overdue from the
+morning it appeared, which is the same noise seen from the other side.
+
+**What this costs, stated plainly.** A recurring task no longer carries its
+rhythm onto the list — *change the water filter every 120 days* arrives undated,
+and the old decision's argument for a date (that it *"said nothing about the
+rhythm it belongs to"*) is real and is being overridden. The instance date is on
+the docket, one click away, and the daily walk is what actually surfaces this
+work. If the loss bites, the cheap fix is a third clock: a recurring task's
+instance date, which would be one clause here.
+
+**Existing items keep their dates.** The pass may write `for` and may take off a
+tag it replaced; it does not touch a due date it did not just set, because a
+date the person typed and a date the old pass invented are indistinguishable
+once written, and clearing somebody's deadline is the worse error.
+
+**A consequence in the horizon, and it is the honest one.** An undated generated
+item shows in neither half: the step is no longer the docket's business, and the
+item has no date for the list's half to sweep. The horizon is *what is coming*,
+and work that has reached the list is here rather than coming. The disjointness
+rule is untouched — what must never happen is one commitment counted twice.

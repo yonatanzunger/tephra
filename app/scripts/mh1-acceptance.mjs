@@ -669,6 +669,36 @@ check(
 )
 
 // ── 8. legibility ───────────────────────────────────────────────────────────
+// ── an event that lasts, and an echoing step (D92) ──────────────────────────
+check(
+  // Seven of ten matters on a real events docket had the range in their titles.
+  'AN EVENT THAT LASTS reads as the range somebody typed',
+  typeof r.spanReads === 'string' && / → /.test(r.spanReads),
+  `the column reads: ${JSON.stringify(r.spanReads)}`,
+)
+check(
+  // **The room is the prominence** (D92, corrected twice from use). A first cut
+  // set ranges heavier, which said a three-day conference outranks a bar
+  // mitzvah — *these are equally important* — and then that even one weight was
+  // too much beside the tasks. So the claim is: the whole range is legible in
+  // the slot, and it is set exactly like every other date on the docket.
+  'and it fits its column, set like every other date rather than shouting',
+  r.spanFits?.clipped === false && r.spanFits?.weight === r.plainWeight,
+  `span ${JSON.stringify(r.spanFits)} vs plain weight ${r.plainWeight}`,
+)
+check(
+  // Reported from use: renaming the matter broke the match with its one step,
+  // and what told you was the row growing a second line.
+  'RENAMING A MATTER TAKES ITS ECHO WITH IT',
+  Array.isArray(r.afterRename) && r.afterRename.length === 1 &&
+    r.afterRename[0] === 'Lisbon, with the family|Lisbon, with the family',
+  JSON.stringify(r.afterRename),
+)
+check(
+  'and the row still draws as one line',
+  r.rowLines === true,
+)
+
 // ── finishing, and the archive (D91) ────────────────────────────────────────
 check(
   // Reported from use: *when a one-off has all its steps completed, that matter

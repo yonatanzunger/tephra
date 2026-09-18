@@ -579,6 +579,9 @@ export function DocketSurface({
                 onSetAfter={step => {
                   if (matter.id !== null) void act(window.tephra.docket.setAfter(id, matter.id, step))
                 }}
+                onSetUntil={until => {
+                  if (matter.id !== null) void act(window.tephra.docket.setUntil(id, matter.id, until))
+                }}
                 onSetMode={mode => {
                   if (matter.id !== null) void act(window.tephra.docket.setMode(id, matter.id, mode))
                 }}
@@ -823,6 +826,7 @@ function Row({
   onStepWhen,
   onStepKind,
   onSetAfter,
+  onSetUntil,
   onSetMode,
   onSetDates,
   today,
@@ -866,6 +870,7 @@ function Row({
   onStepKind: (step: string, kind: StepKind) => void
   /** Which step's completion starts the next instance — null for the calendar. */
   onSetAfter: (step: string | null) => void
+  onSetUntil: (until: string | null) => void
   onSetMode: (mode: Mode) => void
   /** Whether the steps are showing, and how to say otherwise. */
   open: boolean
@@ -1081,6 +1086,7 @@ function Row({
           today={today}
           onMode={onSetMode}
           onStart={v => onCommit('when', v ?? '')}
+          onUntil={onSetUntil}
           onEvery={v => onCommit('every', v ?? '')}
           onAfter={onSetAfter}
           onDates={onSetDates}
@@ -1469,6 +1475,7 @@ function SchedulePanel({
   today,
   onMode,
   onStart,
+  onUntil,
   onEvery,
   onAfter,
   onDates,
@@ -1478,6 +1485,7 @@ function SchedulePanel({
   today: DateKey | null
   onMode: (mode: Mode) => void
   onStart: (start: string | null) => void
+  onUntil: (until: string | null) => void
   onEvery: (every: string | null) => void
   onAfter: (after: string | null) => void
   onDates: (dates: readonly DateKey[]) => void
@@ -1606,6 +1614,29 @@ function SchedulePanel({
           </label>
         )
       })()}
+
+      {/* **And how long it lasts, for the things that last** (D92).
+          Only for events, and only once there is a date for it to end after: a
+          task's *started* is not the beginning of a span, and an end with no
+          beginning is a field that cannot mean anything.
+
+          **Empty is the common case and reads as one day.** Most events are a
+          day; the range is what a conference, a trip or a festival needs, and
+          seven matters on a real docket were writing it into their titles for
+          want of this field. */}
+      {!doing && when.start !== null && (
+        <label className="sched-row">
+          <span className="sched-label">Until</span>
+          <input
+            type="date"
+            className="sched-date"
+            value={when.until ?? ''}
+            title="The last day it runs — leave empty for a single day"
+            min={when.start}
+            onChange={event => onUntil(event.target.value === '' ? null : event.target.value)}
+          />
+        </label>
+      )}
 
       {/* **How it comes round**, which is the other question entirely — and a
           list is as good an answer as a rule for either kind (H7). */}

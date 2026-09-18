@@ -374,6 +374,29 @@ export const EMPTY: TodoItem = {
  * know what day it is); an unresolved `DUE FRIDAY` reads as no date and stays in
  * the sentence, where the next write will resolve it.
  */
+/**
+ * Lift an explicit `DUE 2026-09-30` out of a line, and hand back both halves.
+ *
+ * **The narrow half of `parseEntry`, for a caller that is not reading an entry**
+ * (D93). Generation composes a record from a docket step, so it must not run
+ * the whole entry grammar over that step's words — tags and an owner in a
+ * step's text belong to the step and are the docket's business, and lifting
+ * them would quietly move somebody's words into fields on a different document.
+ * What it does need is the one marker that means *there is a clock on this*.
+ *
+ * One regex, shared, because a second copy of `DUE` is how the two would come
+ * to disagree about what a due date looks like.
+ */
+export function readDue(text: string): { due: DateKey | null; text: string } {
+  const found = DUE.exec(text)
+  if (found === null) return { due: null, text }
+  return {
+    due: found[1] as DateKey,
+    text: (text.slice(0, found.index) + text.slice(found.index + found[0].length))
+      .replace(/\s{2,}/g, ' ').trim(),
+  }
+}
+
 export function parseEntry(typed: string): TodoItem {
   let text = typed.replace(/\s+$/, '')
 

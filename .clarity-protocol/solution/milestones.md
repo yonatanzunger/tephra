@@ -1,6 +1,11 @@
 # Milestones — what shipped, and what we might build next
 
-**Tephra 1.0 works, and is in daily use.** Four weeks from the first commit
+**Tephra 1.0 works, and is in daily use, and use is now what drives it.** Since
+the projects list replaced the plan, every change has come from living on it —
+D91 to D93 are all reports from the notebook rather than items from a roadmap,
+and two of them were bugs that only a real docket could have found.
+
+Four weeks from the first commit
 (2026-08-12) to v1 complete (2026-09-10), and a week after that on dockets, the
 horizon, the service split and the editing surface. It has been the notebook
 this design was written in since well before it was finished, which is where
@@ -48,6 +53,7 @@ waiting to learn.**
 | **MT8 · D85** | TODO items become structured records with a field-based format; `for:` replaces the matter tag | 15 Sep |
 | **D86–D90** | One measure, with the code face's size solved so eighty columns fit it; smart quotes; the stale-edit guard; elided blocks; drafts; the Tasks row in the sidebar | 15–16 Sep |
 | **D91, and two bugs** | A one-off matter finishes and is filed in an archive beside its docket; reconciliation on demand; **adoption**, without which a docket written from outside Tephra generated nothing at all | 16 Sep |
+| **D92 · D93** | An event has an **extent** (`until:`) and stays on the horizon until it ends; a status step completes when its days pass, which is what lets an event finish and be filed; a matter's lone echoing step follows its rename; and a generated task gets a due date only where something is a clock | 18 Sep |
 
 The reasoning behind each — what it taught, what it moved, which of its
 predictions were wrong — is `parts/build-history.md`.

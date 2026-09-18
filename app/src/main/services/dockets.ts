@@ -273,6 +273,16 @@ export class Dockets {
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setDone(matter, done)))
     await this.#durable.wrote(id)
   }
+  /** The last day an event runs, or none — a single-day event (D92). */
+  async setUntil(id: DocumentId, matter: string, until: string | null): Promise<void> {
+    const day = until === null || until.trim() === '' ? null : asDateKey(until.trim())
+    if (until !== null && until.trim() !== '' && day === null) {
+      throw new Error(`${until} is not a date`)
+    }
+    await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as DocketDocument).setUntil(matter, day)))
+    await this.#durable.wrote(id)
+  }
   async setLink(id: DocumentId, matter: string, link: string | null): Promise<void> {
     await this.#mutate(async () => this.#store.corpus.use(id, doc => (doc as DocketDocument).setLink(matter, link)))
     await this.#durable.wrote(id)
@@ -584,5 +594,6 @@ function scheduleFor(shape: NewMatter | undefined): Schedule {
     // Set once the first step exists, since it names one (see `add`).
     after: null,
     dates: null,
+    until: given(shape.until) === null ? null : asDateKey(given(shape.until) as string),
   }
 }

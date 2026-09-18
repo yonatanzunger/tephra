@@ -316,10 +316,29 @@ inferred, which is what keeps merges safe.
 ## The rules that govern behaviour
 
 **A one-off finishes, and its docket has an archive** (D91, added 2026-09-16
-from use). Finishing is read from the steps rather than declared: a `task` whose
-task steps are all done is done, an `event` also has to have happened, and
-anything recurring never finishes because it advances. The stamp is `done:` on
-the matter, written by the pass and taken off by it when a step is reopened.
+from use; simplified by D92 two days later). Finishing is read from the steps
+rather than declared, and the rule is now one line: **every step done**, with at
+least one step. Anything recurring never finishes, because it advances. The
+stamp is `done:` on the matter, written by the pass and taken off by it when a
+step is reopened.
+
+**An event's days are a field, and its status step completes when they pass**
+(D92). `until:` is the inclusive last day of an instance; a status step is
+awareness with no task, so nobody can tick it and *done* for one can only mean
+*those days have gone*. That is what lets an event finish at all — before it,
+every one of ten real events was a single status step that no gesture in the app
+could complete — and it is why D91's rule no longer needs to ask separately
+whether an event has happened.
+
+**A spanning row is on the horizon while any of it is**, and is not past until
+its end has gone: a trip is still the answer to *what is going on* on its third
+day. The range is drawn in the date column in the date's own ink, because for an
+event the date is the whole of what the row says — one day or six.
+
+**A generated task gets a due date only where something is a clock** (D93): an
+explicit `DUE` on the step, or a run-up, whose deadline is the occasion it runs
+up to. Otherwise none — a `+0d` step's computed day is the day it generates, so
+the old rule made every task arrive already due.
 
 The finished matter stays where it is for the rest of the day and the next pass
 moves it to `docket-archive/<same name>.docket.md` — an ordinary docket, so the

@@ -159,7 +159,11 @@ in `goal/horizon.md` and `solution/parts/horizon.md`; scheduled in
 | The horizon: everything bearing down, whatever its source | H8, D74, D78 | ✓ v1 (MH2, MH4) — its own object, implemented by dockets and the task list; **the lower half of the task view**, not a place of its own |
 | Awareness with no task | H6 | ✓ v1 (MH2) — a **status** step, which is a horizon row and generates nothing, ever |
 | The day's selection | H9 | ✓ v1 (MH4) — a per-day mark, not a status and not a tag, so it cannot travel |
-| A one-off matter finishes when its steps do | D91 | ✓ v1 — `done:` written by the pass from the steps, and cleared by it when one is reopened |
+| A one-off matter finishes when its steps do | D91, D92 | ✓ v1 — `done:` written by the pass from the steps, and cleared by it when one is reopened |
+| An event has an extent, not just a date | D92 | ✓ v1 — `until:`, inclusive; on the horizon while any of it is, and prominent in the date column |
+| A status step completes when its days pass | D92, H6 | ✓ v1 — nobody can tick awareness, so the calendar does; this is what lets an event finish |
+| A matter's lone echoing step follows its rename | D92 | ✓ v1 — one step, text equal to the old name: an echo, so it follows |
+| A generated task's due date | D93 | ✓ v1 — only an explicit `DUE` on the step, or a run-up's occasion; otherwise none |
 | A docket has an archive beside it | D91 | ✓ v1 — `docket-archive/<name>.docket.md`, same grammar; filed by the next day's pass, or by hand from the row |
 | Reconciliation on demand | D77, D91 | ✓ v1 — *Window ▸ Bring the List Up to Date*, for a docket Tephra was not the one writing |
 | Bulk acts on the list | MH4 | ✓ v1 — ⌘-click to select, shift to extend; one write and one undo step |
