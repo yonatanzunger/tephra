@@ -4879,10 +4879,27 @@ the docket, one click away, and the daily walk is what actually surfaces this
 work. If the loss bites, the cheap fix is a third clock: a recurring task's
 instance date, which would be one clause here.
 
-**Existing items keep their dates.** The pass may write `for` and may take off a
-tag it replaced; it does not touch a due date it did not just set, because a
-date the person typed and a date the old pass invented are indistinguishable
-once written, and clearing somebody's deadline is the worse error.
+**Existing items keep their dates, and the pass will not sweep them.** It may
+write `for` and take off a tag it replaced; it does not touch a due date it did
+not just set, because a date the person typed and a date the old rule invented
+are indistinguishable once written, and clearing somebody's deadline is the
+worse error.
+
+**So the sweep is a one-off with a dry run** —
+`scripts/clear-invented-due.ts`, disposable, in the shape `migrate-items.ts`
+established: the lock honoured, nothing written without `--write`, a version
+recorded before the first byte moves. It recomputes what D93 says each generated
+item's date should be and corrects the disagreements, which is not only
+clearing: **a run-up's item gains the right date**, the occasion's, where the
+old rule had given it its own day.
+
+It also reports the one thing it cannot know. A generated item whose date
+differs from what the old rule would have computed may be a date somebody typed
+afterwards, so those are marked `!` rather than silently corrected — and on the
+notebook this was written for, all seventeen matched the old arithmetic exactly,
+which is what made applying it a decision rather than a leap. Run on
+2026-09-18: fifteen dates cleared, and two run-ups moved from *the day they
+appeared* to **the filing deadline they are actually for**.
 
 **A consequence in the horizon, and it is the honest one.** An undated generated
 item shows in neither half: the step is no longer the docket's business, and the
