@@ -577,6 +577,82 @@ export class AgendaService implements Serves {
         .filter(one => isLive(one.status))
         .flatMap(one => (one.id === null ? [] : [one.id])),
     )
+    /**
+     * Does the item this step made still EXIST anywhere? (D94)
+     *
+     * **A decision is honoured while its record exists**, and this is the
+     * distinction the withdrawal rule was missing. An item that is *done*,
+     * *dropped* or *backlogged* is a recorded decision and the step must not
+     * ask again — that is D79's exemption and it stands. An item that has been
+     * **deleted from the file** is not a decision; it is the absence of one,
+     * and the step was left pointing at nothing, asking nobody, for ever.
+     *
+     * Reported from use: a duplicated day was cleaned up by deleting the rows
+     * by hand, and the work never came back — *something isn't propagating from
+     * the docket to the TODO list*. Nothing was; every step still named the
+     * item it had made.
+     *
+     * **Corpus-wide, because a resolved item lives on the day it was resolved**
+     * and is absent from today's list as surely as a deleted one. Today's live
+     * set cannot tell them apart; `itemIds` can, and it sweeps before it
+     * answers rather than trusting a cache.
+     *
+     * **At most once per run, and only when something asks.** The sweep is one
+     * `stat` per file; a pass that has nothing outstanding never pays for it.
+     * If that ever bites, the cheaper shape is an id-keyed payload in the index
+     * rather than a set built from every scanned file.
+     */
+    /**
+     * **Today's list first, and every id on it whatever its status** — which is
+     * the half that has to come before the index. The index sweeps *files*, and
+     * a status written a moment ago is in the document and the journal before it
+     * is on disk (D7: the index is a disposable cache of a scan, and it is
+     * behind by construction). Asking it about an item dropped seconds earlier
+     * answered *gone*, and the pass offered the work again — caught by the test
+     * for D79's exemption, which is exactly the rule it would have broken.
+     */
+    const onToday = new Set(
+      (await this.#todo.items(list, today)).flatMap(one => (one.id === null ? [] : [one.id])),
+    )
+    /**
+     * **And the question is what the item IS now, not whether its id appears
+     * somewhere.** The first cut asked the latter and did nothing on the
+     * notebook that reported the bug: a carry copies an item into every day it
+     * survives, so deleting it from today leaves a week of live copies behind
+     * and the id is still *findable*. What that history says is where the item
+     * stood on those days, which is not a claim about now.
+     *
+     * `itemsNow` answers properly — the newest instance, which is what the item
+     * is — so two states mean *nobody is being asked this any more*:
+     *
+     * - **no entry at all**: every trace deleted.
+     * - **newest instance still LIVE and not on today's list**: it was taken
+     *   off today without being resolved. The carry brings every live item
+     *   forward, so this cannot happen on its own — somebody removed the row.
+     *
+     * A newest instance that is *done*, *dropped* or *backlogged* is a recorded
+     * decision, wherever it sits, and D79's exemption holds.
+     *
+     * **This clause depends on today being materialised**, which it is: the
+     * pass opened with `list()`, and the carry is part of that. Said out loud
+     * because if it were ever not true, every live item would look absent from
+     * today at once.
+     */
+    let now: ReadonlyMap<string, { status: TodoStatus }> | null = null
+    const stillThere = async (item: string): Promise<boolean> => {
+      if (onToday.has(item)) return true
+      // **Biased towards leaving the step alone**, because the two ways to be
+      // wrong are not equally bad. Freeing a step whose item is really still
+      // there offers the work twice — a duplicate, which is what this whole
+      // reconciler exists to prevent. Declining to free one leaves it stuck
+      // until the next sweep, which repairs itself. So while the index is still
+      // building, nothing is freed at all.
+      if (this.#store.index.status().building) return true
+      now ??= await this.#store.index.itemsNow()
+      const found = now.get(item)
+      return found !== undefined && !isLive(found.status)
+    }
+
     for (const docket of await this.#store.corpus.list('docket')) {
       let touched = false
       // **An archive is adopted and then left alone** (D91). It is a docket by
@@ -600,7 +676,7 @@ export class AgendaService implements Serves {
       // **What the docket is CALLED**, for the tag every task it generates
       // carries. The same rule `dockets()` uses: the person's words, falling
       // back to the slug of them, which is the only other name a document has.
-      const domain = (await this.#store.corpus.use(docket, doc => doc.titleOf(ONLY_SEGMENT)))
+      const domain = (await this.#store.corpus.use(docket, doc => doc.titleOf(ONLY_SEGMENT), { mode: 'read' }))
         ?? nameOf(docket as string)
       // **Which section each matter is under**, for the context a generated item
       // carries. Read once per docket rather than per step: a section name is
@@ -615,6 +691,16 @@ export class AgendaService implements Serves {
         if (matter === undefined) continue
         for (const step of matter.steps) {
           if (step.id === null || step.kind !== 'task') continue
+          // **A step pointing at an item that no longer exists is freed** (D94),
+          // before anything below it reads `made`: the next round then treats
+          // the step as it would any other and generates if it is due. Clearing
+          // rather than generating here keeps this a reconciler — one fact made
+          // true per clause, and the rounds do the rest.
+          if (step.made !== null && !(await stillThere(step.made))) {
+            await this.#setStepMade(docket, id, step.id, null)
+            touched = true
+            continue
+          }
           const due = dueOn(step, matter, addDays, this.#day.zone)
           const wanted = step.done === null && due !== null && compareDateKeys(due, today) <= 0
           if (wanted && step.made === null) {

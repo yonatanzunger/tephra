@@ -4906,3 +4906,60 @@ item shows in neither half: the step is no longer the docket's business, and the
 item has no date for the list's half to sweep. The horizon is *what is coming*,
 and work that has reached the list is here rather than coming. The disjointness
 rule is untouched — what must never happen is one commitment counted twice.
+
+## D94: A decision is honoured while its record exists
+
+**Date:** 2026-09-18
+**Status:** decided and **built**
+**Amends:** D79's exemption list, which read *finished, dropped, backlogged, or
+deleted outright — all four mean stop waiting*. The fourth comes out.
+**Extends:** D77 (the pass makes one fact true per clause), D7 (the index is a
+disposable cache of a scan, and is behind by construction).
+**Source:** reported from use — *something isn't propagating from the docket to
+the TODO list* — after a duplicated day was cleaned up by deleting its rows.
+
+**Decision.** A step that has generated an item asks again when that item is no
+longer being asked of anybody, which is two states and not four:
+
+- **No entry anywhere**: every trace of it deleted.
+- **Its newest instance still live, and not on today's list**: taken off today
+  without being resolved. The carry brings every live item forward, so this
+  cannot happen on its own — somebody removed the row.
+
+An item that is **done, dropped or backlogged** is a recorded decision and is
+still honoured, wherever it sits. That was D79's point and it stands.
+
+**Why deletion is not a decision.** The other three are *written down*: the
+glyph in the file says what somebody decided, and a pass that re-offered the
+work would be overruling them. Deleting the row deletes the record — and what
+was left behind was a step pointing at nothing, asking nobody, for ever, with
+nothing in any surface to show it. A person cleaning up a file has not declined
+anything; they have removed the evidence that there was ever anything to
+decline. **The app's way to decline is the glyph, not the delete key.**
+
+**The question had to be asked properly, and the first version was not.** The
+first cut asked *does this id appear anywhere in the corpus* — and changed
+nothing on the notebook that reported the bug, while passing its own test. A
+carry copies an item into **every day it survives**, so a row deleted from today
+leaves a week of live copies behind and the id is still findable. What that
+history says is where the item stood on those days, which is not a claim about
+now. `CorpusIndex.itemsNow` answers the right question: the newest instance,
+which is what the item *is*.
+
+**And the order of the two checks is load-bearing.** Today's list is asked
+first, from the document, and every id on it counts whatever its status; the
+index is asked second. The index sweeps *files*, so a status written a moment
+ago is in the document and the journal before it is on disk — asking the index
+about an item dropped seconds earlier answered *gone*, and the pass offered the
+work again. That was caught by the test for D79's exemption, which is the rule
+it would have broken.
+
+**Biased towards leaving the step alone**, because the two ways to be wrong are
+not equal: freeing a step whose item is really there offers the work twice,
+which is the failure this reconciler exists to prevent, while declining to free
+one leaves it stuck until the next sweep and repairs itself. So nothing is freed
+at all while the index is still building.
+
+**What would reopen this.** A person who deletes generated rows *meaning* to
+decline them and is annoyed to see them return — for whom the answer is that
+`[-]` is how you decline, and the row is how the app knows you did.

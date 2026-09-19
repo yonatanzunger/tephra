@@ -164,6 +164,7 @@ in `goal/horizon.md` and `solution/parts/horizon.md`; scheduled in
 | A status step completes when its days pass | D92, H6 | ✓ v1 — nobody can tick awareness, so the calendar does; this is what lets an event finish |
 | A matter's lone echoing step follows its rename | D92 | ✓ v1 — one step, text equal to the old name: an echo, so it follows |
 | A generated task's due date | D93 | ✓ v1 — only an explicit `DUE` on the step, or a run-up's occasion; otherwise none |
+| A deleted generated row comes back | D94 | ✓ v1 — a decision is honoured while its record exists; done, dropped and backlogged still stand |
 | A docket has an archive beside it | D91 | ✓ v1 — `docket-archive/<name>.docket.md`, same grammar; filed by the next day's pass, or by hand from the row |
 | Reconciliation on demand | D77, D91 | ✓ v1 — *Window ▸ Bring the List Up to Date*, for a docket Tephra was not the one writing |
 | Bulk acts on the list | MH4 | ✓ v1 — ⌘-click to select, shift to extend; one write and one undo step |

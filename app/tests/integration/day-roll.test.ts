@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { NotebookService } from '../../src/main/services/notebook-service.ts'
 import { msUntilNextDay, dateKeyAt } from '../../src/shared/dates.ts'
+import type { DocumentId } from '../../src/shared/document-api.ts'
 
 /** A clock the test moves by hand, so no test waits for a real midnight. */
 function fixture(t: TestContext, start: Date) {
@@ -163,5 +164,54 @@ test('THE SEED LANDS BEFORE A WRITE PICKS A DAY', async t => {
   assert.ok(
     items.some(one => one.id === made),
     `filed under a day nothing reads back: read ${String(today)}, list holds ${JSON.stringify(days)}`,
+  )
+})
+
+test('THE BUG: two windows opening at once doubled the whole day', async t => {
+  // **Reported from a real notebook** (note 69). A day file arrived holding
+  // forty-two items where the previous day had twenty-one — every item twice,
+  // *with the same id on both copies*, which is worse than a duplicate row
+  // since every verb addresses an item by id and would find whichever came
+  // first. Items with no docket in sight were doubled too, so it was never
+  // generation: it was the **carry**, which materialises today from yesterday.
+  //
+  // The carry guards itself — *does this day already exist?* — and is idempotent
+  // when it runs alone. `Tasks.today()` did not take the store's mutation lock,
+  // though, and **every other write in that service does**: two callers asking
+  // what today is, with the day not yet materialised, both answered *it does
+  // not exist* and both wrote it. Two windows on startup is exactly two such
+  // callers, which is why a single-window launch never showed it.
+  const root = await mkdtemp(join(tmpdir(), 'tephra-carry-race-'))
+  await mkdir(join(root, 'tasks.todo', '2026', '03'), { recursive: true })
+  await writeFile(
+    join(root, 'tasks.todo', '2026', '03', '2026-03-09.md'),
+    '---\ntephra: 1\ndate: 2026-03-09\nkind: todo\n---\n'
+    + '- [ ] Ring the dentist\n  <!--tephra:item aaaa1111 1757462400 1757462400-->\n'
+    + '- [ ] Pick up the parcel\n  <!--tephra:item bbbb2222 1757462400 1757462400-->\n',
+  )
+  const nb = await Notebook.open({ root, lock: false, watch: false })
+  const svc = new NotebookService(nb, {
+    history: false,
+    now: () => new Date('2026-03-10T09:00:00Z'),
+    dayCheckMs: 24 * 60 * 60_000,
+  })
+  t.after(async () => {
+    await svc.stop()
+    await nb.close()
+  })
+  // **The two callers are not the same method**, which is why racing `today`
+  // against itself proves nothing: at a roll the surface asks `today` and the
+  // pass asks `list`, and *both* of them carry. Neither took the lock.
+  const [list, a] = await Promise.all([
+    svc.todo.list(),
+    svc.todo.today('tasks.todo' as DocumentId),
+  ])
+  assert.equal(a, await svc.todo.today(list))
+  const items = await svc.todo.items(list, a)
+  assert.deepEqual(items.map(one => one.text), ['Ring the dentist', 'Pick up the parcel'])
+  assert.deepEqual(
+    items.flatMap(one => (one.id === null ? [] : [one.id])),
+    ['aaaa1111', 'bbbb2222'],
+    'carried once, keeping their ids — and no id appearing twice',
   )
 })

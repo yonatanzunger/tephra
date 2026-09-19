@@ -1769,3 +1769,68 @@ nothing about *having two dates* makes something matter more.
 
 > Related: note 50's *unstyled inferred from a font size*, and note 59's three
 > kinds of marker — both are the same error, a rule keyed to a proxy.
+
+## 69. Two doors, one verb, and a day written twice
+
+**2026-09-18.** A task list woke up holding **forty-two items where the day
+before had twenty-one** — every item twice, *sharing one id with its copy*,
+which is worse than a duplicate row because every verb addresses an item by id
+and would find whichever came first. The two halves were concatenated, not
+interleaved: the whole body written, then written again.
+
+**What the artifact ruled out before any code was read.** Items with no docket
+anywhere were doubled too — *Pick up Rx*, *Review Melissa's proposal* — so it
+was never generation. Only one thing writes the whole day at once: the **carry**,
+which materialises today from yesterday.
+
+The carry guards itself — *does this day exist yet?* — and is idempotent alone.
+`Tasks.list()` and `Tasks.today()` both carry, and both were **the only two
+writes in that service that did not take the store's mutation queue**. A
+read-then-write is a race unless something serialises the pair. At a day
+boundary the surface asks `today` and the pass asks `list`; both answered *not
+yet*.
+
+> **Racing a verb against itself proved nothing.** My first reproduction called
+> `today()` twice concurrently and passed — so I nearly concluded the race was
+> elsewhere. The two callers in the wild were *different methods*, and reaching
+> for the pair that actually runs at a roll reproduced it on the first try, with
+> the same concatenated shape.
+
+**The guard, because the invariant was kept by memory at one door out of many**
+(note 61's shape, and its answer): a static check asks whether a `corpus.use`
+callback mutates and, if it does, whether the method takes the lock. It found
+**two more unlocked writes** — a rename's title write and the import — and I
+confirmed it fails when the original bug is put back, because a check that
+cannot fail is not a check.
+
+## 70. The id was findable; the item was gone
+
+**2026-09-18, an hour later.** The same cleanup — deleting the duplicated rows
+by hand — left every generated step pointing at an item that no longer existed.
+Generation skips a step that has already generated; withdrawal only fires for a
+step that is no longer due. So the work was owed, unasked, and invisible.
+
+**My first fix asked the wrong question and passed its own test.** *Does this id
+exist anywhere in the corpus* — which is true for a deleted row, because **a
+carry copies an item into every day it survives**, so a week of live copies sits
+behind it. The test I wrote for the rule was green; the real notebook changed by
+nothing at all. Running it against a copy of the actual data is what said so.
+
+> **An item's history is not a claim about its present.** The newest instance is
+> what the item *is* — the same rule `tephra:todo/<id>` resolves by — and the
+> question is what it is now, not whether its name has ever appeared.
+
+**And then the order of two lookups mattered.** Asking the index first answered
+*gone* for an item dropped seconds earlier: the index sweeps files, and a status
+written a moment ago is in the document and the journal before it is on disk
+(D7). The document's own view of today has to be asked first, and every id on it
+counts whatever its status. The test for D79's exemption caught this — the rule
+it would have broken was the one that test exists for.
+
+> **Where two sources disagree, ask which one is behind by construction.** The
+> index is a cache of a scan and says so in its own comments; I read it as an
+> oracle anyway, because it was the convenient shape.
+
+> Related: note 65, where the fastest instrument was the artifact rather than
+> the code — twice now, and this time the artifact was the shape of the
+> duplication, which said *carry* before any code was opened.

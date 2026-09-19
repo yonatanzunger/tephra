@@ -3461,3 +3461,70 @@ test('a step waiting on another step has no clock, so it has no due date', async
     [null],
   )
 })
+
+// ── a deleted item is not a decision (D94) ───────────────────
+
+test('THE BUG: deleting a generated row left its step asking nobody, for ever', async t => {
+  // **Reported from use.** A duplicated day was cleaned up by deleting the rows
+  // by hand; reconciling afterwards added one task where several were owed —
+  // *something isn't propagating from the docket to the TODO list*. Nothing
+  // was: every step still recorded the item it had made, so generation skipped
+  // it, and withdrawal only fires for a step that is no longer due.
+  const { service } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const job = await service.docket.add(id, 'Fix the gate', { mode: 'task', start: service.today })
+  const list = await service.todo.list()
+  const made = (await service.todo.items(list, service.today))[0]?.id as string
+  assert.ok(made !== undefined, 'it generated once')
+
+  // Deleted the way a person cleaning up a file deletes it: gone, not resolved.
+  await service.todo.remove(list, made)
+  assert.deepEqual((await service.todo.items(list, service.today)).map(one => one.text), [])
+
+  await service.agenda.reconcile()
+  assert.deepEqual(
+    (await service.todo.items(list, service.today)).map(one => one.text),
+    ['Fix the gate'],
+    'the pass notices the record is gone and offers the work again',
+  )
+  // And the step now points at the new item rather than at the hole.
+  const step = (await service.docket.matters(id)).find(one => one.id === job)?.steps[0]
+  assert.notEqual(step?.made, null)
+  assert.notEqual(step?.made, made)
+  await settled(service as never)
+})
+
+test('but a RESOLVED item is a decision, and stays honoured', async t => {
+  // D79's exemption, which is untouched: done, dropped and backlogged are all
+  // *stop asking*, and they are still in the file where the decision is legible.
+  const { service, on } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  await service.docket.add(id, 'Fix the gate', { mode: 'task', start: service.today })
+  const list = await service.todo.list()
+  const made = (await service.todo.items(list, service.today))[0]?.id as string
+  await service.agenda.todoSetStatus(list, made, 'dropped')
+  // **Flushed, because the app flushes** — the write tiers put a resolved item
+  // on disk within seconds and certainly before the next day. The corpus-wide
+  // check reads files, so a test that never flushed would be asking about a
+  // decision the disk has not heard of yet, which is a state the running app
+  // passes through for a moment and never sits in. The hazard is recorded with
+  // the decision rather than hidden here.
+  await service.flush()
+  await service.agenda.reconcile()
+  assert.deepEqual(
+    (await service.todo.items(list, service.today)).map(one => [one.text, one.status]),
+    [['Fix the gate', 'dropped']],
+    'not asked again, and not a second copy',
+  )
+
+  // **And still honoured tomorrow**, when it is no longer carried and so no
+  // longer in the live set — which is the case the corpus-wide check exists to
+  // get right: absent from today is not the same as absent from the notebook.
+  await on('2026-03-11')
+  await service.agenda.reconcile()
+  assert.deepEqual(
+    (await service.todo.items(list, service.today)).map(one => one.text),
+    [],
+    'yesterday\'s decision still stands',
+  )
+})

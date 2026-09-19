@@ -173,7 +173,10 @@ export class LibraryService implements Serves {
     // identity and the frontmatter title is what it is CALLED; leaving the old
     // title behind would make Rename appear to do nothing, since the panel
     // shows the title when there is one.
-    await this.#store.corpus.use(to, async doc => {
+    // **Under the queue, like every other write** (note 69): a rename racing
+    // the reconciler's write to the same document is the read-then-write shape
+    // that doubled a task list, one layer over.
+    await this.#store.mutate(async () => this.#store.corpus.use(to, async doc => {
       // **A draft leaving gets a title whether or not it had one** (D90): the
       // name it is being given is what it is called, and the frontmatter is
       // where *what it is called* lives (D59). For an ordinary rename the old
@@ -182,7 +185,7 @@ export class LibraryService implements Serves {
       if (isDraft(id as string as RelPath) || (await doc.titleOf(ONLY_SEGMENT)) !== null) {
         await doc.setTitleOf(ONLY_SEGMENT, wanted)
       }
-    })
+    }))
     await this.#store.filesets.retarget(id as string as RelPath, to as string as RelPath)
     this.#durable.touched()
     return to
@@ -301,11 +304,12 @@ export class LibraryService implements Serves {
     if (text === null) throw new Error(`${from} could not be read`)
 
     const rel = await this.#freeNoteName(basename(from).replace(/\.md$/i, ''))
-    await this.#store.corpus.use(rel, async doc => {
+    // Under the queue, for the reason the rename gives.
+    await this.#store.mutate(async () => this.#store.corpus.use(rel, async doc => {
       await doc.setBodyOf(ONLY_SEGMENT, text as DocumentText)
       await doc.setTitleOf(ONLY_SEGMENT, basename(from).replace(/\.md$/i, ''))
       await doc.setSourceOf(ONLY_SEGMENT, from)
-    })
+    }))
     this.#durable.touched()
     return rel
   }

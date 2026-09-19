@@ -111,7 +111,7 @@ export class Dockets {
     if (partner === null) return null
     const to = partner as string as DocumentId
     if (!(await this.#store.corpus.exists(to))) {
-      const title = (await this.#store.corpus.use(from, doc => doc.titleOf(ONLY_SEGMENT)))
+      const title = (await this.#store.corpus.use(from, doc => doc.titleOf(ONLY_SEGMENT), { mode: 'read' }))
         ?? nameOf(from as string)
       await this.#store.corpus.create(to, `${title} (archive)`)
       this.#store.changed(to)
@@ -143,12 +143,12 @@ export class Dockets {
       // **What it is CALLED, falling back to what it is named.** The frontmatter
       // title is the person's words; the filename is a slug of them and the only
       // other name a document has (D59's rule, as `info()` applies it).
-      title: (await this.#store.corpus.use(id, doc => doc.titleOf(ONLY_SEGMENT))) ?? nameOf(id as string),
+      title: (await this.#store.corpus.use(id, doc => doc.titleOf(ONLY_SEGMENT), { mode: 'read' })) ?? nameOf(id as string),
     })))
     return rows.sort((a, b) => a.title.localeCompare(b.title))
   }
   async matters(id: DocumentId): Promise<readonly Matter[]> {
-    return this.#store.corpus.use(id, doc => (doc as DocketDocument).matters())
+    return this.#store.corpus.use(id, doc => (doc as DocketDocument).matters(), { mode: 'read' })
   }
 
   /**

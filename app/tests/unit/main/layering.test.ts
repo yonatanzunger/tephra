@@ -340,3 +340,74 @@ test('nothing writes a document behind the document layer', async () => {
     'ask the Corpus for the document and write through it — see this test\'s comment',
   )
 })
+
+/**
+ * Every write in a service goes through the store's mutation queue.
+ *
+ * **Because the queue is what makes a read-then-write safe** (note 69). A verb
+ * that checks the world and then changes it — *does this day exist yet?*, then
+ * materialise it — is a race unless something serialises the pair. `mutate` is
+ * that something, and it is taken by every write in every service except where
+ * somebody forgot.
+ *
+ * **Somebody forgot twice, at the same verb.** `Tasks.list()` and
+ * `Tasks.today()` both carried the day without the lock, and on a real notebook
+ * two of them ran at once at a day boundary: the whole day was written twice,
+ * every item sharing one id with its copy. An invariant kept by memory at one
+ * door out of many is note 61's shape, and the answer there was the same as
+ * here — say it once, mechanically.
+ *
+ * A call is allowed through if it is a **read** (`mode: 'read'`), which takes no
+ * lock by design, or if `mutate` appears in the lines that open the statement.
+ */
+test('every write in a service goes through the mutation queue', async () => {
+  // **What is asked is whether the callback MUTATES**, not whether the call
+  // declared itself a read. Two sites legitimately do neither: they borrow a
+  // handle — the stream's document, and the window an editor is bound to —
+  // which cannot be a read-only borrow, since everything later written through
+  // them goes the same way. Asking about the verbs inside instead says the rule
+  // as the rule actually is: *a write takes the queue.*
+  const MUTATORS = /\.(set[A-Z]\w*|add|adopt|adoptAll|carry|choose|complete\w*|decline|keep|move\w*|remove\w*|rename|replace|retarget|tag|untag|undo|redo|suspend|activate|advance)\s*\(/
+  const offenders: string[] = []
+  for (const rel of await sources('main')) {
+    if (!rel.startsWith('services/')) continue
+    // **The store is exempt because the store IS the queue**: `mutate` is its
+    // own method.
+    if (rel === 'services/corpus-service.ts') continue
+    const text = await readFile(join(ROOT, 'main', rel), 'utf8')
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    for (const found of code.matchAll(/\bcorpus\.use\s*\(/g)) {
+      // The call's real extent, by balancing its parentheses — a `use` can run
+      // to thirty lines and a fixed window either misses the end or swallows
+      // the next statement.
+      let depth = 0
+      let at = (found.index ?? 0) + found[0].length - 1
+      const from = at
+      for (; at < code.length; at++) {
+        if (code[at] === '(') depth += 1
+        else if (code[at] === ')') {
+          depth -= 1
+          if (depth === 0) break
+        }
+      }
+      const call = code.slice(from, at + 1)
+      if (!MUTATORS.test(call)) continue
+      // **And `mutate` is looked for as far back as the method's own opening
+      // line**, not a line or two: `move` wraps two writes in one serialised
+      // turn, and measuring from the second one found no lock above it. The
+      // method is the right unit — a verb that takes the queue takes it for
+      // everything it does.
+      const before = code.slice(0, from)
+      const method = Math.max(...[...before.matchAll(/\n {2}(?:async )?[#a-zA-Z][\w]*\s*[(<]/g)]
+        .map(one => one.index ?? 0), 0)
+      if (/#?mutate\s*\(/.test(before.slice(method))) continue
+      const line = code.slice(0, from).split('\n').length
+      offenders.push(`${rel}:${line}: ${(code.slice(from, from + 70).split('\n')[0] ?? '').trim()}`)
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'a use whose callback writes belongs inside #mutate — see this test\'s comment',
+  )
+})

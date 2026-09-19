@@ -86,7 +86,16 @@ export class Tasks {
     const made = TASKS_ID
     // No `create`: a directory document has no single file to be created, and
     // the day the carry materialises IS what brings it into being.
-    await this.#store.corpus.use(made, doc => (doc as TodoDocument).carry(this.#day.today, this.#takenIds))
+    //
+    // **Under the lock, like every other write in this service** (note 69).
+    // This and `today` were the only two that were not, and both of them carry:
+    // the carry guards itself with *does this day exist yet*, which is a read
+    // followed by a write and therefore a race unless something serialises it.
+    // At a day roll both are called at once — the surface asks `today`, the
+    // pass asks `list` — and both answered *not yet*, so a real notebook woke
+    // up with **every item of the day twice, sharing one id**.
+    await this.#mutate(async () =>
+      this.#store.corpus.use(made, doc => (doc as TodoDocument).carry(this.#day.today, this.#takenIds)))
     this.#touched()
     return made
   }
@@ -118,7 +127,10 @@ export class Tasks {
   async today(id: DocumentId): Promise<SegmentKey> {
     await this.#day.ready()
     const today = this.#day.today
-    await this.#store.corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds))
+    // Under the lock, for the reason `list` gives: the carry's own guard is a
+    // read-then-write, and this is the other half of the pair that raced.
+    await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as TodoDocument).carry(today, this.#takenIds)))
     this.#touched()
     const keys = await this.#store.corpus.use(id, doc => doc.keys(), { mode: 'read' })
     // The day for a daily list; the one segment for an overall one.
