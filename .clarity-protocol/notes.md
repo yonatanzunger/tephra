@@ -1834,3 +1834,38 @@ it would have broken was the one that test exists for.
 > Related: note 65, where the fastest instrument was the artifact rather than
 > the code — twice now, and this time the artifact was the shape of the
 > duplication, which said *carry* before any code was opened.
+
+## 71. Two rows, one key, and a field that closed itself
+
+**2026-09-20.** *Add Note suddenly isn't working on a TODO item.* The service
+path was fine in a probe within a minute; the full gesture — menu, field, Enter,
+file — passed in the acceptance fixture. It was broken on the real notebook and
+nowhere else, and the difference was **which item**: one chosen for today.
+
+**A chosen item is drawn twice** — in the Today section and in the list, which
+is MH4's rule that *an item appears in both places* — and every per-item editor
+on the surface was keyed by item id alone. So *Add Note…* opened **two** fields.
+The second focused itself on mount; the first saw the blur and finished with
+nothing; finishing closed the shared state, which closed both. The probe said it
+in two numbers: `fieldsOpen: 2`, `fieldFocused: false`. The same key shape was
+under the text editor, the blocked-reason field and the owner field, so all four
+would have done it.
+
+> **An editor is open at a PLACE on the page, not on an item.** Once a thing can
+> be drawn twice, any state keyed by the thing alone is a state about two rows,
+> and the two rows will disagree the moment one of them acts.
+
+**Why the suite could not see it.** The acceptance fixture chooses nothing for
+today, so nothing is drawn twice, so one field opens and the check passes — the
+check was true of the fixture and not of the rule. It now chooses a live item
+first and asks for the note from the copy in Today, and asserts *one field, with
+focus*, which the pre-fix probe would have failed.
+
+**And a slip on the way**, kept because it is the kind that recurs: the first
+version of the check chose the scene's first row, which an earlier step had
+already finished — chosen but not live, so not picked, so not drawn twice, and
+the precondition silently failed while the note check kept passing. *Drawn
+twice* is now asserted on its own, before the thing that depends on it.
+
+> Related: note 62 (two doors that look like one) and note 69 (one verb behind
+> two unlocked doors) — the third instance this week of a fact with two homes.

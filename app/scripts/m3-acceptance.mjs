@@ -1205,6 +1205,27 @@ console.log('\n\u2014 the task list \u2014')
 
   check('the list opens under its own name', r.title === 'tasks', JSON.stringify(r.title))
   check(
+    // The precondition for the bug: the item is in two places on the page.
+    'a chosen item is drawn twice — in Today and in the list',
+    r.drawnTwice === 2,
+    `drawn ${r.drawnTwice} times`,
+  )
+  check(
+    // Reported broken from use 2026-09-20 (note 71). The service path was fine
+    // in a probe; the gesture opened TWO fields on a chosen item, and the
+    // second's focus closed the first, which closed both.
+    'and adding a note opens ONE field, which has focus',
+    r.noteFieldsOpen === 1 && r.noteFieldFocused === true,
+    `fields ${r.noteFieldsOpen} · focused ${r.noteFieldFocused}`,
+  )
+  check(
+    'A NOTE CAN BE ADDED THROUGH THE ROW MENU, and it lands',
+    r.noteFieldOpened === true &&
+      Array.isArray(r.noteShown) && r.noteShown.some(t => t.includes('Ask about the crown')) &&
+      Array.isArray(r.noteStored) && r.noteStored.some(one => one.includes('Ask about the crown')),
+    `menu ${JSON.stringify(r.noteMenu)} · field ${r.noteFieldOpened} · shown ${JSON.stringify(r.noteShown)} · stored ${JSON.stringify(r.noteStored)}`,
+  )
+  check(
     'THE CARRY: today is what was still yours yesterday',
     carried.length === 5 && !carried.some(t => t.includes('estate agent')),
     JSON.stringify(carried),

@@ -809,6 +809,50 @@ export async function runVerify(request: string): Promise<void> {
       await settle(600)
     }
 
+    if (scene === 'note-probe') {
+      // **A diagnostic over a real notebook**: open today's list, add a note to
+      // the first row through the menu and the field, and say what happened at
+      // every step. Kept because the next report of this shape will want it.
+      const list = await window.tephra.todo.which()
+      await pane.goTo({ kind: 'document', id: list })
+      let waited = 0
+      while (waited < 20_000 && document.querySelectorAll('.todo-row').length < 1) {
+        await settle(200)
+        waited += 200
+      }
+      const rows = [...document.querySelectorAll('.todo-list > .todo-row')] as HTMLElement[]
+      say('rows', rows.length)
+      const target = rows[0]
+      say('targetText', target?.querySelector('.todo-text')?.textContent?.slice(0, 40) ?? 'none')
+      target?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+      await settle(500)
+      say('menu', [...document.querySelectorAll('.row-menu button')].map(b => (b.textContent ?? '').trim()))
+      ;([...document.querySelectorAll('.row-menu button')].find(b => /note/i.test(b.textContent ?? '')) as HTMLElement | null)?.click()
+      await settle(600)
+      const field = document.querySelector('.todo-note-field') as HTMLInputElement | null
+      say('fieldOpened', field !== null)
+      // **One field, and it has focus.** Two is the bug: a chosen item is drawn
+      // twice, and an editor keyed by item alone opened in both rows.
+      say('fieldsOpen', document.querySelectorAll('.todo-note-field').length)
+      say('fieldFocused', document.activeElement === field)
+      if (field !== null) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        setter?.call(field, 'probe note')
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        await settle(150)
+        const before = Date.now()
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle(2500)
+        say('afterEnterMs', Date.now() - before)
+      }
+      say('fieldStillOpen', document.querySelector('.todo-note-field') !== null)
+      say('noteShown', [...document.querySelectorAll('.todo-note')].map(n => n.textContent ?? ''))
+      const day = await window.tephra.todo.today(list)
+      say('stored', (await window.tephra.todo.items(list, day))
+        .flatMap(one => one.notes.length > 0 ? [[one.text.slice(0, 24), ...one.notes]] : []))
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+    }
+
     if (scene === 'todo') {
       // The list, driven the way a person drives it — but navigated to rather
       // than opened from the menu. **⌘1 opens a window of its own** (a person
@@ -1067,6 +1111,64 @@ export async function runVerify(request: string): Promise<void> {
       await settle(700)
       say('secondEnterCommitted', document.querySelector('.todo-field') === null)
       say('enterEnterRows', texts())
+
+      // ── a note, through the gesture (reported broken 2026-09-20) ────
+      // **Through the menu and the field, not the API**: the service path was
+      // proved fine in a probe, so whatever broke is in what a person touches.
+      {
+        // **On an item CHOSEN for today**, which is the case that hid the bug: a
+        // chosen item is drawn in the Today section and in the list (MH4), and
+        // an editor keyed by item alone opened in both — the second took focus,
+        // the first blurred and closed them both. Unchosen, one field opens and
+        // the check would have passed while the report was true.
+        // **A LIVE row**, because only a live chosen item is drawn in Today —
+        // the scene's earlier steps finished the first row, and a finished item
+        // chosen for today is chosen but not picked.
+        const target = rows().find(r => r.className.includes('status-todo'))
+        const words = target?.querySelector('.todo-text')?.textContent?.slice(0, 20) ?? '§'
+        // Chosen through the menu, which is the gesture and the only path that
+        // proves the surface hears its own act (the reorient scene's rule).
+        target?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+        await settle(400)
+        ;([...document.querySelectorAll('.row-menu button')].find(
+          b => (b.textContent ?? '').trim() === 'Do this today') as HTMLElement | null)?.click()
+        let waitedToday = 0
+        while (waitedToday < 4000 && document.querySelector('.todo-today') === null) {
+          await settle(200)
+          waitedToday += 200
+        }
+        say('drawnTwice', [...document.querySelectorAll('.todo-row')]
+          .filter(r => (r.textContent ?? '').includes(words)).length)
+        // And the note is asked for from the copy in TODAY, which is the one a
+        // person working their day is looking at.
+        const chosen = [...document.querySelectorAll('.todo-today .todo-row')].find(
+          r => (r.textContent ?? '').includes(words)) as HTMLElement | undefined
+        chosen?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 400, clientY: 300 }))
+        await settle(400)
+        const menu = [...document.querySelectorAll('.row-menu button')].map(b => (b.textContent ?? '').trim())
+        say('noteMenu', menu)
+        ;([...document.querySelectorAll('.row-menu button')].find(
+          b => /note/i.test(b.textContent ?? ''),
+        ) as HTMLElement | null)?.click()
+        await settle(500)
+        const field = document.querySelector('.todo-note-field') as HTMLInputElement | null
+        say('noteFieldOpened', field !== null)
+        say('noteFieldsOpen', document.querySelectorAll('.todo-note-field').length)
+        say('noteFieldFocused', document.activeElement === field)
+        if (field !== null) {
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+          setter?.call(field, 'Ask about the crown')
+          field.dispatchEvent(new Event('input', { bubbles: true }))
+          await settle(150)
+          field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          await settle(1200)
+        }
+        say('noteShown', [...document.querySelectorAll('.todo-note')].map(n => n.textContent ?? ''))
+        const list = await window.tephra.todo.which()
+        const day = await window.tephra.todo.today(list)
+        say('noteStored', (await window.tephra.todo.items(list, day))
+          .flatMap(one => one.notes.length > 0 ? [[one.text.slice(0, 20), ...one.notes]] : []))
+      }
 
       await window.tephra.doc.flush()
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')

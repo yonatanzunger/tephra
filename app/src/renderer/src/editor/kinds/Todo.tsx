@@ -151,11 +151,41 @@ const TITLE: Readonly<Record<TodoStatus, string>> = {
  */
 const SHOW_RESOLVED = false
 
+/**
+ * Where on the page a row is drawn: the Today section, the plain list, or a tag
+ * group. An item chosen for today is in two of these at once, which is why an
+ * open editor has to say which (note 71).
+ */
+type Place = 'today' | 'list' | `tag:${string}`
+
+/** An editor that is open: on this item, in this place. */
+interface Opened {
+  readonly id: string
+  readonly at: Place
+}
+
+const openHere = (opened: Opened | null, item: TodoItem, at: Place): boolean =>
+  opened !== null && opened.id === item.id && opened.at === at
+
 export function TodoSurface({ window: docWindow, settings, onError, onTextTarget }: SurfaceProps): React.JSX.Element {
   const list = docWindow.document.id as DocumentId
   const [today, setToday] = useState<DateKey | null>(null)
   const [items, setItems] = useState<readonly TodoItem[]>([])
-  const [editing, setEditing] = useState<string | null>(null)
+  /**
+   * Which item has an editor open, and WHERE on the page (note 71).
+   *
+   * **An item chosen for today is drawn twice** — in the Today section and in
+   * the list (MH4: *an item appears in both places*) — and every one of these
+   * four editors was keyed by item id alone. So opening a note on a chosen item
+   * opened two fields: the second took focus on mount, the first saw the blur
+   * and finished with nothing, and its finishing closed both. Reported as *Add
+   * Note isn't working*, which it was not — for exactly the items a person had
+   * just decided to work on today.
+   *
+   * The place is part of the key, so an editor opens in the row that was
+   * touched and nowhere else. The other three states below share the shape.
+   */
+  const [editing, setEditing] = useState<Opened | null>(null)
   /** Not adding, or the text to start the new item with. */
   const [adding, setAdding] = useState<string | null>(null)
   /**
@@ -168,7 +198,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    */
   const [addCaret, setAddCaret] = useState<number | null>(null)
   /** The item whose owner is being typed, if any (D85's field verbs). */
-  const [owning, setOwning] = useState<string | null>(null)
+  const [owning, setOwning] = useState<Opened | null>(null)
   /** Which group the open add row belongs to, or null for the foot of the list. */
   const [addIn, setAddIn] = useState<string | null>(null)
   /**
@@ -182,9 +212,9 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
   const [capturing, setCapturing] = useState(false)
   const [menu, setMenu] = useState<RowMenuRequest | null>(null)
   /** The item whose reason is being typed, after `Blocked…` is chosen. */
-  const [blocking, setBlocking] = useState<string | null>(null)
+  const [blocking, setBlocking] = useState<Opened | null>(null)
   /** Which item has a note being typed under it, if any. Beside `blocking`. */
-  const [noting, setNoting] = useState<string | null>(null)
+  const [noting, setNoting] = useState<Opened | null>(null)
   /**
    * Which way the list is laid out (T8's cheap half).
    *
@@ -719,10 +749,10 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
    * same item with the same verbs, and two copies of this JSX would be two
    * places for those verbs to drift apart.
    */
-  const row = (item: TodoItem, under: string | null = null): React.JSX.Element => (
+  const row = (item: TodoItem, under: string | null = null, at: Place = 'list'): React.JSX.Element => (
     // **The row and what is written under it**, as a fragment, because they are
     // one item on the page and two elements in the list.
-    <Fragment key={`${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}>
+    <Fragment key={`${at}:${under ?? ''}:${item.id ?? `unadopted:${item.text}`}`}>
     <Row
       readOnly={past}
       under={under}
@@ -762,9 +792,9 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       today={today}
       tags={live}
       known={known}
-      editing={editing === item.id}
-      blocking={blocking === item.id}
-      onEdit={() => setEditing(item.id)}
+      editing={openHere(editing, item, at)}
+      blocking={openHere(blocking, item, at)}
+      onEdit={() => setEditing(item.id === null ? null : { id: item.id, at })}
       onDone={text => {
         setEditing(null)
         if (item.id !== null && text !== null) act(window.tephra.todo.edit(list, item.id, text))
@@ -784,7 +814,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
           onUntag: (tag: string) => {
             act(window.tephra.todo.untag(list, item.id as string, tag))
           },
-          owning: owning === item.id,
+          owning: openHere(owning, item, at),
           onOwnerDone: (name: string | null) => {
             setOwning(null)
             if (name === null) return
@@ -845,16 +875,16 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
             ...(item.moved !== null ? [] : statusItems(status => {
               // Blocked asks WHY, because a block without the thing it is
               // waiting on is the one status that says nothing (T4).
-              if (status === 'blocked') setBlocking(id)
+              if (status === 'blocked') setBlocking({ id, at })
               else act(window.tephra.todo.setStatus(list, id, status))
-            }, () => act(window.tephra.todo.remove(list, id)), () => setNoting(id),
+            }, () => act(window.tephra.todo.remove(list, id)), () => setNoting({ id, at }),
               dockets,
               where => act(window.tephra.todo.putDown(list, id, where)),
               {
                 item,
                 today,
                 onDue: due => act(window.tephra.todo.setDue(list, id, due)),
-                onOwner: () => setOwning(id),
+                onOwner: () => setOwning({ id, at }),
                 onNobody: () => act(window.tephra.todo.setOwner(list, id, null)),
               })),
           ],
@@ -865,8 +895,8 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
       <Notes
         item={item}
         readOnly={past}
-        adding={noting === item.id}
-        onAdding={open => setNoting(open ? item.id : null)}
+        adding={openHere(noting, item, at)}
+        onAdding={open => setNoting(open && item.id !== null ? { id: item.id, at } : null)}
         onNotes={notes => act(window.tephra.todo.setNotes(list, item.id as string, notes))}
       />
     )}
@@ -965,7 +995,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
               Today
               <span className="todo-group-count">{picked.length}</span>
             </h2>
-            <ol className="todo-list">{picked.map(item => row(item))}</ol>
+            <ol className="todo-list">{picked.map(item => row(item, null, 'today'))}</ol>
           </section>
         )}
 
@@ -982,7 +1012,7 @@ export function TodoSurface({ window: docWindow, settings, onError, onTextTarget
                     <span className="todo-group-count">{group.items.length}</span>
                   </h2>
                   <ol className="todo-list">
-                    {group.items.map(item => row(item, group.tag))}
+                    {group.items.map(item => row(item, group.tag, `tag:${group.tag}`))}
                     {adding !== null && addIn === group.tag && addRow()}
                   </ol>
                   {/* **T8's other half** (MT6). What was finished under this
