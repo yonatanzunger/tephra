@@ -1926,3 +1926,49 @@ counts rects had to be re-read.
 
 > Related: note 50 (a check keyed to a proxy) — this is the inverse, a property
 > check whose fixture could not exhibit the property's failure.
+
+## 73. The decoration that moved the thing it was measuring
+
+**2026-09-22.** Hanging punctuation, asked for with a photograph of a printed
+page. The left-edge quote shipped; the right edge — ten times more frequent —
+was built, worked, and had to be taken out. The reason is a shape worth
+recognising again.
+
+**The decoration is derived from the layout and changes it.** Hanging a comma
+at a row's end gives that row the comma's width back; the browser re-breaks with
+the extra room; the comma stops ending the row; the decoration is now wrong and
+drags the following text over itself. Recomputing gives a cycle:
+`0→13, 13→13, 13→6, 6→13, 13→4, 4→1` — deterministic, identical across runs.
+
+> **A fixed-point iteration whose step function depends on its own output does
+> not converge just because you wrap it in a loop.** I reached for two guards
+> before admitting that — *add once then only retract*, and a budget — and both
+> are ways of choosing which wrong answer to stop at. The first was worse than
+> the second in an instructive way: it threw twelve good hangs away on **one**
+> transient reading taken during font load, because a one-way ratchet cannot
+> recover from a bad measurement.
+
+**Four wrong turns on the way, each cheap and each visible only in a number.**
+
+- *It decorated nothing.* The read found a hundred and five row ends and every
+  sampled one was a space or a letter — because note 72's fix hangs the trailing
+  space, so the last character of a row is the space and the punctuation is the
+  one before it. What hangs is the last **ink**.
+- *It dispatched nothing.* CodeMirror refuses a transaction inside a measure —
+  *calls to EditorView.update are not allowed while an update is in progress* —
+  and the plugin swallowed the throw. A microtask after the cycle is the fix.
+- *It never looked again.* A decoration that changes inline geometry is not
+  reported as a geometry change, because CodeMirror watches heights. Nothing
+  asked a second time, so stale hangs simply stayed.
+- *The check found nothing.* The fixture's quoted paragraph was at the top of
+  the day and the stream opens at the end, so the line was never rendered and
+  could not be measured.
+
+**And the measurement that mattered came before the code.** Counting the
+notebook first — 3 paragraphs opening with a quote, ~2 row-initial quotes, 10%
+of rows ending in punctuation — is what made the outcome legible rather than
+disappointing: the half that shipped is the rare one, and I knew that going in.
+
+> Related: note 50 and note 72 — a check keyed to a proxy, and a fixture that
+> could not exhibit the thing it asserted. This is the third: a mechanism that
+> cannot be stable, found only by building it.

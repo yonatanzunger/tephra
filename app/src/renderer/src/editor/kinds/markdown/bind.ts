@@ -26,6 +26,7 @@ import { highlightSelectionMatches } from '@codemirror/search'
 import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
+import { hangingPunctuation } from './hanging.ts'
 import { listIndent, listLayout } from './lists.ts'
 import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
 import { findMarks, setFindMarks, type FindMarks } from './find-marks.ts'
@@ -213,6 +214,10 @@ export function bindEditor(options: BindOptions): Binding {
         // Quotes curl as they are typed, and never afterwards (D87).
         smartQuotes(),
         listLayout(),
+        // **Punctuation hangs into the margin** (D95), which is only visible in
+        // justified text — with a ragged edge there is no line for it to hang
+        // off, and the decoration costs nothing there.
+        hangingPunctuation(),
         ...(behaviour.annotations ? [tagExtents(docWindow), tagSpines(docWindow, spineHost)] : []),
         ...(behaviour.days ? [dayBoundaries(docWindow)] : []),
         ...(behaviour.annotations

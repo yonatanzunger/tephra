@@ -2152,6 +2152,12 @@ body {
    short cases sit against the disclosure they belong to. */
 /* Each clause of the sentence holds together; the commas are where it breaks. */
 .docket-clause { white-space: nowrap; }
+/* **A hanging opening quote** (D95). The negative margin is written per glyph by
+   `hanging.ts`, measured off the face the line is actually set in, so nothing
+   here may set a width — the margin IS the mechanism. `position: relative`
+   keeps the glyph painted above the line's background without moving it. */
+.tx-hang-open { position: relative; }
+
 .docket-when {
   flex: 0 0 15.5rem; text-align: right; cursor: text;
   /* **The UI face, not the notebook's.** A date is apparatus — it is not

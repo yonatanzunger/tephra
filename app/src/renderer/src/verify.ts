@@ -412,32 +412,34 @@ export async function runVerify(request: string): Promise<void> {
       }
       say('visualLines', visualLines)
       say('spaceStarts', spaceStarts)
-      // Diagnostics: how the paragraph is set, and where wrapped lines begin.
-      const first = document.querySelector('.cm-content .cm-line') as HTMLElement | null
-      say('textAlign', first === null ? 'none' : getComputedStyle(first).textAlign)
+
+      const firstLine = document.querySelector('.cm-content .cm-line') as HTMLElement | null
+      say('textAlign', firstLine === null ? 'none' : getComputedStyle(firstLine).textAlign)
+
+      // ── a hanging opening quote (D95) ─────────────────────────
       {
-        const starts: { ch: string; left: number }[] = []
-        for (const line of [...document.querySelectorAll('.cm-content .cm-line')] as HTMLElement[]) {
-          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
-          let prevTop: number | null = null
-          for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-            const text = node.textContent ?? ''
-            for (let i = 0; i < text.length; i += 1) {
-              const range = document.createRange()
-              range.setStart(node, i)
-              range.setEnd(node, i + 1)
-              const rect = range.getBoundingClientRect()
-              if (rect.width === 0 && rect.height === 0) continue
-              if (prevTop !== null && Math.abs(rect.top - prevTop) > 2) {
-                starts.push({ ch: JSON.stringify(text[i]), left: Math.round(rect.left) })
-              }
-              prevTop = rect.top
-            }
-          }
-        }
-        say('lineStarts', starts.slice(0, 12))
-        say('contentLeft', Math.round(first?.getBoundingClientRect().left ?? -1))
+        const hung = [...document.querySelectorAll('.tx-hang-open')] as HTMLElement[]
+        say('hungCount', hung.length)
+        say('hungChars', hung.map(one => one.textContent ?? ''))
+        // **Against the margin every other line starts at**, which is the claim:
+        // the quote sits outside it and the text beneath is flush.
+        const lines = [...document.querySelectorAll('.cm-content .cm-line')] as HTMLElement[]
+        const margin = Math.round(Math.min(...lines.map(one => one.getBoundingClientRect().left)))
+        say('margin', margin)
+        say('hungLefts', hung.map(one => Math.round(one.getBoundingClientRect().left)))
+        say('allHangOut', hung.length > 0 && hung.every(one => one.getBoundingClientRect().left < margin - 1))
+        // And the words after it start AT the margin, not beyond it — which is
+        // what says the glyph was taken out of the measure rather than nudged.
+        say('textAtMargin', hung.map(one => {
+          const next = one.nextSibling
+          if (next === null) return 'nothing-after'
+          const range = document.createRange()
+          range.selectNodeContents(next)
+          const rect = [...range.getClientRects()].find(r => r.width > 0)
+          return rect === undefined ? 'nothing-after' : Math.round(rect.left) - margin
+        }))
       }
+
       say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
     }
 

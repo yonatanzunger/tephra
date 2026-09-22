@@ -521,11 +521,26 @@ console.log('\n— wrapping —')
   const words = ['a', 'of', 'the', 'four', 'seven', 'twelve', 'reading', 'notebook',
     'alignment', 'typography', 'consistency', 'hyphenation']
   let seed = 7
-  const prose = Array.from({ length: 1200 }, () => {
+  const next = () => {
     seed = (seed * 1103515245 + 12345) % 2147483648
-    return words[(seed >>> 16) % words.length]
+    return seed >>> 16
+  }
+  // **Punctuated like prose**, because the other claim this fixture carries is
+  // about punctuation at a row's END (D95): a paragraph of bare words has one
+  // period in twelve hundred, and nothing to hang. Commas and full stops fall
+  // where the generator puts them, so they land at row ends by chance — which
+  // is how they land in writing.
+  const prose = Array.from({ length: 1200 }, () => {
+    const word = words[next() % words.length]
+    const mark = next() % 9
+    return mark === 0 ? `${word},` : mark === 1 ? `${word}.` : word
   }).join(' ')
-  const root = await week([`${prose}.\n`])
+  // **A paragraph that opens with a quotation**, which is what hangs (D95), and
+  // one that does not, so the check can tell the difference.
+  // **The quoted paragraph LAST**, because the stream opens at the append
+  // position and only rendered lines can be measured — with it first, the check
+  // found nothing and said so, which cost a run to work out.
+  const root = await week([`${prose}.\n\n\u201C${prose}.\u201D\n`])
   // **Justified, because that is the condition.** Left-aligned, Chromium lets a
   // trailing space overflow the margin even under `break-spaces`, and a hundred
   // wrapped lines showed nothing; justified, the line must end AT the margin, so
@@ -561,6 +576,22 @@ console.log('\n— wrapping —')
     typeof r.visualLines === 'number' && r.visualLines >= 60 &&
       Array.isArray(r.spaceStarts) && r.spaceStarts.length === 0,
     `${r.visualLines} wrapped lines · started with a space: ${JSON.stringify(r.spaceStarts)}`,
+  )
+  check(
+    // Reported from use, with a photograph of a printed page: *quotation marks
+    // at the left margin hang, so alignment is to the text rather than to the
+    // quote.* Chromium has no `hanging-punctuation` at all, so this is a
+    // measured negative margin (D95).
+    'A PARAGRAPH OPENING WITH A QUOTE HANGS IT, out past the margin',
+    r.hungCount === 1 && r.allHangOut === true,
+    `${r.hungCount} hung at ${JSON.stringify(r.hungLefts)}, margin ${r.margin}`,
+  )
+  check(
+    // The point of hanging rather than nudging: the words start where every
+    // other line starts, and the mark is the only thing outside.
+    'and the words after it begin AT the margin, within a pixel',
+    Array.isArray(r.textAtMargin) && r.textAtMargin.every(one => typeof one === 'number' && Math.abs(one) <= 1),
+    `offsets from the margin: ${JSON.stringify(r.textAtMargin)}`,
   )
   check('and nothing errored on the way', r.appError === 'none')
 }

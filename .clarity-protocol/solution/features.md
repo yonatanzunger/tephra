@@ -43,6 +43,7 @@ in place rather than being quietly corrected.
 | Rendered editing — tables | R1.4 | v3+ |
 | Rendered editing — equations | R1.4 | v3+ |
 | Inline image rendering | R7 | ✓ v1 — **and it had never once worked before R7**: the widget drew an `<img>` with no route to the corpus to point it at |
+| Hanging punctuation: an opening quote sits in the margin | D95 | ✓ v1 — measured off the line's own face; the row-end half was built and **rejected**, being unable to settle |
 | Typography and visual system, tunable | R1.3 | ✓ v1 for tunable; **what "excellent" wants next is a project** (`milestones.md`) |
 | State preservation: scroll, cursor, in-flight text | R1.2 | ✓ v1 |
 | Autosave | R1.2 | ✓ v1 |

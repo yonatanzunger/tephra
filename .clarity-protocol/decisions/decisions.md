@@ -4963,3 +4963,65 @@ at all while the index is still building.
 **What would reopen this.** A person who deletes generated rows *meaning* to
 decline them and is annoyed to see them return — for whom the answer is that
 `[-]` is how you decline, and the row is how the app knows you did.
+
+## D95: An opening quotation hangs; punctuation at a row's end does not
+
+**Date:** 2026-09-22
+**Status:** decided and **built** (the first half; the second is recorded as
+tried and rejected)
+**Extends:** R1.3 (the reading surface is the product), D86 (measured off the
+real font, never assumed), note 72 (wrapped content hangs its spaces).
+**Source:** asked from use, with a photograph of a printed page — *one
+traditional thing in typesetting is to have quotation marks at the left margin
+hang, so that alignment is to the text rather than to the quote.*
+
+**Decision.** A paragraph whose first character is an opening quotation mark
+hangs it: the glyph gets a negative left margin of exactly its own advance,
+measured off the face that line is set in, so its box ends where it began. The
+mark paints into the margin and the words after it sit where they always would
+have — flush with every other line.
+
+**Punctuation at the end of a visual row does not hang**, though it was built,
+works, and is the far more frequent case. Why not is the useful half of this
+record.
+
+**What the numbers said before any of it was written.** In the notebook that
+asked for this: **3** paragraphs in the whole corpus open with a quotation, and
+of 115 opening quotes only about **2** begin a wrapped row at any moment. A row
+*ends* in a comma, a period or a colon **10% of the time** — 39 rows in 409.
+The frequent case is the right edge, by two orders of magnitude.
+
+**And the right edge cannot be made to settle.** Hanging means the row gains
+that glyph's width; the browser then breaks the line *with* the extra room, a
+hyphenation point moves into it, and the glyph that ended the row no longer
+ends it — so a decoration derived from the layout has changed the layout it was
+derived from. A glyph left adrift in the middle of a row drags the text after it
+leftwards, over itself. Iterating is deterministic and does not converge:
+
+```
+0→13, 13→13, 13→13, 13→6, 6→13, 13→4, 4→1
+```
+
+on one settled page, identically across runs, and the same whether the
+re-measure waits a microtask or an animation frame. Two mitigations were tried:
+*add once then only retract*, which converged on one hang out of thirteen by
+believing a single transient reading; and a **budget**, which merely chooses an
+arbitrary point in the cycle to stop at.
+
+**Real typesetters have the same property** — optical alignment changes line
+breaks in InDesign as well — but they compute the break **with** the hang, in
+one pass. CSS has no way to say *break as if this glyph were inside the
+measure*, and `hanging-punctuation` is precisely the property that would have
+said it. **Chromium does not implement it at all**: `CSS.supports(
+'hanging-punctuation', 'first')` is false and setting it does nothing, measured
+in this Electron rather than assumed.
+
+**Why the half that shipped is safe.** Its set is keyed to the *document* — the
+first character of a line either is an opening quote or is not — so a re-wrap
+cannot change it, and there is no loop. It changes the layout once, like any
+other decoration, and stops.
+
+**What would reopen this.** `hanging-punctuation` arriving in Chromium, which
+would do the whole thing properly in one pass and make this file a deletion.
+Failing that, hyphenating by hand — which would put line breaking in our own
+hands and is a far larger project than the feature deserves.
