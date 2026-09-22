@@ -66,6 +66,24 @@ export function tephraTheme(t: Typography): Extension {
       padding: '3rem 0 60vh',
       caretColor: 'rgb(var(--accent))',
     },
+    // **A space at a wrap hangs; it does not start the next line.** CodeMirror's
+    // base theme sets `white-space: break-spaces` on wrapped content, under
+    // which a preserved space never hangs — so whenever a word ends exactly at
+    // the margin, the space after it wraps to the start of the next visual line
+    // and takes up its width there, and that line sits one space in from the
+    // left edge. Reported from use as an occasional broken margin (note 72),
+    // and occasional is exactly its signature: it needs the word to end within
+    // a space-width of the edge.
+    //
+    // CodeMirror chose `break-spaces` so the caret can sit on a trailing space
+    // at the wrap point, which is the right trade in a code editor and the
+    // wrong one here: a reading surface's left edge is a promise (R1.3), and a
+    // caret that lands a hair to the right of a hung space is a quirk nobody
+    // reads. `pre-wrap` hangs the whole run of trailing spaces, so a doubled
+    // space after a full stop is covered as well.
+    '.cm-content.cm-lineWrapping': {
+      whiteSpace: 'pre-wrap',
+    },
     // Per-paragraph, not per-line: see the note in widgets.ts.
     //
     // **Justified, or ragged right.** Hyphenation travels with it rather than

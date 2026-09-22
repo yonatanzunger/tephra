@@ -504,6 +504,67 @@ console.log('\n— a wide table —')
   check('nothing errored on the way', r.appError === 'none', String(r.appError))
 }
 
+// ── a wrapped line never begins with a space (note 72) ────────────────────
+console.log('\n— wrapping —')
+{
+  // **Words of every length from one to twelve, cycled**, so the line ends land
+  // all over the last word-width and some of them within a space of the margin
+  // — which is the only case that shows the defect. Forty-odd visual lines make
+  // a miss vanishingly unlikely; the computed style is asserted as well, since
+  // it is the mechanism and the thing a CodeMirror upgrade would move.
+  // **Aperiodic, and that is load-bearing.** The first cut cycled the words
+  // with a fixed stride, and a periodic sequence wraps in a repeating pattern:
+  // thirty-eight lines with a handful of distinct end positions, none within a
+  // space of the margin, so the property passed WITHOUT the fix. A small LCG
+  // scatters the line ends across the last word-width, and a hundred lines make
+  // a miss a one-in-a-hundred-thousand event.
+  const words = ['a', 'of', 'the', 'four', 'seven', 'twelve', 'reading', 'notebook',
+    'alignment', 'typography', 'consistency', 'hyphenation']
+  let seed = 7
+  const prose = Array.from({ length: 1200 }, () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    return words[(seed >>> 16) % words.length]
+  }).join(' ')
+  const root = await week([`${prose}.\n`])
+  // **Justified, because that is the condition.** Left-aligned, Chromium lets a
+  // trailing space overflow the margin even under `break-spaces`, and a hundred
+  // wrapped lines showed nothing; justified, the line must end AT the margin, so
+  // the space is pushed to the next line and drawn there — five of a hundred
+  // and five, on the same paragraph, the moment the theme was applied. The
+  // notebook that reported this runs justified. A partial theme file falls back
+  // field by field, so one key is the whole theme.
+  await mkdir(join(root, 'config', 'themes'), { recursive: true })
+  await writeFile(join(root, 'config', 'themes', 'justified.json'), '{ "justify": true }\n')
+  await mkdir(join(root, '.tephra'), { recursive: true })
+  await writeFile(join(root, '.tephra', 'ui-state.json'), JSON.stringify({
+    version: 1,
+    windows: [{ location: { kind: 'today' }, cursor: null, bounds: { x: 60, y: 60, width: 1400, height: 950 } }],
+    theme: 'justified', listView: 'time', searchWidth: 380,
+  }))
+  const r = report(await launch('wrap', root, { timeoutMs: 60_000, shotDelay: 20_000 }))
+  check(
+    'the paragraph is set justified, which is the only setting that shows the defect',
+    r.textAlign === 'justify',
+    `text-align is ${JSON.stringify(r.textAlign)}`,
+  )
+  check(
+    // Reported from use: *occasionally a line seems to get started with a
+    // space, breaking alignment on the left margin.* CodeMirror wraps with
+    // `break-spaces`, under which a space that does not fit at the end of a line
+    // moves to the start of the next one and is drawn there.
+    'THE MECHANISM: wrapped content hangs its spaces (pre-wrap, not break-spaces)',
+    r.whiteSpace === 'pre-wrap',
+    `white-space is ${JSON.stringify(r.whiteSpace)}`,
+  )
+  check(
+    'and across a paragraph that wraps dozens of times, no visual line starts with a space',
+    typeof r.visualLines === 'number' && r.visualLines >= 60 &&
+      Array.isArray(r.spaceStarts) && r.spaceStarts.length === 0,
+    `${r.visualLines} wrapped lines · started with a space: ${JSON.stringify(r.spaceStarts)}`,
+  )
+  check('and nothing errored on the way', r.appError === 'none')
+}
+
 if (process.env.TEPHRA_TIMING !== undefined) {
   const total = spent.reduce((n, one) => n + one.ms, 0)
   console.log(`\n\u2014 where the time went: ${(total / 1000).toFixed(1)}s across ${spent.length} launches \u2014`)

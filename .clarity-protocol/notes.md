@@ -1869,3 +1869,60 @@ twice* is now asserted on its own, before the thing that depends on it.
 
 > Related: note 62 (two doors that look like one) and note 69 (one verb behind
 > two unlocked doors) — the third instance this week of a fact with two homes.
+
+## 72. The space that would not hang
+
+**2026-09-21.** *Occasionally a line seems to get started with a space,
+breaking alignment on the left margin.* With a screenshot: a wrapped line
+indented by exactly one space, and — the detail that turned out to matter — a
+right edge flush with the line above it.
+
+**The mechanism.** CodeMirror wraps content with `white-space: break-spaces`,
+under which a preserved space never hangs: it always takes up width, and there
+is a break opportunity after it. When the word before a space ends within a
+space-width of the margin, the space does not fit, so it moves to the start of
+the next visual line and is drawn there. That is the indent. It is *occasional*
+because it needs the line's last word to land in that narrow band.
+
+CodeMirror chose `break-spaces` for a reason — with it, a caret can sit on a
+trailing space at a wrap point and every space has a position of its own — and
+it is the right trade for code and the wrong one for prose, where the left edge
+is a promise (R1.3). One theme rule sets `pre-wrap` on wrapped content, under
+which the whole run of trailing spaces hangs. A doubled space after a full stop
+is covered by the same rule, and CodeMirror still recognises `pre-wrap` as
+wrapping.
+
+**The reproduction that would not reproduce.** A paragraph built to wrap a
+hundred times showed **nothing** without the fix, twice. The first fixture was
+periodic — twelve words cycled with a fixed stride, so the line ends repeated
+and none fell in the band. Made aperiodic with a small LCG: still nothing. The
+missing ingredient was in the screenshot the whole time: **justified text.**
+Left-aligned, Chromium lets the trailing space overflow the margin even under
+`break-spaces`, so the defect never shows; justified, the line must end exactly
+at the margin, so the space is pushed over. With the notebook's justified theme
+applied, five of a hundred and five lines began with a space.
+
+> **A reproduction inherits the conditions of the report, or it is a different
+> experiment.** I had the mechanism right and the fixture wrong, and a check
+> that passed under the wrong conditions would have guarded nothing — the
+> mechanism assertion (`pre-wrap`) would have caught a regression, and the
+> property assertion (*no line starts with a space*) would have been decoration.
+> The suite now asserts the condition too: the paragraph is set justified.
+
+**And a smaller slip inside that one.** The fixture's theme did not apply on the
+first try, because a `ui-state.json` with an empty `windows` array is read as *no
+state at all* and the whole file falls back to defaults, theme included. The
+diagnostic that said so was `textAlign: "left"` — asked for after the fact,
+which is one round later than it should have been.
+
+**One casualty, and it was a measurement.** The list-hang check took
+`getClientRects()` over a wrapped item's text and read `rects[1]` as the second
+visual row — *one rect per visual row*, its own comment said. Under `pre-wrap` a
+hung space is a rect of its own at the right edge of the first row, so `rects[1]`
+became the space at 1011px and the check failed against a layout that had not
+moved. It now asks for the first rect on a lower line, which is what it always
+meant. A fix to how text wraps is a fix to what a rect is, and any check that
+counts rects had to be re-read.
+
+> Related: note 50 (a check keyed to a proxy) — this is the inverse, a property
+> check whose fixture could not exhibit the property's failure.

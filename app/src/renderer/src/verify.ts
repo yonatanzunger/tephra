@@ -379,6 +379,68 @@ export async function runVerify(request: string): Promise<void> {
       say('lineBoxes', lines.slice(0, 8))
     }
 
+    if (scene === 'wrap') {
+      // **No wrapped line may begin with a space** (note 72). CodeMirror wraps
+      // with `white-space: break-spaces`, under which a space that does not fit
+      // at the end of a line moves to the start of the next and takes up width
+      // there — so a word ending within a space of the margin indents the line
+      // after it. The theme overrides it to `pre-wrap`, where trailing spaces
+      // hang. Two claims: the mechanism, and the property it buys.
+      await settle(1500)
+      const content = document.querySelector('.cm-content') as HTMLElement | null
+      say('whiteSpace', content === null ? 'none' : getComputedStyle(content).whiteSpace)
+      let visualLines = 0
+      const spaceStarts: string[] = []
+      for (const line of [...document.querySelectorAll('.cm-content .cm-line')] as HTMLElement[]) {
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+        let prevTop: number | null = null
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          const text = node.textContent ?? ''
+          for (let i = 0; i < text.length; i += 1) {
+            const range = document.createRange()
+            range.setStart(node, i)
+            range.setEnd(node, i + 1)
+            const rect = range.getBoundingClientRect()
+            if (rect.width === 0 && rect.height === 0) continue
+            if (prevTop !== null && Math.abs(rect.top - prevTop) > 2) {
+              visualLines += 1
+              if (text[i] === ' ') spaceStarts.push(text.slice(i, i + 24))
+            }
+            prevTop = rect.top
+          }
+        }
+      }
+      say('visualLines', visualLines)
+      say('spaceStarts', spaceStarts)
+      // Diagnostics: how the paragraph is set, and where wrapped lines begin.
+      const first = document.querySelector('.cm-content .cm-line') as HTMLElement | null
+      say('textAlign', first === null ? 'none' : getComputedStyle(first).textAlign)
+      {
+        const starts: { ch: string; left: number }[] = []
+        for (const line of [...document.querySelectorAll('.cm-content .cm-line')] as HTMLElement[]) {
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+          let prevTop: number | null = null
+          for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+            const text = node.textContent ?? ''
+            for (let i = 0; i < text.length; i += 1) {
+              const range = document.createRange()
+              range.setStart(node, i)
+              range.setEnd(node, i + 1)
+              const rect = range.getBoundingClientRect()
+              if (rect.width === 0 && rect.height === 0) continue
+              if (prevTop !== null && Math.abs(rect.top - prevTop) > 2) {
+                starts.push({ ch: JSON.stringify(text[i]), left: Math.round(rect.left) })
+              }
+              prevTop = rect.top
+            }
+          }
+        }
+        say('lineStarts', starts.slice(0, 12))
+        say('contentLeft', Math.round(first?.getBoundingClientRect().left ?? -1))
+      }
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+    }
+
     if (scene === 'wide') {
       // **A table wider than the measure must not widen the measure** (D42,
       // R27). Reported from use: a six-column table at the end of a day pushed
@@ -2758,7 +2820,15 @@ export async function runVerify(request: string): Promise<void> {
         range.selectNodeContents(node)
         const rects = [...range.getClientRects()]
         firstText = rects.length > 0 ? Math.round((rects[0] as DOMRect).left) : 0
-        secondRow = rects.length > 1 ? Math.round((rects[1] as DOMRect).left) : 0
+        // **The first rect on a LOWER line, not rects[1].** Under `pre-wrap`
+        // (note 72) the trailing space at a wrap hangs, and a hung space is a
+        // rect of its own at the right edge of the first row — so *one rect per
+        // visual row* stopped being true the day spaces stopped starting lines,
+        // and rects[1] became the hung space at 1011px rather than the second
+        // row at 310. What this measures is the second row, so ask for it.
+        const top = rects.length > 0 ? (rects[0] as DOMRect).top : 0
+        const lower = rects.find(one => one.top > top + 2)
+        secondRow = lower === undefined ? 0 : Math.round(lower.left)
       }
       say('firstTextLeft', firstText)
       say('secondRowLeft', secondRow)
