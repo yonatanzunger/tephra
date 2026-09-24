@@ -37,6 +37,7 @@ import {
 } from '../../../../shared/kinds/todo.ts'
 import { addDays, daysBetween } from '../../../../shared/dates.ts'
 import type { HorizonRow } from '../../../../shared/horizon-api.ts'
+import { DateField } from '../../frame/DateField.tsx'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 
 /**
@@ -2058,11 +2059,14 @@ function Field({
               {spelling.toLowerCase()}
             </button>
           ))}
-          <input
-            type="date"
-            aria-label="A date"
-            onMouseDown={e => e.stopPropagation()}
-            onChange={e => e.currentTarget.value !== '' && setDue(e.currentTarget.value)}
+          {/* **Held while it is typed** (D96): a date input reports four
+              complete years on the way to the one meant, and each of them was
+              being written onto the item as a due date. */}
+          <DateField
+            className=""
+            label="A date"
+            value=""
+            onCommit={said => { if (said !== '') setDue(said) }}
           />
           <button type="button" className="clear" onMouseDown={e => {
             e.preventDefault()

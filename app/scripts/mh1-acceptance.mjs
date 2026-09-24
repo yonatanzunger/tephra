@@ -669,6 +669,38 @@ check(
 )
 
 // ── 8. legibility ───────────────────────────────────────────────────────────
+// ── typing a date (D96) ─────────────────────────────────────────────────────
+check(
+  // Reported from use: *trying to type in the date fields doesn't work — it
+  // gets very confused, throws errors, or generates nonsense.* A date input
+  // reports `''` and then four complete years on the way to the one meant.
+  'A HALF-TYPED DATE IS NOT COMMITTED: nothing is written while typing',
+  r.dateFieldOpened === true && r.whileTyping === 'none',
+  `field ${r.dateFieldOpened} · start while typing: ${JSON.stringify(r.whileTyping)}`,
+)
+check(
+  // And the one the person meant is, on Enter — with the past date kept as the
+  // origin rather than bounced forward (the second half of the report).
+  'and Enter commits the one that was meant, keeping it as the origin',
+  r.afterEnter?.since === '1985-03-12' && typeof r.afterEnter?.start === 'string' &&
+    r.afterEnter.start > '2026-01-01',
+  JSON.stringify(r.afterEnter),
+)
+check(
+  // Asked from use of the first cut: *it seems strange to show both since and
+  // starting — what's the difference, really?* One is authored and one is the
+  // pass's bookkeeping, so only the authored one is a field.
+  'ONE DATE ROW, and it is the origin once there is one',
+  Array.isArray(r.dateRows) && r.dateRows.filter(one => one !== 'Until').length === 1 &&
+    r.dateRows.includes('Since'),
+  `rows: ${JSON.stringify(r.dateRows)}`,
+)
+check(
+  'and the row says which instance is coming, which is what a birthday is for',
+  typeof r.readsAs === 'string' && /since 1985-03-12/.test(r.readsAs) && /\dth|\dst|\dnd|\drd/.test(r.readsAs),
+  `the column reads: ${JSON.stringify(r.readsAs)}`,
+)
+
 // ── an event that lasts, and an echoing step (D92) ──────────────────────────
 check(
   // Seven of ten matters on a real events docket had the range in their titles.

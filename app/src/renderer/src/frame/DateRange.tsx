@@ -10,6 +10,7 @@
 // eye lands on first.
 
 import { useEffect, useRef, useState } from 'react'
+import { DateField } from './DateField.tsx'
 import { addDays, dateKeyAt, daysBetween } from '../../../shared/dates.ts'
 import type { DateKey } from '../../../shared/document-api.ts'
 
@@ -128,21 +129,21 @@ export function DateRange({
         </div>
 
         <div className="range-fields">
-          <label htmlFor="range-from">From</label>
-          <input
-            id="range-from"
-            type="date"
+          <label>From</label>
+          {/* Held while it is typed, like every other date field (D96): the
+              fallback to today made a half-typed year snap back to this week. */}
+          <DateField
+            className=""
             value={from}
             max={to}
-            onChange={e => setFrom((e.target.value || today) as DateKey)}
+            onCommit={said => setFrom((said || today) as DateKey)}
           />
-          <label htmlFor="range-to">To</label>
-          <input
-            id="range-to"
-            type="date"
+          <label>To</label>
+          <DateField
+            className=""
             value={to}
             min={from}
-            onChange={e => setTo((e.target.value || today) as DateKey)}
+            onCommit={said => setTo((said || today) as DateKey)}
           />
         </div>
 

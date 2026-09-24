@@ -1972,3 +1972,79 @@ disappointing: the half that shipped is the rare one, and I knew that going in.
 > Related: note 50 and note 72 — a check keyed to a proxy, and a fixture that
 > could not exhibit the thing it asserted. This is the third: a mechanism that
 > cannot be stable, found only by building it.
+
+## 74. The field that was told four times
+
+**2026-09-24.** *Typing in the date fields doesn't work — it gets very
+confused, throws errors, or generates nonsense.* Three symptoms, one cause, and
+the cause is a fact about the platform I had never checked: `<input type="date">`
+reports its value as `''` while the date is incomplete, and then, as the year is
+typed a digit at a time, as a **complete** date four times over — `0001-03-12`,
+`0019-03-12`, `0198-03-12`, `1985-03-12`. Every one of those is a valid ISO
+date, and the last is the only one anybody meant.
+
+Committing on change therefore told the document four wrong things and then the
+right one, and each symptom in the report traces to one of them: `''` cleared
+the field being typed into (so the panel redrew around a suspended matter, the
+*confusion*); a year in the hundreds sent the pass walking a recurrence forward
+from the year one (the *nonsense*); and an end date is, for three of those four
+keystrokes, earlier than its own start — refused by the verb, so the **error was
+thrown by the rule that exists to protect the field**.
+
+> **The report named the fix.** *The date selector flow with the UI works fine,
+> but not typing* — which is the distinction the code needed: a change with a
+> keystroke behind it is a thought in progress, and one without is a completed
+> gesture from the calendar. Hold the first, commit the second.
+
+**And the second report, an hour later, was not a bug at all.** *I tried to put
+the start date for my wife's birthday as her actual date of birth and it just
+kept bouncing back to being this year.* It was being advanced, exactly as D76
+specifies: `start` is the *next* instance, and the pass walks it forward. The
+rule was right and the outcome was useless, because the sentence that matters is
+the parenthesis — *useful for other people whose ages I don't remember*. A
+birthday's content is the year it started in, and the design stored only where
+the series is now.
+
+> **A field that holds one of two facts will be asked for the other one.** The
+> fix is not to change what `start` means but to stop it being the only date a
+> recurrence keeps: `since` never moves, and the row can then say *the 43rd
+> since 1985-03-12*, which is the answer that was actually wanted.
+
+**One more thing worth keeping.** Five inputs in four files had been written the
+same way, so the typing fix is a shared field rather than five corrections —
+and the two that nobody had complained about (the task list's due date, the
+print range) were writing intermediate years too.
+
+**And the count was wrong by one, which is its own small lesson.** *The 45th
+since 1982-11-15*, said the row, of a birthday in 2026 — because I had counted
+occurrences of the date with the birth as the first. The arithmetic was
+self-consistent and the sentence was not: **the Nth *since* X** means N have
+gone by. I had written the word myself and not read it.
+
+> A phrase that carries the arithmetic is worth checking against the arithmetic.
+> *Since* is a subtraction, and I implemented a count.
+
+**And then the fix drew the next question, which was the better one.** *It seems
+strange to show both since and starting. What's the difference, really?* I had
+answered *whose ages I don't remember* by adding a field, and adding a field is
+what you do when you have not decided which fact is the authored one. The
+difference is real — `since` is typed, `start` is the pass's running note of
+where the series has got to — and that difference is precisely why only one of
+them belongs in a panel. The row below it, `NEXT`, was already answering *when
+is the next one* with three dates.
+
+> **A panel asks for what a person knows.** If a field's content is maintained
+> by the program, showing it invites the user to maintain it too, and then two
+> dates can disagree. One row now, labelled by what it holds; editing it
+> re-anchors the series.
+
+**And the merge report carried a second bug, at the door I hadn't gone through.**
+*If I try to enter such a date when creating a matter, it files it under start
+and loses the year again.* The origin rule was in `setStart`; creation calls
+`add`. Same rule, two doors — the third time in this notebook. The test I wrote
+first had edited an existing matter, which is the same door again; the one that
+matters asks for the past date *at creation*.
+
+> Related: note 62 and note 69 — a rule kept by memory at one door out of many.
+> This is the same shape in the renderer: five doors, one habit. And in
+> `dockets.ts`: two doors, one rule, one of them forgotten.

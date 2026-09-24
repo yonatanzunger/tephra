@@ -5025,3 +5025,113 @@ other decoration, and stops.
 would do the whole thing properly in one pass and make this file a deletion.
 Failing that, hyphenating by hand — which would put line breaking in our own
 hands and is a far larger project than the feature deserves.
+
+## D96: A half-typed date is not a date, and a past one on a recurrence is an origin
+
+**Date:** 2026-09-24
+**Status:** decided and **built**
+**Amends:** D76's *`start` is a known instance, kept as the NEXT one* — which
+stands, and is now not the only date a recurrence keeps. **Extends:** D80 (the
+schedule panel), D92 (`until`), T16 (a field reads what a person typed).
+**Source:** two reports from use, an hour apart, about the same panel.
+
+**Decision, part one: a date field holds a half-typed date and commits once.**
+`<input type="date">` reports its value as `''` until the date is complete, and
+then — as the year is typed a digit at a time — as a *complete* date four times
+over: `0001-03-12`, `0019-03-12`, `0198-03-12`, `1985-03-12`. Committing on
+every change did four wrong things before doing the right one, which is exactly
+what was reported: *typing in the date fields doesn't work — it gets very
+confused, throws errors, or generates nonsense.* All three, and each has its own
+cause:
+
+- `''` was read as *no date*, so the first keystroke **cleared the field being
+  typed into** — on a matter that means suspending it, and the panel redraws
+  around a question it no longer has an answer to;
+- a start of `0001-03-12` on a recurring matter sent the pass walking instances
+  forward from the year one, which is the nonsense;
+- and an end date is, for three of those four keystrokes, before its own start —
+  which the verb refuses, so the **error was thrown by the rule that exists to
+  protect the field**.
+
+**Typing is held; picking commits.** A keystroke marks the field as being typed
+in and nothing is told; blur and Enter commit, Escape abandons. A change with no
+keystroke behind it came from the calendar — one gesture, one complete date —
+and commits at once, which is why the picker always worked and had to keep
+working. An implausible year is not committed even then, because a paste or a
+held arrow key can also produce one.
+
+**One field, four inputs.** The schedule panel's start, its `until`, its date
+list, the task list's due date and the print range were all written the same
+way; the fix is a shared `DateField` rather than five corrections.
+
+**Decision, part two: a past date on a recurrence is where the series began.**
+Reported minutes later: *I tried to put the start date for my wife's birthday as
+her actual date of birth (useful for other people whose ages I don't remember)
+and it just kept bouncing back to being this year.* It was not being rejected.
+`start` means *the next instance* and the pass advanced it, exactly as D76 says
+— and threw away the one fact a birthday is for.
+
+So a recurrence keeps **both**: `start`, the next instance, which moves; and
+`since`, the origin, which never does. Typing a past date into a repeating
+matter writes both, the pass walks `start` forward as before, and the row then
+reads **every year, the 43rd since 1985-03-12** — which is the answer somebody
+wanted from *whose ages I don't remember*, and cannot be got from *next March*.
+
+**Only where it can mean that.** A task's `start` is *when work began* and is in
+the past by nature; a one-off event in the past simply happened. The rule is for
+repeating matters, where a date behind us cannot be the next instance.
+
+**Counted in whole intervals, or not at all.** An origin need not sit on the
+series — *every 90 days* from a Tuesday in March lands between two instances —
+and a count that rounded would be a number the file does not support. Then the
+form says only *since*, which is true.
+
+**And counted as ELAPSED, not as the ordinal of the occurrence** — corrected
+within the hour by the person who asked for it: *I put in my wife's birthdate
+(1982-11-15) and it said this is the 45th; this coming one is the 44th.* Right,
+and the word in the sentence decides it: **the Nth *since* 1982** means N have
+gone by, and the day itself is not one of them. A wedding in 1982 has its
+forty-fourth anniversary in 2026 by the same arithmetic. A series of *meetings*
+would be counted the other way — the forty-fifth meeting — and would want a
+different word; this one says *since*. The first instance therefore carries no
+count at all, because *the 0th since* is not a sentence.
+
+**And the origin is editable**, through a verb and a field of its own, shown
+once there is one. Without that a mistyped 1895 would be unreachable: the field
+above it now reads the next instance, so there would be nowhere to correct it
+but the file.
+
+**Amended the same day, part three: one authored date row, not two.** Shipping
+both fields drew the question straight back: *it seems strange to show both
+`since` and `starting`. What's the difference, really?* There is a real
+difference and it is not one a panel should be asking about — **one of these
+dates is authored and the other is bookkeeping.** `since` is the fact somebody
+typed; `start` is the pass's own note of where the series has got to, walked
+forward every day, and the thing `T±N` step offsets are measured from. A panel
+shows the facts a person authored. And the panel's own `NEXT` line, one row
+below, already answers *when is the next one* with three dates instead of one,
+which is the better answer anyway.
+
+So the panel has a single date row. It is labelled **Since** once the matter has
+an origin, and *Starting* / *Started* / *On* — as before — when it does not.
+Editing it on a matter with an origin sets **both**: the origin moves and the
+next instance is re-anchored to it, so correcting a mistyped 1895 moves the whole
+series rather than leaving the two dates disagreeing. Clearing it clears both,
+which suspends the matter, as clearing a start always did. `start` stays in the
+file, in the grammar and in D76 untouched — this is a decision about which facts
+a person is shown and asked for, not about what a docket records.
+
+**And the same report found the rule standing at one door of two.** *If I try to
+enter such a date when creating a matter, it files it under `start` and loses the
+year again.* The origin rule had been written into `setStart`, and creation goes
+through `add` — a second door onto the same rule, which is note 62's shape for
+the third time. It is now one private method, `#rememberOrigin`, called from
+both, and the integration test that would have caught it asks for the date *at
+creation* rather than in an edit.
+
+**What would reopen this.** A recurrence wanting the count in something other
+than its own interval — *the 12th year of a monthly meeting* — which is a second
+unit and is not asked for yet. Or a matter whose next instance genuinely needs
+authoring apart from its origin — a series deliberately resumed somewhere other
+than its own cadence — which no report has asked for and which the `every`
+field's own arithmetic has so far always answered.

@@ -52,6 +52,7 @@ import {
 } from '../../../../shared/kinds/docket.ts'
 import type { DateKey, DocumentId } from '../../../../shared/document-api.ts'
 import { addDays, dateKeyAt, dayLabel, DEFAULT_ZONE } from '../../../../shared/dates.ts'
+import { DateField } from '../../frame/DateField.tsx'
 
 export function DocketSurface({
   window: docWindow,
@@ -582,6 +583,9 @@ export function DocketSurface({
                 onSetUntil={until => {
                   if (matter.id !== null) void act(window.tephra.docket.setUntil(id, matter.id, until))
                 }}
+                onSetSince={since => {
+                  if (matter.id !== null) void act(window.tephra.docket.setSince(id, matter.id, since))
+                }}
                 onSetMode={mode => {
                   if (matter.id !== null) void act(window.tephra.docket.setMode(id, matter.id, mode))
                 }}
@@ -827,6 +831,7 @@ function Row({
   onStepKind,
   onSetAfter,
   onSetUntil,
+  onSetSince,
   onSetMode,
   onSetDates,
   today,
@@ -871,6 +876,7 @@ function Row({
   /** Which step's completion starts the next instance — null for the calendar. */
   onSetAfter: (step: string | null) => void
   onSetUntil: (until: string | null) => void
+  onSetSince: (since: string | null) => void
   onSetMode: (mode: Mode) => void
   /** Whether the steps are showing, and how to say otherwise. */
   open: boolean
@@ -1087,6 +1093,7 @@ function Row({
           onMode={onSetMode}
           onStart={v => onCommit('when', v ?? '')}
           onUntil={onSetUntil}
+          onSince={onSetSince}
           onEvery={v => onCommit('every', v ?? '')}
           onAfter={onSetAfter}
           onDates={onSetDates}
@@ -1476,6 +1483,7 @@ function SchedulePanel({
   onMode,
   onStart,
   onUntil,
+  onSince,
   onEvery,
   onAfter,
   onDates,
@@ -1486,6 +1494,7 @@ function SchedulePanel({
   onMode: (mode: Mode) => void
   onStart: (start: string | null) => void
   onUntil: (until: string | null) => void
+  onSince: (since: string | null) => void
   onEvery: (every: string | null) => void
   onAfter: (after: string | null) => void
   onDates: (dates: readonly DateKey[]) => void
@@ -1590,22 +1599,57 @@ function SchedulePanel({
          * arithmetic; everywhere else it still means exactly what it says.
          */
         const counted = repeats && !listed && when.after !== null && when.every !== null
-        const shown = counted && when.start !== null
-          ? backInterval(when.start, when.every as Interval)
-          : when.start
+        /**
+         * **One date row, and the authored half of the pair is the one shown**
+         * (D96 as amended). Asked from use, looking at both: *it seems strange
+         * to show both since and starting — what's the difference, really?*
+         *
+         * The difference is that one is written and the other is bookkeeping.
+         * `since` is the fact somebody typed — the birth, the wedding, the
+         * first meeting — and `start` is the pass's: the next instance, walked
+         * forward as instances pass, and what a step's `T±N` measures from. The
+         * panel was showing both halves, one of which nobody authored, while
+         * the NEXT line underneath already answers *when is the next one* and
+         * answers it better, with three of them.
+         *
+         * So: where there is an origin, the field IS the origin. Editing it
+         * re-anchors the series, and the pass works out the rest.
+         */
+        const origin = repeats && !listed && when.since !== null
+        const shown = origin
+          ? when.since
+          : counted && when.start !== null
+            ? backInterval(when.start, when.every as Interval)
+            : when.start
         return (
           <label className="sched-row">
             <span className="sched-label">
-              {counted ? 'Last done' : doing ? 'Started' : repeats ? 'Starting' : 'On'}
+              {origin ? 'Since' : counted ? 'Last done' : doing ? 'Started' : repeats ? 'Starting' : 'On'}
             </span>
-            <input
-              type="date"
-              className="sched-date"
+            <DateField
               value={shown ?? ''}
-              title={counted ? 'When it was last done; the next one follows from the interval' : undefined}
-              onChange={event => {
-                const said = event.target.value
-                if (said === '') { onStart(null); return }
+              {...(origin
+                ? { title: 'The first one — what the count is measured from; the next follows from the interval' }
+                : counted
+                  ? { title: 'When it was last done; the next one follows from the interval' }
+                  : {})}
+              onCommit={said => {
+                if (said === '') {
+                  // Clearing the row clears both halves: there is no series
+                  // left for an origin to be the origin of.
+                  if (origin) onSince(null)
+                  onStart(null)
+                  return
+                }
+                if (origin) {
+                  // **Re-anchored from the origin.** `start` is set to the same
+                  // date and the pass walks it forward to the next instance,
+                  // which is the mechanism the origin has always used — so
+                  // correcting 1895 to 1985 moves the whole series with it.
+                  onSince(said)
+                  onStart(said)
+                  return
+                }
                 onStart(counted && when.every !== null
                   ? addInterval(said as DateKey, when.every as Interval).date
                   : said)
@@ -1627,13 +1671,11 @@ function SchedulePanel({
       {!doing && when.start !== null && (
         <label className="sched-row">
           <span className="sched-label">Until</span>
-          <input
-            type="date"
-            className="sched-date"
+          <DateField
             value={when.until ?? ''}
             title="The last day it runs — leave empty for a single day"
-            min={when.start}
-            onChange={event => onUntil(event.target.value === '' ? null : event.target.value)}
+            {...(when.start === null ? {} : { min: when.start })}
+            onCommit={said => onUntil(said === '' ? null : said)}
           />
         </label>
       )}
@@ -1736,12 +1778,10 @@ function SchedulePanel({
               </button>
             </span>
           ))}
-          <input
-            type="date"
-            className="sched-date"
+          <DateField
             value={adding}
-            onChange={event => {
-              const said = event.target.value
+            title="Add a date to the list"
+            onCommit={said => {
               setAdding('')
               if (said !== '') onDates([...(when.dates ?? []), said as DateKey])
             }}

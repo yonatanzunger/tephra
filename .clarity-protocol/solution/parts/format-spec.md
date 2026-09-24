@@ -214,6 +214,30 @@ steps:
 An `until` on or before its `start` is kept in the file (the leniency rule) and
 read as no extent; the verbs refuse to write one.
 
+**And `since:` is where a recurrence began** (D96) — the first instance, written
+once and advanced never, beside the `start` that the pass does advance:
+
+```markdown
+### Rivka's birthday
+mode: recurring-event
+start: 2027-03-12
+every: 1y
+since: 1985-03-12
+```
+
+`start` answers *when is the next one*; `since` answers *how many have there
+been*, which is what a birthday is for and what advancing a lone date destroys.
+It is written by typing a past date into a repeating matter — the one thing such
+a date can mean there, whether the matter is being created or edited — and read
+back as *every year, the 43rd since 1985-03-12*.
+
+Both fields are in the file; **only `since` is shown** (D96, part three). The
+panel offers one date row, because `start` is the pass's bookkeeping and the
+panel's `NEXT` line already answers *when is the next one*. A writer producing a
+docket by hand may set `start` alone, as before; a writer who knows where the
+series began should set `since` too, and may set `start` to the same date and let
+the pass walk it forward.
+
 **A finished one-off carries `done:`** (D91), written by the reconciler from the
 steps and cleared by it when a step is reopened:
 

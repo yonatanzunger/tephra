@@ -406,6 +406,9 @@ export class DocketDocument extends SegmentedDocument {
         // the thing rather than about its schedule: a trip that becomes a
         // recurring trip lasts the same eight days.
         until: was.when.until,
+        // An origin outlives a change of mode for the same reason an extent
+        // does: it is a fact about the thing, not about its schedule.
+        since: was.when.since,
       },
     }))
   }
@@ -426,6 +429,18 @@ export class DocketDocument extends SegmentedDocument {
       }
       return { ...was, when: { ...was.when, until } }
     })
+  }
+
+  /**
+   * Where the series began (D96) — set once, advanced never.
+   *
+   * **Nothing else on a recurrence stays still.** `start` is the next instance
+   * and the pass walks it forward; this is the one date that is a fact about
+   * the past, so the pass must never touch it and no verb but this one writes
+   * it.
+   */
+  async setSince(id: string, since: DateKey | null): Promise<void> {
+    await this.#write(id, was => ({ ...was, when: { ...was.when, since } }))
   }
 
   async setStart(id: string, start: DateKey | null): Promise<void> {

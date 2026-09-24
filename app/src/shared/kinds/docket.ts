@@ -435,11 +435,30 @@ export interface Schedule {
    * Null for everything without an extent, which is most matters.
    */
   readonly until: DateKey | null
+  /**
+   * Where the series began, for a recurrence that has a first instance (D96).
+   *
+   * **`start` is the NEXT instance and is advanced as instances pass** (D76),
+   * which is right for *change the air filters* and destroys the one fact a
+   * birthday is for. Reported from use: a wife's date of birth typed into a
+   * recurring event *kept bouncing back to being this year* — correctly, by the
+   * rule, and uselessly, because *whose ages I don't remember* is the whole
+   * reason to write it down.
+   *
+   * So the origin is kept beside the next instance rather than instead of it.
+   * Nothing advances this, ever; it is the only date on a recurrence that does
+   * not move. What it buys is the count: this year's instance is the forty-first
+   * since 1985, which is what somebody wants from a birthday and cannot be got
+   * from *next March*.
+   *
+   * Null for every recurrence nobody has said that about, which is most.
+   */
+  readonly since: DateKey | null
 }
 
 /** A matter nobody has dated: on the list, generating nothing. */
 export const UNSCHEDULED: Schedule = {
-  start: null, every: null, after: null, dates: null, until: null,
+  start: null, every: null, after: null, dates: null, until: null, since: null,
 }
 
 /**
@@ -967,10 +986,55 @@ export function readSchedule(when: Schedule, mode?: Mode, today?: DateKey): stri
   // **Said as *after it is done* rather than as a date**, because that is what
   // the difference between the two recurring shapes actually is: one is the
   // calendar's business and the other is yours.
-  return when.after === null
-    ? (doing ? `${how}, ${began(when.start)}` : `${how} from ${when.start}`)
-    : `${how} after it is done`
+  if (when.after !== null) return `${how} after it is done`
+  // **The origin, and how many this one is** (D96). A recurrence with a first
+  // instance can say which instance is coming, and for the case that asked for
+  // it — a birthday — that number is the answer somebody wanted: *the 41st*,
+  // rather than the date of birth they would have to subtract from.
+  //
+  // **Counted in whole intervals**, so it is right for the yearly case and
+  // honest for the rest: five instances of *every 90 days* is five.
+  if (when.since !== null && when.every !== null) {
+    const which = instancesSince(when.since, when.start, when.every)
+    // **No count on the first one**, which is the origin itself: *the 0th since*
+    // is not a sentence, and *since* alone says everything there is to say.
+    return which === null || which === 0
+      ? `${how} since ${when.since}`
+      : `${how}, the ${which}${ordinal(which)} since ${when.since}`
+  }
+  return doing ? `${how}, ${began(when.start)}` : `${how} from ${when.start}`
 }
+
+/**
+ * How many intervals have ELAPSED between the origin and this instance.
+ *
+ * **Elapsed, not the ordinal of the occurrence** — which is an off-by-one
+ * somebody caught within the hour: born in 1982, the 2026 birthday is the
+ * *forty-fourth*, and counting the birth as the first occurrence made it the
+ * forty-fifth. The word in the sentence decides it: *the Nth **since** 1982*
+ * means N of them have gone by, and the day itself is not one of them. A
+ * wedding in 1982 has its forty-fourth anniversary in 2026 by the same
+ * arithmetic.
+ *
+ * (A series of meetings would be counted the other way — the forty-fifth
+ * meeting — and would want the other word. This says *since*.)
+ *
+ * **Whole intervals only, and null when they do not divide.** A date somebody
+ * typed as an origin need not sit on the series — *every 90 days* from a
+ * Tuesday in March lands between two instances — and a count that rounded
+ * would be a number the file does not support. Null then, and the reading form
+ * says only *since*.
+ */
+function instancesSince(since: DateKey, start: DateKey, every: Interval): number | null {
+  let at = since
+  for (let n = 0; n <= 500; n += 1) {
+    if (at === start) return n
+    if (compareKeys(at, start) > 0) return null
+    at = addInterval(at, every).date
+  }
+  return null
+}
+
 
 /**
  * An old `when:` line into the three variables.
@@ -987,7 +1051,7 @@ export function parseLegacyWhen(text: string): Schedule | null {
   }
   if (DAY.test(said)) {
     const day = real(said)
-    return day === null ? null : { start: day, every: null, after: null, dates: null, until: null }
+    return day === null ? null : { start: day, every: null, after: null, dates: null, until: null, since: null }
   }
   const every = EVERY.exec(said.toLowerCase())
   if (every !== null) {
@@ -995,7 +1059,7 @@ export function parseLegacyWhen(text: string): Schedule | null {
     if (every[3] !== undefined && from === null) return null
     const n = every[1] === undefined ? 1 : Number(every[1])
     if (n === 0) return null
-    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null, dates: null, until: null }
+    return { start: from, every: { n, unit: unitOf(every[2] as string) }, after: null, dates: null, until: null, since: null }
   }
   return null
 }
@@ -1118,6 +1182,11 @@ export function parseMatter(block: string): Matter | null {
       // the old word.
       inSteps = true
       if (value !== '') extra.push(line)
+    } else if (key === 'since') {
+      const said = value.trim()
+      if (said === '') when = { ...when, since: null }
+      else if (DAY.test(said)) when = { ...when, since: said as DateKey }
+      else extra.push(line)
     } else if (key === 'until') {
       // **A date or nothing**, and the leniency rule for the rest: an
       // unreadable end is somebody's note and is kept as an unknown key.
@@ -1224,6 +1293,9 @@ export function matterBlock(matter: Matter, level = MATTER_LEVEL): string {
   // sessions down eight lines would bury the matter they belong to.
   if (matter.when.dates !== null) lines.push(`dates: ${matter.when.dates.join(', ')}`)
   if (matter.when.after !== null) lines.push(`after: ${matter.when.after}`)
+  // **With the recurrence it is the origin of**, which is what it is about —
+  // not with `start`, which it is deliberately not (D96).
+  if (matter.when.since !== null) lines.push(`since: ${matter.when.since}`)
   // **After the schedule and before everything else**, because on an archived
   // matter this is the fact somebody is looking for (D91).
   if (matter.done !== null) lines.push(`done: ${matter.done}`)

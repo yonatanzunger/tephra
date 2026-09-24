@@ -161,6 +161,8 @@ in `goal/horizon.md` and `solution/parts/horizon.md`; scheduled in
 | Awareness with no task | H6 | ✓ v1 (MH2) — a **status** step, which is a horizon row and generates nothing, ever |
 | The day's selection | H9 | ✓ v1 (MH4) — a per-day mark, not a status and not a tag, so it cannot travel |
 | A one-off matter finishes when its steps do | D91, D92 | ✓ v1 — `done:` written by the pass from the steps, and cleared by it when one is reopened |
+| A recurrence remembers where it began | D96 | ✓ v1 — `since:`, never advanced; the row reads *the 43rd since 1985-03-12*, which is what a birthday is for |
+| A half-typed date commits nothing | D96 | ✓ v1 — one shared field: typing is held until blur or Enter, the calendar commits at once |
 | An event has an extent, not just a date | D92 | ✓ v1 — `until:`, inclusive; on the horizon while any of it is, and prominent in the date column |
 | A status step completes when its days pass | D92, H6 | ✓ v1 — nobody can tick awareness, so the calendar does; this is what lets an event finish |
 | A matter's lone echoing step follows its rename | D92 | ✓ v1 — one step, text equal to the old name: an echo, so it follows |

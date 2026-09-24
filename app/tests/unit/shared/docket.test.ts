@@ -34,10 +34,10 @@ test('THE FOUR SHAPES, in three variables and nothing else', () => {
   // the whole vocabulary: a thing to get done, a thing happening, a thing that
   // comes round, and a thing to keep up with.
   const shapes = [
-    { start: null, every: null, after: null, dates: null , until: null},
-    { start: '2026-11-12', every: null, after: null, dates: null , until: null},
-    { start: '2026-11-12', every: { n: 1, unit: 'y' }, after: null, dates: null, until: null },
-    { start: '2026-11-12', every: { n: 90, unit: 'd' }, after: 'aaaa1111', dates: null, until: null },
+    { start: null, every: null, after: null, dates: null , until: null, since: null},
+    { start: '2026-11-12', every: null, after: null, dates: null , until: null, since: null},
+    { start: '2026-11-12', every: { n: 1, unit: 'y' }, after: null, dates: null, until: null, since: null },
+    { start: '2026-11-12', every: { n: 90, unit: 'd' }, after: 'aaaa1111', dates: null, until: null, since: null },
   ] as const
   assert.deepEqual(shapes.map(one => readSchedule(one as never)), [
     '—',
@@ -51,7 +51,7 @@ test('and a matter with an interval and no start is PAUSED, not broken', () => {
   // Which is what suspending a recurrence leaves: the shape stays, the date
   // goes, and restarting it is one field.
   assert.equal(
-    readSchedule({ start: null, every: { n: 90, unit: 'd' }, after: null, dates: null, until: null }),
+    readSchedule({ start: null, every: { n: 90, unit: 'd' }, after: null, dates: null, until: null, since: null }),
     'every 90 days, not started',
   )
 })
@@ -88,13 +88,13 @@ test('and reads back in words for the column', () => {
 test('THE OLD `when:` IS READ, so a docket from before the split opens', () => {
   // Read and never written — which is how the format moved without anybody
   // migrating a file, the same bargain the trigger line got.
-  assert.deepEqual(parseLegacyWhen('—'), { start: null, every: null, after: null, dates: null , until: null})
+  assert.deepEqual(parseLegacyWhen('—'), { start: null, every: null, after: null, dates: null , until: null, since: null})
   assert.deepEqual(parseLegacyWhen('2026-11-12'),
-    { start: '2026-11-12', every: null, after: null, dates: null , until: null})
+    { start: '2026-11-12', every: null, after: null, dates: null , until: null, since: null})
   assert.deepEqual(parseLegacyWhen('every 90d from 2026-10-01'),
-    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null, until: null })
+    { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null, until: null, since: null })
   assert.deepEqual(parseLegacyWhen('every 90d'),
-    { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null, until: null })
+    { start: null, every: { n: 90, unit: 'd' }, after: null, dates: null, until: null, since: null })
 })
 
 test('and a form that was WITHDRAWN is not understood here either', () => {
@@ -128,7 +128,7 @@ test('a block carries everything a matter is', () => {
   ].join('\n'))
   assert.ok(matter !== null)
   assert.equal(matter.name, 'Change the air filters')
-  assert.deepEqual(matter.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null, until: null })
+  assert.deepEqual(matter.when, { start: '2026-10-01', every: { n: 90, unit: 'd' }, after: null, dates: null, until: null, since: null })
   assert.deepEqual(matter.tags, ['house', 'air quality'])
   assert.equal(matter.owner, 'me')
   assert.equal(matter.link, '../notes/hvac.md')
@@ -162,7 +162,7 @@ test('a block somebody typed by hand has no id, and is still a matter', () => {
   const matter = parseMatter('## Fix the gate\nwhen: 2026-10-01')
   assert.ok(matter !== null)
   assert.equal(matter.id, null)
-  assert.deepEqual(matter.when, { start: '2026-10-01', every: null, after: null, dates: null , until: null})
+  assert.deepEqual(matter.when, { start: '2026-10-01', every: null, after: null, dates: null , until: null, since: null})
 })
 
 test('any heading level below the title opens a block', () => {
@@ -231,7 +231,7 @@ test('THE WHITESPACE RULE: a bad indent changes nothing structural', () => {
 test('THE PROPERTY: a block round-trips through parse and back', () => {
   const original = bare({
     name: 'The ACM talk',
-    when: { start: '2026-11-12' as DateKey, every: null, after: null, dates: null , until: null},
+    when: { start: '2026-11-12' as DateKey, every: null, after: null, dates: null , until: null, since: null},
     tags: ['speaking'],
     owner: 'me',
     link: '../notes/acm.md',
@@ -521,15 +521,15 @@ test('and every way of writing one goes back in (accept flexibly)', () => {
 test('a listed schedule reads as its next date and how many are left', () => {
   const dates = ['2026-09-20', '2026-10-04', '2026-10-18'] as DateKey[]
   assert.equal(
-    readSchedule({ start: '2026-09-20' as DateKey, every: null, after: null, dates, until: null }),
+    readSchedule({ start: '2026-09-20' as DateKey, every: null, after: null, dates, until: null, since: null }),
     '2026-09-20, 2 more',
   )
   assert.equal(
-    readSchedule({ start: '2026-10-18' as DateKey, every: null, after: null, dates, until: null }),
+    readSchedule({ start: '2026-10-18' as DateKey, every: null, after: null, dates, until: null, since: null }),
     '2026-10-18, the last',
   )
   assert.equal(
-    readSchedule({ start: null, every: null, after: null, dates, until: null }),
+    readSchedule({ start: null, every: null, after: null, dates, until: null, since: null }),
     '3 dates, all past',
   )
 })
@@ -538,7 +538,7 @@ test('and the block round-trips a list, which is the format claim', () => {
   const dates = ['2026-09-20', '2026-10-04'] as DateKey[]
   const block = matterBlock(bare({
     name: 'The campaign',
-    when: { start: '2026-09-20' as DateKey, every: null, after: null, dates, until: null },
+    when: { start: '2026-09-20' as DateKey, every: null, after: null, dates, until: null, since: null },
   }))
   assert.match(block, /^dates: 2026-09-20, 2026-10-04$/m)
   assert.deepEqual(parseMatter(block)?.when.dates, dates)
@@ -561,7 +561,7 @@ test('AND A LIST WITH ONE BAD DATE IN IT IS KEPT VERBATIM, not silently pruned',
 // an appointment.
 
 test('A TASK SAYS WHEN IT STARTED; an event says when it happens', () => {
-  const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null , until: null}
+  const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null , until: null, since: null}
   const today = '2026-09-13' as DateKey
   assert.equal(readSchedule(when, 'task', today), 'started 2026-09-10')
   assert.equal(readSchedule(when, 'event', today), '2026-09-10')
@@ -569,7 +569,7 @@ test('A TASK SAYS WHEN IT STARTED; an event says when it happens', () => {
 
 test('and a task dated ahead has NOT started, which the tense has to say', () => {
   // Otherwise the row repeats a small lie every day until the date arrives.
-  const when = { start: '2026-09-20' as DateKey, every: null, after: null, dates: null , until: null}
+  const when = { start: '2026-09-20' as DateKey, every: null, after: null, dates: null , until: null, since: null}
   assert.equal(readSchedule(when, 'task', '2026-09-13' as DateKey), 'starting 2026-09-20')
 })
 
@@ -577,13 +577,13 @@ test('and an undated task says so in the words its button uses', () => {
   // *No date yet* is true of a task and useful about it only if you already know
   // that dating it is what starting it means. **Activate** is the control beside
   // it, so the two have to agree.
-  const when = { start: null, every: null, after: null, dates: null , until: null}
+  const when = { start: null, every: null, after: null, dates: null , until: null, since: null}
   assert.equal(readSchedule(when, 'task'), 'not started')
   assert.equal(readSchedule(when, 'event'), '—')
 })
 
 test('a recurring task counting from a date reads as a task, not an appointment', () => {
-  const when = { start: '2026-09-10' as DateKey, every: { n: 90, unit: 'd' as const }, after: null, dates: null, until: null }
+  const when = { start: '2026-09-10' as DateKey, every: { n: 90, unit: 'd' as const }, after: null, dates: null, until: null, since: null }
   assert.equal(readSchedule(when, 'recurring-task', '2026-09-13' as DateKey),
     'every 90 days, started 2026-09-10')
   assert.equal(readSchedule(when, 'recurring-event', '2026-09-13' as DateKey),
@@ -591,12 +591,12 @@ test('a recurring task counting from a date reads as a task, not an appointment'
 })
 
 test('and one counting from completion already said it right, so it is unchanged', () => {
-  const when = { start: '2026-09-10' as DateKey, every: { n: 90, unit: 'd' as const }, after: 'abcd1234', dates: null, until: null }
+  const when = { start: '2026-09-10' as DateKey, every: { n: 90, unit: 'd' as const }, after: 'abcd1234', dates: null, until: null, since: null }
   assert.equal(readSchedule(when, 'recurring-task'), 'every 90 days after it is done')
 })
 
 test('and with no mode given it reads as it always did, for callers that have none', () => {
-  const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null , until: null}
+  const when = { start: '2026-09-10' as DateKey, every: null, after: null, dates: null , until: null, since: null}
   assert.equal(readSchedule(when), '2026-09-10')
 })
 
@@ -634,4 +634,42 @@ test('THE FIELD TAKES WHAT IT SHOWS: "every 5 years" parses', () => {
   // And it still refuses what is not one.
   assert.equal(parseInterval('every so often'), null)
   assert.equal(parseInterval('every 0 days'), null)
+})
+
+test('a recurrence with an origin reads as how many have gone by (D96)', () => {
+  // **Elapsed, not the ordinal of the occurrence.** Reported within the hour:
+  // born in 1982, the 2026 birthday is the forty-fourth, and counting the birth
+  // itself as the first made it the forty-fifth. *The Nth since X* means N have
+  // gone by, and the day itself is not one of them.
+  const born = {
+    start: '2026-11-15' as DateKey, every: { n: 1, unit: 'y' as const }, after: null,
+    dates: null, until: null, since: '1982-11-15' as DateKey,
+  }
+  assert.equal(readSchedule(born, 'recurring-event'), 'every year, the 44th since 1982-11-15')
+  const when = {
+    start: '2027-03-12' as DateKey, every: { n: 1, unit: 'y' as const }, after: null,
+    dates: null, until: null, since: '1985-03-12' as DateKey,
+  }
+  assert.equal(readSchedule(when, 'recurring-event'), 'every year, the 42nd since 1985-03-12')
+})
+
+test('and an origin off the series is kept but not counted', () => {
+  // **A count that rounded would be a number the file does not support.** An
+  // origin somebody typed need not sit on the series — *every 90 days* from a
+  // Tuesday in March lands between two instances — so the form says only
+  // *since*, which is true, rather than a nearest instance, which is not.
+  const when = {
+    start: '2026-04-02' as DateKey, every: { n: 90, unit: 'd' as const }, after: null,
+    dates: null, until: null, since: '2026-01-01' as DateKey,
+  }
+  assert.equal(readSchedule(when, 'recurring-event'), 'every 90 days since 2026-01-01')
+})
+
+test('and the first one carries no count, there being none to carry', () => {
+  // *The 0th since* is not a sentence, and `since` alone says it all.
+  const when = {
+    start: '2026-01-01' as DateKey, every: { n: 1, unit: 'y' as const }, after: null,
+    dates: null, until: null, since: '2026-01-01' as DateKey,
+  }
+  assert.equal(readSchedule(when, 'recurring-event'), 'every year since 2026-01-01')
 })

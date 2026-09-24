@@ -650,6 +650,13 @@ export type DocketCommand =
   | { readonly kind: 'matters'; readonly docket: DocumentId }
   /** This docket's archive, if it has one, and how much is in it (D91). */
   | { readonly kind: 'archive'; readonly docket: DocumentId }
+  /** Where a recurrence began, or none — never advanced (D96). */
+  | {
+      readonly kind: 'since'
+      readonly docket: DocumentId
+      readonly matter: string
+      readonly since: string | null
+    }
   /** The last day an event runs, or none — a single-day event (D92). */
   | {
       readonly kind: 'until'

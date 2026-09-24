@@ -145,6 +145,7 @@ export class AgendaService implements Serves {
       mode: command => this.#docket.setMode(command.docket, command.matter, command.mode),
       start: command => this.#docket.setStart(command.docket, command.matter, command.start),
       until: command => this.#docket.setUntil(command.docket, command.matter, command.until),
+      since: command => this.#docket.setSince(command.docket, command.matter, command.since),
       moveTo: command => this.#docket.moveTo(command.docket, command.matter, command.to),
       dates: command => this.#docket.setDates(command.docket, command.matter, command.dates),
       every: command => this.#docket.setEvery(command.docket, command.matter, command.every),

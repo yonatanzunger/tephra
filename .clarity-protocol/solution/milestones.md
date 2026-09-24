@@ -53,6 +53,7 @@ waiting to learn.**
 | **MT8 · D85** | TODO items become structured records with a field-based format; `for:` replaces the matter tag | 15 Sep |
 | **D86–D90** | One measure, with the code face's size solved so eighty columns fit it; smart quotes; the stale-edit guard; elided blocks; drafts; the Tasks row in the sidebar | 15–16 Sep |
 | **D91, and two bugs** | A one-off matter finishes and is filed in an archive beside its docket; reconciliation on demand; **adoption**, without which a docket written from outside Tephra generated nothing at all | 16 Sep |
+| **D96** | A half-typed date commits nothing — a date input reports four complete years on the way to the one meant — and a past date on a recurrence is kept as the **origin** rather than advanced away | 24 Sep |
 | **note 72 · D95** | Wrapped lines stop beginning with a space — CodeMirror's `break-spaces` moves one there whenever a word ends at the margin — and a paragraph opening with a quotation hangs it into the margin | 21–22 Sep |
 | **D94, and a race** | A deleted row is not a decision, so the step offers the work again; and the day's **carry** taken under the mutation queue — two unlocked writes had it materialising twice, every item sharing an id with its copy | 18 Sep |
 | **D92 · D93** | An event has an **extent** (`until:`) and stays on the horizon until it ends; a status step completes when its days pass, which is what lets an event finish and be filed; a matter's lone echoing step follows its rename; and a generated task gets a due date only where something is a clock | 18 Sep |

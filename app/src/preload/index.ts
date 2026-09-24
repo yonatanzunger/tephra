@@ -237,6 +237,9 @@ const tephra = {
     setMode: (docket: DocumentId, matter: string, mode: Mode): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'mode', docket, matter, mode }),
     /** The next instance, or none. No start date is the whole of *inactive*. */
+    /** Where a recurrence began — null for one nobody has said that about (D96). */
+    setSince: (docket: DocumentId, matter: string, since: string | null): Promise<void> =>
+      ipcRenderer.invoke(CHANNEL.docket, { kind: 'since', docket, matter, since }),
     /** The last day an event runs — null for one that takes a single day (D92). */
     setUntil: (docket: DocumentId, matter: string, until: string | null): Promise<void> =>
       ipcRenderer.invoke(CHANNEL.docket, { kind: 'until', docket, matter, until }),

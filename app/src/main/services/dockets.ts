@@ -24,10 +24,10 @@ import type { DayService } from './day-service.ts'
 import type { FixedPoints } from './fixed-point.ts'
 import type { DocketDocument } from '../x/documents/kinds/docket.ts'
 import {
-  MODES, parseInterval, spellInterval, spellStepWhen, UNSCHEDULED,
+  MODES, parseInterval, shapeOf, spellInterval, spellStepWhen, UNSCHEDULED,
   type Matter, type Mode, type NewMatter, type Schedule, type Section, type StepKind,
 } from '../../shared/kinds/docket.ts'
-import { asDateKey } from '../../shared/dates.ts'
+import { asDateKey, compareDateKeys } from '../../shared/dates.ts'
 import { archiveOf, isArchive, type RelPath } from '../w/layout.ts'
 import { nameOf } from '../../shared/slug.ts'
 import type { DateKey, DocumentId } from '../../shared/document-api.ts'
@@ -193,6 +193,7 @@ export class Dockets {
     // half-shaped.
     const mode = MODES.find(one => one.key === shape?.mode)
     if (mode !== undefined) {
+      await this.#rememberOrigin(id, made, when.start)
       const first = await this.#mutate(async () =>
         this.#store.corpus.use(id, doc =>
           (doc as DocketDocument).addStep(made, '+0d', name, mode.kind)))
@@ -225,6 +226,56 @@ export class Dockets {
     }
     await this.#mutate(async () =>
       this.#store.corpus.use(id, doc => (doc as DocketDocument).setStart(matter, said)))
+    await this.#rememberOrigin(id, matter, said)
+    await this.#durable.wrote(id)
+  }
+
+  /**
+   * A past date on a recurrence is where the series BEGAN (D96).
+   *
+   * **`start` means *the next one* and the pass advances it**, so a date already
+   * behind us cannot be what it says: reported from use, a date of birth typed
+   * into a recurring event *kept bouncing back to being this year*. It was not
+   * being rejected — it was being advanced, exactly as written, and the fact
+   * worth keeping was thrown away in the process.
+   *
+   * So it is kept. `start` still receives the date and the pass still walks it
+   * forward, which is what makes the row say *next November*; `since` remembers
+   * where the series began, which is what makes it say *the forty-fourth*.
+   *
+   * **Only where it can mean that**: a repeating matter. A task's `start` is
+   * *when work began* and is in the past by nature; a one-off event in the past
+   * simply happened.
+   *
+   * **And it is called from both doors**, which is the second half of the same
+   * report: *if I try to enter such a date when CREATING a matter, it files it
+   * under start and loses the year again.* The rule lived in `setStart` only,
+   * so the panel kept the year and the new-matter row did not — one rule, two
+   * doors, and note 62's shape again.
+   */
+  async #rememberOrigin(id: DocumentId, matter: string, said: DateKey | null): Promise<void> {
+    if (said === null || compareDateKeys(said, this.#day.today) >= 0) return
+    const found = (await this.matters(id)).find(one => one.id === matter)
+    if (found === undefined || !shapeOf(found.mode).repeating) return
+    await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as DocketDocument).setSince(matter, said)))
+  }
+
+  /**
+   * Where a recurrence began (D96) — corrected here, and nowhere else.
+   *
+   * **Because a mistyped year would otherwise be unreachable.** The origin is
+   * set as a side effect of typing a past start, and the field then shows the
+   * next instance; without a verb of its own, fixing 1895 to 1985 would mean
+   * editing the file.
+   */
+  async setSince(id: DocumentId, matter: string, since: string | null): Promise<void> {
+    const day = since === null || since.trim() === '' ? null : asDateKey(since.trim())
+    if (since !== null && since.trim() !== '' && day === null) {
+      throw new Error(`${since} is not a date`)
+    }
+    await this.#mutate(async () =>
+      this.#store.corpus.use(id, doc => (doc as DocketDocument).setSince(matter, day)))
     await this.#durable.wrote(id)
   }
 
@@ -595,5 +646,8 @@ function scheduleFor(shape: NewMatter | undefined): Schedule {
     after: null,
     dates: null,
     until: given(shape.until) === null ? null : asDateKey(given(shape.until) as string),
+    // **Never set when a matter is made**: an origin is something somebody
+    // says later, about a series that already exists (D96).
+    since: null,
   }
 }

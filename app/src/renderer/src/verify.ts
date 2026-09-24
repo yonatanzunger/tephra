@@ -3734,6 +3734,56 @@ export async function runVerify(request: string): Promise<void> {
       }
 
       // **Legibility has a floor even though it has no instrument** (H3): the
+      // ── typing a date, a keystroke at a time (D96) ────────────
+      //
+      // **The reported bug, driven the way it was reported**: a date input
+      // reports `''` until the date is complete and then four complete years on
+      // the way to the one meant, and every one of those was being committed.
+      {
+        const docketId = (await window.tephra.docket.list())[0]?.id
+        if (docketId !== undefined) {
+          const born = await window.tephra.docket.add(docketId, 'A birthday',
+            { mode: 'recurring-event', every: '1y' })
+          await settle(700)
+          const rowOf = (text: string): HTMLElement | undefined =>
+            [...document.querySelectorAll('.docket-row')].find(
+              one => (one.textContent ?? '').includes(text),
+            ) as HTMLElement | undefined
+          ;(rowOf('A birthday')?.querySelector('.docket-when') as HTMLElement | null)?.click()
+          await settle(500)
+          const field = document.querySelector('.sched-date') as HTMLInputElement | null
+          say('dateFieldOpened', field !== null)
+          if (field !== null) {
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+            // The states a date input passes through while a year is typed.
+            const states = ['', '', '0001-03-12', '0019-03-12', '0198-03-12', '1985-03-12']
+            for (const state of states) {
+              field.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }))
+              setter?.call(field, state)
+              field.dispatchEvent(new Event('input', { bubbles: true }))
+              await settle(120)
+            }
+            // **Nothing may have been written yet**, which is the whole claim.
+            say('whileTyping', (await window.tephra.docket.matters(docketId))
+              .find(one => one.id === born)?.when.start ?? 'none')
+            field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+            await settle(1200)
+          }
+          const after = (await window.tephra.docket.matters(docketId)).find(one => one.id === born)
+          say('afterEnter', { start: after?.when.start ?? null, since: after?.when.since ?? null })
+          say('readsAs', rowOf('A birthday')?.querySelector('.docket-when')?.textContent?.trim() ?? 'none')
+          // **One date row, not two** (D96 as amended): asked from use, looking
+          // at a panel showing both halves of the pair — *it seems strange to
+          // show both since and starting; what's the difference, really?* The
+          // authored half is the one shown, and the NEXT line answers the rest.
+          say('dateRows', [...document.querySelectorAll('.sched-row')]
+            .map(one => (one.querySelector('.sched-label')?.textContent ?? '').trim())
+            .filter(one => ['Since', 'Starting', 'Last done', 'Started', 'On', 'Until'].includes(one)))
+          if (born !== undefined) await window.tephra.docket.remove(docketId, born)
+          await settle(500)
+        }
+      }
+
       // ── an event that lasts, and an echoing step (D92) ────────
       {
         const docketId = (await window.tephra.docket.list())[0]?.id
