@@ -184,7 +184,9 @@ function listRows(state: EditorState, font: string): DecorationSet {
       Decoration.line({
         class: 'tx-list',
         attributes: {
-          style: `padding-left:${row.hang.toFixed(2)}px;text-indent:-${row.hang.toFixed(2)}px`,
+          // Inline-start, so an RTL list hangs its marker off the right (D98);
+          // `text-indent` is already relative to the direction.
+          style: `padding-inline-start:${row.hang.toFixed(2)}px;text-indent:-${row.hang.toFixed(2)}px`,
         },
       }),
     )

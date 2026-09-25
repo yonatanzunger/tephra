@@ -596,6 +596,80 @@ console.log('\n— wrapping —')
   check('and nothing errored on the way', r.appError === 'none')
 }
 
+// ── which way a line runs (D98) ───────────────────────────────────────────
+console.log('\n— bidi —')
+{
+  // Reported from use, on a memorial prayer: *when I type entire lines in
+  // Hebrew, not only is it aligning them LTR, but it's placing punctuation at
+  // the end of the line at the right-hand side of the page, as though we're in
+  // some kind of LTR-override state.* Which is what it was: nothing set a base
+  // direction, so every line took the document's, and the trailing commas —
+  // neutrals — resolved to it and landed at its end.
+  //
+  // **The fixture is the report.** Hebrew that ends in a comma, English beside
+  // it, a line opening with digits (weak, so they do not decide), and a fenced
+  // code block, which stays left-to-right whatever it contains.
+  const root = await week([
+    'I just miss him. I really wish I could give him a hug right now.\n'
+    + '\n'
+    + '\u05D0\u05DC \u05DE\u05DC\u05D0 \u05E8\u05D7\u05DE\u05D9\u05DD \u05E9\u05D5\u05DB\u05DF \u05D1\u05DE\u05E8\u05D5\u05DE\u05D9\u05DD,\n'
+    + '\u05D5\u05E0\u05D0\u05DE\u05E8 \u05D0\u05DE\u05DF.\n'
+    + '\n'
+    + '2026-09-24 — a date in front of English.\n'
+    + '\n'
+    + '```js\n'
+    + 'const answer = 42\n'
+    + '```\n',
+  ])
+  const r = report(await launch('bidi', root, { timeoutMs: 60_000, shotDelay: 18_000 }))
+  const row = needle => (Array.isArray(r.bidi) ? r.bidi.find(one => one.needle === needle) : undefined)
+  const hebrew = ['\u05D0\u05DC \u05DE\u05DC\u05D0 \u05E8\u05D7\u05DE\u05D9\u05DD', '\u05D5\u05E0\u05D0\u05DE\u05E8 \u05D0\u05DE\u05DF'].map(row)
+  check(
+    'A HEBREW LINE RUNS RIGHT TO LEFT, which nothing had told the page',
+    hebrew.every(one => one !== undefined && one.css === 'rtl'),
+    JSON.stringify(hebrew.map(one => one?.css ?? 'missing')),
+  )
+  check(
+    // The reported symptom, measured where it appeared: the comma is the last
+    // character, and on a right-to-left line the last character is at the LEFT.
+    'THE REPORTED DEFECT: its last character is at the left, not the right',
+    hebrew.every(one => one?.startsRightOfEnd === true),
+    JSON.stringify(hebrew.map(one => ({ startsRightOfEnd: one?.startsRightOfEnd }))),
+  )
+  check(
+    // `text-align: left` is physical and would have held the line flush left
+    // however the direction resolved. `start` is the same value for English.
+    'and it is flush RIGHT, the alignment being logical rather than physical',
+    hebrew.every(one => one?.align === 'start' && typeof one.fromRight === 'number' && one.fromRight <= 2),
+    JSON.stringify(hebrew.map(one => ({ align: one?.align, fromRight: one?.fromRight }))),
+  )
+  check(
+    // Without `perLineTextDirection` CodeMirror uses one direction for the
+    // whole editor, and the caret, the selection rectangles and every
+    // coordinate lookup would go on believing the line was English.
+    'and CODEMIRROR agrees, so the caret and the selection follow the text',
+    hebrew.every(one => one?.cm === 1),
+    JSON.stringify(hebrew.map(one => ({ cm: one?.cm }))),
+  )
+  const english = row('I just miss him')
+  const dated = row('2026-09-24')
+  check(
+    'English beside it is untouched, and so is a line that opens with digits',
+    english?.css === 'ltr' && english?.cm === 0 && english?.startsRightOfEnd === false
+      && typeof english?.fromLeft === 'number' && english.fromLeft <= 2
+      && dated?.css === 'ltr',
+    `english ${JSON.stringify(english)} · dated ${JSON.stringify(dated)}`,
+  )
+  check(
+    // A line of code that began with a Hebrew comment would otherwise flip, and
+    // a code block's columns are its meaning.
+    'and CODE is told outright that it is left-to-right, whatever it holds',
+    row('const answer')?.attr === 'ltr' && row('const answer')?.css === 'ltr',
+    JSON.stringify(row('const answer')),
+  )
+  check('nothing errored on the way', r.appError === 'none', String(r.appError))
+}
+
 if (process.env.TEPHRA_TIMING !== undefined) {
   const total = spent.reduce((n, one) => n + one.ms, 0)
   console.log(`\n\u2014 where the time went: ${(total / 1000).toFixed(1)}s across ${spent.length} launches \u2014`)

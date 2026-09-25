@@ -90,9 +90,12 @@ export function tephraTheme(t: Typography): Extension {
     // being a second switch: unhyphenated justified text at a reading measure
     // is what gives justification its bad name, opening rivers of white where
     // the spaces stretch to fill the line.
+    // **`start`, not `left`** (D98). A physical value forces English alignment
+    // on a paragraph the bidi layer has just declared right-to-left, which is
+    // half of what made a page of Hebrew read as an override.
     '.cm-line': {
       padding: '0',
-      textAlign: t.justify ? 'justify' : 'left',
+      textAlign: t.justify ? 'justify' : 'start',
       hyphens: t.justify ? 'auto' : 'manual',
       WebkitHyphens: t.justify ? 'auto' : 'manual',
     },

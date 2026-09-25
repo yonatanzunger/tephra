@@ -27,6 +27,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
 import { hangingPunctuation } from './hanging.ts'
+import { textDirection } from './bidi.ts'
 import { listIndent, listLayout } from './lists.ts'
 import { scrollTrack, setTrackMarks, type TrackMarks } from './scroll-track.ts'
 import { findMarks, setFindMarks, type FindMarks } from './find-marks.ts'
@@ -211,6 +212,9 @@ export function bindEditor(options: BindOptions): Binding {
             ]),
         widgetExtensions(),
         codeBlocks(),
+        // **Each paragraph runs the way its own words do** (D98). Above the
+        // theme, because it decides what `text-align: start` means.
+        textDirection(),
         // Quotes curl as they are typed, and never afterwards (D87).
         smartQuotes(),
         listLayout(),

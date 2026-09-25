@@ -108,7 +108,10 @@ const hangs = StateField.define<DecorationSet>({
       for (const one of effect.value) {
         builder.add(one.at, one.at + 1, Decoration.mark({
           class: 'tx-hang-open',
-          attributes: { style: `margin-left:${-one.px}px` },
+          // **Inline-start, not left** (D98): on a right-to-left paragraph the
+          // opening quote stands at the right margin, and a negative left
+          // margin would hang it off the wrong edge, into the text.
+          attributes: { style: `margin-inline-start:${-one.px}px` },
         }))
       }
       return builder.finish()

@@ -379,6 +379,54 @@ export async function runVerify(request: string): Promise<void> {
       say('lineBoxes', lines.slice(0, 8))
     }
 
+    if (scene === 'bidi') {
+      // **Which way a line runs** (D98). Reported from use, on a page of
+      // Hebrew: left-aligned, and each line's trailing comma at the *right*
+      // edge — the trailing neutral resolving to a paragraph direction nobody
+      // had set. The claims are geometric, because that is what was reported:
+      // where on the page the first character is, and where the last one is.
+      await settle(1600)
+      const doc = view.state.doc
+      const rows: Record<string, unknown>[] = []
+      for (const needle of ['אל מלא רחמים', 'ונאמר אמן', 'I just miss him', '2026-09-24', 'const answer']) {
+        let found: number | null = null
+        for (let n = 1; n <= doc.lines && found === null; n += 1) {
+          if (doc.line(n).text.includes(needle)) found = n
+        }
+        if (found === null) {
+          rows.push({ needle, found: false })
+          continue
+        }
+        const line = doc.line(found)
+        const node = view.domAtPos(line.from).node
+        const el = (node.nodeType === 1 ? node : node.parentElement) as HTMLElement | null
+        const box = el?.closest('.cm-line') as HTMLElement | null
+        const rect = box?.getBoundingClientRect()
+        const head = view.coordsAtPos(line.from)
+        const tail = view.coordsAtPos(line.to)
+        rows.push({
+          needle,
+          attr: box?.getAttribute('dir') ?? 'none',
+          // What CSS resolved `dir="auto"` to — the value CodeMirror reads.
+          css: box === null ? 'none' : getComputedStyle(box).direction,
+          align: box === null ? 'none' : getComputedStyle(box).textAlign,
+          // What CodeMirror itself believes, which is what the caret follows.
+          // 0 is LTR and 1 is RTL, its own `Direction` enum.
+          cm: view.textDirectionAt(line.from),
+          // **The reported defect, measured.** On a right-to-left line the
+          // first character is at the right and the last — the comma — at the
+          // left. This was false for every Hebrew line in the report.
+          startsRightOfEnd: head !== null && tail !== null ? head.left > tail.left : null,
+          // And the alignment: how far the text's own start sits from each edge
+          // of the line box it is drawn in.
+          fromLeft: head !== null && rect !== undefined ? Math.round(head.left - rect.left) : null,
+          fromRight: head !== null && rect !== undefined ? Math.round(rect.right - head.right) : null,
+        })
+      }
+      say('bidi', rows)
+      say('appError', document.querySelector('.scaffold .bad')?.textContent ?? 'none')
+    }
+
     if (scene === 'wrap') {
       // **No wrapped line may begin with a space** (note 72). CodeMirror wraps
       // with `white-space: break-spaces`, under which a space that does not fit
@@ -6223,14 +6271,24 @@ export async function runVerify(request: string): Promise<void> {
 
 interface EditorViewLike {
   state: {
-    doc: { toString(): string; length: number }
+    doc: {
+      toString(): string
+      length: number
+      /** How many source lines, and each of them — for a claim made per line. */
+      readonly lines: number
+      line(n: number): { from: number; to: number; number: number; text: string }
+    }
     selection: { main: { head: number; from: number; to: number; empty: boolean } }
   }
   dispatch(spec: unknown): void
   /** The editable element, for driving a real paste or drop at it (R7). */
   readonly contentDOM: HTMLElement
+  /** The DOM a position is drawn in, for reading the box it landed in. */
+  domAtPos(at: number): { node: Node; offset: number }
+  /** Which way the line at this position runs — 0 is LTR, 1 is RTL (D98). */
+  textDirectionAt(at: number): number
   /** Where a position is on screen. Used to check what a reader can see. */
-  coordsAtPos(at: number): { top: number; bottom: number; left: number } | null
+  coordsAtPos(at: number): { top: number; bottom: number; left: number; right: number } | null
   posAtCoords(coords: { x: number; y: number }): number | null
   readonly viewport: { from: number; to: number }
 }

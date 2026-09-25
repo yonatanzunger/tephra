@@ -5206,3 +5206,82 @@ than what was still outstanding.
 **What would reopen this.** *Did it on Tuesday* — a completion dated in the past
 — which is a different gesture with a date in it, and which the daily walk
 already half-answers. Nobody has asked for it.
+
+## D98: Each line runs the way its own words do
+
+**Date:** 2026-09-24
+**Status:** decided and **built**
+**Extends:** D86 (the reading column), D95 (hanging punctuation).
+**Source:** one report from use — a memorial prayer typed in Hebrew.
+
+**The report.** *Something isn't implementing the BIDI algorithm correctly.
+When I type entire lines in Hebrew, not only is it aligning them LTR, but it's
+placing punctuation at the end of the line at the right-hand side of the page,
+as though we're in some kind of LTR-override state.* Exactly right, and the
+override was a default — two of them.
+
+**What was actually wrong, which is smaller than it looked.** Chromium
+implements the bidi algorithm; every Hebrew run was ordered correctly all along,
+which is why the page read as *nearly* right. What no layer had supplied was the
+one input the algorithm takes from outside: the **paragraph's base direction**,
+rules P2 and P3. A trailing comma is a *neutral*, so it resolves to that
+direction and is drawn at its end — and in a left-to-right paragraph, the end is
+the right-hand side.
+
+Two defaults kept it unset:
+
+- **CodeMirror reads direction rather than assigning it** —
+  `getComputedStyle(line).direction` — and reads it *per line* only when
+  `EditorView.perLineTextDirection` is enabled, which is off by default because
+  it costs a DOM measurement per line. Nothing in the tree set `dir`, so every
+  line inherited the document's `ltr`.
+- **And the theme said `text-align: left`**, a physical value, so a line given
+  the right direction would still have been flush left.
+
+**Decision: ask the browser, per line.** A line decoration puts `dir="auto"` on
+every line, which is how HTML asks for P2/P3; the theme aligns to `start`; and
+`perLineTextDirection` is turned on so the caret, the selection rectangles and
+every coordinate lookup follow the text. Code lines are told `dir="ltr"`
+outright — a code block's columns are its meaning, whatever alphabet its
+comments are in.
+
+**Physical properties became logical.** The hanging opening quote (D95) moved
+from `margin-left` to `margin-inline-start`, and a list's hanging indent from
+`padding-left` to `padding-inline-start`: on a right-to-left paragraph the
+opening quote stands at the *right* margin, and a negative left margin would
+have hung it off the wrong edge, into its own text.
+
+**What we do NOT implement, and the draft that proved it.** The first cut
+decided the direction itself, per *paragraph* rather than per line, by finding
+the first strongly-directional character. It was wrong within twenty lines, in
+a way the tests written alongside it agreed with, because both came from the
+same misunderstanding: it inferred *strong* from `Script=`, and an Arabic-Indic
+digit (`Bidi_Class=AN`) and a Hebrew vowel point (`NSM`) are inside right-to-left
+scripts while being **weak** — P2 skips both. JavaScript cannot ask for the real
+property: `\p{…}` exposes only `General_Category`, `Script` and
+`Script_Extensions`, so `\p{Bidi_Class=R}` is a syntax error, and `Intl` offers
+nothing per character — ICU's table is in the process and out of reach. Measured
+in Chromium, `dir="auto"` gets both cases right, because it *is* that table.
+
+> **The correction came as a question**: *do we actually need to be implementing
+> the BIDI algorithm ourselves — shouldn't the underlying text widgets be
+> handling this for us?* Yes. The whole of what is ours is an attribute, a facet
+> and a keyword.
+
+**What it costs: the granularity.** `dir="auto"` resolves per element, and an
+element here is one source line, while a Tephra paragraph is a run of
+consecutive lines. So a Hebrew paragraph whose fourth line opens with a name in
+Latin letters will have that line alone flip. The honest reading is that the
+line does begin with an English word; the escape hatch is Unicode's own, a
+U+200F at the start, which is strong and prints nothing.
+
+**What would reopen this.** That flip being a nuisance in practice — the fix is
+to keep the attribute and choose the paragraph's direction by *probing* a hidden
+`dir="auto"` element with the paragraph's text, which stays exact because the
+browser still answers. Or the rendered surface (M5), where markdown's paragraphs
+become real paragraph elements and the question answers itself.
+
+**Not covered, and deliberately.** This is the prose editor. The task list, the
+docket and the sidebar draw a person's words as ordinary HTML, where the same
+`dir="auto"` belongs on the element that holds the text — a separate and simpler
+sweep, not yet done.

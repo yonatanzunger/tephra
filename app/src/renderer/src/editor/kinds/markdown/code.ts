@@ -20,7 +20,15 @@ const CODE_LINE = Decoration.line({ class: 'tx-code' })
 /** The fence rows themselves — ``` and its info string — which are apparatus. */
 const FENCE_LINE = Decoration.line({ class: 'tx-code tx-fence' })
 
-function build(state: EditorState): DecorationSet {
+/**
+ * Every line of every code block, by start offset, in document order.
+ *
+ * **Exported because a second layer asks the same question** (D98). Code is
+ * left-to-right whatever alphabet it is written in — its columns are its
+ * meaning — so the bidi layer has to know which lines are code, and walking the
+ * tree for it twice would be one rule kept in two places.
+ */
+export function codeRows(state: EditorState): readonly { at: number; fence: boolean }[] {
   const rows: { at: number; fence: boolean }[] = []
   syntaxTree(state).iterate({
     enter(node) {
@@ -39,6 +47,11 @@ function build(state: EditorState): DecorationSet {
   // The tree is walked in document order, but a nested block would not be, and
   // `RangeSetBuilder` requires sorted input rather than merely usually-sorted.
   rows.sort((a, b) => a.at - b.at)
+  return rows
+}
+
+function build(state: EditorState): DecorationSet {
+  const rows = codeRows(state)
   const builder = new RangeSetBuilder<Decoration>()
   let previous = -1
   for (const row of rows) {

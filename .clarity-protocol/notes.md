@@ -2090,3 +2090,59 @@ verb of that shape without noticing it was the same shape.
 > Related: note 62, note 69, note 74 — one rule at one door out of many. This is
 > its sibling: one *act* spread over two writes, which is the same failure seen
 > from the other side.
+
+## 76. I reimplemented ICU, badly, in twenty lines
+
+**2026-09-24.** A page of Hebrew came in left-aligned with its commas on the
+wrong side, and I diagnosed it correctly in a few minutes: nothing had set a
+base direction, so the trailing neutrals resolved to the document's and landed
+at its end. Then I sat down to fix it and wrote a Unicode heuristic.
+
+It looked reasonable. `\p{Script=Hebrew}`, `\p{Script=Arabic}` and seven more,
+tested before `\p{L}`, with the first match deciding — the Unicode bidi
+algorithm's rule P2, near enough. I wrote nine unit tests and they all passed,
+because I wrote them from the same understanding that produced the code.
+
+**Two questions from the user took it apart, in order.** First: *is it correct
+to infer RTL from `\p{Script=XXX}`, or should we use the Unicode property of the
+letter directly?* It is not correct, and measuring showed exactly how: an
+Arabic-Indic digit is `Script=Arabic` and `Bidi_Class=AN`, a Hebrew vowel point
+is `Script=Hebrew` and `NSM`, and P2 skips both for being **weak**. My table
+called them strong. JavaScript cannot ask for the property that matters —
+`\p{Bidi_Class=R}` is a syntax error, only `General_Category`, `Script` and
+`Script_Extensions` are exposed — so I was about to start enumerating ranges by
+hand, which is to say maintaining a copy of a table that was already in the
+process and unreachable.
+
+Then the second question, which was the one that mattered: **do we actually need
+to be implementing the BIDI algorithm ourselves? Shouldn't the underlying text
+widgets be handling this for us?**
+
+> They were. Chromium does the whole algorithm — every reordering rule — and had
+> been doing it correctly all along, which is why the bug read as *nearly right*.
+> The single thing it will not decide unasked is the paragraph's base direction,
+> and `dir="auto"` is how you ask. That is not an algorithm; it is a request.
+
+Sixty lines, a script list and a unit-test file came out. What went in was an
+attribute, a CodeMirror facet and one CSS keyword — and the two cases my table
+got wrong were measured to come out right, because the attribute reaches the
+ICU table my regex was an approximation of.
+
+> **When a fix starts growing a Unicode table, stop.** The question is not *how
+> do I get this table right* but *who already has it*. Reaching for the standard
+> implementation is not laziness; it is the difference between being correct and
+> being correct-looking, and the unit tests I wrote could not tell those apart
+> because they were derived from the implementation instead of from the standard.
+
+**And the measurement that decided it belongs here too**, because it is the kind
+that is quick and that I nearly skipped: `dir="auto"` resolves computed
+`direction` to `rtl`, while `unicode-bidi: plaintext` — the CSS property that
+sounds like the same thing — leaves it `ltr`. With `plaintext` the glyphs would
+have reordered correctly and the alignment would have stayed wrong, and
+CodeMirror, which reads exactly that computed value, would have gone on
+believing every line was English. Two minutes in a probe window separated the
+lever that works from the one that half works.
+
+> Related: note 75's *a test that passes only in company is telling you about
+> timing*. This is the sibling: a test that passes because it shares the code's
+> assumptions is telling you nothing at all.
