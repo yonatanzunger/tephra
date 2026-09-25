@@ -15,7 +15,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notebook } from '../../src/main/w/notebook.ts'
 import { DocketDocument } from '../../src/main/x/documents/kinds/docket.ts'
-import { readSchedule, UNSCHEDULED } from '../../src/shared/kinds/docket.ts'
+import { addInterval, onlyTaskLeft, readSchedule, UNSCHEDULED } from '../../src/shared/kinds/docket.ts'
+import type { Matter } from '../../src/shared/kinds/docket.ts'
 import { addDays } from '../../src/shared/dates.ts'
 import { kindOf, type RelPath } from '../../src/main/w/layout.ts'
 import { BACKLOG_DOCKET } from '../../src/shared/document-api.ts'
@@ -1680,6 +1681,99 @@ test('and re-activating generates afresh, having withdrawn the last lot', async 
   const list = await service.todo.list()
   assert.equal((await service.todo.items(list, service.today)).length, 1,
     'one again, not none and not two')
+})
+
+// ── did it today (D97) ─────────────────────────────────────
+//
+// **The gesture for work the list never offered.** A chore due on Monday that
+// got done on Thursday had generated nothing, so there was nothing to tick
+// anywhere and no way to say so but editing the file.
+
+test('DID IT TODAY on a chore due next week rolls it forward from TODAY', async t => {
+  const { service } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const drain = await service.docket.add(id, 'Liquid Heat the shower drain',
+    { mode: 'recurring-task', every: '4w', start: addDays(service.today, 4) })
+  const step = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
+  // Nothing has generated: it is not due for four days.
+  assert.deepEqual(await onList(service), [])
+
+  await service.agenda.docketCompleteStep(id, drain, step, true)
+  const after = (await service.docket.matters(id))[0]
+  assert.equal(after?.when.start, addDays(service.today, 28),
+    'four weeks from the day it was done, not from the day it was due')
+  assert.equal(after?.steps[0]?.done, null, 'and the new instance starts clean')
+  await settled(service)
+})
+
+test('AND IT LEAVES THE TRACE: the day says the chore was done, because it was', async t => {
+  // Asked for on seeing the first cut, which stamped the step and told the list
+  // nothing: *clicking "did it today" should create the right traces in the
+  // archive — I think it may need to create a TODO item and immediately mark it
+  // as done.* The day's list is where *what did I do* is answered.
+  const { service } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const drain = await service.docket.add(id, 'Liquid Heat the shower drain',
+    { mode: 'recurring-task', every: '4w', start: addDays(service.today, 4) })
+  const step = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
+  await service.agenda.docketCompleteStep(id, drain, step, true)
+
+  const list = await service.todo.list()
+  const items = await service.todo.items(list, service.today)
+  assert.equal(items.length, 1, 'one row, on the day it was done')
+  const [item] = items
+  assert.equal(item?.status, 'done')
+  assert.match(item?.text ?? '', /Liquid Heat the shower drain/)
+  // **The item the pass would have made**, not an approximation of one: the
+  // docket is its tag, and a step with no clock on it gets no due date (D93).
+  assert.deepEqual(item?.tags, ['The house'])
+  assert.equal(item?.due, null)
+  await settled(service)
+})
+
+test('and on a one-off it finishes the matter, which is what files it', async t => {
+  const { service, on } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const gate = await service.docket.add(id, 'Replace the gate latch', { mode: 'task' })
+  const step = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
+  await service.agenda.docketCompleteStep(id, gate, step, true)
+  assert.equal((await service.docket.matters(id))[0]?.done, service.today)
+  // And filed on the following day, never under the hand that ticked it (D91).
+  await on(addDays(service.today, 1))
+  assert.deepEqual(await service.docket.matters(id), [])
+})
+
+test('THE WEDGE IT AVOIDS: the item it generated is ticked, not stranded', async t => {
+  // Marking the step done while its item was still live would leave a task on
+  // the list that nothing can take off — the generating clause withdraws an item
+  // only while its step is undone, and resolving it flows back to a step already
+  // done. So the docket-side gesture ticks the ITEM when there is one.
+  const { service } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const car = await service.docket.add(id, 'The car needs fixing', { mode: 'task' })
+  await service.docket.activate(id, car)
+  const [made] = await onList(service)
+  const step = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
+
+  await service.agenda.docketCompleteStep(id, car, step, true)
+  const list = await service.todo.list()
+  const item = (await service.todo.items(list, service.today)).find(one => one.id === made)
+  assert.equal(item?.status, 'done', 'the item somebody could see says it is done')
+  assert.notEqual((await service.docket.matters(id))[0]?.done, null, 'and the step heard')
+  await settled(service)
+})
+
+test('the ROW offers it only where one task is left, so it cannot mean two things', async t => {
+  const { service } = await serviced(t)
+  const id = await service.library.newDocument('The house', undefined, 'docket')
+  const move = await service.docket.add(id, 'Move house', { mode: 'task' })
+  const first = (await service.docket.matters(id))[0]?.steps[0]?.id ?? ''
+  await service.docket.addStep(id, move, '+2d', 'hire a van', 'task')
+  assert.equal(onlyTaskLeft((await service.docket.matters(id))[0] as Matter), null)
+
+  // Finish one and the other becomes unambiguous — which is how a run-up ends.
+  await service.agenda.docketCompleteStep(id, move, first, true)
+  assert.equal(onlyTaskLeft((await service.docket.matters(id))[0] as Matter)?.text, 'hire a van')
 })
 
 // ── reconciliation: the clock tick (MH3b, D76) ──────────────

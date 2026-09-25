@@ -556,6 +556,47 @@ export function isFinished(matter: Matter): boolean {
 }
 
 /**
+ * Can somebody stamp this step done by hand? (D97)
+ *
+ * **Only a task, because only a task is something anybody does.** A `status`
+ * step completes by the calendar and nobody can tick it (D92) — that is what it
+ * means for it to be awareness rather than work — so offering the gesture on
+ * one would be an affordance that either lies or fights the pass.
+ *
+ * **And a repeating matter has to be running.** Stamping the clock step of a
+ * suspended recurrence writes a `done` that nothing will ever clear: the advance
+ * clause needs a `start` to count from, so it declines, and the stamp sits there
+ * making the matter look finished while the docket says it is not happening. A
+ * one-off with no date is the opposite case and is allowed — *I did the thing I
+ * never got round to scheduling* is a true and useful sentence, and finishing it
+ * is what files it.
+ */
+export function canComplete(step: Step, matter: Matter): boolean {
+  if (matter.done !== null) return false
+  if (step.kind !== 'task' || step.done !== null) return false
+  return !(shapeOf(matter.mode).repeating && matter.when.start === null)
+}
+
+/**
+ * The one task a matter has left to do, when it has exactly one (D97).
+ *
+ * **What the matter ROW can offer without opening it**, which is the whole point
+ * of the question: a chore docket is sixteen matters of one step each, and
+ * *I did that today* has to be one gesture from the list. Where more than one
+ * task is outstanding the row cannot know which one you mean, so it offers
+ * nothing and the steps carry the gesture individually.
+ *
+ * **Counted over what is LEFT, not over the steps.** A matter of four steps with
+ * three of them done has one task outstanding and is as unambiguous as a matter
+ * of one — which is also how a run-up ends: the last thing left is the thing you
+ * just did.
+ */
+export function onlyTaskLeft(matter: Matter): Step | null {
+  const left = matter.steps.filter(step => canComplete(step, matter))
+  return left.length === 1 ? (left[0] as Step) : null
+}
+
+/**
  * Is this status step's day behind us? (D92, item 3)
  *
  * **A status step completes by the calendar, because nobody can tick it.** It

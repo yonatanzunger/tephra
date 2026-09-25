@@ -11,7 +11,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  addInterval, backInterval, matterBlock, parseInterval, parseInterval as _pi, parseLegacyWhen, parseMatter, parseOffset,
+  addInterval, backInterval, canComplete, matterBlock, onlyTaskLeft,
+  parseInterval, parseInterval as _pi, parseLegacyWhen, parseMatter, parseOffset,
   parseStepWhen, readInterval, readSchedule, readStepWhen, scanMatters, spellInterval,
   spellOffset, spellStepWhen,
   unusedMatterId, STANDING, type Matter,
@@ -672,4 +673,55 @@ test('and the first one carries no count, there being none to carry', () => {
     dates: null, until: null, since: '2026-01-01' as DateKey,
   }
   assert.equal(readSchedule(when, 'recurring-event'), 'every year since 2026-01-01')
+})
+
+// ── did it today (D97) ─────────────────────────────────────
+
+const step = (over: Record<string, unknown> = {}) => ({
+  id: 'a1', kind: 'task' as const, when: { kind: 'at' as const, offset: '+0d' },
+  text: 'Liquid Heat the shower drain', done: null, made: null, ...over,
+})
+
+test('a task step not yet done can be stamped by hand', () => {
+  const m = bare({ steps: [step()] })
+  assert.equal(canComplete(m.steps[0] as never, m), true)
+  assert.equal(onlyTaskLeft(m)?.id, 'a1')
+})
+
+test('a STATUS step cannot: nobody can tick awareness, the calendar does (D92)', () => {
+  const m = bare({ mode: 'event', steps: [step({ kind: 'status' })] })
+  assert.equal(canComplete(m.steps[0] as never, m), false)
+  assert.equal(onlyTaskLeft(m), null)
+})
+
+test('nor one already done, nor anything on a finished matter', () => {
+  assert.equal(onlyTaskLeft(bare({ steps: [step({ done: 1757462400 })] })), null)
+  assert.equal(onlyTaskLeft(bare({ done: '2026-09-20' as DateKey, steps: [step()] })), null)
+})
+
+test('THE WEDGE: a suspended recurrence cannot, its stamp having nothing to clear it', () => {
+  // The advance clause needs a `start` to count the next instance from, so a
+  // `done` written here would sit for ever, reading as finished work on a matter
+  // the docket says is not happening.
+  const off = bare({ mode: 'recurring-task', when: { ...STANDING, every: { n: 4, unit: 'w' } }, steps: [step()] })
+  assert.equal(onlyTaskLeft(off), null)
+  const on = bare({
+    mode: 'recurring-task',
+    when: { ...STANDING, start: '2026-09-28' as DateKey, every: { n: 4, unit: 'w' } },
+    steps: [step()],
+  })
+  assert.equal(onlyTaskLeft(on)?.id, 'a1')
+})
+
+test('but a one-off with no date CAN: doing a thing you never scheduled is a fact', () => {
+  const m = bare({ when: STANDING, steps: [step()] })
+  assert.equal(onlyTaskLeft(m)?.id, 'a1')
+})
+
+test('and two tasks outstanding offer nothing, the row not knowing which you mean', () => {
+  const m = bare({ steps: [step(), step({ id: 'a2', text: 'hire a van' })] })
+  assert.equal(onlyTaskLeft(m), null)
+  // Finish one and the other is unambiguous — which is how a run-up ends.
+  const later = bare({ steps: [step({ done: 1757462400 }), step({ id: 'a2', text: 'hire a van' })] })
+  assert.equal(onlyTaskLeft(later)?.id, 'a2')
 })

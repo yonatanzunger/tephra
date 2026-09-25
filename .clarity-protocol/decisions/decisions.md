@@ -5135,3 +5135,74 @@ unit and is not asked for yet. Or a matter whose next instance genuinely needs
 authoring apart from its origin — a series deliberately resumed somewhere other
 than its own cadence — which no report has asked for and which the `every`
 field's own arithmetic has so far always answered.
+
+## D97: Done today, from the docket, through the list
+
+**Date:** 2026-09-24
+**Status:** decided and **built**
+**Extends:** D76 (a recurring task counts from the day it was done), D77/D83
+(the reconciler and its trigger), D91 (finishing is a fact about the steps).
+**Source:** one report from use, and a correction to the first cut an hour
+later.
+
+**The gap.** *One of the recurring tasks I have is next due on the 28th, and
+doesn't have a task on the TODO list yet, but we actually ended up doing it
+today. But there's no quick way to mark "done today."* Every way to finish a
+step ran through the task list — tick the generated item and the step hears
+(H7a) — which is exactly right for work the list has offered and no use at all
+for a chore done four days early. Nothing had generated, so there was nothing to
+tick anywhere, and the only way to say so was to edit the file.
+
+**Decision: a gesture, on the thing it is an act on.** *Did it today* appears on
+any task step that is not yet done, and on the matter's own resting row when the
+matter has exactly one task outstanding — which is the common shape and the one
+the report is about: a chore docket is sixteen matters of one step each, and
+the answer has to be one click from the list without opening anything.
+
+**It takes the row's slot from *suspend*.** The resting row has room for one
+verb, and *suspend* — which was in it — is also in the context menu, where it
+stays. On a chore docket, ticking one off is what somebody came to the page to
+do and suspending one is rare; the row should hold the common act. Where more
+than one task is outstanding the row cannot know which you mean, so it says
+*suspend* as before and the steps carry the gesture individually.
+
+**Only a task, and only a running matter.** A `status` step completes by the
+calendar and nobody can tick it (D92). And a repeating matter with no `start`
+cannot advance, so a stamp written on one would sit for ever, reading as
+finished work on a matter the docket says is not happening. A one-off with no
+date is the opposite case and is allowed: *I did the thing I never got round to
+scheduling* is a true sentence, and finishing it is what files it.
+
+**Decision, part two — and the correction: it goes THROUGH the task list.** The
+first cut stamped the step directly, and the report came back within the hour:
+*clicking "did it today" should create the right traces in the archive — I think
+it may need to create a TODO item and immediately mark it as done.* Right, and
+for a reason bigger than tidiness. **The day's list is the record of the day.**
+A step stamped in a file leaves today saying nothing happened, and *what did I
+do* is a question the notebook answers from its days, not from its dockets.
+
+So the gesture makes the item the pass would have made — same tag, same `for`,
+same rule about due dates (D93) — points the step at it, and ticks it. The stamp
+on the step then arrives the way it always does: as the flow-back from an item
+being finished. **One road to *done*, not two**, which is the deeper reason to
+prefer it: a second way for a step to become done would be a second set of bugs,
+and the two cases now differ only in whether the item exists already.
+
+**And it must be one write, or the reconciler eats it.** An item live for a step
+that is not due is precisely the state the pass exists to forbid, so the first
+implementation raced: make the item, and a pass between the two writes withdrew
+it again before it could be ticked — the matter never advanced, and *whether it
+worked depended on how busy the process was*. `FixedPoints.defer` is for exactly
+this, and its docstring says so in advance: *the writes are not wrong in either
+order — what is wrong is being read halfway.*
+
+**What this changes elsewhere.** A step finished this way keeps naming what it
+made, which is the ordinary shape of a step finished through the list; and a
+day's list now holds done rows for chores that were never offered on it. Both
+are the record working, not noise — but two acceptance claims had been written
+against the older, thinner file and were counting every row on the day rather
+than what was still outstanding.
+
+**What would reopen this.** *Did it on Tuesday* — a completion dated in the past
+— which is a different gesture with a date in it, and which the daily walk
+already half-answers. Nobody has asked for it.

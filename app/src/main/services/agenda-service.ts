@@ -162,7 +162,7 @@ export class AgendaService implements Serves {
       stepWhen: command => this.#docket.setStepWhen( command.docket, command.matter, command.step, command.when, ),
       stepKind: command => this.#docket.setStepKind( command.docket, command.matter, command.step, command.stepKind, ),
       removeStep: command => this.#docket.removeStep(command.docket, command.matter, command.step),
-      completeStep: command => this.#docket.completeStep( command.docket, command.matter, command.step, command.done, ),
+      completeStep: command => this.docketCompleteStep( command.docket, command.matter, command.step, command.done, ),
       activate: command => this.#docket.activate(command.docket, command.matter),
       suspend: command => this.#docket.suspend(command.docket, command.matter),
       sections: command => this.#docket.sections(command.docket),
@@ -425,6 +425,119 @@ export class AgendaService implements Serves {
     // (D83). `#wrote` below reports the write and waits for what derives from
     // it, which is the same guarantee without a verb having to remember.
     await this.#durable.wrote(id)
+  }
+
+  /**
+   * The item a step asks for, made and pointed at (D85, D93, D97).
+   *
+   * **One method because there are two doors.** The pass makes these when a step
+   * comes due; `docketCompleteStep` makes one for a chore somebody did before it
+   * ever came due. If they composed the item separately they would drift, and
+   * the drift would be silent — an item missing its `for`, or carrying a due
+   * date the rule says it should not have. Note 62's shape, refused in advance.
+   *
+   * The per-docket facts arrive as `where` because the pass reads them once for
+   * a whole docket and this must not make it read them per step.
+   */
+  async #generate(
+    where: {
+      docket: DocumentId
+      list: DocumentId
+      /** What the docket is called — the tag every item it makes carries. */
+      domain: string
+      sections: readonly Section[]
+    },
+    matter: Matter,
+    step: Step,
+  ): Promise<string> {
+    const said = readDue(step.text)
+    const runUp = step.when.kind === 'at' && step.when.offset.startsWith('-')
+    const item = await this.#todo.make(where.list, {
+      text: said.text,
+      tags: [where.domain],
+      for: forWhat(matter, step.text, where.sections),
+      owner: matter.owner,
+      // The occasion's own date for a run-up, since that is the thing being run
+      // up to; `matter.when.start` IS the live instance.
+      due: said.due ?? (runUp ? matter.when.start : null),
+    })
+    await this.#setStepMade(where.docket, matter.id as string, step.id as string, item)
+    return item
+  }
+
+  /** The per-docket facts a generated item carries, for a one-off call. */
+  async #contextOf(docket: DocumentId): Promise<{
+    docket: DocumentId
+    list: DocumentId
+    domain: string
+    sections: readonly Section[]
+  }> {
+    return {
+      docket,
+      list: await this.#todo.list(),
+      domain: (await this.#store.corpus.use(docket, doc => doc.titleOf(ONLY_SEGMENT), { mode: 'read' }))
+        ?? nameOf(docket as string),
+      sections: await this.#docket.sections(docket),
+    }
+  }
+
+  /**
+   * *Did it today* — finish a step from the docket's side (D97).
+   *
+   * **Through the task list, always, because the list is the record.** Asked for
+   * in exactly those terms: *clicking "did it today" should create the right
+   * traces in the archive*. A step stamped straight in the file leaves today's
+   * list saying nothing happened — and the day's list is where *what did I do*
+   * is answered, and what the archive keeps. So this makes the item the pass
+   * would have made and ticks it, and the stamp on the step arrives the way it
+   * always does: as the flow-back from an item being finished.
+   *
+   * **Which also makes it one road rather than two.** The step already hears
+   * about completion through `todoSetStatus` → `#finished`; had this stamped the
+   * step directly it would be a second way for a step to become done, with its
+   * own bugs. The two cases below differ only in whether the item exists yet.
+   *
+   * **And the other order wedges.** The generating clause withdraws an item only
+   * while its step is undone (D79's exemption), so a step stamped here with its
+   * item left live would be a task on somebody's list that nothing can take off
+   * and no gesture can resolve.
+   */
+  async docketCompleteStep(
+    docket: DocumentId,
+    matter: string,
+    step: string,
+    done: boolean,
+  ): Promise<void> {
+    const found = (await this.#docket.matters(docket)).find(one => one.id === matter)
+    const was = found?.steps.find(one => one.id === step)
+    // **A status step is not this gesture's business.** Nobody can tick
+    // awareness — the calendar completes it (D92) — so there is no item to make
+    // and the plain stamp is the only honest thing left.
+    if (!done || was === undefined || was.kind !== 'task' || found?.id == null) {
+      await this.#docket.completeStep(docket, matter, step, done)
+      return
+    }
+    // **All of it inside one `defer`, or the pass eats the item.** Making an
+    // item for a step that is not due yet writes a state the reconciler exists
+    // to forbid — an item live for a step nothing is asking for — and a pass
+    // that ran between the two writes withdrew it again before it could be
+    // ticked. Which is the failure `defer` is for, in the words of its own
+    // docstring: the writes are not wrong in either order, what is wrong is
+    // being read halfway. Held together, the pass sees the end state — an item
+    // done and a step stamped — and advances the matter from today.
+    await this.#fixed.defer(async () => {
+      const list = await this.#todo.list()
+      const live = was.made !== null
+        && (await this.#todo.items(list, this.#day.today))
+          .some(one => one.id === was.made && isLive(one.status))
+      // **Today's list, and live.** An item resolved days ago is a statement
+      // about the past and is not there to be ticked again, so a fresh one is
+      // made — the record of having done it today, which is what was asked for.
+      const item = live
+        ? (was.made as string)
+        : await this.#generate(await this.#contextOf(docket), found as Matter, was)
+      await this.todoSetStatus(list, item, 'done')
+    })
   }
 
   /**
@@ -757,17 +870,13 @@ export class AgendaService implements Serves {
             // **Composed once, as a record.** Every field is known for certain
             // here, so joining them into a string for the entry grammar to take
             // apart again would be two chances to be wrong.
-            const said = readDue(step.text)
-            const runUp = step.when.kind === 'at' && step.when.offset.startsWith('-')
-            const item = await this.#todo.make(list, {
-              text: said.text,
-              tags: [domain],
-              for: forWhat(matter, step.text, sections),
-              owner: matter.owner,
-              // The occasion's own date for a run-up, since that is the thing
-              // being run up to; `matter.when.start` IS the live instance.
-              due: said.due ?? (runUp ? matter.when.start : null),
-            })
+            //
+            // **Composed in one method and called from two places** (D97). The
+            // gesture that marks a chore done from the docket makes its item
+            // here too, so what it leaves on the list is indistinguishable from
+            // what the pass would have left — the same tag, the same `for`, the
+            // same rule about due dates.
+            await this.#generate({ docket, list, domain, sections }, matter, step)
             // **The matter is a TAG, not a prefix.** On the list a step's text
             // stands alone — *find a general mechanic* says nothing about which
             // car — and the first cut solved that by writing the matter's name
@@ -781,8 +890,6 @@ export class AgendaService implements Serves {
             // matter's name (D76): a chip beside it is redundant to read and
             // still correct to group by, which is the opposite trade from the
             // prefix, where the redundancy was in the sentence itself.
-
-            await this.#setStepMade(docket, id, step.id, item)
             touched = true
           } else if (!wanted && step.made !== null && step.done === null && live.has(step.made)) {
             // **Only what it made, and only while it is still being asked.**

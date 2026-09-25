@@ -155,6 +155,7 @@ in `goal/horizon.md` and `solution/parts/horizon.md`; scheduled in
 | Dockets as a document kind, with their own surface | H2, D68, D72 | ✓ v1 (MH1) — `dockets/<name>.docket.md`, sections, drag to reorder |
 | A matter as a schedule and an ordered list of steps | H4, H7, D76 | ✓ v1 (MH1, amended) — four modes over three fields (`start`, `every`, `after`); ranges and seasons shipped and were then **withdrawn** as a premature optimisation |
 | Generation: a docket puts work on the task list | H5, H7a | ✓ v1 (MH3a) — provenance on the step, so it generates once, withdraws what it made, and hears the task being finished |
+| *Did it today*, from the docket | D97 | ✓ v1 — on any task step, and on the row of a matter with one task left; it makes the item the pass would have made and ticks it, so the day records what happened |
 | The clock tick: derived state reconciled, never notified | D77 | ✓ v1 (MH3b) — one idempotent pass; advancing, generating and withdrawing are one operation |
 | Putting a generated task down means three different things | D79, Qa | ✓ engine (MH3b) — advance · skip · suspend; the three-way offer at the moment of the gesture is the rest of MH4 |
 | The horizon: everything bearing down, whatever its source | H8, D74, D78 | ✓ v1 (MH2, MH4) — its own object, implemented by dockets and the task list; **the lower half of the task view**, not a place of its own |

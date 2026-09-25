@@ -2048,3 +2048,45 @@ matters asks for the past date *at creation*.
 > Related: note 62 and note 69 — a rule kept by memory at one door out of many.
 > This is the same shape in the renderer: five doors, one habit. And in
 > `dockets.ts`: two doors, one rule, one of them forgotten.
+
+## 75. The trace is the point, and the pass ate it
+
+**2026-09-24.** *There's no quick way to mark "done today."* The chore was due
+on the 28th, got done on the 24th, and had generated nothing — so the only place
+that could have heard about it was the file. I built the gesture, stamped the
+step, watched a recurring task roll forward from today exactly as D76 says it
+should, and thought I was finished.
+
+**The correction arrived an hour later and was about a different layer.**
+*Clicking "did it today" should create the right traces in the archive — I think
+it may need to create a TODO item and immediately mark it as done.* What I had
+built was correct about the docket and silent about the day. And the day is
+where this notebook answers *what did I do*: the dockets say what is owed, the
+days say what happened, and a completion that touches only the first is a fact
+recorded in the place nobody will look for it.
+
+> **A state change and a record of it are different deliverables.** I had been
+> treating *the step is now done* as the whole of the act, because it is the
+> whole of the model. The act also happened on a day, and that is not derivable
+> from the docket afterwards — the advance overwrites it.
+
+**Then the honest version raced, and the race was instructive.** Making an item
+for a step that is not due writes exactly the state the reconciler exists to
+forbid — an item live for a step nothing is asking for — so a pass landing
+between *make the item* and *tick it* withdrew the item, and the whole gesture
+did nothing. What makes this worth writing down is how it presented: the test
+**passed when the whole file ran** and **failed when run alone**. I had my proof
+before I had my correctness, and only the narrower run told me so.
+
+> **A test that passes only in company is telling you about timing, not about
+> the code.** The right response to the pair is not to keep the green one.
+
+The fix was already written and already documented: `FixedPoints.defer`, whose
+docstring describes this failure a year before I met it — *the writes are not
+wrong in either order; what is wrong is being read halfway.* Two writes that are
+only jointly consistent belong in one deferral, and I had just written a third
+verb of that shape without noticing it was the same shape.
+
+> Related: note 62, note 69, note 74 — one rule at one door out of many. This is
+> its sibling: one *act* spread over two writes, which is the same failure seen
+> from the other side.

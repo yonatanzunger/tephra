@@ -625,6 +625,9 @@ check(
   // and put it back would have passed, reporting one of each. And the first
   // carried `'yielding thirty of them'.length > 0 &&` in its condition — a
   // fragment of its own title, always true, contributing nothing.
+  // **Of what is still outstanding**: since D97 a step finished from the docket
+  // leaves a done row on the day, which is the record it was asked to leave and
+  // not something the pass made.
   r.sameAfterTwice === true && r.countAfterTwice === 1,
   `same=${r.sameAfterTwice} count=${r.countAfterTwice}`,
 )
@@ -699,6 +702,40 @@ check(
   'and the row says which instance is coming, which is what a birthday is for',
   typeof r.readsAs === 'string' && /since 1985-03-12/.test(r.readsAs) && /\dth|\dst|\dnd|\drd/.test(r.readsAs),
   `the column reads: ${JSON.stringify(r.readsAs)}`,
+)
+
+// ── did it today (D97) ──────────────────────────────────────────────────────
+//
+// Reported from use: *one of the recurring tasks is next due on the 28th and
+// doesn't have a task on the list yet, but we actually ended up doing it today,
+// and there's no quick way to mark "done today."*
+check(
+  'NOTHING HAD GENERATED, which is why there was nowhere else to say it',
+  r.choreNotDueYet === 0,
+  `items mentioning it: ${r.choreNotDueYet}`,
+)
+check(
+  'DID IT TODAY is on the resting row, no opening and no menu',
+  r.didItOnTheRow === true,
+  `on the row: ${r.didItOnTheRow}`,
+)
+check(
+  // **From the day it was done, not the day it was due** (D76's rule for a
+  // recurring task, which is what makes this gesture honest rather than a
+  // shortcut for *skip*): four days early means four days earlier next time.
+  'and it rolls the chore forward from TODAY, leaving a clean instance',
+  r.rolledForward?.start === r.rolledForward?.fourWeeksOn &&
+    r.rolledForward?.start !== r.rolledForward?.wasDue &&
+    r.rolledForward?.stamp === null,
+  `rolled: ${JSON.stringify(r.rolledForward)}`,
+)
+check(
+  // Asked for on seeing the first cut, which stamped the step and told the list
+  // nothing: *it should create a TODO item and immediately mark it as done*, so
+  // the day's list — which is what the archive keeps — records what happened.
+  'AND THE DAY RECORDS IT, one row, done, where there had been none',
+  r.andTheDaySaysSo?.rows === 1 && r.andTheDaySaysSo?.status === 'done',
+  `the day says: ${JSON.stringify(r.andTheDaySaysSo)}`,
 )
 
 // ── an event that lasts, and an echoing step (D92) ──────────────────────────
@@ -813,8 +850,10 @@ check(
   (text.match(/^- .*$/gm) ?? []).join(' | '),
 )
 check(
+  // **Stamped, and still naming what it made** — the ordinary shape of a step
+  // finished through the list, which since D97 is the only way one finishes.
   'and the chain, by id, with the finished one stamped',
-  /^- \+0d task: find a suitable shop <!--tephra:step ([0-9a-z]{8}) \d+-->$/m.test(text)
+  /^- \+0d task: find a suitable shop <!--tephra:step ([0-9a-z]{8}) \d+( [0-9a-z]{8})?-->$/m.test(text)
     && /^- after [0-9a-z]{8} task: have the car fixed <!--tephra:step [0-9a-z]{8}-->$/m.test(text),
   (text.match(/^- .*$/gm) ?? []).join(' | '),
 )

@@ -44,7 +44,8 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { SurfaceProps } from '../surface.ts'
 import { RowMenu, type RowMenuRequest } from '../../frame/RowMenu'
 import {
-  addInterval, backInterval, instancesIn, MODES, readInterval, readSchedule, readStepWhen,
+  addInterval, backInterval, canComplete, instancesIn, MODES, onlyTaskLeft,
+  readInterval, readSchedule, readStepWhen,
   shapeOf, spellInterval,
   spellStepWhen,
   type Interval, type Matter, type Mode, type NewMatter as NewMatterShape, type Section,
@@ -564,6 +565,11 @@ export function DocketSurface({
                 onDropStep={step => {
                   if (matter.id !== null) void act(window.tephra.docket.removeStep(id, matter.id, step))
                 }}
+                onDidStep={step => {
+                  if (matter.id !== null) {
+                    void act(window.tephra.docket.completeStep(id, matter.id, step, true))
+                  }
+                }}
                 onEditStep={async (step, text) => {
                   if (matter.id === null) return null
                   return act(window.tephra.docket.editStep(id, matter.id, step, text))
@@ -841,6 +847,7 @@ function Row({
   onMenu,
   onActivate,
   onSuspend,
+  onDidStep,
   onNudge,
   onPlace,
   dragging,
@@ -869,6 +876,8 @@ function Row({
   onRemove: () => void
   onAddStep: (when: string, text: string, kind: StepKind) => Promise<unknown>
   onDropStep: (step: string) => void
+  /** *Did it today* — stamp a task step done as of now (D97). */
+  onDidStep: (step: string) => void
   /** Both answer whether it worked, so a bad value keeps the field open. */
   onEditStep: (step: string, text: string) => Promise<unknown>
   onStepWhen: (step: string, when: string) => Promise<unknown>
@@ -914,6 +923,8 @@ function Row({
   /** Which half of which step is being corrected. Local: it is one gesture. */
   const [fixing, setFixing] = useState<{ step: string; part: 'when' | 'what' } | null>(null)
   const inactive = matter.when.start === null && matter.done === null
+  /** The one task left, if there is exactly one — what the row can offer (D97). */
+  const sole = onlyTaskLeft(matter)
   return (
     <li
       // **Right-click anywhere on a matter** (D10's idiom, as the sidebar and
@@ -1071,9 +1082,25 @@ function Row({
             makes it worse than a disabled control rather than better. MH1 made
             the affordance mistake three times and this is its inverse: an
             option that CAN act where acting means nothing. */}
+        {/* **And the common act takes the slot from the rare one** (D97). This
+            place held *suspend*, which is also in the context menu, and the
+            resting row has room for exactly one verb — so on a matter with a
+            single task outstanding it holds *did it today*, which on a chore
+            docket is the thing somebody came to the page to do. Suspending is
+            one right-click away, where it already was. Where the matter has more
+            than one task left the row cannot know which you mean, so it says
+            *suspend* as before and the steps carry the gesture individually. */}
         {matter.done !== null ? null : inactive ? (
           <button className="docket-start" onClick={onActivate} title="Start work on this now">
             activate
+          </button>
+        ) : sole !== null ? (
+          <button
+            className="docket-start quiet"
+            onClick={() => { if (sole.id !== null) onDidStep(sole.id) }}
+            title="Mark this done, as of today"
+          >
+            did it today
           </button>
         ) : (
           <button
@@ -1284,6 +1311,20 @@ function Row({
                   <option value="task">Do a task</option>
                   <option value="status">Raise a reminder</option>
                 </select>
+                {/* **The act, on the thing it is an act on** (D97). Every other
+                    way to finish a step went through the task list — which is
+                    fine for work the list has offered, and no use at all for a
+                    chore due on Monday that got done on Thursday: nothing had
+                    generated, so there was nothing to tick anywhere. */}
+                {canComplete(step, matter) && (
+                  <button
+                    className="docket-quiet"
+                    onClick={() => { if (step.id !== null) onDidStep(step.id) }}
+                    title="Mark this done, as of today"
+                  >
+                    did it today
+                  </button>
+                )}
                 <button
                   className="docket-quiet danger"
                   onClick={() => { if (step.id !== null) onDropStep(step.id) }}

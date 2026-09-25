@@ -3784,6 +3784,52 @@ export async function runVerify(request: string): Promise<void> {
         }
       }
 
+      // ── did it today (D97) ───────────────────────────────────
+      //
+      // **Reported from use**: a recurring chore next due on the 28th, actually
+      // done today, and no way to say so — nothing had generated, so there was
+      // nothing to tick on the list either.
+      {
+        const docketId = (await window.tephra.docket.list())[0]?.id
+        if (docketId !== undefined) {
+          const today = await window.tephra.doc.today()
+          const dayFrom = (n: number): string =>
+            new Date(Date.parse(`${today}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+          const chore = await window.tephra.docket.add(docketId, 'Liquid Heat the drain',
+            { mode: 'recurring-task', every: '4w', start: dayFrom(4) })
+          await settle(1000)
+          const row = [...document.querySelectorAll('.docket-row')].find(
+            one => (one.textContent ?? '').includes('Liquid Heat'),
+          ) as HTMLElement | undefined
+          const list = await window.tephra.todo.which()
+          const day = await window.tephra.todo.today(list)
+          say('choreNotDueYet', (await window.tephra.todo.items(list, day))
+            .filter(one => (one.text ?? '').includes('Liquid Heat')).length)
+          // **On the resting row, without opening it** — which is the whole ask:
+          // a chore docket is sixteen matters of one step each.
+          const did = [...(row?.querySelectorAll('.docket-start') ?? [])].find(
+            one => (one.textContent ?? '').trim() === 'did it today',
+          ) as HTMLElement | undefined
+          say('didItOnTheRow', did !== undefined)
+          did?.click()
+          await settle(1600)
+          const after = (await window.tephra.docket.matters(docketId)).find(one => one.id === chore)
+          say('rolledForward', {
+            start: after?.when.start ?? null,
+            fourWeeksOn: dayFrom(28),
+            wasDue: dayFrom(4),
+            stamp: after?.steps[0]?.done ?? null,
+          })
+          // **And the day says it happened** (asked for on seeing the first cut,
+          // which stamped the step and told the list nothing).
+          const trace = (await window.tephra.todo.items(list, day))
+            .filter(one => (one.text ?? '').includes('Liquid Heat'))
+          say('andTheDaySaysSo', { rows: trace.length, status: trace[0]?.status ?? 'none' })
+          if (chore !== undefined) await window.tephra.docket.remove(docketId, chore)
+          await settle(500)
+        }
+      }
+
       // ── an event that lasts, and an echoing step (D92) ────────
       {
         const docketId = (await window.tephra.docket.list())[0]?.id
@@ -4645,7 +4691,11 @@ export async function runVerify(request: string): Promise<void> {
         await window.tephra.docket.generate()
         const after = JSON.stringify((await window.tephra.todo.items(list, day)).map(one => one.id))
         say('sameAfterTwice', before === after)
-        say('countAfterTwice', (await window.tephra.todo.items(list, day)).length)
+        // **What is still being ASKED**, which is the claim; the day's list also
+        // holds what has been done on it, and since D97 that includes the rows
+        // left by steps finished from the docket earlier in this scene.
+        say('countAfterTwice', (await window.tephra.todo.items(list, day))
+          .filter(one => one.status !== 'done' && one.status !== 'dropped').length)
 
         // **And it withdraws**, which is the half that makes it a reconciler
         // rather than a sweep: clearing the start date is the only act, and the
